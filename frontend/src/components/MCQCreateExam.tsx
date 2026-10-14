@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Plus, Save, Trash2, ChevronLeft, ChevronRight, CheckSquare,
   Clock, List, Settings, Eye, AlertCircle, BookOpen, X, Check, GraduationCap, MessageCircle
@@ -7,7 +7,7 @@ import { MCQExamConfig, MCQExamStatus } from '../types/mcq';
 import { MCQQuestion } from '../types/mcq';
 import {
   getAllQuestions, getAllExams, createExam, saveExam, deleteExam,
-  publishExam, validateExamForPublish
+  publishExam, validateExamForPublish, onMcqDataChanged
 } from '../services/mcqService';
 import { AIPaperGeneratorModal } from './AIPaperGeneratorModal';
 
@@ -31,6 +31,17 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
   const [showAIModal, setShowAIModal] = useState(false);
 
   const reload = () => setExams(getAllExams());
+
+  useEffect(() => {
+    const refresh = () => setExams(getAllExams());
+    const unsubscribe = onMcqDataChanged(refresh);
+    window.addEventListener('storage', refresh);
+    refresh();
+    return () => {
+      unsubscribe();
+      window.removeEventListener('storage', refresh);
+    };
+  }, []);
 
   const handlePublish = (id: string) => {
     const errors = publishExam(id);

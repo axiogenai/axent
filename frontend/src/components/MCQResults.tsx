@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   BarChart2, Users, Award, CheckCircle, XCircle, Clock,
   AlertTriangle, ChevronDown, ChevronUp, Download, Eye, Filter,
   MessageCircle, Copy, Check, ExternalLink, X
 } from 'lucide-react';
 import { MCQAttempt, MCQExamConfig } from '../types/mcq';
-import { getAllAttempts, getAllExams, gradeAttempt } from '../services/mcqService';
+import { getAllAttempts, getAllExams, gradeAttempt, onMcqDataChanged } from '../services/mcqService';
 import { SimpleSelect } from './watermelon/Select';
 
 // ── Attempt row ───────────────────────────────────────────────────────────────
@@ -16,7 +16,10 @@ const AttemptRow: React.FC<{ attempt: MCQAttempt; showExplanations: boolean }> =
   const score = attempt.score ?? 0;
   const maxScore = attempt.maxScore;
   const scoreColor = pct >= 80 ? 'var(--success)' : pct >= 60 ? 'var(--warning)' : pct >= 40 ? 'var(--warning)' : 'var(--danger)';
-  const statusColor = attempt.status === 'SUBMITTED' ? 'var(--success)' : attempt.status === 'TIMED_OUT' ? 'var(--warning)' : 'var(--text-muted)';
+  const isDisqualified = attempt.status === 'ABANDONED' &&
+    attempt.infractionLog?.some((item) => item.event === 'DISQUALIFIED_BY_PROCTOR');
+  const displayStatus = isDisqualified ? 'DISQUALIFIED' : attempt.status;
+  const statusColor = displayStatus === 'SUBMITTED' ? 'var(--success)' : displayStatus === 'TIMED_OUT' || isDisqualified ? 'var(--warning)' : 'var(--text-muted)';
 
   // Compute per-question detail if submitted
   const grade = useMemo(() => {
@@ -37,7 +40,7 @@ const AttemptRow: React.FC<{ attempt: MCQAttempt; showExplanations: boolean }> =
             </span>
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
-            <span style={{ fontSize: '11px', color: statusColor, fontWeight: 600, textTransform: 'uppercase' }}>{attempt.status}</span>
+            <span style={{ fontSize: '11px', color: statusColor, fontWeight: 600, textTransform: 'uppercase' }}>{displayStatus}</span>
             <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{new Date(attempt.startTime).toLocaleString()}</span>
             {attempt.tabSwitchCount > 0 && (
               <span style={{ fontSize: '11px', color: 'var(--warning)' }}>
@@ -110,8 +113,22 @@ export const MCQResults: React.FC = () => {
   const [selectedSem, setSelectedSem] = useState<string>('ALL');
   const [selectedDiv, setSelectedDiv] = useState<string>('ALL');
 
-  const exams = useMemo(() => getAllExams(), []);
-  const allAttempts = useMemo(() => getAllAttempts(), []);
+  const [exams, setExams] = useState<MCQExamConfig[]>(() => getAllExams());
+  const [allAttempts, setAllAttempts] = useState<MCQAttempt[]>(() => getAllAttempts());
+
+  useEffect(() => {
+    const refresh = () => {
+      setExams(getAllExams());
+      setAllAttempts(getAllAttempts());
+    };
+    const unsubscribe = onMcqDataChanged(refresh);
+    window.addEventListener('storage', refresh);
+    refresh();
+    return () => {
+      unsubscribe();
+      window.removeEventListener('storage', refresh);
+    };
+  }, []);
 
   const filteredAttempts = useMemo(() => {
     return allAttempts.filter((a) => {
@@ -145,13 +162,19 @@ export const MCQResults: React.FC = () => {
   const exportCSV = () => {
     if (submittedAttempts.length === 0) return;
     const header = 'Name,Roll,Dept,Semester,Division,Exam,Score,MaxScore,Percentage,Correct,Wrong,Unanswered,TabSwitches,UnfocusedSec,Status,SubmitTime';
+    const csvCell = (value: unknown) => {
+      let text = String(value ?? '');
+      if (/^[=+\-@]/.test(text)) text = `'${text}`;
+      return `"${text.replace(/"/g, '""')}"`;
+    };
     const rows = submittedAttempts.map((a) => [
       a.studentName, a.studentRoll, a.studentDept, a.studentSem, a.studentDiv || 'A', a.examTitle,
       a.score ?? 0, a.maxScore, a.percentageScore ?? 0,
       a.correctCount ?? 0, a.wrongCount ?? 0, a.unansweredCount ?? 0,
       a.tabSwitchCount, Math.round(a.unfocusedSeconds),
-      a.status, a.submitTime ? new Date(a.submitTime).toISOString() : '',
-    ].join(','));
+      a.status === 'ABANDONED' && a.infractionLog?.some((item) => item.event === 'DISQUALIFIED_BY_PROCTOR') ? 'DISQUALIFIED' : a.status,
+      a.submitTime ? new Date(a.submitTime).toISOString() : '',
+    ].map(csvCell).join(','));
     const csv = [header, ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);

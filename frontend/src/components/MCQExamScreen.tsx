@@ -8,7 +8,7 @@ import {
 import { MCQAttempt, MCQExamConfig, MCQGradeResult, MCQ_STORAGE_KEYS } from '../types/mcq';
 import {
   getAllExams, getActiveAttempt, getAllAttempts, startAttempt, saveAnswer,
-  submitAttempt, recordInfraction, updateUnfocusedTime
+  submitAttempt, recordInfraction, updateUnfocusedTime, onMcqDataChanged, persistAttemptToCloud
 } from '../services/mcqService';
 import { playSound } from '../utils/sounds';
 import { parseExamToken, SAMPLE_MCQ_TOKEN, SAMPLE_CANDIDATE_TOKEN } from '../utils/tokenParser';
@@ -1528,6 +1528,22 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     return getAllExams().find((e) => e.id === initialExamId) ?? null;
   });
 
+  useEffect(() => {
+    const refreshExams = () => {
+      const exams = getAllExams();
+      setAllExamsList(exams);
+      const latest = exams.find((item) => item.id === activeExamId);
+      if (latest) setExam(latest);
+    };
+    const unsubscribe = onMcqDataChanged(refreshExams);
+    window.addEventListener('storage', refreshExams);
+    refreshExams();
+    return () => {
+      unsubscribe();
+      window.removeEventListener('storage', refreshExams);
+    };
+  }, [activeExamId]);
+
   const [attempt, setAttempt] = useState<MCQAttempt | null>(() => {
     if (activeAttempt && activeAttempt.status === 'IN_PROGRESS' && activeAttempt.examId === initialExamId) {
       return activeAttempt;
@@ -1935,7 +1951,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     }
   };
 
-  const handleDisqualifyCandidate = () => {
+  const handleDisqualifyCandidate = async () => {
     if (!attempt || !exam) return;
     const confirm = window.confirm(
       `Disqualify and Terminate Examination?\n\n` +
@@ -1947,23 +1963,27 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
     setSubmitted(true);
     setIsLockedByProctor(false);
-    const result = submitAttempt(attempt.id, answers, 'SUBMITTED');
+    recordInfraction(attempt.id, 'DISQUALIFIED_BY_PROCTOR');
+    const result = submitAttempt(attempt.id, answers, 'ABANDONED');
     if (result) {
       setGradeResult(result);
       playSound('warning');
       const finished: MCQAttempt = {
         ...attempt,
-        status: 'SUBMITTED',
+        status: 'ABANDONED',
         score: result.score,
         correctCount: result.correctCount,
         wrongCount: result.wrongCount
       };
       setAttempt(finished);
       syncMcqLiveStation(finished, exam, student, currentIdx, true);
+      if (!(await persistAttemptToCloud(attempt.id))) {
+        window.alert('The attempt was finalized on this device, but cloud sync failed. Keep this device open and notify the invigilator.');
+      }
     }
   };
 
-  const handleTimerExpire = useCallback(() => {
+  const handleTimerExpire = useCallback(async () => {
     if (!attempt || submitted || !exam) return;
     setSubmitted(true);
     const result = submitAttempt(attempt.id, answers, 'TIMED_OUT');
@@ -1976,13 +1996,16 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         localStorage.removeItem(`codedna_mcq_current_idx_${attempt.id}`);
       } catch {}
       syncMcqLiveStation(finished, exam, student, currentIdx, true);
+      if (!(await persistAttemptToCloud(attempt.id))) {
+        window.alert('Time expired and the result was saved locally, but cloud sync failed. Keep this device open and notify the invigilator.');
+      }
     } else {
       setSubmitted(false);
       window.alert('The attempt could not be finalized. Contact the invigilator immediately and keep this page open.');
     }
   }, [attempt, answers, submitted, exam, student, currentIdx]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!attempt || submitted || isLockedByProctor || (attempt && attempt.tabSwitchCount >= 3) || !exam) {
       playSound('warning');
       return;
@@ -1999,6 +2022,9 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         localStorage.removeItem(`codedna_mcq_current_idx_${attempt.id}`);
       } catch {}
       syncMcqLiveStation(finished, exam, student, currentIdx, true);
+      if (!(await persistAttemptToCloud(attempt.id))) {
+        window.alert('Your result was saved on this device, but cloud sync failed. Keep this device open and notify the invigilator before exiting.');
+      }
     } else {
       setSubmitted(false);
       window.alert('Submission failed and is not confirmed. Contact the invigilator and keep this page open.');
@@ -2083,7 +2109,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     );
   }
 
-  if (exam.endTime && now > exam.endTime) {
+  if (exam.endTime && now >= exam.endTime) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)', padding: '24px' }}>
         <div style={{

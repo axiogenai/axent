@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Plus, Search, Edit2, Trash2, Copy, Archive, CheckCircle, ChevronDown, ChevronUp,
   Tag, BookOpen, Filter, X, Eye, BarChart2, Check, Upload, Download, GraduationCap,
@@ -9,7 +9,7 @@ import {
 } from '../types/mcq';
 import {
   getAllQuestions, saveQuestion, createQuestion, deleteQuestion,
-  duplicateQuestion, archiveQuestion, publishQuestion, validateQuestion, buildOption
+  duplicateQuestion, archiveQuestion, publishQuestion, validateQuestion, buildOption, onMcqDataChanged
 } from '../services/mcqService';
 import { generateMCQQuestionsWithAI, GeneratedMCQQuestion } from '../services/groqService';
 import { isSupabaseConnected } from '../services/supabaseService';
@@ -711,6 +711,17 @@ export const MCQQuestionBank: React.FC = () => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   const reload = () => setQuestions(getAllQuestions());
+
+  useEffect(() => {
+    const refresh = () => setQuestions(getAllQuestions());
+    const unsubscribe = onMcqDataChanged(refresh);
+    window.addEventListener('storage', refresh);
+    refresh();
+    return () => {
+      unsubscribe();
+      window.removeEventListener('storage', refresh);
+    };
+  }, []);
 
   const subjects = useMemo(() => {
     const s = new Set(questions.map((q) => q.subject).filter(Boolean));
