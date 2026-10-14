@@ -91,6 +91,12 @@ export function parseExamToken(rawToken: string): DecodedTokenResult {
     const candidateData = parsed.candidate || parsed;
 
     if (candidateData && (candidateData.name || candidateData.rollNumber)) {
+      if (parsed.expiresAt) {
+        const expiresAt = Date.parse(parsed.expiresAt);
+        if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+          return { success: false, error: 'This admit token has expired or has an invalid expiry date. Request a new token from the invigilator.' };
+        }
+      }
       return {
         success: true,
         tokenType: 'base64',
@@ -112,6 +118,12 @@ export function parseExamToken(rawToken: string): DecodedTokenResult {
       const parsedJson = JSON.parse(trimmed);
       const candidateData = parsedJson.candidate || parsedJson;
       if (candidateData && (candidateData.name || candidateData.rollNumber)) {
+        if (parsedJson.expiresAt) {
+          const expiresAt = Date.parse(parsedJson.expiresAt);
+          if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+            return { success: false, error: 'This admit token has expired or has an invalid expiry date. Request a new token from the invigilator.' };
+          }
+        }
         return {
           success: true,
           tokenType: 'json',

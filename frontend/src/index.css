@@ -748,3 +748,31 @@ body {
 }
 
 
+
+
+/* Responsive hardening for dense examination and administration screens. */
+img, video, canvas, svg { max-width: 100%; }
+input, select, textarea, button { max-width: 100%; }
+input, select, textarea { min-width: 0; }
+pre, code { overflow-wrap: anywhere; }
+.ledger-table-container { max-width: 100%; -webkit-overflow-scrolling: touch; }
+@media (max-width: 768px) {
+  html, body { min-width: 320px; }
+  #root, main { min-width: 0; width: 100%; }
+  .card, .card-elevated { padding: 12px; }
+  .ledger-table th, .ledger-table td { padding-left: 9px; padding-right: 9px; }
+  .btn { white-space: normal; min-height: 34px; height: auto; padding-top: 7px; padding-bottom: 7px; }
+  .kpi-value { font-size: clamp(18px, 5vw, 24px); }
+}
+@media (max-width: 480px) {
+  .card, .card-elevated { border-radius: var(--radius-sm); padding: 10px; }
+  .ledger-table { font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

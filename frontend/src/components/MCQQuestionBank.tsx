@@ -761,7 +761,11 @@ export const MCQQuestionBank: React.FC = () => {
   };
 
   const handlePublish = (id: string) => {
-    publishQuestion(id);
+    const errors = publishQuestion(id);
+    if (errors.length > 0) {
+      window.alert(`This question cannot be published:\n\n${errors.map((error) => `• ${error}`).join('\n')}`);
+      return;
+    }
     reload();
   };
 
