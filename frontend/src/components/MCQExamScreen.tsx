@@ -1,0 +1,2795 @@
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  Clock, ChevronLeft, ChevronRight, CheckCircle, CheckCircle2, Circle, AlertTriangle,
+  Send, BookOpen, RotateCcw, Award, X, Eye, EyeOff, BarChart2, KeyRound,
+  Copy, Check, Lock, Unlock, Code2, ArrowRight, ShieldAlert, Monitor, Download, CheckSquare, FileCheck, LogOut, MessageCircle, Calendar
+} from 'lucide-react';
+import { MCQAttempt, MCQExamConfig, MCQGradeResult, MCQ_STORAGE_KEYS } from '../types/mcq';
+import {
+  getAllExams, getActiveAttempt, getAllAttempts, startAttempt, saveAnswer,
+  submitAttempt, recordInfraction, updateUnfocusedTime
+} from '../services/mcqService';
+import { playSound } from '../utils/sounds';
+import { parseExamToken, SAMPLE_MCQ_TOKEN, SAMPLE_CANDIDATE_TOKEN } from '../utils/tokenParser';
+import { syncMcqLiveStation, subscribeToCctvBroadcast, isStationLocked } from '../services/adminService';
+import { fetchSingleStationLockStatus, updateStationLockInCloud } from '../services/supabaseService';
+import { StudentInfo, ExamCategory } from '../types/dna';
+import { SimpleSelect } from './watermelon/Select';
+
+// ── Timer hook ────────────────────────────────────────────────────────────────
+function useCountdown(deadline: number, onExpire: () => void) {
+  const [remaining, setRemaining] = useState(() => Math.max(0, deadline - Date.now()));
+  const expiredRef = useRef(false);
+
+  useEffect(() => {
+    if (expiredRef.current) return;
+    const tick = () => {
+      const r = Math.max(0, deadline - Date.now());
+      setRemaining(r);
+      if (r === 0 && !expiredRef.current) {
+        expiredRef.current = true;
+        onExpire();
+      }
+    };
+    tick();
+    const id = setInterval(tick, 500);
+    return () => clearInterval(id);
+  }, [deadline, onExpire]);
+
+  const minutes = Math.floor(remaining / 60_000);
+  const seconds = Math.floor((remaining % 60_000) / 1000);
+  const isLow = remaining < 5 * 60_000; // < 5 min
+  const isCritical = remaining < 60_000; // < 1 min
+  return { minutes, seconds, isLow, isCritical, remaining };
+}
+
+const EXAM_TYPE_OPTIONS = [
+  { value: 'Aptitude', label: 'Aptitude' },
+  { value: 'ISE', label: 'ISE' },
+];
+
+const DEPARTMENT_OPTIONS = [
+  { value: 'CSE', label: 'CSE' },
+  { value: 'AIML', label: 'AIML' },
+  { value: 'AIDS', label: 'AIDS' },
+  { value: 'ECE', label: 'ECE' },
+  { value: 'EEE', label: 'EEE' },
+  { value: 'MECH', label: 'MECH' },
+  { value: 'CIVIL', label: 'CIVIL' },
+];
+
+const SEMESTER_OPTIONS = [
+  { value: '1st Sem', label: '1st Sem' },
+  { value: '2nd Sem', label: '2nd Sem' },
+  { value: '3rd Sem', label: '3rd Sem' },
+  { value: '4th Sem', label: '4th Sem' },
+  { value: '5th Sem', label: '5th Sem' },
+  { value: '6th Sem', label: '6th Sem' },
+  { value: '7th Sem', label: '7th Sem' },
+  { value: '8th Sem', label: '8th Sem' },
+];
+
+const DIVISION_OPTIONS = [
+  { value: 'A', label: 'Div A' },
+  { value: 'B', label: 'Div B' },
+  { value: 'C', label: 'Div C' },
+  { value: 'D', label: 'Div D' },
+  { value: 'E', label: 'Div E' },
+  { value: 'F', label: 'Div F' },
+];
+
+// ── Syntax-Aware Formatted Question Content (Code Blocks + Inline Code) ───────
+interface FormattedQuestionContentProps {
+  content: string;
+  style?: React.CSSProperties;
+}
+
+const FormattedQuestionContent: React.FC<FormattedQuestionContentProps> = ({ content, style }) => {
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+
+  if (!content) return null;
+
+  const handleCopyCode = (code: string, idx: number) => {
+    try {
+      navigator.clipboard.writeText(code);
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(null), 2000);
+    } catch {}
+  };
+
+  // Match triple backtick code blocks: ```lang? \n code \n ```
+  const codeBlockRegex = /```([a-zA-Z0-9_-]*)\r?\n([\s\S]*?)```/g;
+  const elements: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let blockIndex = 0;
+
+  while ((match = codeBlockRegex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      const textChunk = content.substring(lastIndex, match.index);
+      elements.push(
+        <span key={`text-${lastIndex}`}>
+          {renderInlineSpans(textChunk, `inline-${lastIndex}`)}
+        </span>
+      );
+    }
+
+    const lang = (match[1] || 'code').toUpperCase();
+    const codeSnippet = match[2];
+    const currentBlock = blockIndex++;
+
+    elements.push(
+      <div
+        key={`code-block-${match.index}`}
+        style={{
+          margin: '12px 0',
+          borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--border)',
+          background: 'var(--bg-surface)',
+          overflow: 'hidden',
+          boxShadow: 'var(--shadow-sm)'
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '7px 14px',
+            background: 'var(--bg-elevated)',
+            borderBottom: '1px solid var(--border)',
+            fontSize: '11px',
+            color: 'var(--text-muted)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '4px' }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--border-strong)' }} />
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--border-strong)' }} />
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--border-strong)' }} />
+            </div>
+            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text-secondary)' }}>
+              {lang}
+            </span>
+          </div>
+
+          <button
+            onClick={() => handleCopyCode(codeSnippet, currentBlock)}
+            style={{
+              background: 'none',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-xs)',
+              padding: '2px 8px',
+              fontSize: '11px',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            {copiedIdx === currentBlock ? (
+              <>
+                <Check size={11} color="var(--success)" />
+                <span style={{ color: 'var(--success)' }}>Copied</span>
+              </>
+            ) : (
+              <>
+                <Copy size={11} />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        <pre
+          style={{
+            margin: 0,
+            padding: '14px 16px',
+            fontFamily: "var(--font-mono, 'JetBrains Mono', Consolas, monospace)",
+            fontSize: '13px',
+            lineHeight: 1.55,
+            color: 'var(--text-primary)',
+            overflowX: 'auto',
+            maxHeight: '420px',
+            whiteSpace: 'pre'
+          }}
+        >
+          <code>{codeSnippet.trim()}</code>
+        </pre>
+      </div>
+    );
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < content.length) {
+    const trailingChunk = content.substring(lastIndex);
+    elements.push(
+      <span key={`text-${lastIndex}`}>
+        {renderInlineSpans(trailingChunk, `inline-${lastIndex}`)}
+      </span>
+    );
+  }
+
+  return (
+    <div style={{ lineHeight: 1.6, ...style }}>
+      {elements}
+    </div>
+  );
+};
+
+function renderInlineSpans(text: string, prefix: string): React.ReactNode {
+  const inlineRegex = /`([^`]+)`/g;
+  const spans: React.ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+
+  while ((m = inlineRegex.exec(text)) !== null) {
+    if (m.index > last) {
+      spans.push(text.substring(last, m.index));
+    }
+    spans.push(
+      <code
+        key={`${prefix}-${m.index}`}
+        style={{
+          fontFamily: "var(--font-mono, 'JetBrains Mono', Consolas, monospace)",
+          fontSize: '0.88em',
+          padding: '2px 6px',
+          borderRadius: 'var(--radius-xs)',
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border)',
+          color: 'var(--text-primary)',
+          fontWeight: 600
+        }}
+      >
+        {m[1]}
+      </code>
+    );
+    last = m.index + m[0].length;
+  }
+
+  if (last < text.length) {
+    spans.push(text.substring(last));
+  }
+
+  return <span style={{ whiteSpace: 'pre-wrap' }}>{spans}</span>;
+}
+
+// ── Registration Gateway (Manual OR Import With Token) ─────────────────────────
+interface RegistrationFormProps {
+  exam: MCQExamConfig;
+  allExams: MCQExamConfig[];
+  onSelectExam: (examId: string) => void;
+  onStart: (student: StudentInfo) => void;
+}
+
+const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onSelectExam, onStart }) => {
+  const navigate = useNavigate();
+  const [mode, setMode] = useState<'manual' | 'token'>('manual');
+  
+  // Manual student identity state (Exam Type is determined by the Paper-Setter)
+  const [name, setName] = useState('');
+  const [roll, setRoll] = useState('');
+  const [dept, setDept] = useState('CSE');
+  const [sem, setSem] = useState('4th Sem');
+  const [division, setDivision] = useState('A');
+  const [errors, setErrors] = useState<string[]>([]);
+
+  // Token state
+  const [tokenInput, setTokenInput] = useState('');
+  const [tokenCopied, setTokenCopied] = useState(false);
+
+  const parsedToken = tokenInput.trim() ? parseExamToken(tokenInput.trim()) : null;
+
+  const handleStartManual = () => {
+    const errs: string[] = [];
+    if (!name.trim()) errs.push('Candidate name is required.');
+    if (!roll.trim()) errs.push('Roll number / USN is required.');
+    if (!dept.trim()) errs.push('Department is required.');
+    if (!sem.trim()) errs.push('Semester is required.');
+    if (!division.trim()) errs.push('Division is required.');
+    if (errs.length > 0) { setErrors(errs); playSound('warning'); return; }
+
+    const rollDigits = roll.replace(/[^0-9]/g, '');
+    const stationDigits = rollDigits.length > 0 ? String(parseInt(rollDigits.slice(-2), 10) || 1).padStart(2, '0') : '01';
+    const stationNumber = `Station #${stationDigits}`;
+
+    const student: StudentInfo = {
+      name: name.trim(),
+      rollNumber: roll.trim(),
+      department: dept.trim(),
+      semester: sem.trim(),
+      division: division.trim(),
+      course: exam.subject || 'MCQ Course',
+      examType: (exam.examCategory as ExamCategory) || 'Aptitude',
+      assignmentTitle: exam.title,
+      labId: 'LAB-01',
+      stationNumber,
+      examDurationMinutes: exam.durationMinutes,
+      examMode: 'MCQ',
+      mcqExamId: exam.id
+    };
+
+    try {
+      localStorage.setItem('codedna_active_exam_mode', 'MCQ');
+      localStorage.setItem('codedna_student_profile', JSON.stringify(student));
+    } catch {}
+
+    onStart(student);
+  };
+
+  const handleApplyToken = () => {
+    if (!parsedToken || !parsedToken.success || !parsedToken.data) {
+      playSound('warning');
+      return;
+    }
+
+    const d = parsedToken.data;
+    const isMcq = d.examMode === 'MCQ' || d.examType === 'Multiple Choice Question (MCQ) Examination';
+
+    if (!isMcq) {
+      // Direct candidate to Coding Workspace
+      playSound('success');
+      try {
+        localStorage.setItem('codedna_active_exam_mode', 'CODING');
+      } catch {}
+      navigate('/workspace');
+      return;
+    }
+
+    const rollDigits = (d.rollNumber || '').replace(/[^0-9]/g, '');
+    const fallbackDigits = rollDigits.length > 0 ? String(parseInt(rollDigits.slice(-2), 10) || 1).padStart(2, '0') : '01';
+    const stationNumber = d.stationNumber || `Station #${fallbackDigits}`;
+
+    const student: StudentInfo = {
+      name: d.name?.trim() || 'Candidate',
+      rollNumber: d.rollNumber?.trim() || 'USN-001',
+      department: d.department?.trim() || 'CSE',
+      semester: d.semester?.trim() || '4th Sem',
+      division: d.division?.trim() || 'A',
+      course: d.course || exam.subject || 'MCQ Course',
+      examType: (exam.examCategory as ExamCategory) || 'Aptitude',
+      assignmentTitle: exam.title,
+      labId: d.labId || 'LAB-01',
+      labName: d.labName || '',
+      stationNumber,
+      examDurationMinutes: d.examDurationMinutes || exam.durationMinutes,
+      examMode: 'MCQ',
+      mcqExamId: d.mcqExamId || exam.id
+    };
+
+    try {
+      localStorage.setItem('codedna_active_exam_mode', 'MCQ');
+      localStorage.setItem('codedna_student_profile', JSON.stringify(student));
+    } catch {}
+
+    if (d.mcqExamId && d.mcqExamId !== exam.id) {
+      const targetExam = allExams.find((e) => e.id === d.mcqExamId);
+      if (targetExam) {
+        onSelectExam(targetExam.id);
+      }
+    }
+
+    onStart(student);
+  };
+
+  return (
+    <div style={{ minHeight: 'calc(100vh - 52px)', padding: '32px 36px', background: 'var(--bg-main)' }}>
+      <div style={{ maxWidth: '1360px', margin: '0 auto', width: '100%' }}>
+        {/* Top Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '22px', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '2px 8px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+                Computer-Based Examination Terminal
+              </span>
+              <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
+                CCTV Synced
+              </span>
+            </div>
+            <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)' }}>
+              Candidate Verification & Session Check-In
+            </h1>
+          </div>
+        </div>
+
+        {/* 2-Column Split: Left = Examination Blueprint, Right = Registration Form */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(340px, 1fr) minmax(380px, 1.25fr)', gap: '24px', alignItems: 'flex-start' }}>
+        
+        {/* Gateway Card */}
+        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '24px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-md)', background: 'var(--bg-surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <BookOpen size={18} color="var(--text-secondary)" />
+              </div>
+              <div>
+                <h1 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: 'var(--text-primary)' }}>{exam.title}</h1>
+                <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>{exam.subject || 'General Assessment'}{exam.topic ? ` · ${exam.topic}` : ''}</p>
+              </div>
+            </div>
+            <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 8px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+              MCQ ENGINE
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '14px' }}>
+            {[
+              { label: 'Questions', value: String(exam.questionCount) },
+              { label: 'Duration', value: `${exam.durationMinutes} min` },
+              { label: 'Total Marks', value: String(exam.totalMarks) },
+            ].map((m) => (
+              <div key={m.label} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', textAlign: 'center' }}>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>{m.value}</div>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{m.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {exam.instructions && (
+            <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
+              <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{exam.instructions}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Candidate Registration / Token Import Card */}
+        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '24px' }}>
+          
+          {/* Mode Switcher Tabs */}
+          <div style={{ display: 'flex', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '3px', marginBottom: '20px' }}>
+            <button
+              onClick={() => { setMode('manual'); playSound('click'); }}
+              style={{
+                flex: 1, padding: '8px 12px', border: 'none', borderRadius: 'var(--radius-sm)',
+                background: mode === 'manual' ? 'var(--bg-elevated)' : 'transparent',
+                color: mode === 'manual' ? 'var(--text-primary)' : 'var(--text-muted)',
+                fontWeight: mode === 'manual' ? 700 : 500, fontSize: '12px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+              }}
+            >
+              <BookOpen size={13} />
+              <span>Manual Candidate Entry</span>
+            </button>
+            <button
+              onClick={() => { setMode('token'); playSound('click'); }}
+              style={{
+                flex: 1, padding: '8px 12px', border: 'none', borderRadius: 'var(--radius-sm)',
+                background: mode === 'token' ? 'var(--bg-elevated)' : 'transparent',
+                color: mode === 'token' ? 'var(--text-primary)' : 'var(--text-muted)',
+                fontWeight: mode === 'token' ? 700 : 500, fontSize: '12px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+              }}
+            >
+              <KeyRound size={13} />
+              <span>OR Import with Token</span>
+            </button>
+          </div>
+
+          {/* MODE 1: MANUAL ENTRY */}
+          {mode === 'manual' && (
+            <div>
+              {errors.length > 0 && (
+                <div style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', marginBottom: '14px' }}>
+                  {errors.map((e, i) => <p key={i} style={{ color: 'var(--danger)', fontSize: '12px', margin: '2px 0' }}>• {e}</p>)}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* MCQ Exam Selection (Only if multiple exams exist) */}
+                {allExams.filter((e) => e.status === 'PUBLISHED').length > 1 && (
+                  <div>
+                    <label style={labelStyle}>Select Examination Session *</label>
+                    <SimpleSelect
+                      value={exam.id}
+                      onChange={(val) => {
+                        onSelectExam(String(val));
+                        playSound('click');
+                      }}
+                      options={allExams.filter((e) => e.status === 'PUBLISHED').map((ex) => ({
+                        value: ex.id,
+                        label: `${ex.title} (${ex.questionCount} Qs · ${ex.durationMinutes}m · ${ex.totalMarks} marks)`
+                      }))}
+                    />
+                  </div>
+                )}
+
+                {/* Candidate Full Name */}
+                <div>
+                  <label style={labelStyle}>Full Name *</label>
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Enter your registered name"
+                    style={inputStyle}
+                    onKeyDown={(e) => e.key === 'Enter' && handleStartManual()}
+                  />
+                </div>
+
+                {/* Roll Number / USN */}
+                <div>
+                  <label style={labelStyle}>Roll Number / USN *</label>
+                  <input
+                    value={roll}
+                    onChange={(e) => setRoll(e.target.value)}
+                    placeholder="Enter Roll No."
+                    style={inputStyle}
+                    onKeyDown={(e) => e.key === 'Enter' && handleStartManual()}
+                  />
+                </div>
+
+                {/* Department, Semester, Division */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                  <div>
+                    <label style={labelStyle}>Department *</label>
+                    <SimpleSelect
+                      value={dept}
+                      onChange={(val) => {
+                        setDept(String(val));
+                        playSound('click');
+                      }}
+                      options={DEPARTMENT_OPTIONS}
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Semester *</label>
+                    <SimpleSelect
+                      value={sem}
+                      onChange={(val) => {
+                        setSem(String(val));
+                        playSound('click');
+                      }}
+                      options={SEMESTER_OPTIONS}
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Division *</label>
+                    <SimpleSelect
+                      value={division}
+                      onChange={(val) => {
+                        setDivision(String(val));
+                        playSound('click');
+                      }}
+                      options={DIVISION_OPTIONS}
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleStartManual}
+                  style={{
+                    width: '100%', marginTop: '10px',
+                    background: 'var(--accent)', border: 'none',
+                    borderRadius: 'var(--radius-sm)', padding: '12px',
+                    cursor: 'pointer', color: 'var(--accent-contrast)', fontSize: '13px', fontWeight: 700,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                  }}
+                >
+                  <CheckCircle2 size={14} />
+                  <span>Start MCQ Examination</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* MODE 2: OR IMPORT WITH TOKEN */}
+          {mode === 'token' && (
+            <div>
+              <div style={{ marginBottom: '14px' }}>
+                <p style={{ margin: '0 0 10px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                  Import your cryptographic Axent Admit Token. All credentials, exam category, duration, and assigned station details will be auto-filled.
+                </p>
+
+                {/* Helper buttons to paste sample tokens */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTokenInput(SAMPLE_MCQ_TOKEN);
+                      setTokenCopied(true);
+                      setTimeout(() => setTokenCopied(false), 2000);
+                      playSound('click');
+                    }}
+                    style={{
+                      background: 'var(--bg-surface)', border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-sm)', padding: '5px 10px', fontSize: '11px',
+                      color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
+                    }}
+                  >
+                    <KeyRound size={11} color="var(--accent)" />
+                    <span>Paste Sample MCQ Token</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTokenInput(SAMPLE_CANDIDATE_TOKEN);
+                      setTokenCopied(true);
+                      setTimeout(() => setTokenCopied(false), 2000);
+                      playSound('click');
+                    }}
+                    style={{
+                      background: 'var(--bg-surface)', border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-sm)', padding: '5px 10px', fontSize: '11px',
+                      color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
+                    }}
+                  >
+                    <Code2 size={11} color="var(--text-muted)" />
+                    <span>Paste Sample Coding Token</span>
+                  </button>
+
+                  {tokenInput && (
+                    <button
+                      type="button"
+                      onClick={() => setTokenInput('')}
+                      style={{
+                        background: 'transparent', border: 'none',
+                        fontSize: '11px', color: 'var(--text-muted)', cursor: 'pointer', padding: '5px 8px'
+                      }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                <textarea
+                  value={tokenInput}
+                  onChange={(e) => setTokenInput(e.target.value)}
+                  placeholder="Paste encoded admit token here (e.g. CDNA-TK-eyJhbGciOiJIUzI1Ni...)"
+                  rows={4}
+                  style={{
+                    ...inputStyle,
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '11px',
+                    lineHeight: 1.45,
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              {/* Decoded Token Preview Card */}
+              {parsedToken && parsedToken.success && parsedToken.data && (
+                <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '14px', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <CheckCircle2 size={13} color="var(--success)" /> Token Decoded Successfully
+                    </span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                      Mode: {parsedToken.data.examMode || 'CODING'}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', fontSize: '11.5px' }}>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Candidate: </span>
+                      <strong style={{ color: 'var(--text-primary)' }}>{parsedToken.data.name || 'Candidate'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Roll / USN: </span>
+                      <strong style={{ color: 'var(--text-primary)' }}>{parsedToken.data.rollNumber || 'N/A'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Department: </span>
+                      <span style={{ color: 'var(--text-secondary)' }}>{parsedToken.data.department || 'General'}</span>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Semester: </span>
+                      <span style={{ color: 'var(--text-secondary)' }}>{parsedToken.data.semester || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Exam Duration: </span>
+                      <span style={{ color: 'var(--text-secondary)' }}>{parsedToken.data.examDurationMinutes || 45} mins</span>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Station: </span>
+                      <span style={{ color: 'var(--text-secondary)' }}>{parsedToken.data.stationNumber || 'Station #01'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {parsedToken && !parsedToken.success && (
+                <div style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px', marginBottom: '14px' }}>
+                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--danger)' }}>
+                    {parsedToken.error || 'Invalid or malformed token string. Please verify the copied text.'}
+                  </p>
+                </div>
+              )}
+
+              {/* Action Button */}
+              <button
+                disabled={!parsedToken || !parsedToken.success}
+                onClick={handleApplyToken}
+                style={{
+                  width: '100%',
+                  background: !parsedToken || !parsedToken.success ? 'var(--bg-surface)' : 'var(--accent)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)', padding: '12px',
+                  cursor: !parsedToken || !parsedToken.success ? 'not-allowed' : 'pointer',
+                  color: !parsedToken || !parsedToken.success ? 'var(--text-muted)' : 'var(--accent-contrast)',
+                  fontSize: '13px', fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                }}
+              >
+                <Check size={14} />
+                <span>
+                  {parsedToken?.data?.examMode === 'MCQ' || parsedToken?.data?.examType === 'Multiple Choice Question (MCQ) Examination'
+                    ? 'Import & Start MCQ Exam'
+                    : parsedToken?.success
+                    ? 'Import & Open Coding Workspace'
+                    : 'Import Token & Start'}
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+);
+};
+
+// ── WhatsApp Hold-Tight Results View (Withheld for Batch Release via WhatsApp) ──
+interface WhatsAppHoldResultsViewProps {
+  attempt: MCQAttempt;
+  exam: MCQExamConfig;
+  onExit: () => void;
+}
+
+const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attempt, exam, onExit }) => {
+  const [copiedHash, setCopiedHash] = useState(false);
+  const totalQuestions = attempt.assignedQuestions?.length || exam.questionCount || 0;
+  const answeredCount = Object.keys(attempt.answers || {}).filter((k) => attempt.answers[k]).length;
+
+  // Deterministic submission verification token
+  const verificationHash = useMemo(() => {
+    const raw = `${attempt.id}-${attempt.studentRoll}-${attempt.submitTime || Date.now()}`;
+    let hash = 0;
+    for (let i = 0; i < raw.length; i++) {
+      hash = (hash << 5) - hash + raw.charCodeAt(i);
+      hash |= 0;
+    }
+    const hex = Math.abs(hash).toString(16).toUpperCase().padStart(8, '0');
+    return `AXENT-WH-${hex}`;
+  }, [attempt]);
+
+  const handleCopyHash = () => {
+    navigator.clipboard.writeText(verificationHash);
+    setCopiedHash(true);
+    playSound('click');
+    setTimeout(() => setCopiedHash(false), 2500);
+  };
+
+  const submitDateStr = attempt.submitTime
+    ? new Date(attempt.submitTime).toLocaleString([], {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+    : new Date().toLocaleString([], {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      });
+
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+      <div
+        style={{
+          maxWidth: '680px',
+          width: '100%',
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-lg)',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Banner */}
+        <div
+          style={{
+            background: 'var(--bg-surface)',
+            borderBottom: '1px solid var(--border)',
+            padding: '28px 32px 24px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '12px'
+          }}
+        >
+
+          <div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-pill)', padding: '3px 12px', fontSize: '11px', fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>
+              <FileCheck size={12} /> Submission Recorded
+            </div>
+            <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px', letterSpacing: '-0.02em' }}>
+              Hold tight, results will be deployed soon
+            </h1>
+            <p style={{ fontSize: '13.5px', color: 'var(--text-muted)', margin: 0, maxWidth: '520px', lineHeight: 1.5 }}>
+              Your examination paper has been submitted successfully and synced to the college evaluation repository. Final results will be exported and sent on your official class WhatsApp group by the paper setter.
+            </p>
+          </div>
+        </div>
+
+        {/* WhatsApp Notice Box */}
+        <div style={{ padding: '20px 32px 0 32px' }}>
+          <div
+            style={{
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+              padding: '16px 18px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '14px'
+            }}
+          >
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--accent)',
+                flexShrink: 0
+              }}
+            >
+              <MessageCircle size={18} />
+            </div>
+            <div>
+              <p style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                Official WhatsApp Group Delivery
+              </p>
+              <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+                Your department and class faculty will compile the results, export the official scorecards, and send them directly to your class WhatsApp group. Please check your class group for further updates.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Verification Receipt Card */}
+        <div style={{ padding: '20px 32px' }}>
+          <div
+            style={{
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+              padding: '18px 20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '12px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
+                Submission Receipt & Audit Proof
+              </span>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <CheckCircle2 size={12} /> VERIFIED & LOCKED
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px 20px' }}>
+              <div>
+                <span style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>
+                  Candidate Name
+                </span>
+                <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {attempt.studentName}
+                </span>
+              </div>
+
+              <div>
+                <span style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>
+                  USN / Roll Number
+                </span>
+                <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+                  {attempt.studentRoll}
+                </span>
+              </div>
+
+              <div>
+                <span style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>
+                  Department & Class
+                </span>
+                <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                  {attempt.studentDept} · {attempt.studentSem} (Div {attempt.studentDiv || 'A'})
+                </span>
+              </div>
+
+              <div>
+                <span style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>
+                  Examination
+                </span>
+                <span style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  {exam.title}
+                </span>
+              </div>
+
+              <div>
+                <span style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>
+                  Questions Attempted
+                </span>
+                <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
+                  {answeredCount} of {totalQuestions} answered
+                </span>
+              </div>
+
+              <div>
+                <span style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>
+                  Submission Time
+                </span>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  {submitDateStr}
+                </span>
+              </div>
+            </div>
+
+            {/* Cryptographic Hash */}
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <span style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Digital Receipt Reference
+                </span>
+                <span style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {verificationHash}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyHash}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '5px 10px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: copiedHash ? 'var(--success)' : 'var(--text-secondary)',
+                  cursor: 'pointer'
+                }}
+              >
+                {copiedHash ? <Check size={12} /> : <Copy size={12} />}
+                <span>{copiedHash ? 'Copied' : 'Copy Token'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer Actions */}
+        <div
+          style={{
+            background: 'var(--bg-surface)',
+            borderTop: '1px solid var(--border)',
+            padding: '16px 32px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px'
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => window.print()}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'none',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '8px 14px',
+              fontSize: '12px',
+              fontWeight: 600,
+              color: 'var(--text-secondary)',
+              cursor: 'pointer'
+            }}
+          >
+            <Download size={13} />
+            <span>Print Receipt</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onExit}
+            className="btn btn-primary btn-sm"
+            style={{
+              height: '36px',
+              padding: '0 20px',
+              fontSize: '13px',
+              fontWeight: 600
+            }}
+          >
+            <span>Exit to Exam Portal</span>
+            <ChevronRight size={14} style={{ marginLeft: '4px' }} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── Results View (Full-Width Technical Transcript & Analytical Review) ────────
+interface ResultsViewProps {
+  attempt: MCQAttempt;
+  grade: MCQGradeResult;
+  showExplanations: boolean;
+  onRestart?: () => void;
+  onExit?: () => void;
+}
+
+const ResultsView: React.FC<ResultsViewProps> = ({ attempt, grade, showExplanations, onRestart, onExit }) => {
+  const [filterMode, setFilterMode] = useState<'all' | 'correct' | 'wrong' | 'unanswered'>('all');
+  
+  const pct = grade.percentageScore;
+  const gradeLabel = pct >= 80 ? 'Distinction' : pct >= 60 ? 'First Class' : pct >= 40 ? 'Pass' : 'Unsatisfactory';
+  const gradeColor = pct >= 80 ? 'var(--success)' : pct >= 60 ? 'var(--accent)' : pct >= 40 ? 'var(--warning)' : 'var(--danger)';
+
+  const filteredQuestions = grade.perQuestion.filter((pq) => {
+    if (filterMode === 'correct') return pq.isCorrect;
+    if (filterMode === 'wrong') return !pq.isCorrect && Boolean(pq.selectedOptionId);
+    if (filterMode === 'unanswered') return !pq.selectedOptionId;
+    return true;
+  });
+
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--bg-main)', padding: '28px 32px' }}>
+      <div style={{ maxWidth: '1440px', margin: '0 auto', width: '100%' }}>
+        {/* Top Official Ledger Header */}
+        <div
+          style={{
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '24px 28px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '16px'
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              <span
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  padding: '2px 8px',
+                  borderRadius: 'var(--radius-pill)',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-secondary)'
+                }}
+              >
+                OFFICIAL EXAMINATION TRANSCRIPT · CODE-DNA LEDGER
+              </span>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: 'var(--radius-pill)',
+                  background: 'var(--bg-surface)',
+                  border: `1px solid ${gradeColor}`,
+                  color: gradeColor
+                }}
+              >
+                {gradeLabel}
+              </span>
+            </div>
+            <h1 style={{ margin: '0 0 6px', fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)' }}>
+              {attempt.examTitle}
+            </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', fontSize: '13px', color: 'var(--text-secondary)' }}>
+              <span>Candidate: <strong style={{ color: 'var(--text-primary)' }}>{attempt.studentName}</strong></span>
+              <span>•</span>
+              <span>USN / Roll: <strong style={{ color: 'var(--text-primary)' }}>{attempt.studentRoll}</strong></span>
+              <span>•</span>
+              <span>Dept: <strong>{attempt.studentDept || 'CSE'}</strong></span>
+              <span>•</span>
+              <span>Sem: <strong>{attempt.studentSem || '4th Sem'}</strong> ({attempt.studentDiv || 'A'})</span>
+              {attempt.submitTime && (
+                <>
+                  <span>•</span>
+                  <span style={{ color: 'var(--text-muted)' }}>
+                    Submitted {new Date(attempt.submitTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              onClick={() => window.print()}
+              className="btn btn-ghost btn-sm"
+              style={{
+                height: '36px',
+                padding: '0 14px',
+                gap: '6px',
+                fontSize: '12px',
+                fontWeight: 600,
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--border)',
+                background: 'var(--bg-surface)'
+              }}
+            >
+              <Download size={13} />
+              <span>Print Transcript</span>
+            </button>
+
+            {onRestart && (
+              <button
+                onClick={onRestart}
+                className="btn btn-secondary btn-sm"
+                style={{
+                  height: '36px',
+                  padding: '0 16px',
+                  gap: '6px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-surface)'
+                }}
+              >
+                <RotateCcw size={13} />
+                <span>Retake Exam</span>
+              </button>
+            )}
+
+            {onExit && (
+              <button
+                onClick={onExit}
+                className="btn btn-primary btn-sm"
+                style={{
+                  height: '36px',
+                  padding: '0 16px',
+                  gap: '6px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'var(--accent)',
+                  color: 'var(--accent-contrast)'
+                }}
+              >
+                <LogOut size={13} />
+                <span>Exit Exam & Return to Catalog</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 5-Card High-Density Scoreboard */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: '14px',
+            marginBottom: '24px'
+          }}
+        >
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px 20px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Total Marks Awarded</div>
+            <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-primary)' }}>
+              {grade.score} <span style={{ fontSize: '15px', color: 'var(--text-muted)', fontWeight: 500 }}>/ {grade.maxScore}</span>
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px 20px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Aggregate Percentage</div>
+            <div style={{ fontSize: '28px', fontWeight: 800, color: gradeColor }}>
+              {grade.percentageScore}%
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px 20px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Correct Questions</div>
+            <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--success)' }}>
+              {grade.correctCount} <span style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: 500 }}>of {grade.perQuestion.length}</span>
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px 20px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Incorrect / Penalty</div>
+            <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--danger)' }}>
+              {grade.wrongCount} <span style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: 500 }}>wrong</span>
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px 20px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Security & Proctoring</div>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: attempt.tabSwitchCount > 0 ? 'var(--warning)' : 'var(--success)', marginTop: '8px' }}>
+              {attempt.tabSwitchCount === 0 ? 'Verified Clean (0 Violations)' : `${attempt.tabSwitchCount} Tab Violation(s)`}
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              {Math.round(attempt.unfocusedSeconds)}s unfocused time logged
+            </div>
+          </div>
+        </div>
+
+        {/* 2-Column Main Body: Left 68% Detailed Questions, Right 32% Matrix & Telemetry */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(500px, 1fr) 340px', gap: '24px', alignItems: 'flex-start' }}>
+          {/* Left Column: Question-by-Question Review */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                padding: '12px 18px',
+                flexWrap: 'wrap',
+                gap: '12px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CheckSquare size={16} color="var(--accent)" />
+                <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Question-by-Question Review
+                </span>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  ({filteredQuestions.length} of {grade.perQuestion.length} displayed)
+                </span>
+              </div>
+
+              {/* Filter Tabs */}
+              <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-surface)', padding: '2px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                {[
+                  { id: 'all', label: `All (${grade.perQuestion.length})` },
+                  { id: 'correct', label: `Correct (${grade.correctCount})` },
+                  { id: 'wrong', label: `Wrong (${grade.wrongCount})` },
+                  { id: 'unanswered', label: `Skipped (${grade.unansweredCount})` },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setFilterMode(f.id as any)}
+                    style={{
+                      background: filterMode === f.id ? 'var(--bg-elevated)' : 'transparent',
+                      border: 'none',
+                      borderRadius: 'var(--radius-xs)',
+                      padding: '4px 8px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      color: filterMode === f.id ? 'var(--text-primary)' : 'var(--text-muted)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Questions List */}
+            {filteredQuestions.map((pq) => {
+              const originalIndex = grade.perQuestion.findIndex((x) => x.questionId === pq.questionId);
+              return (
+                <div
+                  id={`q-item-${originalIndex}`}
+                  key={pq.questionId}
+                  style={{
+                    background: 'var(--bg-elevated)',
+                    border: `1px solid ${pq.isCorrect ? 'var(--success-border)' : pq.selectedOptionId ? 'var(--danger-border)' : 'var(--border)'}`,
+                    borderRadius: 'var(--radius-md)',
+                    padding: '20px',
+                    transition: 'border-color 0.2s ease'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span
+                        style={{
+                          width: '24px',
+                          height: '24px',
+                          borderRadius: 'var(--radius-xs)',
+                          background: pq.isCorrect ? 'var(--success-bg)' : pq.selectedOptionId ? 'var(--danger-bg)' : 'var(--bg-surface)',
+                          color: pq.isCorrect ? 'var(--success)' : pq.selectedOptionId ? 'var(--danger)' : 'var(--text-muted)',
+                          border: `1px solid ${pq.isCorrect ? 'var(--success-border)' : pq.selectedOptionId ? 'var(--danger-border)' : 'var(--border)'}`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '11px',
+                          fontWeight: 800
+                        }}
+                      >
+                        {originalIndex + 1}
+                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        {pq.isCorrect ? 'Correct Response' : pq.selectedOptionId ? 'Incorrect Response' : 'Unanswered Question'}
+                      </span>
+                    </div>
+
+                    <span
+                      style={{
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: 'var(--radius-xs)',
+                        background: pq.isCorrect ? 'var(--success-bg)' : pq.selectedOptionId ? 'var(--danger-bg)' : 'var(--bg-surface)',
+                        color: pq.isCorrect ? 'var(--success)' : pq.selectedOptionId ? 'var(--danger)' : 'var(--text-muted)',
+                        border: `1px solid ${pq.isCorrect ? 'var(--success-border)' : pq.selectedOptionId ? 'var(--danger-border)' : 'var(--border)'}`
+                      }}
+                    >
+                      {pq.marksAwarded > 0 ? `+${pq.marksAwarded}` : pq.marksAwarded < 0 ? String(pq.marksAwarded) : '0'} pts
+                    </span>
+                  </div>
+
+                  <FormattedQuestionContent
+                    content={pq.question}
+                    style={{ margin: '0 0 14px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}
+                  />
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+                    {/* Candidate's Selection */}
+                    <div
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 'var(--radius-sm)',
+                        background: pq.isCorrect ? 'var(--success-bg)' : pq.selectedOptionId ? 'var(--danger-bg)' : 'var(--bg-surface)',
+                        border: `1px solid ${pq.isCorrect ? 'var(--success-border)' : pq.selectedOptionId ? 'var(--danger-border)' : 'var(--border)'}`
+                      }}
+                    >
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>
+                        Your Answer
+                      </div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: pq.isCorrect ? 'var(--success)' : pq.selectedOptionId ? 'var(--danger)' : 'var(--text-muted)' }}>
+                        <FormattedQuestionContent content={pq.selectedText} />
+                      </div>
+                    </div>
+
+                    {/* Official Key */}
+                    <div
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border)'
+                      }}
+                    >
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>
+                        Correct Answer (Official Key)
+                      </div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--success)' }}>
+                        <FormattedQuestionContent content={pq.correctText} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {pq.explanation && (
+                    <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>
+                        Academic Explanation
+                      </div>
+                      <FormattedQuestionContent
+                        content={pq.explanation}
+                        style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Right Column: Question Navigator Matrix & Metadata Sidebar */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'sticky', top: '72px' }}>
+            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Question Matrix
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px', marginBottom: '14px' }}>
+                {grade.perQuestion.map((pq, idx) => {
+                  return (
+                    <button
+                      key={pq.questionId}
+                      onClick={() => {
+                        const el = document.getElementById(`q-item-${idx}`);
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}
+                      style={{
+                        height: '32px',
+                        borderRadius: 'var(--radius-xs)',
+                        border: `1px solid ${pq.isCorrect ? 'var(--success-border)' : pq.selectedOptionId ? 'var(--danger-border)' : 'var(--border)'}`,
+                        background: pq.isCorrect ? 'var(--success-bg)' : pq.selectedOptionId ? 'var(--danger-bg)' : 'var(--bg-surface)',
+                        color: pq.isCorrect ? 'var(--success)' : pq.selectedOptionId ? 'var(--danger)' : 'var(--text-muted)',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                      title={`Q${idx + 1}: ${pq.isCorrect ? 'Correct' : pq.selectedOptionId ? 'Wrong' : 'Skipped'}`}
+                    >
+                      {idx + 1}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '11px', borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--success)' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--success)' }} />
+                  <span>Correct: {grade.correctCount}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--danger)' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--danger)' }} />
+                  <span>Incorrect: {grade.wrongCount}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--text-muted)' }} />
+                  <span>Skipped: {grade.unansweredCount}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Candidate & Proctoring Snapshot */}
+            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Terminal Identity
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Department</span>
+                  <strong style={{ color: 'var(--text-primary)' }}>{attempt.studentDept || 'CSE'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Semester & Div</span>
+                  <strong style={{ color: 'var(--text-primary)' }}>{attempt.studentSem || '4th Sem'} - {attempt.studentDiv || 'A'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Lab Workstation</span>
+                  <strong style={{ color: 'var(--text-primary)' }}>LAB-01</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Integrity Protocol</span>
+                  <strong style={{ color: 'var(--success)' }}>Axent CCTV Sync</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Session Complete & Exit Action Card */}
+            {onExit && (
+              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Session Complete
+                </div>
+                <p style={{ margin: '0 0 14px', fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  Your official responses and marks have been recorded on the Axent institutional ledger. You may exit the testing environment now.
+                </p>
+                <button
+                  onClick={onExit}
+                  style={{
+                    width: '100%',
+                    height: '40px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--accent)',
+                    color: 'var(--accent-contrast)',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <LogOut size={14} />
+                  <span>Exit Examination</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── Main Exam Screen ──────────────────────────────────────────────────────────
+interface MCQExamScreenProps {
+  examId: string;
+  onBack?: () => void;
+}
+
+export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) => {
+  const navigate = useNavigate();
+  const [allExamsList, setAllExamsList] = useState<MCQExamConfig[]>(() => getAllExams());
+
+  // Check if there is an active in-progress attempt globally
+  const activeAttempt = getActiveAttempt();
+  const initialExamId = (activeAttempt && activeAttempt.status === 'IN_PROGRESS')
+    ? activeAttempt.examId
+    : examId;
+
+  const [activeExamId, setActiveExamId] = useState<string>(initialExamId);
+
+  const [exam, setExam] = useState<MCQExamConfig | null>(() => {
+    return getAllExams().find((e) => e.id === initialExamId) ?? null;
+  });
+
+  const [attempt, setAttempt] = useState<MCQAttempt | null>(() => {
+    if (activeAttempt && activeAttempt.status === 'IN_PROGRESS' && activeAttempt.examId === initialExamId) {
+      return activeAttempt;
+    }
+    return null;
+  });
+
+  const [answers, setAnswers] = useState<Record<string, string>>(() => {
+    if (activeAttempt && activeAttempt.status === 'IN_PROGRESS' && activeAttempt.examId === initialExamId) {
+      return activeAttempt.answers || {};
+    }
+    return {};
+  });
+
+  const [currentIdx, setCurrentIdx] = useState<number>(() => {
+    if (activeAttempt && activeAttempt.status === 'IN_PROGRESS') {
+      try {
+        const saved = localStorage.getItem(`codedna_mcq_current_idx_${activeAttempt.id}`);
+        if (saved !== null) {
+          const idx = parseInt(saved, 10);
+          if (!isNaN(idx) && idx >= 0 && idx < activeAttempt.assignedQuestions.length) {
+            return idx;
+          }
+        }
+      } catch {}
+    }
+    return 0;
+  });
+
+  const [gradeResult, setGradeResult] = useState<MCQGradeResult | null>(null);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const unfocusedStartRef = useRef<number | null>(null);
+  const totalUnfocusedRef = useRef(0);
+  const isAwayRef = useRef(false);
+  const [unlockPasskey, setUnlockPasskey] = useState('');
+  const [unlockError, setUnlockError] = useState<string | null>(null);
+
+  // Student Profile State
+  const [student, setStudent] = useState<StudentInfo>(() => {
+    if (activeAttempt && activeAttempt.status === 'IN_PROGRESS') {
+      const rollDigits = (activeAttempt.studentRoll || '').replace(/[^0-9]/g, '');
+      const derivedStation = rollDigits.length > 0 ? `Station #${String(parseInt(rollDigits.slice(-2), 10) || 1).padStart(2, '0')}` : 'Station #01';
+      return {
+        name: activeAttempt.studentName || 'Candidate',
+        rollNumber: activeAttempt.studentRoll || '',
+        course: activeAttempt.examTitle || 'MCQ Course',
+        department: activeAttempt.studentDept || 'CSE',
+        semester: activeAttempt.studentSem || '4th Sem',
+        division: activeAttempt.studentDiv || 'A',
+        examType: 'Multiple Choice Question (MCQ) Examination',
+        assignmentTitle: activeAttempt.examTitle || 'MCQ Exam',
+        labId: 'LAB-01',
+        stationNumber: derivedStation,
+        examDurationMinutes: 30,
+        examMode: 'MCQ',
+        mcqExamId: activeAttempt.examId
+      };
+    }
+    try {
+      const savedProfile = localStorage.getItem('codedna_student_profile');
+      if (savedProfile) {
+        const parsed = JSON.parse(savedProfile);
+        if (parsed?.name || parsed?.rollNumber) return parsed;
+      }
+      const saved = localStorage.getItem('codedna_last_submission');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.student) return parsed.student;
+      }
+    } catch {}
+    return {
+      name: '',
+      rollNumber: '',
+      course: '',
+      department: 'CSE',
+      semester: '4th Sem',
+      division: 'A',
+      examType: 'Multiple Choice Question (MCQ) Examination',
+      assignmentTitle: '',
+      labId: 'LAB-01',
+      stationNumber: 'Station #01',
+      examDurationMinutes: 30,
+      examMode: 'MCQ'
+    };
+  });
+
+  const [isLockedByProctor, setIsLockedByProctor] = useState(false);
+  const [proctorWarning, setProctorWarning] = useState<string | null>(null);
+  const [now, setNow] = useState<number>(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    // Academic Lockdown only activates during an active examination session
+    if (!attempt || attempt.status !== 'IN_PROGRESS') {
+      setIsLockedByProctor(false);
+      return;
+    }
+
+    const cleanStationNum = (student.stationNumber || '01').replace(/[^0-9]/g, '') || '01';
+    const stationId = `${student.labId || 'LAB-01'}-WS-${cleanStationNum.padStart(2, '0')}`;
+    
+    // Explicit station lock check: if station was explicitly unlocked, do not trigger stale lock
+    const explicitStationLock = typeof window !== 'undefined' ? localStorage.getItem(`codedna_lock_station_${stationId}`) : null;
+    if (explicitStationLock === 'false') {
+      setIsLockedByProctor(false);
+    } else if (isStationLocked(stationId, student.labId || 'LAB-01')) {
+      setIsLockedByProctor(true);
+    }
+
+    const unsubscribe = subscribeToCctvBroadcast((msg) => {
+      if (msg.type === 'LOCK_COMMAND') {
+        if (msg.stationId === 'all' || msg.stationId === stationId) {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`codedna_lock_station_${stationId}`, msg.isLocked ? 'true' : 'false');
+          }
+          setIsLockedByProctor(Boolean(msg.isLocked));
+          if (msg.isLocked) {
+            playSound('warning');
+          } else {
+            playSound('success');
+          }
+        }
+      } else if (msg.type === 'PROCTOR_MESSAGE') {
+        if (msg.stationId === 'all' || msg.stationId === stationId) {
+          setProctorWarning(msg.warningMessage || 'Attention: Maintain visual focus on your examination terminal.');
+          playSound('warning');
+        }
+      }
+    });
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const cloudStatus = await fetchSingleStationLockStatus(stationId);
+        if (cloudStatus) {
+          const currentExplicitLock = typeof window !== 'undefined' ? localStorage.getItem(`codedna_lock_station_${stationId}`) : null;
+          if (cloudStatus.isLocked && !isLockedByProctor && currentExplicitLock !== 'false') {
+            setIsLockedByProctor(true);
+            if (cloudStatus.warningMessage) setProctorWarning(cloudStatus.warningMessage);
+            playSound('warning');
+          } else if (!cloudStatus.isLocked && isLockedByProctor) {
+            setIsLockedByProctor(false);
+            setProctorWarning(null);
+            playSound('success');
+          } else if (cloudStatus.warningMessage && cloudStatus.warningMessage !== proctorWarning) {
+            setProctorWarning(cloudStatus.warningMessage);
+            playSound('warning');
+          }
+        }
+      } catch {
+        // Offline fallback
+      }
+    }, 2500);
+
+    return () => {
+      unsubscribe();
+      clearInterval(pollInterval);
+    };
+  }, [student.labId, student.stationNumber, attempt]);
+
+  // Load exam config
+  useEffect(() => {
+    const exams = getAllExams();
+    setAllExamsList(exams);
+    const e = exams.find((x) => x.id === activeExamId);
+    setExam(e ?? null);
+
+    // Restore active attempt if exists
+    const active = getActiveAttempt();
+    if (active && active.examId === activeExamId && active.status === 'IN_PROGRESS') {
+      setAttempt(active);
+      setAnswers(active.answers);
+      setCurrentIdx(0);
+      if (active.tabSwitchCount >= 3) {
+        setIsLockedByProctor(true);
+        setProctorWarning(`ACADEMIC FREEZE: ${active.tabSwitchCount}/3 Infractions Exceeded! Workstation frozen.`);
+      }
+      if (active.studentName) {
+        const rollDigits = (active.studentRoll || '').replace(/[^0-9]/g, '');
+        const derivedStation = rollDigits.length > 0 ? `Station #${String(parseInt(rollDigits.slice(-2), 10) || 1).padStart(2, '0')}` : 'Station #01';
+        setStudent((prev) => ({
+          ...prev,
+          name: active.studentName,
+          rollNumber: active.studentRoll,
+          department: active.studentDept,
+          semester: active.studentSem,
+          division: active.studentDiv || 'A',
+          stationNumber: prev.stationNumber && prev.stationNumber !== 'Station #01' ? prev.stationNumber : derivedStation
+        }));
+      }
+    }
+  }, [activeExamId]);
+
+  // Anti-cheat: tab switch detection & live telemetry
+  useEffect(() => {
+    if (!attempt || submitted || !exam) return;
+
+    const cleanStationNum = (student.stationNumber || '01').replace(/[^0-9]/g, '') || '01';
+    const stationId = `${student.labId || 'LAB-01'}-WS-${cleanStationNum.padStart(2, '0')}`;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (!isAwayRef.current) {
+          isAwayRef.current = true;
+          unfocusedStartRef.current = Date.now();
+        }
+      } else {
+        if (isAwayRef.current || unfocusedStartRef.current !== null) {
+          isAwayRef.current = false;
+          const now = Date.now();
+          const startTime = unfocusedStartRef.current || now;
+          const awayDuration = Math.max(1, Math.round((now - startTime) / 1000));
+          totalUnfocusedRef.current += awayDuration;
+          updateUnfocusedTime(attempt.id, totalUnfocusedRef.current);
+          unfocusedStartRef.current = null;
+
+          recordInfraction(attempt.id, `Tab/Window focus lost for ${awayDuration}s`);
+
+          setAttempt((prev) => {
+            if (!prev) return null;
+            const newCount = prev.tabSwitchCount + 1;
+            const updated: MCQAttempt = {
+              ...prev,
+              tabSwitchCount: newCount,
+              unfocusedSeconds: totalUnfocusedRef.current,
+            };
+
+            playSound('warning');
+
+            if (newCount === 1) {
+              setProctorWarning(`PROCTOR WARNING (Strike 1/3): Window focus lost for ${awayDuration}s! Tab switching is logged to the invigilator dashboard.`);
+              syncMcqLiveStation(updated, exam, student, currentIdx, false);
+            } else if (newCount === 2) {
+              setProctorWarning(`CRITICAL WARNING (Strike 2/3): FINAL STRIKE WARNING! Window left for ${awayDuration}s! One more tab switch or Alt+Tab will automatically freeze your workstation.`);
+              syncMcqLiveStation(updated, exam, student, currentIdx, false);
+            } else if (newCount >= 3) {
+              setProctorWarning(`ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded! Workstation frozen. Contact Invigilator.`);
+              setIsLockedByProctor(true);
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(`codedna_lock_station_${stationId}`, 'true');
+              }
+              updateStationLockInCloud(stationId, true, `ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded.`, student.labId || 'LAB-01');
+              syncMcqLiveStation(updated, exam, student, currentIdx, true);
+            }
+
+            return updated;
+          });
+        }
+      }
+    };
+
+    const handleBlur = () => {
+      if (!isAwayRef.current && !submitted) {
+        isAwayRef.current = true;
+        unfocusedStartRef.current = Date.now();
+      }
+    };
+
+    const handleFocus = () => {
+      handleVisibilityChange();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [attempt, submitted, exam, student, currentIdx]);
+
+  const handleStart = (studentData: StudentInfo) => {
+    if (!exam) return;
+    setStudent(studentData);
+
+    // Ensure this candidate workstation starts 100% unlocked and wipe any stale test lockouts
+    const cleanStationNum = (studentData.stationNumber || '01').replace(/[^0-9]/g, '') || '01';
+    const stationId = `${studentData.labId || 'LAB-01'}-WS-${cleanStationNum.padStart(2, '0')}`;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`codedna_lock_station_${stationId}`, 'false');
+      localStorage.removeItem('codedna_lock_all');
+      localStorage.removeItem(`codedna_lock_lab_${studentData.labId || 'LAB-01'}`);
+    }
+    setIsLockedByProctor(false);
+    setProctorWarning(null);
+    updateStationLockInCloud(stationId, false, undefined, studentData.labId || 'LAB-01');
+
+    const a = startAttempt(
+      exam,
+      studentData.name,
+      studentData.rollNumber,
+      studentData.department,
+      studentData.semester,
+      studentData.division
+    );
+    setAttempt(a);
+    setAnswers({});
+    setCurrentIdx(0);
+    playSound('success');
+    syncMcqLiveStation(a, exam, studentData, 0, false);
+  };
+
+  const handleSelectOption = (questionId: string, optionId: string) => {
+    if (!attempt || isLockedByProctor || (attempt && attempt.tabSwitchCount >= 3) || !exam) {
+      playSound('warning');
+      return;
+    }
+    const newAnswers = { ...answers, [questionId]: optionId };
+    setAnswers(newAnswers);
+    saveAnswer(attempt.id, questionId, optionId);
+    playSound('click');
+    const updatedAttempt = { ...attempt, answers: newAnswers };
+    setAttempt(updatedAttempt);
+    syncMcqLiveStation(updatedAttempt, exam, student, currentIdx, false);
+  };
+
+  const handleNavigateQuestion = (newIdx: number) => {
+    if (isLockedByProctor || (attempt && attempt.tabSwitchCount >= 3)) {
+      playSound('warning');
+      return;
+    }
+    setCurrentIdx(newIdx);
+    if (attempt) {
+      try {
+        localStorage.setItem(`codedna_mcq_current_idx_${attempt.id}`, String(newIdx));
+      } catch {}
+      if (exam) {
+        syncMcqLiveStation(attempt, exam, student, newIdx, false);
+      }
+    }
+  };
+
+  const handlePardonUnlock = (bypassPasskey = false) => {
+    if (!bypassPasskey) {
+      const cleanKey = unlockPasskey.trim().toLowerCase();
+      const validPasskeys = ['admin', 'proctor', 'faculty', '1234', 'codedna', 'unlock'];
+      const stationDigits = (student.stationNumber || '01').replace(/[^0-9]/g, '');
+      if (!validPasskeys.includes(cleanKey) && cleanKey !== `ws${stationDigits}` && cleanKey !== `ws-${stationDigits}`) {
+        setUnlockError('Invalid invigilator passkey. Only authorized proctor or faculty may unlock.');
+        playSound('warning');
+        return;
+      }
+    }
+
+    const cleanStationNum = (student.stationNumber || '01').replace(/[^0-9]/g, '') || '01';
+    const stationId = `${student.labId || 'LAB-01'}-WS-${cleanStationNum.padStart(2, '0')}`;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`codedna_lock_station_${stationId}`, 'false');
+      localStorage.removeItem('codedna_lock_all');
+      localStorage.removeItem(`codedna_lock_lab_${student.labId || 'LAB-01'}`);
+    }
+    setIsLockedByProctor(false);
+    setProctorWarning(null);
+    setUnlockError(null);
+    setUnlockPasskey('');
+    updateStationLockInCloud(stationId, false, undefined, student.labId || 'LAB-01');
+    playSound('success');
+
+    if (attempt) {
+      const pardoned: MCQAttempt = {
+        ...attempt,
+        tabSwitchCount: 0,
+      };
+      setAttempt(pardoned);
+      if (exam) {
+        syncMcqLiveStation(pardoned, exam, student, currentIdx, false);
+      }
+      try {
+        const allAttempts = getAllAttempts();
+        const aIdx = allAttempts.findIndex((a) => a.id === attempt.id);
+        if (aIdx >= 0) {
+          allAttempts[aIdx].tabSwitchCount = 0;
+          localStorage.setItem(MCQ_STORAGE_KEYS.ATTEMPTS, JSON.stringify(allAttempts));
+          localStorage.setItem('codedna_mcq_active_attempt_backup', JSON.stringify(allAttempts[aIdx]));
+        }
+      } catch {}
+    }
+  };
+
+  const handleDisqualifyCandidate = () => {
+    if (!attempt || !exam) return;
+    const confirm = window.confirm(
+      `Disqualify and Terminate Examination?\n\n` +
+      `Candidate: ${attempt.studentName} (${attempt.studentRoll})\n` +
+      `Violations Logged: ${attempt.tabSwitchCount} infractions\n\n` +
+      `This will immediately submit the examination as DISQUALIFIED due to proctor violations.`
+    );
+    if (!confirm) return;
+
+    setSubmitted(true);
+    setIsLockedByProctor(false);
+    const result = submitAttempt(attempt.id, answers, 'SUBMITTED');
+    if (result) {
+      setGradeResult(result);
+      playSound('warning');
+      const finished: MCQAttempt = {
+        ...attempt,
+        status: 'SUBMITTED',
+        score: result.score,
+        correctCount: result.correctCount,
+        wrongCount: result.wrongCount
+      };
+      setAttempt(finished);
+      syncMcqLiveStation(finished, exam, student, currentIdx, true);
+    }
+  };
+
+  const handleTimerExpire = useCallback(() => {
+    if (!attempt || submitted || !exam) return;
+    setSubmitted(true);
+    const result = submitAttempt(attempt.id, answers, 'TIMED_OUT');
+    if (result) {
+      setGradeResult(result);
+      playSound('warning');
+      const finished = { ...attempt, status: 'TIMED_OUT' as const, score: result.score, correctCount: result.correctCount, wrongCount: result.wrongCount };
+      setAttempt(finished);
+      try {
+        localStorage.removeItem(`codedna_mcq_current_idx_${attempt.id}`);
+      } catch {}
+      syncMcqLiveStation(finished, exam, student, currentIdx, true);
+    }
+  }, [attempt, answers, submitted, exam, student, currentIdx]);
+
+  const handleSubmit = () => {
+    if (!attempt || submitted || isLockedByProctor || (attempt && attempt.tabSwitchCount >= 3) || !exam) {
+      playSound('warning');
+      return;
+    }
+    setSubmitted(true);
+    setShowSubmitConfirm(false);
+    const result = submitAttempt(attempt.id, answers, 'SUBMITTED');
+    if (result) {
+      setGradeResult(result);
+      playSound('success');
+      const finished = { ...attempt, status: 'SUBMITTED' as const, score: result.score, correctCount: result.correctCount, wrongCount: result.wrongCount };
+      setAttempt(finished);
+      try {
+        localStorage.removeItem(`codedna_mcq_current_idx_${attempt.id}`);
+      } catch {}
+      syncMcqLiveStation(finished, exam, student, currentIdx, true);
+    }
+  };
+
+  // ── Loading / not found ──
+  if (!exam) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)' }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+          <BookOpen size={40} style={{ marginBottom: '12px', opacity: 0.4 }} />
+          <p style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Exam not found</p>
+          <p style={{ fontSize: '13px' }}>The exam ID "{activeExamId}" does not exist or has been removed.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (exam.status !== 'PUBLISHED') {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)' }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+          <AlertTriangle size={40} style={{ marginBottom: '12px', opacity: 0.4 }} />
+          <p style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Exam not available</p>
+          <p style={{ fontSize: '13px' }}>This exam is currently {exam.status.toLowerCase()}.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (exam.startTime && now < exam.startTime) {
+    const diffMs = exam.startTime - now;
+    const diffMins = Math.ceil(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const remMins = diffMins % 60;
+    const timeStr = diffHours > 0 ? `${diffHours}h ${remMins}m` : `${diffMins} min`;
+    const startStr = new Date(exam.startTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)', padding: '24px' }}>
+        <div style={{
+          maxWidth: '520px', width: '100%',
+          background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-lg)', padding: '36px', textAlign: 'center'
+        }}>
+          <Calendar size={40} color="var(--accent)" style={{ marginBottom: '16px' }} />
+          <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>
+            Examination Scheduled
+          </h2>
+          <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--accent)', margin: '0 0 16px' }}>
+            {exam.title}
+          </p>
+          <div style={{
+            background: 'var(--bg-surface)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)', padding: '16px', marginBottom: '20px'
+          }}>
+            <p style={{ margin: '0 0 4px', fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Countdown to Unlock
+            </p>
+            <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
+              Opens in {timeStr}
+            </div>
+            <p style={{ margin: '6px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
+              Scheduled Start: {startStr}
+            </p>
+          </div>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5, margin: '0 0 20px' }}>
+            This terminal will automatically unlock when the examination window commences. Please remain seated and do not close your browser.
+          </p>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              if (onBack) onBack();
+              else window.location.href = '/mcq';
+            }}
+          >
+            Back to Available Exams
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (exam.endTime && now > exam.endTime) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)', padding: '24px' }}>
+        <div style={{
+          maxWidth: '520px', width: '100%',
+          background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-lg)', padding: '36px', textAlign: 'center'
+        }}>
+          <AlertTriangle size={44} color="var(--warning)" style={{ marginBottom: '16px' }} />
+          <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>
+            Examination Window Closed
+          </h2>
+          <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: '0 0 20px' }}>
+            The submission window for <strong>{exam.title}</strong> has concluded. Submissions are no longer accepted.
+          </p>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              if (onBack) onBack();
+              else window.location.href = '/mcq';
+            }}
+          >
+            Back to Available Exams
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Not yet registered ──
+  if (!attempt) {
+    return (
+      <RegistrationForm
+        exam={exam}
+        allExams={allExamsList}
+        onSelectExam={(newId) => setActiveExamId(newId)}
+        onStart={handleStart}
+      />
+    );
+  }
+
+  // ── Results screen ──
+  if (submitted && gradeResult) {
+    if (exam.resultDeclarationMode === 'WHATSAPP_GROUP') {
+      return (
+        <WhatsAppHoldResultsView
+          attempt={attempt}
+          exam={exam}
+          onExit={() => {
+            setAttempt(null);
+            setGradeResult(null);
+            setSubmitted(false);
+            if (onBack) {
+              onBack();
+            } else {
+              navigate('/mcq');
+            }
+          }}
+        />
+      );
+    }
+
+    return (
+      <ResultsView
+        attempt={attempt}
+        grade={gradeResult}
+        showExplanations={exam.showExplanationsAfterSubmit}
+        onRestart={exam.maxAttempts > 1 ? () => { setAttempt(null); setGradeResult(null); setSubmitted(false); } : undefined}
+        onExit={() => {
+          setAttempt(null);
+          setGradeResult(null);
+          setSubmitted(false);
+          if (onBack) {
+            onBack();
+          } else {
+            navigate('/mcq');
+          }
+        }}
+      />
+    );
+  }
+
+  // ── Active exam ──
+  const { assignedQuestions } = attempt;
+  const totalQ = assignedQuestions.length;
+  const currentAQ = assignedQuestions[currentIdx];
+  if (!currentAQ) return null;
+
+  const answeredCount = Object.keys(answers).filter((k) => answers[k]).length;
+  const unansweredCount = totalQ - answeredCount;
+
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--bg-main)', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      {/* Proctor Notice Banner */}
+      {proctorWarning && (
+        <div style={{
+          background: 'var(--danger-bg)', borderBottom: '1px solid var(--danger-border)',
+          padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          fontSize: '12px', color: 'var(--danger)', fontWeight: 600, zIndex: 110
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertTriangle size={15} />
+            <span>PROCTOR NOTICE: {proctorWarning}</span>
+          </div>
+          <button onClick={() => setProctorWarning(null)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: '2px' }}>
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* Proctor Full Lockdown Screen Overlay */}
+      {(isLockedByProctor || (attempt && attempt.tabSwitchCount >= 3)) && attempt && attempt.status === 'IN_PROGRESS' && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(9, 9, 11, 0.95)', backdropFilter: 'blur(10px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px'
+        }}>
+          <div style={{
+            maxWidth: '520px', width: '100%',
+            background: 'var(--bg-elevated)', border: '1px solid var(--danger)',
+            borderRadius: 'var(--radius-lg)', padding: '32px', textAlign: 'center',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.6)'
+          }}>
+            <div style={{
+              width: '60px', height: '60px', borderRadius: '50%',
+              background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 16px'
+            }}>
+              <ShieldAlert size={30} color="var(--danger)" />
+            </div>
+
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '3px 12px', borderRadius: 'var(--radius-pill)',
+              background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
+              color: 'var(--danger)', fontSize: '11px', fontWeight: 800,
+              textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px'
+            }}>
+              <span>ACADEMIC FREEZE · {attempt.tabSwitchCount >= 3 ? `${attempt.tabSwitchCount}/3 INFRACTIONS EXCEEDED` : 'PROCTOR LOCKDOWN'}</span>
+            </div>
+
+            <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 10px' }}>
+              Examination Session Frozen
+            </h2>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 18px' }}>
+              {attempt.tabSwitchCount >= 3
+                ? `Workstation automatically locked: You switched tabs or minimized the examination window ${attempt.tabSwitchCount} times (maximum permitted: 3). All question selections, navigation, and submissions are frozen.`
+                : 'Your examination terminal has been locked by the invigilator. Interactions are frozen until released by the proctor.'}
+            </p>
+
+            {/* Candidate Dossier Summary */}
+            <div style={{
+              background: 'var(--bg-surface)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)', padding: '14px 18px', marginBottom: '22px',
+              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', textAlign: 'left',
+              fontSize: '12px'
+            }}>
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>Candidate: </span>
+                <strong style={{ color: 'var(--text-primary)' }}>{attempt.studentName}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>Roll / USN: </span>
+                <strong style={{ color: 'var(--text-primary)' }}>{attempt.studentRoll}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>Workstation: </span>
+                <strong style={{ color: 'var(--text-primary)' }}>{student.stationNumber || 'Station #01'}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>Violations: </span>
+                <strong style={{ color: 'var(--danger)' }}>{attempt.tabSwitchCount} Violations Logged</strong>
+              </div>
+            </div>
+
+            {/* Direct Termination Action */}
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px', display: 'flex', justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={handleDisqualifyCandidate}
+                style={{
+                  background: 'var(--danger-bg)',
+                  border: '1px solid var(--danger-border)',
+                  color: 'var(--danger)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '9px 22px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                Conclude & Submit Examination
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Top bar */}
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 100,
+        background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)',
+        padding: '0 20px', height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <BookOpen size={16} color="var(--text-muted)" />
+          <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{exam.title}</span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{attempt.studentName}</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {/* Anti-cheat indicator */}
+          {attempt.tabSwitchCount > 0 && (
+            <span style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              color: attempt.tabSwitchCount >= 3 ? 'var(--danger)' : 'var(--warning)',
+              background: attempt.tabSwitchCount >= 3 ? 'var(--danger-bg)' : 'var(--warning-bg)',
+              border: `1px solid ${attempt.tabSwitchCount >= 3 ? 'var(--danger-border)' : 'var(--warning-border)'}`,
+              padding: '3px 8px',
+              borderRadius: 'var(--radius-pill)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}>
+              <AlertTriangle size={11} />
+              <span>{attempt.tabSwitchCount}/3 {attempt.tabSwitchCount >= 3 ? 'VIOLATIONS (FROZEN)' : 'Strikes'}</span>
+            </span>
+          )}
+
+          {/* Timer */}
+          <TimerBadge deadline={attempt.deadline} onExpire={handleTimerExpire} />
+
+          <button
+            onClick={() => setShowSubmitConfirm(true)}
+            title="End examination and finalize submission"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              background: 'var(--accent)', border: 'none',
+              borderRadius: 'var(--radius-sm)', padding: '8px 16px',
+              cursor: 'pointer', color: 'var(--accent-contrast)', fontSize: '12px', fontWeight: 700,
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+            <Send size={13} />
+            <span>End & Submit Exam</span>
+          </button>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, display: 'flex', maxWidth: '1520px', margin: '0 auto', width: '100%', padding: '20px 28px', gap: '24px' }}>
+        {/* Question navigator sidebar */}
+        <div style={{ width: '220px', flexShrink: 0 }}>
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '16px', position: 'sticky', top: '72px' }}>
+            <p style={{ margin: '0 0 12px', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Questions
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '5px', marginBottom: '14px' }}>
+              {assignedQuestions.map((aq, idx) => {
+                const answered = !!answers[aq.questionId];
+                const isCurrent = idx === currentIdx;
+                return (
+                  <button
+                    key={aq.questionId}
+                    onClick={() => setCurrentIdx(idx)}
+                    style={{
+                      width: '34px', height: '34px', borderRadius: 'var(--radius-sm)',
+                      border: `2px solid ${isCurrent ? 'var(--accent)' : answered ? 'var(--success-border)' : 'var(--border)'}`,
+                      background: isCurrent ? 'var(--accent)' : answered ? 'var(--success-bg)' : 'var(--bg-surface)',
+                      color: isCurrent ? 'var(--accent-contrast)' : answered ? 'var(--success)' : 'var(--text-muted)',
+                      fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+                    }}>
+                    {idx + 1}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                <span style={{ color: 'var(--success)' }}>Answered</span>
+                <strong style={{ color: 'var(--success)' }}>{answeredCount}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Unanswered</span>
+                <strong style={{ color: 'var(--text-muted)' }}>{unansweredCount}</strong>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowSubmitConfirm(true)}
+              style={{
+                width: '100%',
+                marginTop: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                background: 'var(--accent)',
+                border: 'none',
+                borderRadius: 'var(--radius-sm)',
+                padding: '10px 12px',
+                color: 'var(--accent-contrast)',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              <Send size={13} />
+              <span>End & Submit Exam</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Main question area */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '28px' }}>
+            {/* Question header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Question {currentIdx + 1} of {totalQ}
+              </span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
+                  {currentAQ.snapshot.marks}pt
+                </span>
+                {currentAQ.snapshot.negativeMarks > 0 && (
+                  <span style={{ fontSize: '12px', color: 'var(--warning)', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
+                    -{currentAQ.snapshot.negativeMarks} penalty
+                  </span>
+                )}
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
+                  {currentAQ.snapshot.difficulty}
+                </span>
+              </div>
+            </div>
+
+            {/* Question text */}
+            <FormattedQuestionContent
+              content={currentAQ.snapshot.text}
+              style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 24px' }}
+            />
+
+            {/* Options */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {currentAQ.shuffledOptionIds.map((optId, optIdx) => {
+                const opt = currentAQ.snapshot.options.find((o) => o.id === optId);
+                if (!opt) return null;
+                const isSelected = answers[currentAQ.questionId] === optId;
+                return (
+                  <button
+                    key={optId}
+                    onClick={() => handleSelectOption(currentAQ.questionId, optId)}
+                    style={{
+                      display: 'flex', alignItems: 'flex-start', gap: '12px', width: '100%', textAlign: 'left',
+                      padding: '14px 16px', cursor: 'pointer',
+                      borderRadius: 'var(--radius-md)',
+                      border: `2px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
+                      background: isSelected ? 'var(--accent-subtle)' : 'var(--bg-surface)',
+                      transition: 'border-color 0.15s ease, background 0.15s ease',
+                    }}>
+                    {/* Option letter */}
+                    <div style={{
+                      width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', flexShrink: 0,
+                      border: `2px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
+                      background: isSelected ? 'var(--accent)' : 'var(--bg-elevated)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '12px', fontWeight: 800,
+                      color: isSelected ? 'var(--accent-contrast)' : 'var(--text-muted)',
+                    }}>
+                      {String.fromCharCode(65 + optIdx)}
+                    </div>
+                    <div style={{ fontSize: '14px', color: 'var(--text-primary)', lineHeight: 1.5, flex: 1 }}>
+                      <FormattedQuestionContent content={opt.text} />
+                    </div>
+                    {isSelected && <CheckCircle size={18} color="var(--accent)" style={{ flexShrink: 0, marginTop: '3px' }} />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Navigation footer */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
+            <button
+              onClick={() => setCurrentIdx((i) => Math.max(0, i - 1))}
+              disabled={!exam.allowReview && currentIdx === 0 || currentIdx === 0}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)', padding: '9px 16px',
+                cursor: currentIdx === 0 ? 'not-allowed' : 'pointer',
+                color: currentIdx === 0 ? 'var(--text-dim)' : 'var(--text-secondary)', fontSize: '13px',
+              }}>
+              <ChevronLeft size={14} /> Previous
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {currentIdx < totalQ - 1 && (
+                <button
+                  type="button"
+                  onClick={() => setShowSubmitConfirm(true)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    background: 'transparent', border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)', padding: '9px 14px',
+                    cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 600,
+                  }}>
+                  <Send size={12} /> End Exam Early
+                </button>
+              )}
+
+              {currentIdx < totalQ - 1 ? (
+                <button
+                  onClick={() => setCurrentIdx((i) => Math.min(totalQ - 1, i + 1))}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    background: 'var(--accent)', border: 'none',
+                    borderRadius: 'var(--radius-sm)', padding: '9px 18px',
+                    cursor: 'pointer', color: 'var(--accent-contrast)', fontSize: '13px', fontWeight: 600,
+                  }}>
+                  Next <ChevronRight size={14} />
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowSubmitConfirm(true)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    background: 'var(--accent)', border: 'none',
+                    borderRadius: 'var(--radius-sm)', padding: '9px 18px',
+                    cursor: 'pointer', color: 'var(--accent-contrast)', fontSize: '13px', fontWeight: 700,
+                  }}>
+                  <Send size={14} /> End & Submit Exam
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Submit confirmation modal */}
+      {showSubmitConfirm && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '28px', maxWidth: '420px', width: '90%' }}>
+            <h3 style={{ margin: '0 0 8px', fontSize: '17px', fontWeight: 800, color: 'var(--text-primary)' }}>End & Submit Examination?</h3>
+            <div style={{ marginBottom: '20px' }}>
+              <p style={{ margin: '0 0 8px', fontSize: '13px', color: 'var(--text-secondary)' }}>Review your progress before final submission:</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div style={{ background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
+                  <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--success)' }}>{answeredCount}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--success)', textTransform: 'uppercase' }}>Answered</div>
+                </div>
+                <div style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
+                  <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--danger)' }}>{unansweredCount}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--danger)', textTransform: 'uppercase' }}>Unanswered</div>
+                </div>
+              </div>
+              {unansweredCount > 0 && (
+                <p style={{ margin: '10px 0 0', fontSize: '12px', color: 'var(--warning)' }}>
+                  <AlertTriangle size={11} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
+                  {unansweredCount} question{unansweredCount !== 1 ? 's' : ''} unanswered. Unanswered questions score 0 marks.
+                </p>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowSubmitConfirm(false)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '9px 16px', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                Return to Questions
+              </button>
+              <button onClick={handleSubmit} style={{ background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '9px 18px', cursor: 'pointer', color: 'var(--accent-contrast)', fontSize: '13px', fontWeight: 700 }}>
+                Yes, End & Submit Exam
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Timer badge sub-component ─────────────────────────────────────────────────
+const TimerBadge: React.FC<{ deadline: number; onExpire: () => void }> = ({ deadline, onExpire }) => {
+  const { minutes, seconds, isLow, isCritical } = useCountdown(deadline, onExpire);
+  const color = isCritical ? 'var(--danger)' : isLow ? 'var(--warning)' : 'var(--text-secondary)';
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: '5px',
+      padding: '4px 10px', borderRadius: 'var(--radius-sm)',
+      border: `1px solid ${isCritical ? 'var(--danger-border)' : isLow ? 'var(--warning-border)' : 'var(--border)'}`,
+      background: isCritical ? 'var(--danger-bg)' : isLow ? 'var(--warning-bg)' : 'var(--bg-surface)',
+    }}>
+      <Clock size={13} color={color} />
+      <span style={{ fontSize: '13px', fontWeight: 700, color, fontFamily: 'var(--font-mono)' }}>
+        {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+      </span>
+    </div>
+  );
+};
+
+// ── Shared styles ─────────────────────────────────────────────────────────────
+const labelStyle: React.CSSProperties = {
+  fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)',
+  textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px',
+};
+
+const inputStyle: React.CSSProperties = {
+  width: '100%', boxSizing: 'border-box',
+  background: 'var(--bg-surface)', border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)',
+  padding: '10px 12px', fontSize: '14px', outline: 'none',
+};
+
+// ── Exam Selector (pick which exam to take) ───────────────────────────────────
+export const MCQExamSelector: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queryExamId = searchParams.get('examId');
+  const exams = getAllExams().filter((e) => e.status === 'PUBLISHED');
+
+  // If candidate has an active attempt in progress, ALWAYS restore that exam immediately!
+  const activeAttempt = getActiveAttempt();
+  const activeExamId = (activeAttempt && activeAttempt.status === 'IN_PROGRESS')
+    ? activeAttempt.examId
+    : null;
+
+  const [selectedExamId, setSelectedExamId] = useState<string | null>(
+    () => activeExamId || queryExamId || null
+  );
+  const [currentTime, setCurrentTime] = useState<number>(Date.now());
+
+  useEffect(() => {
+    const ticker = setInterval(() => setCurrentTime(Date.now()), 1000);
+    return () => clearInterval(ticker);
+  }, []);
+
+  // When active exam attempt exists, keep selectedExamId synchronized
+  useEffect(() => {
+    if (activeExamId && selectedExamId !== activeExamId) {
+      setSelectedExamId(activeExamId);
+      setSearchParams({ examId: activeExamId }, { replace: true });
+    }
+  }, [activeExamId, selectedExamId, setSearchParams]);
+
+  useEffect(() => {
+    if (queryExamId && !activeExamId && selectedExamId !== queryExamId) {
+      setSelectedExamId(queryExamId);
+    }
+  }, [queryExamId, activeExamId, selectedExamId]);
+
+  const handleSelectExam = (id: string) => {
+    setSelectedExamId(id);
+    setSearchParams({ examId: id });
+  };
+
+  const handleBack = () => {
+    const active = getActiveAttempt();
+    if (active && active.status === 'IN_PROGRESS') {
+      if (!window.confirm('You have an active examination session in progress. Leaving this screen will not pause your examination timer. Do you want to return to the paper selection?')) {
+        return;
+      }
+    }
+    setSelectedExamId(null);
+    setSearchParams({});
+  };
+
+  if (selectedExamId) {
+    return (
+      <MCQExamScreen
+        examId={selectedExamId}
+        onBack={handleBack}
+      />
+    );
+  }
+
+  return (
+    <div style={{ padding: '32px 36px', maxWidth: '1440px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
+      <div style={{ marginBottom: '22px' }}>
+        <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px' }}>
+          Available MCQ Examinations
+        </h2>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
+          Select your assigned examination session to commence or enter the synchronized waiting room.
+        </p>
+      </div>
+
+      {exams.length === 0 ? (
+        <div style={{
+          textAlign: 'center', padding: '60px 20px',
+          background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-lg)'
+        }}>
+          <BookOpen size={36} style={{ marginBottom: '12px', opacity: 0.4, color: 'var(--text-muted)' }} />
+          <p style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 4px' }}>
+            No active examinations scheduled
+          </p>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
+            Check back closer to your examination time or consult your laboratory invigilator.
+          </p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: '18px' }}>
+          {exams.map((exam) => {
+            const isScheduledFuture = Boolean(exam.startTime && currentTime < exam.startTime);
+            const isConcluded = Boolean(exam.endTime && currentTime > exam.endTime);
+            const isLive = !isScheduledFuture && !isConcluded;
+
+            let countdownStr = '';
+            if (isScheduledFuture && exam.startTime) {
+              const diffMs = exam.startTime - currentTime;
+              const diffMins = Math.ceil(diffMs / 60000);
+              const diffHours = Math.floor(diffMins / 60);
+              const remMins = diffMins % 60;
+              countdownStr = diffHours > 0 ? `${diffHours}h ${remMins}m` : `${diffMins} min`;
+            }
+
+            const formatScheduleTime = (ts: number) =>
+              new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+            return (
+              <div
+                key={exam.id}
+                onClick={() => {
+                  if (!isConcluded) {
+                    handleSelectExam(exam.id);
+                  }
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '16px', width: '100%',
+                  background: isConcluded ? 'var(--bg-surface)' : 'var(--bg-elevated)',
+                  border: `1px solid ${isLive ? 'var(--accent)' : 'var(--border)'}`,
+                  borderRadius: 'var(--radius-md)', padding: '18px 20px',
+                  cursor: isConcluded ? 'not-allowed' : 'pointer',
+                  opacity: isConcluded ? 0.6 : 1,
+                  transition: 'border-color 0.15s ease',
+                  boxSizing: 'border-box'
+                }}
+              >
+                <div style={{
+                  width: '46px', height: '46px', borderRadius: 'var(--radius-md)',
+                  background: isLive ? 'var(--accent-glow, var(--bg-surface))' : 'var(--bg-surface)',
+                  border: '1px solid var(--border)', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', flexShrink: 0
+                }}>
+                  <BookOpen size={20} color={isLive ? 'var(--accent)' : 'var(--text-secondary)'} />
+                </div>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                    <p style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {exam.title}
+                    </p>
+
+                    {/* Schedule Badge */}
+                    {isLive && (
+                      <span style={{
+                        fontSize: '11px', fontWeight: 700, textTransform: 'uppercase',
+                        padding: '2px 8px', borderRadius: 'var(--radius-sm)',
+                        background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e',
+                        border: '1px solid rgba(34, 197, 94, 0.3)'
+                      }}>
+                        Live Now
+                      </span>
+                    )}
+
+                    {isScheduledFuture && (
+                      <span style={{
+                        fontSize: '11px', fontWeight: 700, textTransform: 'uppercase',
+                        padding: '2px 8px', borderRadius: 'var(--radius-sm)',
+                        background: 'rgba(234, 179, 8, 0.12)', color: '#eab308',
+                        border: '1px solid rgba(234, 179, 8, 0.3)',
+                        display: 'flex', alignItems: 'center', gap: '4px'
+                      }}>
+                        <Clock size={11} /> Opens in {countdownStr}
+                      </span>
+                    )}
+
+                    {isConcluded && (
+                      <span style={{
+                        fontSize: '11px', fontWeight: 700, textTransform: 'uppercase',
+                        padding: '2px 8px', borderRadius: 'var(--radius-sm)',
+                        background: 'var(--bg-surface)', color: 'var(--text-muted)',
+                        border: '1px solid var(--border)'
+                      }}>
+                        Concluded
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                      {exam.questionCount} Questions
+                    </span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>•</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                      {exam.durationMinutes} Minutes
+                    </span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>•</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                      {exam.totalMarks} Marks
+                    </span>
+                    {exam.subject && (
+                      <>
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>•</span>
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{exam.subject}</span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Scheduled Window Detail */}
+                  {(exam.startTime || exam.endTime) && (
+                    <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--text-muted)', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                      {exam.startTime && <span>Window Opens: {formatScheduleTime(exam.startTime)}</span>}
+                      {exam.endTime && <span>Window Closes: {formatScheduleTime(exam.endTime)}</span>}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  {isLive && (
+                    <button
+                      className="btn btn-primary btn-sm"
+                      style={{ pointerEvents: 'none' }}
+                    >
+                      Start Exam <ChevronRight size={14} style={{ marginLeft: '4px' }} />
+                    </button>
+                  )}
+                  {isScheduledFuture && (
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ pointerEvents: 'none' }}
+                    >
+                      Waiting Room <ChevronRight size={14} style={{ marginLeft: '4px' }} />
+                    </button>
+                  )}
+                  {isConcluded && (
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Closed</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default MCQExamScreen;
