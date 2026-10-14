@@ -782,7 +782,18 @@ export async function syncFromSupabase(): Promise<void> {
           void saveExamToCloud(ex);
         }
       }
-      save(MCQ_STORAGE_KEYS.EXAMS, cloudE.length > 0 ? cloudE : mergeUpdatedRecords(localE, cloudE));
+      const reconciled = cloudE.map((ce) => {
+        const localMatch = localE.find((le) => le.id === ce.id);
+        if (localMatch) {
+          const resultDeclarationMode =
+            ce.resultDeclarationMode || localMatch.resultDeclarationMode || 'IMMEDIATE';
+          const whatsappGroupName = ce.whatsappGroupName || localMatch.whatsappGroupName || '';
+          const whatsappGroupLink = ce.whatsappGroupLink || localMatch.whatsappGroupLink || '';
+          return { ...ce, resultDeclarationMode, whatsappGroupName, whatsappGroupLink };
+        }
+        return ce;
+      });
+      save(MCQ_STORAGE_KEYS.EXAMS, reconciled.length > 0 ? reconciled : localE);
       notifyExamsChanged();
     }
 

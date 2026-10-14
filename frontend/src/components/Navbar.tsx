@@ -5,18 +5,16 @@ import {
   Sun,
   Moon,
   Layers,
-  SlidersHorizontal,
+  Settings,
   Code2,
   FileText,
   ShieldAlert,
-  Activity,
   ListChecks,
   ExternalLink,
   LogOut,
   LucideIcon
 } from 'lucide-react';
 import { ThemeMode } from '../types/dna';
-import { getStoredModel } from '../services/groqService';
 import { signOut } from '../services/authService';
 import { ContinuousTabs } from './watermelon-ui';
 
@@ -63,8 +61,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const currentModel = getStoredModel();
-  const engineLabel = 'REASONING ENGINE';
 
   const [examMode, setExamMode] = useState<'MCQ' | 'CODING'>(() => getActiveExamMode());
 
@@ -318,38 +314,24 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         )}
 
-        {/* Model status - hidden on login route */}
-        {!isLoginRoute && (
-          <div
+        {/* Settings Button - available to authorities */}
+        {(isAdminRoute || isPaperSetterRoute) && (
+          <button
+            className="btn btn-ghost btn-sm"
             onClick={onOpenSettings}
-            title="Engine & LLM Configuration"
-            className="badge badge-neutral"
+            title="System & AI Settings"
             style={{
-              cursor: 'pointer',
-              height: '28px',
-              padding: '0 10px',
-              gap: '6px',
-              border: '1px solid var(--border)'
+              width: '32px',
+              height: '32px',
+              padding: 0,
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border)',
+              background: 'var(--bg-surface)',
+              color: 'var(--text-secondary)'
             }}
           >
-            <SlidersHorizontal size={12} color="var(--accent)" />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', fontWeight: 600 }}>
-              {engineLabel}
-            </span>
-            <span
-              className={`badge badge-sm ${isRunning ? 'badge-warning' : 'badge-success'}`}
-              style={{ height: '16px', padding: '0 5px', fontSize: '9px', fontWeight: 700 }}
-            >
-              {isRunning ? (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                  <Activity size={8} className="spinner-icon" />
-                  EXEC
-                </span>
-              ) : (
-                'ONLINE'
-              )}
-            </span>
-          </div>
+            <Settings size={14} />
+          </button>
         )}
 
         {/* Theme Toggle */}

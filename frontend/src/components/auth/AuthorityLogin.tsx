@@ -6,6 +6,7 @@ import {
   KeyRound,
   Mail,
   Lock,
+  User,
   Eye,
   EyeOff,
   ArrowRight,
@@ -14,12 +15,13 @@ import {
   Layers,
   ShieldAlert,
   Send,
-  Sparkles,
   RefreshCw,
-  Check
+  Check,
+  GraduationCap
 } from 'lucide-react';
 import {
   signInWithPassword,
+  signUpWithPassword,
   sendMagicLink,
   updateUserPassword,
   getAuthSession,
@@ -28,7 +30,7 @@ import {
 } from '../../services/authService';
 import { playSound } from '../../utils/sounds';
 
-type LoginTab = 'password' | 'magic_link' | 'set_password';
+type AuthTab = 'signin' | 'register' | 'magic_link' | 'set_password';
 
 export const AuthorityLogin: React.FC = () => {
   const navigate = useNavigate();
@@ -44,14 +46,15 @@ export const AuthorityLogin: React.FC = () => {
     return 'paper_setter';
   });
 
-  const [activeTab, setActiveTab] = useState<LoginTab>(() => {
+  const [activeTab, setActiveTab] = useState<AuthTab>(() => {
     if (typeParam === 'recovery' || typeParam === 'invite') return 'set_password';
-    return 'password';
+    return 'signin';
   });
 
-  // Form Fields
+  // Sign In & Registration Fields
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   // Set New Password Fields
@@ -69,9 +72,8 @@ export const AuthorityLogin: React.FC = () => {
     const hash = window.location.hash;
     if (hash && (hash.includes('access_token=') || hash.includes('type=recovery') || hash.includes('type=invite'))) {
       setActiveTab('set_password');
-      setSuccessMessage('Authority link verified. Please configure your institutional password below.');
+      setSuccessMessage('Authority verification confirmed. Please configure your institutional password below.');
     } else {
-      // Check if user is already authenticated
       void getAuthSession().then((session) => {
         if (session && !typeParam) {
           navigate(redirectTarget, { replace: true });
@@ -130,6 +132,55 @@ export const AuthorityLogin: React.FC = () => {
     }
   };
 
+  // ── Institutional Registration Submit ────────────────────────────────────────
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedName = fullName.trim();
+
+    if (!trimmedName || trimmedName.length < 2) {
+      setErrorMessage('Full name is required (min 2 characters).');
+      playSound('warning');
+      return;
+    }
+    if (!trimmedEmail) {
+      setErrorMessage('Institutional email is required.');
+      playSound('warning');
+      return;
+    }
+    if (password.length < 8) {
+      setErrorMessage('Password must contain at least 8 characters.');
+      playSound('warning');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const { user, error, needsEmailConfirmation } = await signUpWithPassword(trimmedEmail, password, role);
+      if (error) {
+        setErrorMessage(error);
+        playSound('warning');
+        return;
+      }
+      if (user) {
+        playSound('success');
+        if (needsEmailConfirmation) {
+          setSuccessMessage(`Registration received! A confirmation email was dispatched to ${trimmedEmail}. You may also log in with the default password.`);
+        } else {
+          setSuccessMessage('Authority account configured! Entering portal...');
+          setTimeout(() => {
+            navigate(redirectTarget, { replace: true });
+          }, 800);
+        }
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // ── Send Magic Link / Invite Submit ─────────────────────────────────────────
   const handleMagicLinkSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,12 +190,6 @@ export const AuthorityLogin: React.FC = () => {
     const trimmedEmail = email.trim().toLowerCase();
     if (!trimmedEmail) {
       setErrorMessage('Institutional email is required to dispatch an invite link.');
-      playSound('warning');
-      return;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(trimmedEmail)) {
-      setErrorMessage('Please provide a valid email format.');
       playSound('warning');
       return;
     }
@@ -158,9 +203,8 @@ export const AuthorityLogin: React.FC = () => {
         playSound('warning');
         return;
       }
-
       playSound('success');
-      setSuccessMessage(`Magic link dispatched to ${trimmedEmail}. Check your institutional email and click the link to enter.`);
+      setSuccessMessage(`Magic link dispatched to ${trimmedEmail}. Check your inbox and click the link to enter.`);
     } finally {
       setIsLoading(false);
     }
@@ -191,18 +235,17 @@ export const AuthorityLogin: React.FC = () => {
         playSound('warning');
         return;
       }
-
       playSound('success');
       setSuccessMessage('Password configured successfully! Redirecting to your authority portal...');
       setTimeout(() => {
         navigate(redirectTarget, { replace: true });
-      }, 1200);
+      }, 1000);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Local development bypass (so offline testing is never blocked)
+  // Local development bypass
   const handleDevBypass = () => {
     const dummySession = {
       access_token: 'dev-token',
@@ -230,74 +273,68 @@ export const AuthorityLogin: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '32px 16px',
+        padding: '36px 16px',
         background: 'var(--bg-main)'
       }}
     >
       <div
         style={{
-          maxWidth: '460px',
+          maxWidth: '440px',
           width: '100%',
           background: 'var(--bg-elevated)',
           border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)',
-          overflow: 'hidden',
-          boxShadow: 'var(--shadow-md)'
+          borderRadius: 'var(--radius-md)',
+          boxShadow: 'var(--shadow-md)',
+          overflow: 'hidden'
         }}
       >
-        {/* Institutional Header Banner */}
+        {/* ── Watermelon UI Architecture: Brand Header ── */}
         <div
           style={{
-            padding: '24px 28px 20px',
+            padding: '24px 28px 18px',
             borderBottom: '1px solid var(--border)',
-            background: 'var(--bg-surface)',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: '14px'
+            background: 'var(--bg-surface)'
           }}
         >
-          <div
-            style={{
-              width: '42px',
-              height: '42px',
-              borderRadius: 'var(--radius-sm)',
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--accent)',
-              flexShrink: 0
-            }}
-          >
-            <Hexagon size={22} />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--accent)', background: 'var(--bg-elevated)', border: '1px solid var(--border)', padding: '1px 6px', borderRadius: 'var(--radius-pill)' }}>
-                Institutional Gateway
-              </span>
-              <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-muted)' }}>
-                Supabase Auth
-              </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+            <div
+              style={{
+                width: '34px',
+                height: '34px',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--accent)'
+              }}
+            >
+              <Hexagon size={18} />
             </div>
-            <h1 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-              Authority Portal Sign In
-            </h1>
-            <p style={{ margin: '3px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
-              Examination authoring, question banks & live invigilation
-            </p>
+            <div>
+              <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--accent)' }}>
+                Axent Assessment Authority
+              </span>
+              <h1 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+                Institutional Gateway
+              </h1>
+            </div>
           </div>
+          <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+            Authorized portal for paper setters, faculty invigilators, and academic chief proctors.
+          </p>
         </div>
 
-        {/* Portal Role Selector Tabs */}
+        {/* ── Role Switcher: Paper Setter vs Admin ── */}
         <div
           style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',
             background: 'var(--bg-surface)',
             borderBottom: '1px solid var(--border)',
-            padding: '6px'
+            padding: '4px 6px',
+            gap: '4px'
           }}
         >
           <button
@@ -347,48 +384,55 @@ export const AuthorityLogin: React.FC = () => {
           </button>
         </div>
 
-        {/* Card Body */}
-        <div style={{ padding: '24px 28px' }}>
-          {/* Method Selector Tabs (Password vs Magic Link) */}
-          {activeTab !== 'set_password' && (
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-              <button
-                type="button"
-                onClick={() => { setActiveTab('password'); setErrorMessage(null); }}
-                style={{
-                  flex: 1,
-                  padding: '7px 12px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  borderRadius: 'var(--radius-xs)',
-                  border: activeTab === 'password' ? '1px solid var(--border)' : '1px solid transparent',
-                  background: activeTab === 'password' ? 'var(--bg-surface)' : 'transparent',
-                  color: activeTab === 'password' ? 'var(--text-primary)' : 'var(--text-muted)',
-                  cursor: 'pointer'
-                }}
-              >
-                Password Login
-              </button>
-              <button
-                type="button"
-                onClick={() => { setActiveTab('magic_link'); setErrorMessage(null); }}
-                style={{
-                  flex: 1,
-                  padding: '7px 12px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  borderRadius: 'var(--radius-xs)',
-                  border: activeTab === 'magic_link' ? '1px solid var(--border)' : '1px solid transparent',
-                  background: activeTab === 'magic_link' ? 'var(--bg-surface)' : 'transparent',
-                  color: activeTab === 'magic_link' ? 'var(--text-primary)' : 'var(--text-muted)',
-                  cursor: 'pointer'
-                }}
-              >
-                Magic Link / Invite
-              </button>
-            </div>
-          )}
+        {/* ── Watermelon UI Tabs List (Sign In / Register) ── */}
+        {activeTab !== 'set_password' && (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              borderBottom: '1px solid var(--border)',
+              background: 'var(--bg-surface)'
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => { setActiveTab('signin'); setErrorMessage(null); }}
+              style={{
+                padding: '10px 14px',
+                fontSize: '12.5px',
+                fontWeight: activeTab === 'signin' ? 700 : 500,
+                color: activeTab === 'signin' ? 'var(--text-primary)' : 'var(--text-muted)',
+                background: activeTab === 'signin' ? 'var(--bg-elevated)' : 'transparent',
+                border: 'none',
+                borderBottom: activeTab === 'signin' ? '2px solid var(--accent)' : '2px solid transparent',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => { setActiveTab('register'); setErrorMessage(null); }}
+              style={{
+                padding: '10px 14px',
+                fontSize: '12.5px',
+                fontWeight: activeTab === 'register' ? 700 : 500,
+                color: activeTab === 'register' ? 'var(--text-primary)' : 'var(--text-muted)',
+                background: activeTab === 'register' ? 'var(--bg-elevated)' : 'transparent',
+                border: 'none',
+                borderBottom: activeTab === 'register' ? '2px solid var(--accent)' : '2px solid transparent',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              Create Account
+            </button>
+          </div>
+        )}
 
+        {/* ── Body Container ── */}
+        <div style={{ padding: '24px 28px' }}>
           {/* Quick Credential Pre-fill Helpers */}
           {activeTab !== 'set_password' && (
             <div
@@ -396,8 +440,8 @@ export const AuthorityLogin: React.FC = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                marginBottom: '16px',
-                padding: '6px 10px',
+                marginBottom: '18px',
+                padding: '7px 10px',
                 borderRadius: 'var(--radius-xs)',
                 background: 'var(--bg-surface)',
                 border: '1px solid var(--border)',
@@ -406,7 +450,7 @@ export const AuthorityLogin: React.FC = () => {
               }}
             >
               <span>Default Pass: <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>axent@123</strong></span>
-              <div style={{ display: 'flex', gap: '4px' }}>
+              <div style={{ display: 'flex', gap: '5px' }}>
                 <button
                   type="button"
                   onClick={() => {
@@ -414,7 +458,7 @@ export const AuthorityLogin: React.FC = () => {
                     setStoredAuthorityRole('paper_setter');
                     setEmail('setter@axent.edu');
                     setPassword('axent@123');
-                    setActiveTab('password');
+                    setActiveTab('signin');
                     setErrorMessage(null);
                   }}
                   style={{
@@ -422,7 +466,7 @@ export const AuthorityLogin: React.FC = () => {
                     border: '1px solid var(--border)',
                     borderRadius: 'var(--radius-xs)',
                     padding: '2px 7px',
-                    fontSize: '10px',
+                    fontSize: '10.5px',
                     fontWeight: 600,
                     cursor: 'pointer',
                     color: 'var(--text-secondary)'
@@ -437,7 +481,7 @@ export const AuthorityLogin: React.FC = () => {
                     setStoredAuthorityRole('admin');
                     setEmail('admin@axent.edu');
                     setPassword('axent@123');
-                    setActiveTab('password');
+                    setActiveTab('signin');
                     setErrorMessage(null);
                   }}
                   style={{
@@ -445,7 +489,7 @@ export const AuthorityLogin: React.FC = () => {
                     border: '1px solid var(--border)',
                     borderRadius: 'var(--radius-xs)',
                     padding: '2px 7px',
-                    fontSize: '10px',
+                    fontSize: '10.5px',
                     fontWeight: 600,
                     cursor: 'pointer',
                     color: 'var(--text-secondary)'
@@ -478,7 +522,6 @@ export const AuthorityLogin: React.FC = () => {
                 </div>
               </div>
 
-              {/* If it's an email delivery or rate limit issue from Supabase */}
               {(errorMessage.includes('confirmation email') || errorMessage.includes('rate limit') || errorMessage.includes('SMTP')) && (
                 <div
                   style={{
@@ -502,30 +545,20 @@ export const AuthorityLogin: React.FC = () => {
                       type="button"
                       onClick={handleDevBypass}
                       className="btn btn-primary btn-sm"
-                      style={{
-                        height: '26px',
-                        fontSize: '11px',
-                        padding: '0 10px',
-                        fontWeight: 700
-                      }}
+                      style={{ height: '26px', fontSize: '11px', padding: '0 10px', fontWeight: 700 }}
                     >
                       Bypass & Enter Console Directly
                     </button>
                     <button
                       type="button"
                       onClick={() => {
-                        setActiveTab('password');
+                        setActiveTab('signin');
                         setEmail(role === 'admin' ? 'admin@axent.edu' : 'setter@axent.edu');
                         setPassword('axent@123');
                         setErrorMessage(null);
                       }}
                       className="btn btn-ghost btn-sm"
-                      style={{
-                        height: '26px',
-                        fontSize: '11px',
-                        padding: '0 8px',
-                        border: '1px solid var(--border)'
-                      }}
+                      style={{ height: '26px', fontSize: '11px', padding: '0 8px', border: '1px solid var(--border)' }}
                     >
                       Use Default Pass
                     </button>
@@ -555,9 +588,9 @@ export const AuthorityLogin: React.FC = () => {
             </div>
           )}
 
-          {/* ── Mode 1: Password Login Form ── */}
-          {activeTab === 'password' && (
-            <form onSubmit={handlePasswordLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* ── TAB 1: Sign In ── */}
+          {activeTab === 'signin' && (
+            <form onSubmit={handlePasswordLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', marginBottom: '5px' }}>
                   Institutional Email
@@ -659,9 +692,132 @@ export const AuthorityLogin: React.FC = () => {
             </form>
           )}
 
-          {/* ── Mode 2: Magic Link / Authority Invite ── */}
+          {/* ── TAB 2: Institutional Registration ── */}
+          {activeTab === 'register' && (
+            <form onSubmit={handleRegisterSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', marginBottom: '5px' }}>
+                  Full Name / Faculty Title
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <User size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+                  <input
+                    type="text"
+                    required
+                    placeholder="Prof. Jane Doe"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    style={{
+                      width: '100%',
+                      height: '38px',
+                      padding: '0 12px 0 34px',
+                      fontSize: '13px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text-primary)',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', marginBottom: '5px' }}>
+                  Work / Institutional Email
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <Mail size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+                  <input
+                    type="email"
+                    required
+                    placeholder="jane.doe@institution.edu"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    style={{
+                      width: '100%',
+                      height: '38px',
+                      padding: '0 12px 0 34px',
+                      fontSize: '13px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text-primary)',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', marginBottom: '5px' }}>
+                  Choose Password (Min 8 Characters)
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <Lock size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    minLength={8}
+                    placeholder="Create strong authority password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    style={{
+                      width: '100%',
+                      height: '38px',
+                      padding: '0 36px 0 34px',
+                      fontSize: '13px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text-primary)',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
+                  >
+                    {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="btn btn-primary"
+                style={{
+                  width: '100%',
+                  height: '40px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  marginTop: '4px'
+                }}
+              >
+                {isLoading ? (
+                  <>
+                    <RefreshCw size={14} className="spinner-icon" />
+                    <span>Registering Institutional Account...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Create {role === 'admin' ? 'Chief Proctor' : 'Paper Setter'} Account</span>
+                    <ArrowRight size={14} />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* ── TAB 3: Magic Link ── */}
           {activeTab === 'magic_link' && (
-            <form onSubmit={handleMagicLinkSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <form onSubmit={handleMagicLinkSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', marginBottom: '5px' }}>
                   Institutional Email
@@ -688,52 +844,53 @@ export const AuthorityLogin: React.FC = () => {
                   />
                 </div>
                 <p style={{ margin: '6px 0 0', fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                  Invited authorities receive a secure one-click link. Upon opening, you can immediately set your password and access the console.
+                  Invited authorities receive a secure one-click link. Upon opening, you can access the console immediately.
                 </p>
               </div>
 
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="btn btn-primary"
-                style={{
-                  width: '100%',
-                  height: '40px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  fontSize: '13px',
-                  fontWeight: 700
-                }}
-              >
-                {isLoading ? (
-                  <>
-                    <RefreshCw size={14} className="spinner-icon" />
-                    <span>Dispatching Magic Link...</span>
-                  </>
-                ) : (
-                  <>
-                    <Send size={14} />
-                    <span>Send Magic Link Invite</span>
-                  </>
-                )}
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('signin')}
+                  className="btn btn-secondary btn-sm"
+                  style={{ height: '38px', padding: '0 14px', fontSize: '12px' }}
+                >
+                  Back to Sign In
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="btn btn-primary"
+                  style={{
+                    flex: 1,
+                    height: '38px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    fontSize: '12.5px',
+                    fontWeight: 700
+                  }}
+                >
+                  {isLoading ? <RefreshCw size={14} className="spinner-icon" /> : <Send size={13} />}
+                  <span>Send Magic Link</span>
+                </button>
+              </div>
             </form>
           )}
 
-          {/* ── Mode 3: Set New Authority Password ── */}
+          {/* ── TAB 4: Set New Password ── */}
           {activeTab === 'set_password' && (
-            <form onSubmit={handleSetPasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <form onSubmit={handleSetPasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
                   <KeyRound size={14} color="var(--accent)" />
                   <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Set Your Authority Password
+                    Configure Authority Password
                   </span>
                 </div>
                 <p style={{ margin: '0 0 12px', fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                  Welcome to Axent! Choose a strong password to secure your institutional examination console.
+                  Set your password to secure your institutional examination console.
                 </p>
               </div>
 
@@ -873,6 +1030,37 @@ export const AuthorityLogin: React.FC = () => {
               Direct Access (Dev Mode)
             </button>
           </div>
+        </div>
+
+        {/* ── Card Footer: Return to Candidate Terminal ── */}
+        <div
+          style={{
+            padding: '12px 28px',
+            borderTop: '1px solid var(--border)',
+            background: 'var(--bg-surface)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => navigate('/mcq')}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              fontSize: '12px',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <GraduationCap size={13} color="var(--accent)" />
+            <span>Are you a student taking an exam? <strong>Go to Candidate Portal</strong></span>
+          </button>
         </div>
       </div>
     </div>

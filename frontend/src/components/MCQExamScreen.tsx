@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { MCQAttempt, MCQExamConfig, MCQGradeResult, MCQ_STORAGE_KEYS } from '../types/mcq';
 import {
-  getAllExams, getActiveAttempt, getAllAttempts, startAttempt, saveAnswer,
+  getAllExams, getActiveAttempt, getAllAttempts, getAttemptsForExam, startAttempt, saveAnswer,
   submitAttempt, recordInfraction, updateUnfocusedTime, onMcqDataChanged, persistAttemptToCloud
 } from '../services/mcqService';
 import { playSound } from '../utils/sounds';
@@ -287,20 +287,45 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
 
   const handleStartManual = () => {
     const errs: string[] = [];
-    if (!name.trim()) errs.push('Candidate name is required.');
-    if (!roll.trim()) errs.push('Roll number / USN is required.');
-    if (!dept.trim()) errs.push('Department is required.');
-    if (!sem.trim()) errs.push('Semester is required.');
-    if (!division.trim()) errs.push('Division is required.');
-    if (errs.length > 0) { setErrors(errs); playSound('warning'); return; }
+    const trimmedName = name.trim();
+    const trimmedRoll = roll.trim();
 
-    const rollDigits = roll.replace(/[^0-9]/g, '');
+    if (!trimmedName || trimmedName.length < 2) {
+      errs.push('Candidate full name must contain at least 2 characters.');
+    }
+    if (!trimmedRoll || trimmedRoll.length < 2) {
+      errs.push('Roll number / University Seat Number (USN) must contain at least 2 characters.');
+    }
+    if (!dept.trim()) errs.push('Academic department is required.');
+    if (!sem.trim()) errs.push('Semester is required.');
+    if (!division.trim()) errs.push('Class division is required.');
+
+    // Duplicate submission guard: check if candidate already submitted this exam
+    const normalizedRoll = trimmedRoll.toLowerCase();
+    const candidateAttempts = getAttemptsForExam(exam.id).filter(
+      (item) => String(item.studentRoll || '').trim().toLowerCase() === normalizedRoll
+    );
+    const existingSubmitted = candidateAttempts.find(
+      (item) => item.status === 'SUBMITTED' || item.status === 'TIMED_OUT'
+    );
+    if (existingSubmitted && Math.max(1, exam.maxAttempts || 1) <= 1) {
+      errs.push(`Candidate with Roll Number / USN "${trimmedRoll}" has already submitted this examination. Re-attempting is strictly prohibited under institutional proctoring rules.`);
+    }
+
+    if (errs.length > 0) {
+      setErrors(errs);
+      playSound('warning');
+      return;
+    }
+    setErrors([]);
+
+    const rollDigits = trimmedRoll.replace(/[^0-9]/g, '');
     const stationDigits = rollDigits.length > 0 ? String(parseInt(rollDigits.slice(-2), 10) || 1).padStart(2, '0') : '01';
     const stationNumber = `Station #${stationDigits}`;
 
     const student: StudentInfo = {
-      name: name.trim(),
-      rollNumber: roll.trim(),
+      name: trimmedName,
+      rollNumber: trimmedRoll,
       department: dept.trim(),
       semester: sem.trim(),
       division: division.trim(),
@@ -1004,13 +1029,33 @@ const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attem
 // ── Results View (Full-Width Technical Transcript & Analytical Review) ────────
 interface ResultsViewProps {
   attempt: MCQAttempt;
+  exam: MCQExamConfig;
   grade: MCQGradeResult;
   showExplanations: boolean;
   onRestart?: () => void;
   onExit?: () => void;
 }
 
-const ResultsView: React.FC<ResultsViewProps> = ({ attempt, grade, showExplanations, onRestart, onExit }) => {
+const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExplanations, onRestart, onExit }) => {
+  // STRICT INSTITUTIONAL GUARD:
+  // If exam is configured for WhatsApp Group Release, NEVER leak scores or answer keys!
+  const isWhatsAppRelease =
+    exam.resultDeclarationMode === 'WHATSAPP_GROUP' ||
+    (typeof exam.instructions === 'string' && (
+      exam.instructions.includes('WHATSAPP_GROUP') ||
+      exam.instructions.toLowerCase().includes('whatsapp')
+    ));
+
+  if (isWhatsAppRelease) {
+    return (
+      <WhatsAppHoldResultsView
+        attempt={attempt}
+        exam={exam}
+        onExit={onExit || (() => { window.location.href = '/mcq'; })}
+      />
+    );
+  }
+
   const [filterMode, setFilterMode] = useState<'all' | 'correct' | 'wrong' | 'unanswered'>('all');
   
   const pct = grade.percentageScore;
@@ -1788,13 +1833,42 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       handleVisibilityChange();
     };
 
+    // Anti-cheat: prevent right-click context menu
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      recordInfraction(attempt.id, 'Proctor Security: Right-click context menu attempt blocked');
+      setProctorWarning('PROCTOR ALERT: Right-click and inspect actions are disabled during examinations.');
+      playSound('warning');
+    };
+
+    // Anti-cheat: block restricted keyboard shortcuts (Ctrl+C, Ctrl+V, Ctrl+U, F12, DevTools)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+      if (
+        (isCtrlOrCmd && (key === 'c' || key === 'v' || key === 'u' || key === 'p' || key === 's' || key === 'a')) ||
+        e.key === 'F12' ||
+        (isCtrlOrCmd && e.shiftKey && (key === 'i' || key === 'j' || key === 'c'))
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        recordInfraction(attempt.id, `Proctor Security: Blocked restricted shortcut (${e.key})`);
+        setProctorWarning('PROCTOR SECURITY: Keyboard shortcuts, copying, pasting, and developer tools are strictly disabled.');
+        playSound('warning');
+      }
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleBlur);
     window.addEventListener('focus', handleFocus);
+    window.addEventListener('contextmenu', handleContextMenu);
+    window.addEventListener('keydown', handleKeyDown, true);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleBlur);
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener('keydown', handleKeyDown, true);
     };
   }, [attempt, submitted, exam, student, currentIdx]);
 
@@ -2011,11 +2085,22 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
   // ── Loading / not found ──
   if (!exam) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)' }}>
-        <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)', padding: '24px' }}>
+        <div style={{ textAlign: 'center', maxWidth: '440px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '32px 24px' }}>
           <BookOpen size={40} style={{ marginBottom: '12px', opacity: 0.4 }} />
-          <p style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Exam not found</p>
-          <p style={{ fontSize: '13px' }}>The exam ID "{activeExamId}" does not exist or has been removed.</p>
+          <p style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>Examination Not Found</p>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 20px' }}>The requested examination session does not exist or has been removed from the registry.</p>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => {
+              if (onBack) onBack();
+              else {
+                window.location.href = '/mcq';
+              }
+            }}
+          >
+            Return to Available Exams
+          </button>
         </div>
       </div>
     );
@@ -2023,11 +2108,22 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
   if (exam.status !== 'PUBLISHED') {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)' }}>
-        <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-          <AlertTriangle size={40} style={{ marginBottom: '12px', opacity: 0.4 }} />
-          <p style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Exam not available</p>
-          <p style={{ fontSize: '13px' }}>This exam is currently {exam.status.toLowerCase()}.</p>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)', padding: '24px' }}>
+        <div style={{ textAlign: 'center', maxWidth: '440px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '32px 24px' }}>
+          <AlertTriangle size={40} style={{ marginBottom: '12px', color: 'var(--warning)' }} />
+          <p style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>Examination Closed</p>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 20px' }}>This examination is currently {exam.status.toLowerCase()} and is not taking submissions.</p>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => {
+              if (onBack) onBack();
+              else {
+                window.location.href = '/mcq';
+              }
+            }}
+          >
+            Return to Available Exams
+          </button>
         </div>
       </div>
     );
@@ -2148,7 +2244,15 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
   // ── Results screen ──
   if (submitted && gradeResult) {
-    if (exam.resultDeclarationMode === 'WHATSAPP_GROUP') {
+    const isHoldResults =
+      exam.resultDeclarationMode === 'WHATSAPP_GROUP' ||
+      (typeof exam.instructions === 'string' && (
+        exam.instructions.includes('WHATSAPP_GROUP') ||
+        exam.instructions.toLowerCase().includes('whatsapp') ||
+        exam.instructions.toLowerCase().includes('manual')
+      ));
+
+    if (isHoldResults) {
       return (
         <WhatsAppHoldResultsView
           attempt={attempt}
@@ -2161,6 +2265,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     return (
       <ResultsView
         attempt={attempt}
+        exam={exam}
         grade={gradeResult}
         showExplanations={exam.showExplanationsAfterSubmit}
         onRestart={exam.maxAttempts > 1 ? () => { setAttempt(null); setGradeResult(null); setSubmitted(false); } : undefined}
@@ -2610,9 +2715,14 @@ export const MCQExamSelector: React.FC = () => {
     ? activeAttempt.examId
     : null;
 
-  const [selectedExamId, setSelectedExamId] = useState<string | null>(
-    () => activeExamId || queryExamId || null
-  );
+  const isQueryValid = queryExamId ? exams.some((e) => e.id === queryExamId) : false;
+  const [urlTamperNotice, setUrlTamperNotice] = useState<string | null>(null);
+
+  const [selectedExamId, setSelectedExamId] = useState<string | null>(() => {
+    if (activeExamId) return activeExamId;
+    if (queryExamId && isQueryValid) return queryExamId;
+    return null;
+  });
   const [currentTime, setCurrentTime] = useState<number>(Date.now());
 
   useEffect(() => {
@@ -2620,22 +2730,37 @@ export const MCQExamSelector: React.FC = () => {
     return () => clearInterval(ticker);
   }, []);
 
-  // When active exam attempt exists, keep selectedExamId synchronized
+  // Strict link manipulation and session integrity enforcement
   useEffect(() => {
-    if (activeExamId && selectedExamId !== activeExamId) {
-      setSelectedExamId(activeExamId);
-      setSearchParams({ examId: activeExamId }, { replace: true });
+    // Rule 1: If an exam attempt is currently IN_PROGRESS, strictly lock candidate to activeExamId
+    if (activeExamId) {
+      if (selectedExamId !== activeExamId) {
+        setSelectedExamId(activeExamId);
+      }
+      if (searchParams.get('examId') !== activeExamId) {
+        setSearchParams({ examId: activeExamId }, { replace: true });
+        setUrlTamperNotice('Active examination in progress. Session locked to your ongoing paper.');
+      }
+      return;
     }
-  }, [activeExamId, selectedExamId, setSearchParams]);
 
-  useEffect(() => {
+    // Rule 2: If no active attempt, validate query parameter against published exams
     const currentQueryId = searchParams.get('examId');
-    if (!currentQueryId && selectedExamId && !activeExamId) {
-      setSelectedExamId(null);
-    } else if (currentQueryId && !activeExamId && selectedExamId !== currentQueryId) {
-      setSelectedExamId(currentQueryId);
+    if (!currentQueryId) {
+      if (selectedExamId) setSelectedExamId(null);
+    } else {
+      const valid = exams.some((e) => e.id === currentQueryId);
+      if (!valid) {
+        // Scrub forged / invalid URL parameter immediately
+        setSearchParams({}, { replace: true });
+        setSelectedExamId(null);
+        setUrlTamperNotice(`The examination ID "${currentQueryId}" does not exist or has closed. Redirected to verified catalog.`);
+        playSound('warning');
+      } else if (selectedExamId !== currentQueryId) {
+        setSelectedExamId(currentQueryId);
+      }
     }
-  }, [searchParams, activeExamId, selectedExamId]);
+  }, [searchParams, activeExamId, selectedExamId, exams, setSearchParams]);
 
   const handleSelectExam = (id: string) => {
     setSelectedExamId(id);
@@ -2673,6 +2798,42 @@ export const MCQExamSelector: React.FC = () => {
 
   return (
     <div style={{ padding: '24px 32px', width: '100%', boxSizing: 'border-box' }}>
+      {urlTamperNotice && (
+        <div
+          style={{
+            marginBottom: '16px',
+            padding: '10px 14px',
+            background: 'var(--warning-bg)',
+            border: '1px solid var(--warning-border)',
+            borderRadius: 'var(--radius-sm)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '10px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertTriangle size={15} color="var(--warning)" />
+            <span style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--warning)' }}>
+              {urlTamperNotice}
+            </span>
+          </div>
+          <button
+            onClick={() => setUrlTamperNotice(null)}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--text-muted)',
+              fontSize: '12px',
+              fontWeight: 700
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       <div style={{ marginBottom: '22px' }}>
         <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
           Available MCQ Examinations

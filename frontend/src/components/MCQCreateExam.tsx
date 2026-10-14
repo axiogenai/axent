@@ -319,7 +319,7 @@ const DEFAULT_EXAM: Omit<MCQExamConfig, 'id' | 'createdAt' | 'updatedAt'> = {
   allowReview: true,
   showExplanationsAfterSubmit: true,
   maxAttempts: 1,
-  resultDeclarationMode: 'IMMEDIATE',
+  resultDeclarationMode: 'WHATSAPP_GROUP',
   status: 'DRAFT',
   createdBy: 'admin',
 };
@@ -519,53 +519,53 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ initial, onSave, onBack }) => {
             </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
-              {/* Option A: Immediate */}
-              <div
-                onClick={() => set('resultDeclarationMode', 'IMMEDIATE')}
-                style={{
-                  padding: '14px',
-                  borderRadius: 'var(--radius-sm)',
-                  border: `1.5px solid ${(!form.resultDeclarationMode || form.resultDeclarationMode === 'IMMEDIATE') ? 'var(--accent)' : 'var(--border)'}`,
-                  background: (!form.resultDeclarationMode || form.resultDeclarationMode === 'IMMEDIATE') ? 'var(--bg-elevated)' : 'transparent',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Declare Results After Exam is Over
-                  </span>
-                  {(!form.resultDeclarationMode || form.resultDeclarationMode === 'IMMEDIATE') && (
-                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)' }} />
-                  )}
-                </div>
-                <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                  Candidates view their score, percentage, and question breakdown immediately on screen upon submission.
-                </p>
-              </div>
-
-              {/* Option B: WhatsApp Group */}
+              {/* Option A: Manual / WhatsApp (Held on Server) */}
               <div
                 onClick={() => set('resultDeclarationMode', 'WHATSAPP_GROUP')}
                 style={{
                   padding: '14px',
                   borderRadius: 'var(--radius-sm)',
-                  border: `1.5px solid ${form.resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--accent)' : 'var(--border)'}`,
-                  background: form.resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--bg-elevated)' : 'transparent',
+                  border: `1.5px solid ${(!form.resultDeclarationMode || form.resultDeclarationMode === 'WHATSAPP_GROUP') ? 'var(--accent)' : 'var(--border)'}`,
+                  background: (!form.resultDeclarationMode || form.resultDeclarationMode === 'WHATSAPP_GROUP') ? 'var(--bg-elevated)' : 'transparent',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                   <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Send on WhatsApp Group
+                    Manual Release & WhatsApp (Held on Server)
                   </span>
-                  {form.resultDeclarationMode === 'WHATSAPP_GROUP' && (
+                  {(!form.resultDeclarationMode || form.resultDeclarationMode === 'WHATSAPP_GROUP') && (
                     <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)' }} />
                   )}
                 </div>
                 <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                  Student screen displays: <em>"Hold tight, results will be deployed soon"</em>. Paper setters export results and send them to the class WhatsApp group.
+                  Scores and answers are locked on submission. Candidates receive a secure digital receipt. Paper setters manually export results (CSV) to announce on the class WhatsApp group.
+                </p>
+              </div>
+
+              {/* Option B: Immediate */}
+              <div
+                onClick={() => set('resultDeclarationMode', 'IMMEDIATE')}
+                style={{
+                  padding: '14px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: `1.5px solid ${form.resultDeclarationMode === 'IMMEDIATE' ? 'var(--accent)' : 'var(--border)'}`,
+                  background: form.resultDeclarationMode === 'IMMEDIATE' ? 'var(--bg-elevated)' : 'transparent',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    Immediate On-Screen Score & Solutions
+                  </span>
+                  {form.resultDeclarationMode === 'IMMEDIATE' && (
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)' }} />
+                  )}
+                </div>
+                <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                  Candidates view their score, percentage, and question solutions immediately on screen upon finishing the exam.
                 </p>
               </div>
             </div>

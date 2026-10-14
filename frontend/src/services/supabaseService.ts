@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { MCQQuestion, MCQExamConfig, MCQAttempt } from '../types/mcq';
+import { MCQQuestion, MCQExamConfig, MCQAttempt, MCQResultDeclarationMode } from '../types/mcq';
 import { CandidateStation, CollegeLabInfo } from '../types/dna';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://jswcwixeoilxuhbzojee.supabase.co';
@@ -119,32 +119,66 @@ export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
     }
     if (!data) return null;
 
-    return data.map((row: any): MCQExamConfig => ({
-      id: row.id,
-      title: row.title,
-      description: row.description || '',
-      instructions: row.instructions || '',
-      subject: row.subject || '',
-      topic: row.topic || '',
-      examCategory: row.exam_category || 'Internal Assessment (CIE)',
-      durationMinutes: Number(row.duration_minutes) || 30,
-      startTime: row.start_time ? Number(row.start_time) : undefined,
-      endTime: row.end_time ? Number(row.end_time) : undefined,
-      totalMarks: Number(row.total_marks) || 0,
-      questionCount: Number(row.question_count) || 10,
-      questionIds: row.question_ids || [],
-      shuffleQuestions: Boolean(row.shuffle_questions),
-      shuffleOptions: Boolean(row.shuffle_options),
-      negativeMarkingEnabled: Boolean(row.negative_marking_enabled),
-      allowReview: Boolean(row.allow_review),
-      showExplanationsAfterSubmit: Boolean(row.show_explanations_after_submit),
-      maxAttempts: Number(row.max_attempts) || 1,
-      status: row.status,
-      createdAt: Number(row.created_at),
-      updatedAt: Number(row.updated_at),
-      createdBy: row.created_by || 'admin',
-      publishedAt: row.published_at ? Number(row.published_at) : undefined,
-    }));
+    return data.map((row: any): MCQExamConfig => {
+      let resultDeclMode: MCQResultDeclarationMode = 'IMMEDIATE';
+      let waGroupName = '';
+      let waGroupLink = '';
+      let cleanInstr = row.instructions || '';
+
+      // Extract AXENT_META payload from instructions if present
+      const metaMatch = cleanInstr.match(/<!--AXENT_META:([\s\S]*?)-->/);
+      if (metaMatch) {
+        try {
+          const parsed = JSON.parse(metaMatch[1]);
+          if (parsed.resultDeclarationMode === 'WHATSAPP_GROUP' || parsed.resultDeclarationMode === 'IMMEDIATE') {
+            resultDeclMode = parsed.resultDeclarationMode;
+          }
+          if (parsed.whatsappGroupName) waGroupName = parsed.whatsappGroupName;
+          if (parsed.whatsappGroupLink) waGroupLink = parsed.whatsappGroupLink;
+        } catch {}
+        cleanInstr = cleanInstr.replace(/<!--AXENT_META:[\s\S]*?-->/g, '').trim();
+      }
+
+      if (row.result_declaration_mode) {
+        resultDeclMode = row.result_declaration_mode;
+      }
+      if (row.whatsapp_group_name) {
+        waGroupName = row.whatsapp_group_name;
+      }
+      if (row.whatsapp_group_link) {
+        waGroupLink = row.whatsapp_group_link;
+      }
+
+      return {
+        id: row.id,
+        title: row.title,
+        description: row.description || '',
+        instructions: cleanInstr,
+        subject: row.subject || '',
+        topic: row.topic || '',
+        examCategory: row.exam_category || 'Internal Assessment (CIE)',
+        durationMinutes: Number(row.duration_minutes) || 30,
+        startTime: row.start_time ? Number(row.start_time) : undefined,
+        endTime: row.end_time ? Number(row.end_time) : undefined,
+        totalMarks: Number(row.total_marks) || 0,
+        questionCount: Number(row.question_count) || 10,
+        questionIds: row.question_ids || [],
+        shuffleQuestions: Boolean(row.shuffle_questions),
+        shuffleOptions: Boolean(row.shuffle_options),
+        negativeMarkingEnabled: Boolean(row.negative_marking_enabled),
+        allowReview: Boolean(row.allow_review),
+        showExplanationsAfterSubmit: Boolean(row.show_explanations_after_submit),
+        resultDeclarationMode: resultDeclMode,
+        whatsappGroupName: waGroupName,
+        whatsappGroupLink: waGroupLink,
+        maxAttempts: Number(row.max_attempts) || 1,
+        status: row.status,
+        createdAt: Number(row.created_at),
+        updatedAt: Number(row.updated_at),
+        createdBy: row.created_by || 'admin',
+        publishedAt: row.published_at ? Number(row.published_at) : undefined,
+      };
+    });
   } catch (err) {
     console.warn('[Supabase] Error in fetchExamsFromCloud:', err);
     return null;
@@ -153,11 +187,20 @@ export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
 
 async function writeExamToCloud(e: MCQExamConfig): Promise<boolean> {
   try {
-    const row = {
+    const metaTag = `<!--AXENT_META:${JSON.stringify({
+      resultDeclarationMode: e.resultDeclarationMode || 'IMMEDIATE',
+      whatsappGroupName: e.whatsappGroupName || '',
+      whatsappGroupLink: e.whatsappGroupLink || ''
+    })}-->`;
+
+    const cleanInstructions = (e.instructions || '').replace(/<!--AXENT_META:[\s\S]*?-->/g, '').trim();
+    const finalInstructions = cleanInstructions ? `${cleanInstructions}\n${metaTag}` : metaTag;
+
+    const row: any = {
       id: e.id,
       title: e.title,
       description: e.description || '',
-      instructions: e.instructions || '',
+      instructions: finalInstructions,
       subject: e.subject || '',
       topic: e.topic || '',
       exam_category: e.examCategory,
