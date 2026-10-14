@@ -732,6 +732,23 @@ function mergeAttempts(localAttempts: MCQAttempt[], cloudAttempts: MCQAttempt[])
   return Array.from(merged.values());
 }
 
+export const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+export function pruneExpiredLocalData(): void {
+  try {
+    const cutoff = Date.now() - ONE_WEEK_MS;
+    const attempts = getAllAttempts();
+    const pruned = attempts.filter((a) => {
+      if (a.status === 'IN_PROGRESS') return true;
+      const refTime = a.submitTime || a.startTime || 0;
+      return refTime >= cutoff;
+    });
+    if (pruned.length !== attempts.length) {
+      save(MCQ_STORAGE_KEYS.ATTEMPTS, pruned);
+    }
+  } catch {}
+}
+
 export async function persistAttemptToCloud(attemptId: string): Promise<boolean> {
   const latest = getAttemptById(attemptId);
   if (!latest) return false;
@@ -743,22 +760,59 @@ export async function syncFromSupabase(): Promise<void> {
     const [cloudQ, cloudE, cloudA] = await Promise.all([
       fetchQuestionsFromCloud(), fetchExamsFromCloud(), fetchAttemptsFromCloud()
     ]);
+
+    // 1. Reconcile Questions: replace local storage with cloud data, syncing any local-only items up to cloud
     if (cloudQ !== null) {
-      save(MCQ_STORAGE_KEYS.QUESTIONS, mergeUpdatedRecords(getAllQuestions(), cloudQ));
+      const localQ = getAllQuestions();
+      const cloudIds = new Set(cloudQ.map((q) => q.id));
+      for (const q of localQ) {
+        if (!cloudIds.has(q.id)) {
+          void saveQuestionToCloud(q);
+        }
+      }
+      save(MCQ_STORAGE_KEYS.QUESTIONS, cloudQ.length > 0 ? cloudQ : mergeUpdatedRecords(localQ, cloudQ));
     }
+
+    // 2. Reconcile Exams: replace local storage with cloud data, syncing any local-only items up to cloud
     if (cloudE !== null) {
-      save(MCQ_STORAGE_KEYS.EXAMS, mergeUpdatedRecords(getAllExams(), cloudE));
+      const localE = getAllExams();
+      const cloudIds = new Set(cloudE.map((e) => e.id));
+      for (const ex of localE) {
+        if (!cloudIds.has(ex.id)) {
+          void saveExamToCloud(ex);
+        }
+      }
+      save(MCQ_STORAGE_KEYS.EXAMS, cloudE.length > 0 ? cloudE : mergeUpdatedRecords(localE, cloudE));
       notifyExamsChanged();
     }
+
+    // 3. Reconcile Attempts: replace local storage with cloud data, temporarily cached for 1 week
     if (cloudA !== null) {
-      save(MCQ_STORAGE_KEYS.ATTEMPTS, mergeAttempts(getAllAttempts(), cloudA));
+      const localA = getAllAttempts();
+      const cloudIds = new Set(cloudA.map((a) => a.id));
+      for (const a of localA) {
+        if (!cloudIds.has(a.id)) {
+          void saveAttemptToCloud(a);
+        }
+      }
+
+      const cutoff = Date.now() - ONE_WEEK_MS;
+      // Retain active sessions plus concluded attempts from the last 7 days (1 week temp cache)
+      const recentCloudAttempts = cloudA.filter(
+        (a) => a.status === 'IN_PROGRESS' || (a.submitTime || a.startTime || 0) >= cutoff
+      );
+      save(MCQ_STORAGE_KEYS.ATTEMPTS, recentCloudAttempts);
     }
+
+    // 4. Prune local data older than 1 week
+    pruneExpiredLocalData();
   } catch (err) {
     console.warn('[mcqService] Background Supabase sync notice:', err);
   }
 }
 
 if (typeof window !== 'undefined') {
+  pruneExpiredLocalData();
   void syncFromSupabase();
   let syncTimer: ReturnType<typeof setTimeout> | undefined;
   subscribeToMcqCloudChanges(() => {
