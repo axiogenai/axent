@@ -21,9 +21,12 @@ export function isSupabaseConnected(): boolean {
   return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 }
 
+let mcqChannelCounter = 0;
+
 export function subscribeToMcqCloudChanges(onChange: () => void): () => void {
+  const channelName = `axent-mcq-live-sync-${Date.now()}-${++mcqChannelCounter}`;
   const channel = supabase
-    .channel('axent-mcq-live-sync')
+    .channel(channelName)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_questions' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_exams' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_attempts' }, onChange)
