@@ -12,10 +12,12 @@ import {
   Activity,
   ListChecks,
   ExternalLink,
+  LogOut,
   LucideIcon
 } from 'lucide-react';
 import { ThemeMode } from '../types/dna';
 import { getStoredModel } from '../services/groqService';
+import { signOut } from '../services/authService';
 import { ContinuousTabs } from './watermelon-ui';
 
 interface NavbarProps {
@@ -259,6 +261,32 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>Candidate Terminal</span>
           </button>
         ) : null}
+
+        {/* Authority Sign Out */}
+        {(isAdminRoute || isPaperSetterRoute) && (
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={async () => {
+              await signOut();
+              navigate('/login', { replace: true });
+            }}
+            title="Sign out of Authority Portal"
+            style={{
+              height: '28px',
+              padding: '0 10px',
+              gap: '5px',
+              fontSize: '11px',
+              fontWeight: 600,
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border)',
+              background: 'var(--bg-surface)',
+              color: 'var(--text-secondary)'
+            }}
+          >
+            <LogOut size={12} />
+            <span>Sign Out</span>
+          </button>
+        )}
 
         {/* Model status */}
         <div

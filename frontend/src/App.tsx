@@ -7,6 +7,8 @@ import { FinalReport } from './components/FinalReport';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MCQHub } from './components/MCQHub';
 import { PaperSetterPortal } from './components/PaperSetterPortal';
+import { AuthorityLogin } from './components/auth/AuthorityLogin';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import {
   CodeSubmission,
   AnalysisReport,
@@ -50,13 +52,13 @@ const RootNavigator: React.FC = () => {
 export const App: React.FC = () => {
   const navigate = useNavigate();
 
-  // Theme: Matte Black default, toggleable to Clean Light
+  // Theme: Clean Light default, toggleable to Matte Black
   const [theme, setTheme] = useState<ThemeMode>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('codedna_theme');
       if (saved === 'light' || saved === 'dark') return saved;
     }
-    return 'dark'; // True Matte Black
+    return 'light'; // Clean Daylight White default
   });
 
   useEffect(() => {
@@ -371,32 +373,42 @@ export const App: React.FC = () => {
             }
           />
           <Route
+            path="/login"
+            element={<AuthorityLogin />}
+          />
+          <Route
             path="/mcq"
             element={<MCQHub />}
           />
           <Route
             path="/paper-setter"
-            element={<PaperSetterPortal />}
+            element={
+              <ProtectedRoute requiredRole="paper_setter">
+                <PaperSetterPortal />
+              </ProtectedRoute>
+            }
           />
           <Route
             path="/admin"
             element={
-              <AdminDashboard
-                theme={theme}
-                onSelectReportForStudent={(rep, sub) => {
-                  setAnalysisResults(rep);
-                  try {
-                    localStorage.setItem('codedna_last_report', JSON.stringify(rep));
-                  } catch {}
-                  if (sub) {
-                    setCodeData(sub);
+              <ProtectedRoute requiredRole="admin">
+                <AdminDashboard
+                  theme={theme}
+                  onSelectReportForStudent={(rep, sub) => {
+                    setAnalysisResults(rep);
                     try {
-                      localStorage.setItem('codedna_last_submission', JSON.stringify(sub));
+                      localStorage.setItem('codedna_last_report', JSON.stringify(rep));
                     } catch {}
-                  }
-                  navigate('/report');
-                }}
-              />
+                    if (sub) {
+                      setCodeData(sub);
+                      try {
+                        localStorage.setItem('codedna_last_submission', JSON.stringify(sub));
+                      } catch {}
+                    }
+                    navigate('/report');
+                  }}
+                />
+              </ProtectedRoute>
             }
           />
         </Routes>

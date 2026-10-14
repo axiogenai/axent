@@ -11,7 +11,7 @@ import {
   submitAttempt, recordInfraction, updateUnfocusedTime, onMcqDataChanged, persistAttemptToCloud
 } from '../services/mcqService';
 import { playSound } from '../utils/sounds';
-import { parseExamToken, SAMPLE_MCQ_TOKEN, SAMPLE_CANDIDATE_TOKEN } from '../utils/tokenParser';
+import { parseExamToken } from '../utils/tokenParser';
 import { syncMcqLiveStation, subscribeToCctvBroadcast, isStationLocked } from '../services/adminService';
 import { fetchSingleStationLockStatus, updateStationLockInCloud } from '../services/supabaseService';
 import { StudentInfo, ExamCategory } from '../types/dna';
@@ -264,9 +264,10 @@ interface RegistrationFormProps {
   onSelectExam: (examId: string) => void;
   onStart: (student: StudentInfo) => void;
   startError?: string | null;
+  onBack?: () => void;
 }
 
-const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onSelectExam, onStart, startError }) => {
+const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onSelectExam, onStart, startError, onBack }) => {
   const navigate = useNavigate();
   const [mode, setMode] = useState<'manual' | 'token'>('manual');
   
@@ -394,6 +395,19 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
               Candidate Verification & Session Check-In
             </h1>
           </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (onBack) onBack();
+              else navigate('/mcq', { replace: true });
+            }}
+            className="btn btn-secondary btn-sm"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 14px', fontSize: '12.5px', fontWeight: 600 }}
+          >
+            <ChevronLeft size={14} />
+            <span>Back to Available Exams</span>
+          </button>
         </div>
 
         {/* 2-Column Split: Left = Examination Blueprint, Right = Registration Form */}
@@ -589,57 +603,20 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
                   Import your cryptographic Axent Admit Token. All credentials, exam category, duration, and assigned station details will be auto-filled.
                 </p>
 
-                {/* Helper buttons to paste sample tokens */}
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTokenInput(SAMPLE_MCQ_TOKEN);
-                      setTokenCopied(true);
-                      setTimeout(() => setTokenCopied(false), 2000);
-                      playSound('click');
-                    }}
-                    style={{
-                      background: 'var(--bg-surface)', border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-sm)', padding: '5px 10px', fontSize: '11px',
-                      color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
-                    }}
-                  >
-                    <KeyRound size={11} color="var(--accent)" />
-                    <span>Paste Sample MCQ Token</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTokenInput(SAMPLE_CANDIDATE_TOKEN);
-                      setTokenCopied(true);
-                      setTimeout(() => setTokenCopied(false), 2000);
-                      playSound('click');
-                    }}
-                    style={{
-                      background: 'var(--bg-surface)', border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-sm)', padding: '5px 10px', fontSize: '11px',
-                      color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
-                    }}
-                  >
-                    <Code2 size={11} color="var(--text-muted)" />
-                    <span>Paste Sample Coding Token</span>
-                  </button>
-
-                  {tokenInput && (
+                {tokenInput && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
                     <button
                       type="button"
                       onClick={() => setTokenInput('')}
                       style={{
                         background: 'transparent', border: 'none',
-                        fontSize: '11px', color: 'var(--text-muted)', cursor: 'pointer', padding: '5px 8px'
+                        fontSize: '11px', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 6px'
                       }}
                     >
-                      Clear
+                      Clear Token
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
 
                 <textarea
                   value={tokenInput}
@@ -2147,9 +2124,27 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         onSelectExam={(newId) => { setAttemptStartError(null); setActiveExamId(newId); }}
         onStart={handleStart}
         startError={attemptStartError}
+        onBack={onBack}
       />
     );
   }
+
+  const handleExitToCatalog = () => {
+    try {
+      sessionStorage.removeItem('codedna_mcq_session_attempt');
+      localStorage.removeItem('codedna_mcq_active_attempt_backup');
+      localStorage.removeItem('codedna_mcq_active_attempt');
+      localStorage.removeItem('codedna_active_exam_mode');
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, '', '/mcq');
+      }
+    } catch {}
+    if (onBack) {
+      onBack();
+    } else {
+      navigate('/mcq', { replace: true });
+    }
+  };
 
   // ── Results screen ──
   if (submitted && gradeResult) {
@@ -2158,16 +2153,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         <WhatsAppHoldResultsView
           attempt={attempt}
           exam={exam}
-          onExit={() => {
-            setAttempt(null);
-            setGradeResult(null);
-            setSubmitted(false);
-            if (onBack) {
-              onBack();
-            } else {
-              navigate('/mcq');
-            }
-          }}
+          onExit={handleExitToCatalog}
         />
       );
     }
@@ -2178,16 +2164,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         grade={gradeResult}
         showExplanations={exam.showExplanationsAfterSubmit}
         onRestart={exam.maxAttempts > 1 ? () => { setAttempt(null); setGradeResult(null); setSubmitted(false); } : undefined}
-        onExit={() => {
-          setAttempt(null);
-          setGradeResult(null);
-          setSubmitted(false);
-          if (onBack) {
-            onBack();
-          } else {
-            navigate('/mcq');
-          }
-        }}
+        onExit={handleExitToCatalog}
       />
     );
   }
@@ -2652,10 +2629,13 @@ export const MCQExamSelector: React.FC = () => {
   }, [activeExamId, selectedExamId, setSearchParams]);
 
   useEffect(() => {
-    if (queryExamId && !activeExamId && selectedExamId !== queryExamId) {
-      setSelectedExamId(queryExamId);
+    const currentQueryId = searchParams.get('examId');
+    if (!currentQueryId && selectedExamId && !activeExamId) {
+      setSelectedExamId(null);
+    } else if (currentQueryId && !activeExamId && selectedExamId !== currentQueryId) {
+      setSelectedExamId(currentQueryId);
     }
-  }, [queryExamId, activeExamId, selectedExamId]);
+  }, [searchParams, activeExamId, selectedExamId]);
 
   const handleSelectExam = (id: string) => {
     setSelectedExamId(id);
@@ -2669,8 +2649,17 @@ export const MCQExamSelector: React.FC = () => {
         return;
       }
     }
+    try {
+      sessionStorage.removeItem('codedna_mcq_session_attempt');
+      localStorage.removeItem('codedna_mcq_active_attempt_backup');
+      localStorage.removeItem('codedna_mcq_active_attempt');
+      localStorage.removeItem('codedna_active_exam_mode');
+    } catch {}
     setSelectedExamId(null);
-    setSearchParams({});
+    setSearchParams({}, { replace: true });
+    if (typeof window !== 'undefined') {
+      window.history.replaceState({}, '', '/mcq');
+    }
   };
 
   if (selectedExamId) {
@@ -2683,9 +2672,9 @@ export const MCQExamSelector: React.FC = () => {
   }
 
   return (
-    <div style={{ padding: '32px 36px', maxWidth: '1440px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
-      <div style={{ marginBottom: '22px' }}>
-        <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px' }}>
+    <div style={{ padding: '28px 24px', maxWidth: '1080px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
+      <div style={{ marginBottom: '20px' }}>
+        <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
           Available MCQ Examinations
         </h2>
         <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
@@ -2695,20 +2684,20 @@ export const MCQExamSelector: React.FC = () => {
 
       {exams.length === 0 ? (
         <div style={{
-          textAlign: 'center', padding: '60px 20px',
+          textAlign: 'center', padding: '50px 20px',
           background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)'
+          borderRadius: 'var(--radius-md)'
         }}>
-          <BookOpen size={36} style={{ marginBottom: '12px', opacity: 0.4, color: 'var(--text-muted)' }} />
-          <p style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 4px' }}>
+          <BookOpen size={32} style={{ marginBottom: '12px', opacity: 0.35, color: 'var(--text-muted)' }} />
+          <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 4px' }}>
             No active examinations scheduled
           </p>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
+          <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: 0 }}>
             Check back closer to your examination time or consult your laboratory invigilator.
           </p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: '18px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 340px))', gap: '16px' }}>
           {exams.map((exam) => {
             const isScheduledFuture = Boolean(exam.startTime && currentTime < exam.startTime);
             const isConcluded = Boolean(exam.endTime && currentTime > exam.endTime);
@@ -2735,115 +2724,217 @@ export const MCQExamSelector: React.FC = () => {
                   }
                 }}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: '16px', width: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
                   background: isConcluded ? 'var(--bg-surface)' : 'var(--bg-elevated)',
-                  border: `1px solid ${isLive ? 'var(--accent)' : 'var(--border)'}`,
-                  borderRadius: 'var(--radius-md)', padding: '18px 20px',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '16px 18px',
                   cursor: isConcluded ? 'not-allowed' : 'pointer',
                   opacity: isConcluded ? 0.6 : 1,
-                  transition: 'border-color 0.15s ease',
+                  transition: 'border-color 0.15s ease, background 0.15s ease',
                   boxSizing: 'border-box'
                 }}
               >
-                <div style={{
-                  width: '46px', height: '46px', borderRadius: 'var(--radius-md)',
-                  background: isLive ? 'var(--accent-glow, var(--bg-surface))' : 'var(--bg-surface)',
-                  border: '1px solid var(--border)', display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', flexShrink: 0
-                }}>
-                  <BookOpen size={20} color={isLive ? 'var(--accent)' : 'var(--text-secondary)'} />
-                </div>
+                <div>
+                  {/* Top Category & Status Header */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '10px' }}>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: 'var(--text-secondary)',
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border)',
+                        padding: '2px 8px',
+                        borderRadius: 'var(--radius-xs)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em'
+                      }}
+                    >
+                      {exam.examCategory || exam.subject || 'Assessment'}
+                    </span>
 
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
-                    <p style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                      {exam.title}
-                    </p>
-
-                    {/* Schedule Badge */}
+                    {/* Status Badge */}
                     {isLive && (
-                      <span style={{
-                        fontSize: '11px', fontWeight: 700, textTransform: 'uppercase',
-                        padding: '2px 8px', borderRadius: 'var(--radius-sm)',
-                        background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e',
-                        border: '1px solid rgba(34, 197, 94, 0.3)'
-                      }}>
+                      <span
+                        style={{
+                          fontSize: '10.5px',
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                          padding: '2px 8px',
+                          borderRadius: 'var(--radius-pill)',
+                          background: 'rgba(34, 197, 94, 0.1)',
+                          color: '#22c55e',
+                          border: '1px solid rgba(34, 197, 94, 0.25)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px'
+                        }}
+                      >
+                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#22c55e' }} />
                         Live Now
                       </span>
                     )}
 
                     {isScheduledFuture && (
-                      <span style={{
-                        fontSize: '11px', fontWeight: 700, textTransform: 'uppercase',
-                        padding: '2px 8px', borderRadius: 'var(--radius-sm)',
-                        background: 'rgba(234, 179, 8, 0.12)', color: '#eab308',
-                        border: '1px solid rgba(234, 179, 8, 0.3)',
-                        display: 'flex', alignItems: 'center', gap: '4px'
-                      }}>
-                        <Clock size={11} /> Opens in {countdownStr}
+                      <span
+                        style={{
+                          fontSize: '10.5px',
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                          padding: '2px 8px',
+                          borderRadius: 'var(--radius-pill)',
+                          background: 'rgba(234, 179, 8, 0.1)',
+                          color: '#eab308',
+                          border: '1px solid rgba(234, 179, 8, 0.25)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Clock size={10} /> Opens in {countdownStr}
                       </span>
                     )}
 
                     {isConcluded && (
-                      <span style={{
-                        fontSize: '11px', fontWeight: 700, textTransform: 'uppercase',
-                        padding: '2px 8px', borderRadius: 'var(--radius-sm)',
-                        background: 'var(--bg-surface)', color: 'var(--text-muted)',
-                        border: '1px solid var(--border)'
-                      }}>
+                      <span
+                        style={{
+                          fontSize: '10.5px',
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          padding: '2px 8px',
+                          borderRadius: 'var(--radius-pill)',
+                          background: 'var(--bg-surface)',
+                          color: 'var(--text-muted)',
+                          border: '1px solid var(--border)'
+                        }}
+                      >
                         Concluded
                       </span>
                     )}
                   </div>
 
-                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      {exam.questionCount} Questions
-                    </span>
-                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>•</span>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      {exam.durationMinutes} Minutes
-                    </span>
-                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>•</span>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      {exam.totalMarks} Marks
-                    </span>
-                    {exam.subject && (
-                      <>
-                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>•</span>
-                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{exam.subject}</span>
-                      </>
-                    )}
+                  {/* Title & Topic */}
+                  <h3
+                    style={{
+                      margin: '0 0 6px',
+                      fontSize: '15px',
+                      fontWeight: 700,
+                      color: 'var(--text-primary)',
+                      lineHeight: 1.35
+                    }}
+                  >
+                    {exam.title}
+                  </h3>
+
+                  {exam.topic && (
+                    <p style={{ margin: '0 0 12px', fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                      {exam.topic}
+                    </p>
+                  )}
+
+                  {/* Metric Chips */}
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '14px' }}>
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '3px 8px',
+                        borderRadius: 'var(--radius-xs)',
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border)',
+                        fontSize: '11px',
+                        color: 'var(--text-secondary)'
+                      }}
+                    >
+                      <BookOpen size={11} color="var(--accent)" />
+                      <span>{exam.questionCount} Questions</span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '3px 8px',
+                        borderRadius: 'var(--radius-xs)',
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border)',
+                        fontSize: '11px',
+                        color: 'var(--text-secondary)'
+                      }}
+                    >
+                      <Clock size={11} color="var(--accent)" />
+                      <span>{exam.durationMinutes} Mins</span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '3px 8px',
+                        borderRadius: 'var(--radius-xs)',
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border)',
+                        fontSize: '11px',
+                        color: 'var(--text-secondary)'
+                      }}
+                    >
+                      <Award size={11} color="var(--accent)" />
+                      <span>{exam.totalMarks} Marks</span>
+                    </div>
                   </div>
 
-                  {/* Scheduled Window Detail */}
+                  {/* Schedule Details if available */}
                   {(exam.startTime || exam.endTime) && (
-                    <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--text-muted)', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                      {exam.startTime && <span>Window Opens: {formatScheduleTime(exam.startTime)}</span>}
-                      {exam.endTime && <span>Window Closes: {formatScheduleTime(exam.endTime)}</span>}
+                    <div style={{ marginBottom: '10px', fontSize: '11px', color: 'var(--text-muted)', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                      {exam.startTime && <span>Opens: {formatScheduleTime(exam.startTime)}</span>}
+                      {exam.endTime && <span>Closes: {formatScheduleTime(exam.endTime)}</span>}
                     </div>
                   )}
                 </div>
 
-                <div>
+                {/* Footer Action Bar */}
+                <div
+                  style={{
+                    borderTop: '1px solid var(--border)',
+                    paddingTop: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '8px'
+                  }}
+                >
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    {exam.negativeMarkingEnabled ? 'Negative marking: -0.25' : 'No negative marking'}
+                  </span>
+
                   {isLive && (
                     <button
                       className="btn btn-primary btn-sm"
-                      style={{ pointerEvents: 'none' }}
+                      style={{ padding: '5px 12px', fontSize: '11.5px', gap: '4px', height: '28px' }}
                     >
-                      Start Exam <ChevronRight size={14} style={{ marginLeft: '4px' }} />
+                      <span>Start Exam</span>
+                      <ChevronRight size={13} />
                     </button>
                   )}
                   {isScheduledFuture && (
                     <button
                       className="btn btn-secondary btn-sm"
-                      style={{ pointerEvents: 'none' }}
+                      style={{ padding: '5px 12px', fontSize: '11.5px', gap: '4px', height: '28px' }}
                     >
-                      Waiting Room <ChevronRight size={14} style={{ marginLeft: '4px' }} />
+                      <span>Waiting Room</span>
+                      <ChevronRight size={13} />
                     </button>
                   )}
                   {isConcluded && (
-                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Closed</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Session Concluded</span>
                   )}
                 </div>
               </div>

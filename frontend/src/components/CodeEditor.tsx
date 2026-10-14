@@ -29,7 +29,7 @@ import {
   Plus,
   UserCheck
 } from 'lucide-react';
-import { COLLEGE_LABS } from '../services/adminService';
+import { getAllCollegeLabs } from '../services/adminService';
 import { SimpleSelect } from './watermelon/Select';
 
 export const DEFAULT_LANGUAGE_TEMPLATES: Record<string, string> = {
@@ -1006,18 +1006,31 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
             <SimpleSelect<string>
               value={student.labId || 'LAB-01'}
               onChange={(newLabId) => {
-                const lab = COLLEGE_LABS.find((l) => l.labId === newLabId);
+                const labs = getAllCollegeLabs();
+                const lab = labs.find((l) => l.labId === newLabId);
                 onUpdateStudent({
                   ...student,
                   labId: newLabId,
                   labName: lab?.labName || newLabId
                 });
               }}
-              options={COLLEGE_LABS.map((lab) => ({
-                value: lab.labId,
-                label: `${lab.labCode} - ${lab.labName} (${lab.block})`,
-                badge: lab.labId
-              }))}
+              options={(() => {
+                const labs = getAllCollegeLabs();
+                if (labs.length > 0) {
+                  return labs.map((lab) => ({
+                    value: lab.labId,
+                    label: `${lab.labCode} - ${lab.labName} (${lab.block})`,
+                    badge: lab.labId
+                  }));
+                }
+                return [
+                  {
+                    value: student.labId || 'LAB-01',
+                    label: student.labId ? `Laboratory ${student.labId}` : 'Main Computer Laboratory',
+                    badge: student.labId || 'LAB-01'
+                  }
+                ];
+              })()}
               searchable
               size="sm"
             />

@@ -55,7 +55,6 @@ import { playSound } from '../utils/sounds';
 import {
   parseExamToken,
   generateExamToken,
-  SAMPLE_CANDIDATE_TOKEN,
   DecodedTokenResult
 } from '../utils/tokenParser';
 import {
@@ -69,7 +68,8 @@ import {
   sendProctorLockCommand,
   buildWorkstationId,
   STATION_LOCK_PREFIX,
-  COLLEGE_LABS
+  getAllCollegeLabs,
+  getLabInfoOrDefault
 } from '../services/adminService';
 import { DEFAULT_LANGUAGE_TEMPLATES } from './CodeEditor';
 import { RunActionButton } from './watermelon/RunActionButton';
@@ -255,7 +255,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
       }
     }
 
-    const labInfo = COLLEGE_LABS.find((l) => l.labId === labId) || COLLEGE_LABS[0];
+    const labInfo = getLabInfoOrDefault(labId);
 
     return {
       name,
@@ -2195,7 +2195,8 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                     <SimpleSelect<string>
                       value={student.labId || 'LAB-01'}
                       onChange={(newLabId) => {
-                        const lab = COLLEGE_LABS.find((l) => l.labId === newLabId);
+                        const allLabs = getAllCollegeLabs();
+                        const lab = allLabs.find((l) => l.labId === newLabId);
                         setStudent({
                           ...student,
                           labId: newLabId,
@@ -2203,11 +2204,23 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                           department: lab?.department || student.department
                         });
                       }}
-                      options={COLLEGE_LABS.map((lab) => ({
-                        value: lab.labId,
-                        label: `${lab.labId}: ${lab.labName} (${lab.department})`,
-                        badge: lab.labCode
-                      }))}
+                      options={(() => {
+                        const allLabs = getAllCollegeLabs();
+                        if (allLabs.length > 0) {
+                          return allLabs.map((lab) => ({
+                            value: lab.labId,
+                            label: `${lab.labId}: ${lab.labName} (${lab.department})`,
+                            badge: lab.labCode
+                          }));
+                        }
+                        return [
+                          {
+                            value: student.labId || 'LAB-01',
+                            label: student.labId ? `Laboratory ${student.labId}` : 'Main Computer Laboratory',
+                            badge: student.labId || 'LAB-01'
+                          }
+                        ];
+                      })()}
                       searchable
                       size="md"
                     />
@@ -2438,24 +2451,19 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                     <label style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
                       Exam Pass / QR Token Payload *
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTokenInput(SAMPLE_CANDIDATE_TOKEN);
-                        const res = parseExamToken(SAMPLE_CANDIDATE_TOKEN);
-                        setTokenParseResult(res);
-                        setRegValidationError(null);
-                        setIsCopiedSample(true);
-                        setTimeout(() => setIsCopiedSample(false), 2000);
-                        playSound('click');
-                      }}
-                      className="btn btn-ghost btn-sm"
-                      style={{ height: '22px', padding: '0 8px', fontSize: '10.5px', gap: '4px' }}
-                      title="Insert a sample encrypted candidate token for instant preview"
-                    >
-                      {isCopiedSample ? <CheckCheck size={11} color="var(--success)" /> : <Copy size={11} />}
-                      <span>{isCopiedSample ? 'Sample Inserted!' : 'Try Sample Token'}</span>
-                    </button>
+                    {tokenInput && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTokenInput('');
+                          setTokenParseResult(null);
+                        }}
+                        className="btn btn-ghost btn-sm"
+                        style={{ height: '22px', padding: '0 8px', fontSize: '10.5px' }}
+                      >
+                        Clear
+                      </button>
+                    )}
                   </div>
 
                   <textarea
@@ -2560,7 +2568,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                     }}
                   >
                     <AlertTriangle size={12} style={{ flexShrink: 0 }} />
-                    <span>{tokenParseResult?.error || 'Invalid token format. Click "Try Sample Token" to test.'}</span>
+                    <span>{tokenParseResult?.error || 'Invalid token format. Please check your credentials.'}</span>
                   </div>
                 )}
 
@@ -2621,7 +2629,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                       disabled={!tokenParseResult?.success || !tokenParseResult.data}
                       onClick={() => {
                         if (!tokenParseResult?.success || !tokenParseResult.data) {
-                          setRegValidationError('Please enter a valid exam token or click "Try Sample Token" first.');
+                          setRegValidationError('Please enter a valid exam token.');
                           playSound('warning');
                           return;
                         }

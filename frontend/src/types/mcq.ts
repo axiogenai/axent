@@ -125,7 +125,7 @@ export interface MCQAttempt {
   // Anti-cheat
   tabSwitchCount: number;
   unfocusedSeconds: number;
-  infractionLog: Array<{ timestamp: number; event: string }>;
+  infractionLog: Array<{ timestamp: number; event: string; details?: string }>;
 }
 
 // ── Grade result returned by grader ──────────────────────────────────────────

@@ -203,38 +203,3 @@ function sanitizeCandidateData(raw: Record<string, any>): Partial<StudentInfo> {
     mcqExamId: typeof raw.mcqExamId === 'string' ? raw.mcqExamId.trim() : ''
   };
 }
-
-/**
- * High-fidelity test token for instant preview and validation demonstration.
- */
-export const SAMPLE_CANDIDATE_TOKEN = generateExamToken({
-  name: 'Devraj Sengupta',
-  rollNumber: '1RV22CS088',
-  department: 'Computer Science & Engineering',
-  course: 'CS402 - Advanced Data Structures & Algorithms Lab',
-  semester: '4th Semester',
-  examType: 'Internal Assessment (CIE)',
-  assignmentTitle: 'Implementation of Red-Black Tree Balancing & Self-Auditing',
-  labId: 'LAB-01',
-  labName: 'Alan Turing Computing Lab',
-  stationNumber: 'Station #07',
-  invigilatorName: 'Dr. S. K. Raman',
-  examDurationMinutes: 90,
-  examMode: 'CODING'
-});
-
-export const SAMPLE_MCQ_TOKEN = generateExamToken({
-  name: 'Ananya Sharma',
-  rollNumber: '1RV22CS042',
-  department: 'Computer Science & Engineering',
-  course: 'CS301 - Data Structures & Algorithms',
-  semester: '4th Semester',
-  examType: 'Internal Assessment (CIE)',
-  assignmentTitle: 'Data Structures & Algorithms MCQ Evaluation',
-  labId: 'LAB-01',
-  labName: 'Alan Turing Computing Lab',
-  stationNumber: 'Station #04',
-  invigilatorName: 'Dr. S. K. Raman',
-  examDurationMinutes: 45,
-  examMode: 'MCQ'
-});

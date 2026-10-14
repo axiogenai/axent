@@ -14,7 +14,8 @@ import {
   saveCollegeLabToCloud,
   deleteCollegeLabFromCloud,
   updateStationLockInCloud,
-  updateStationWarningInCloud
+  updateStationWarningInCloud,
+  fetchCollegeLabsFromCloud
 } from './supabaseService';
 
 
@@ -181,37 +182,41 @@ export function subscribeToCctvBroadcast(
 }
 
 // ── REAL INSTITUTE LABORATORIES ──
-// Configurable by faculty and synced to Supabase Cloud
-export const DEFAULT_INSTITUTE_LABS: CollegeLabInfo[] = [
-  {
-    labId: 'LAB-01',
-    labCode: 'CS-LAB-1',
-    labName: 'Computer Science Laboratory 1',
-    department: 'Computer Science & Engineering',
-    block: 'Main Academic Block',
-    totalStations: 40,
-    invigilatorName: 'Faculty In-Charge'
-  }
-];
-
-export const COLLEGE_LABS: CollegeLabInfo[] = DEFAULT_INSTITUTE_LABS;
+// Configurable dynamically by faculty and synchronized to Supabase Cloud
+export const DEFAULT_INSTITUTE_LABS: CollegeLabInfo[] = [];
+export const COLLEGE_LABS: CollegeLabInfo[] = [];
 
 export const LAB_LOCK_PREFIX = 'codedna_lock_lab_';
 export const STATION_LOCK_PREFIX = 'codedna_lock_station_';
 export const CAMPUS_LOCK_KEY = 'codedna_lock_all';
 export const CUSTOM_LABS_KEY = 'codedna_custom_institute_labs';
 
-// ── DYNAMIC COLLEGE LAB MANAGEMENT ──
+// ── DYNAMIC COLLEGE LAB MANAGEMENT (Zero Hardcoded Labs) ──
 export function getAllCollegeLabs(): CollegeLabInfo[] {
-  if (typeof window === 'undefined') return COLLEGE_LABS;
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(CUSTOM_LABS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch {}
-  return COLLEGE_LABS;
+  return [];
+}
+
+export async function syncCollegeLabsFromCloud(): Promise<CollegeLabInfo[]> {
+  try {
+    const cloudLabs = await fetchCollegeLabsFromCloud();
+    if (cloudLabs) {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(cloudLabs));
+      }
+      return cloudLabs;
+    }
+  } catch (err) {
+    console.warn('[Axent] Failed to sync college labs from cloud:', err);
+  }
+  return getAllCollegeLabs();
 }
 
 export function saveCollegeLab(lab: CollegeLabInfo): CollegeLabInfo[] {
@@ -245,11 +250,11 @@ export function resetCollegeLabs(): CollegeLabInfo[] {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(CUSTOM_LABS_KEY);
   }
-  return COLLEGE_LABS;
+  return [];
 }
 
-// ── PURGE CORRUPTED ENTRIES FROM LOCAL STORAGE ──
-export function purgeDemoStations(): void {
+// ── PURGE CORRUPTED / LEGACY ENTRIES FROM LOCAL STORAGE ──
+export function cleanCorruptedStations(): void {
   if (typeof window === 'undefined') return;
   try {
     const raw = localStorage.getItem(STATIONS_KEY);
@@ -269,11 +274,12 @@ export function purgeDemoStations(): void {
     // Ignore
   }
 }
+export const purgeDemoStations = cleanCorruptedStations;
 
 // ── GET ONLY REAL REGISTERED / ACTIVE WORKSTATIONS (NO AUTO FAKE INJECTION) ──
 export function getLiveStations(): CandidateStation[] {
   if (typeof window === 'undefined') return [];
-  purgeDemoStations();
+  cleanCorruptedStations();
   try {
     const raw = localStorage.getItem(STATIONS_KEY);
     if (raw) {
@@ -342,7 +348,7 @@ export function setLabLock(labId: string, isLocked: boolean): void {
   if (typeof window === 'undefined') return;
   if (labId === 'all') {
     localStorage.setItem(CAMPUS_LOCK_KEY, isLocked ? 'true' : 'false');
-    COLLEGE_LABS.forEach((l) => {
+    getAllCollegeLabs().forEach((l) => {
       localStorage.setItem(`${LAB_LOCK_PREFIX}${l.labId}`, isLocked ? 'true' : 'false');
     });
   } else {
@@ -390,7 +396,7 @@ export function clearAllStations(): void {
     localStorage.removeItem(STATIONS_KEY);
     localStorage.removeItem('codedna_cctv_heartbeat_tick');
     localStorage.removeItem(CAMPUS_LOCK_KEY);
-    COLLEGE_LABS.forEach((l) => {
+    getAllCollegeLabs().forEach((l) => {
       localStorage.removeItem(`${LAB_LOCK_PREFIX}${l.labId}`);
     });
     // Remove all station lock keys
@@ -408,10 +414,13 @@ export function clearAllStations(): void {
   }
 }
 
-// ── GET ACTIVE LAB ID (Defaults to LAB-01) ──
+// ── GET ACTIVE LAB ID ──
 export function getActiveLabId(): string {
-  if (typeof window === 'undefined') return 'LAB-01';
-  return localStorage.getItem(CURRENT_LAB_KEY) || 'LAB-01';
+  if (typeof window === 'undefined') return '';
+  const stored = localStorage.getItem(CURRENT_LAB_KEY);
+  if (stored) return stored;
+  const labs = getAllCollegeLabs();
+  return labs[0]?.labId || '';
 }
 
 export function setActiveLabId(labId: string): void {
@@ -425,7 +434,24 @@ export function getStationsForLab(labId: string): CandidateStation[] {
   return all.filter((s) => s.labId === labId);
 }
 
-// ── CAMPUS-WIDE MACRO KPI STATISTICS ACROSS ALL 50 LABS ──
+// ── GET DYNAMIC LAB INFO HELPER ──
+export function getLabInfoOrDefault(labId?: string): CollegeLabInfo {
+  const labs = getAllCollegeLabs();
+  const matched = labs.find((l) => l.labId === labId);
+  if (matched) return matched;
+  if (labs.length > 0) return labs[0];
+  return {
+    labId: labId || 'LAB-01',
+    labCode: labId || 'LAB-01',
+    labName: labId ? `Laboratory ${labId}` : 'Computer Laboratory',
+    department: 'Computer Science & Engineering',
+    block: 'Main Academic Block',
+    totalStations: 40,
+    invigilatorName: 'Faculty In-Charge'
+  };
+}
+
+// ── CAMPUS-WIDE MACRO KPI STATISTICS ACROSS DYNAMIC LABS ──
 export function getCampusStats(): {
   totalLabs: number;
   totalWorkstations: number;
@@ -434,8 +460,9 @@ export function getCampusStats(): {
   cheatingAlerts: number;
 } {
   const all = getLiveStations();
-  const totalLabs = COLLEGE_LABS.length;
-  const totalWorkstations = COLLEGE_LABS.reduce((acc, l) => acc + l.totalStations, 0);
+  const labs = getAllCollegeLabs();
+  const totalLabs = labs.length;
+  const totalWorkstations = labs.reduce((acc, l) => acc + l.totalStations, 0);
 
   const cheatingAlerts = all.filter(
     (s) => s.cheatingRisk === 'High' || s.cheatingRisk === 'Critical' || s.metrics.pasteRatio >= 50
@@ -501,7 +528,7 @@ export function syncCurrentLiveStation(
   const stationLabel = submission.student.stationNumber || 'Station #01';
   const cleanStationNum = stationLabel.replace(/[^0-9]/g, '') || '01';
   const currentStationId = buildWorkstationId(activeLab, stationLabel);
-  const labInfo = COLLEGE_LABS.find((l) => l.labId === activeLab) || COLLEGE_LABS[0];
+  const labInfo = getLabInfoOrDefault(activeLab);
   const existing = stations.find((s) => s.id === currentStationId);
 
   // Check explicit unlock status
@@ -579,7 +606,7 @@ export function submitAndMarkDone(
   const stationLabel = submission.student.stationNumber || 'Station #01';
   const cleanStationNum = stationLabel.replace(/[^0-9]/g, '') || '01';
   const currentStationId = `${activeLab}-WS-${cleanStationNum.padStart(2, '0')}`;
-  const labInfo = COLLEGE_LABS.find((l) => l.labId === activeLab) || COLLEGE_LABS[0];
+  const labInfo = getLabInfoOrDefault(activeLab);
 
   const charCount = submission.code.trim().length;
   const isPastedByMath = charCount > 10 && submission.metrics.keystrokes < 10;
@@ -702,7 +729,7 @@ export function syncMcqLiveStation(
   const stationLabel = studentInfo.stationNumber || 'Station #01';
   const cleanStationNum = stationLabel.replace(/[^0-9]/g, '') || '01';
   const currentStationId = `${activeLab}-WS-${cleanStationNum.padStart(2, '0')}`;
-  const labInfo = COLLEGE_LABS.find((l) => l.labId === activeLab) || COLLEGE_LABS[0];
+  const labInfo = getLabInfoOrDefault(activeLab);
 
   const answeredCount = Object.keys(attempt.answers).filter((k) => attempt.answers[k]).length;
   const totalQuestions = attempt.assignedQuestions.length;
