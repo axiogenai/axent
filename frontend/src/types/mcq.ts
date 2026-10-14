@@ -103,6 +103,7 @@ export interface MCQAttempt {
   studentDiv?: string;
   startTime: number;           // Epoch ms
   deadline: number;            // Epoch ms (startTime + durationMs)
+  lastActivityAt?: number;     // Epoch ms; used to reconcile cross-device sync safely
   submitTime?: number;
   status: MCQAttemptStatus;
 

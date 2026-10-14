@@ -59,8 +59,10 @@ CREATE TABLE IF NOT EXISTS public.mcq_attempts (
     student_roll TEXT NOT NULL,
     student_dept TEXT DEFAULT '',
     student_sem TEXT DEFAULT '',
+    student_div TEXT DEFAULT 'A',
     start_time BIGINT NOT NULL,
     deadline BIGINT NOT NULL,
+    last_activity_at BIGINT,
     submit_time BIGINT,
     status TEXT NOT NULL DEFAULT 'IN_PROGRESS' CHECK (status IN ('IN_PROGRESS', 'SUBMITTED', 'TIMED_OUT', 'ABANDONED')),
     assigned_questions JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -76,6 +78,10 @@ CREATE TABLE IF NOT EXISTS public.mcq_attempts (
     unfocused_seconds NUMERIC DEFAULT 0,
     infraction_log JSONB DEFAULT '[]'::jsonb
 );
+
+-- Safe, repeatable upgrades for databases created from earlier versions of this file.
+ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS student_div TEXT DEFAULT 'A';
+ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS last_activity_at BIGINT;
 
 -- 4. Candidate Workstations (CCTV Telemetry)
 CREATE TABLE IF NOT EXISTS public.candidate_stations (

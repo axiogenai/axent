@@ -21,12 +21,27 @@ import {
   saveExamToCloud,
   deleteExamFromCloud,
   saveAttemptToCloud,
+  subscribeToMcqCloudChanges,
   fetchQuestionsFromCloud,
   fetchExamsFromCloud,
   fetchAttemptsFromCloud
 } from './supabaseService';
 
 // ── Persistence helpers ───────────────────────────────────────────────────────
+
+type McqDataListener = () => void;
+const mcqDataListeners = new Set<McqDataListener>();
+
+export function onMcqDataChanged(listener: McqDataListener): () => void {
+  mcqDataListeners.add(listener);
+  return () => { mcqDataListeners.delete(listener); };
+}
+
+function notifyMcqDataChanged(): void {
+  mcqDataListeners.forEach((listener) => {
+    try { listener(); } catch (error) { console.warn('[mcqService] Data listener failed:', error); }
+  });
+}
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -41,6 +56,7 @@ function load<T>(key: string, fallback: T): T {
 function save(key: string, value: unknown): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    notifyMcqDataChanged();
   } catch (e) {
     console.error('[mcqService] localStorage write failed:', e);
   }
@@ -301,38 +317,24 @@ export function getAttemptsForExam(examId: string): MCQAttempt[] {
 
 export function getActiveAttempt(): MCQAttempt | null {
   try {
-    const raw = localStorage.getItem(MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT);
-    let id = '';
-    if (raw) {
-      id = raw.trim();
-      try {
-        const parsed = JSON.parse(raw);
-        if (typeof parsed === 'string') id = parsed.trim();
-      } catch {}
+    // Recovery is scoped to this browser tab. localStorage is shared by every
+    // candidate on a lab workstation, so it must never choose a session alone.
+    const sessionAttemptId = sessionStorage.getItem('codedna_mcq_session_attempt');
+    if (!sessionAttemptId) return null;
 
-      if (id.startsWith('"') && id.endsWith('"')) {
-        id = id.slice(1, -1);
-      }
-    }
+    const attempt = getAttemptById(sessionAttemptId);
+    if (attempt && attempt.status === 'IN_PROGRESS') return attempt;
 
-    if (id) {
-      const attempt = getAttemptById(id);
-      if (attempt && attempt.status === 'IN_PROGRESS') {
-        return attempt;
-      }
-    }
-
-    // Direct backup object check (guarantees instantaneous zero-lag recovery on refresh)
+    // Restore the local cache only when the tab-scoped ID matches the backup.
     const backupRaw = localStorage.getItem('codedna_mcq_active_attempt_backup');
     if (backupRaw) {
       const backupAttempt = JSON.parse(backupRaw) as MCQAttempt;
-      if (backupAttempt && backupAttempt.id && backupAttempt.status === 'IN_PROGRESS') {
+      if (backupAttempt?.id === sessionAttemptId && backupAttempt.status === 'IN_PROGRESS') {
+        saveAttempt(backupAttempt);
         return backupAttempt;
       }
     }
-
-    // Never fall back to another arbitrary in-progress attempt. On shared lab
-    // workstations this can resume the wrong candidate's session.
+    sessionStorage.removeItem('codedna_mcq_session_attempt');
     return null;
   } catch {
     return null;
@@ -352,9 +354,11 @@ function saveAttempt(attempt: MCQAttempt): void {
     if (attempt.status === 'IN_PROGRESS') {
       localStorage.setItem('codedna_mcq_active_attempt_backup', JSON.stringify(attempt));
       localStorage.setItem(MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT, attempt.id);
+      sessionStorage.setItem('codedna_mcq_session_attempt', attempt.id);
     } else {
       localStorage.removeItem('codedna_mcq_active_attempt_backup');
       localStorage.removeItem(MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT);
+      sessionStorage.removeItem('codedna_mcq_session_attempt');
     }
   } catch {}
   saveAttemptToCloud(attempt);
@@ -384,7 +388,10 @@ export function startAttempt(
     (item) => String(item.studentRoll || '').trim().toLocaleLowerCase() === normalizedRoll
   );
   const existingActive = candidateAttempts.find((item) => item.status === 'IN_PROGRESS');
-  if (existingActive) return existingActive;
+  if (existingActive) {
+    try { sessionStorage.setItem('codedna_mcq_session_attempt', existingActive.id); } catch {}
+    return existingActive;
+  }
 
   const now = Date.now();
   if (exam.status !== 'PUBLISHED') throw new Error('This examination is not published.');
@@ -471,6 +478,7 @@ export function startAttempt(
     studentSem,
     studentDiv: studentDiv || 'A',
     startTime: now,
+    lastActivityAt: now,
     // The attempt cannot outlive its personal duration or the examination window.
     deadline: Math.min(
       now + exam.durationMinutes * 60_000,
@@ -503,7 +511,7 @@ export function saveAnswer(attemptId: string, questionId: string, optionId: stri
   if (!assigned) return false;
   if (optionId !== '' && !assigned.snapshot.options.some((option) => option.id === optionId)) return false;
 
-  all[idx] = { ...attempt, answers: { ...attempt.answers, [questionId]: optionId } };
+  all[idx] = { ...attempt, answers: { ...attempt.answers, [questionId]: optionId }, lastActivityAt: Date.now() };
   save(MCQ_STORAGE_KEYS.ATTEMPTS, all);
   try { localStorage.setItem('codedna_mcq_active_attempt_backup', JSON.stringify(all[idx])); } catch {}
   void saveAttemptToCloud(all[idx]);
@@ -518,6 +526,7 @@ export function recordInfraction(attemptId: string, event: string): void {
   const attempt = all[idx];
   all[idx] = {
     ...attempt,
+    lastActivityAt: Date.now(),
     tabSwitchCount: Math.max(0, Number(attempt.tabSwitchCount) || 0) + 1,
     infractionLog: [...(Array.isArray(attempt.infractionLog) ? attempt.infractionLog : []), { timestamp: Date.now(), event: event.trim().slice(0, 240) }].slice(-200),
   };
@@ -530,7 +539,7 @@ export function updateUnfocusedTime(attemptId: string, totalSeconds: number): vo
   const all = getAllAttempts();
   const idx = all.findIndex((a) => a.id === attemptId);
   if (idx < 0 || all[idx].status !== 'IN_PROGRESS' || !Number.isFinite(totalSeconds)) return;
-  all[idx] = { ...all[idx], unfocusedSeconds: Math.max(0, totalSeconds) };
+  all[idx] = { ...all[idx], unfocusedSeconds: Math.max(0, totalSeconds), lastActivityAt: Date.now() };
   save(MCQ_STORAGE_KEYS.ATTEMPTS, all);
   void saveAttemptToCloud(all[idx]);
 }
@@ -617,7 +626,11 @@ export function submitAttempt(
 
   const now = Date.now();
   const finalStatus: MCQAttemptStatus =
-    now >= existing.deadline || requestedStatus === 'TIMED_OUT' ? 'TIMED_OUT' : 'SUBMITTED';
+    now >= existing.deadline || requestedStatus === 'TIMED_OUT'
+      ? 'TIMED_OUT'
+      : requestedStatus === 'ABANDONED'
+        ? 'ABANDONED'
+        : 'SUBMITTED';
   const assignedById = new Map(existing.assignedQuestions.map((q) => [q.questionId, q]));
 
   for (const [questionId, optionId] of Object.entries(finalAnswers || {})) {
@@ -637,7 +650,7 @@ export function submitAttempt(
     if (selected) sanitizedAnswers[questionId] = selected;
   }
 
-  const attempt: MCQAttempt = { ...existing, answers: sanitizedAnswers };
+  const attempt: MCQAttempt = { ...existing, answers: sanitizedAnswers, lastActivityAt: now };
   const grade = gradeAttempt(attempt);
   const finalAttempt: MCQAttempt = {
     ...attempt,
@@ -656,6 +669,7 @@ export function submitAttempt(
   try {
     localStorage.removeItem(MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT);
     localStorage.removeItem('codedna_mcq_active_attempt_backup');
+    sessionStorage.removeItem('codedna_mcq_session_attempt');
   } catch {}
   return grade;
 }
@@ -682,20 +696,62 @@ function notifyExamsChanged() {
   });
 }
 
+function mergeUpdatedRecords<T extends { id: string; updatedAt?: number }>(localRecords: T[], cloudRecords: T[]): T[] {
+  const merged = new Map(localRecords.map((record) => [record.id, record]));
+  for (const cloudRecord of cloudRecords) {
+    const localRecord = merged.get(cloudRecord.id);
+    if (!localRecord || (cloudRecord.updatedAt ?? 0) >= (localRecord.updatedAt ?? 0)) {
+      merged.set(cloudRecord.id, cloudRecord);
+    }
+  }
+  return Array.from(merged.values());
+}
+
+function mergeAttempts(localAttempts: MCQAttempt[], cloudAttempts: MCQAttempt[]): MCQAttempt[] {
+  const merged = new Map(localAttempts.map((attempt) => [attempt.id, attempt]));
+  for (const cloudAttempt of cloudAttempts) {
+    const localAttempt = merged.get(cloudAttempt.id);
+    if (!localAttempt) {
+      merged.set(cloudAttempt.id, cloudAttempt);
+      continue;
+    }
+    const localFinal = localAttempt.status !== 'IN_PROGRESS';
+    const cloudFinal = cloudAttempt.status !== 'IN_PROGRESS';
+    if (cloudFinal && !localFinal) {
+      merged.set(cloudAttempt.id, cloudAttempt);
+    } else if (localFinal && !cloudFinal) {
+      continue;
+    } else if ((cloudAttempt.lastActivityAt ?? cloudAttempt.submitTime ?? 0) >
+               (localAttempt.lastActivityAt ?? localAttempt.submitTime ?? 0)) {
+      merged.set(cloudAttempt.id, cloudAttempt);
+    } else if (!localFinal && !cloudFinal &&
+               Object.keys(cloudAttempt.answers || {}).length > Object.keys(localAttempt.answers || {}).length) {
+      merged.set(cloudAttempt.id, cloudAttempt);
+    }
+  }
+  return Array.from(merged.values());
+}
+
+export async function persistAttemptToCloud(attemptId: string): Promise<boolean> {
+  const latest = getAttemptById(attemptId);
+  if (!latest) return false;
+  return saveAttemptToCloud(latest);
+}
+
 export async function syncFromSupabase(): Promise<void> {
   try {
-    const cloudQ = await fetchQuestionsFromCloud();
-    if (cloudQ && cloudQ.length > 0) {
-      save(MCQ_STORAGE_KEYS.QUESTIONS, cloudQ);
+    const [cloudQ, cloudE, cloudA] = await Promise.all([
+      fetchQuestionsFromCloud(), fetchExamsFromCloud(), fetchAttemptsFromCloud()
+    ]);
+    if (cloudQ !== null) {
+      save(MCQ_STORAGE_KEYS.QUESTIONS, mergeUpdatedRecords(getAllQuestions(), cloudQ));
     }
-    const cloudE = await fetchExamsFromCloud();
-    if (cloudE && cloudE.length > 0) {
-      save(MCQ_STORAGE_KEYS.EXAMS, cloudE);
+    if (cloudE !== null) {
+      save(MCQ_STORAGE_KEYS.EXAMS, mergeUpdatedRecords(getAllExams(), cloudE));
       notifyExamsChanged();
     }
-    const cloudA = await fetchAttemptsFromCloud();
-    if (cloudA && cloudA.length > 0) {
-      save(MCQ_STORAGE_KEYS.ATTEMPTS, cloudA);
+    if (cloudA !== null) {
+      save(MCQ_STORAGE_KEYS.ATTEMPTS, mergeAttempts(getAllAttempts(), cloudA));
     }
   } catch (err) {
     console.warn('[mcqService] Background Supabase sync notice:', err);
@@ -703,6 +759,11 @@ export async function syncFromSupabase(): Promise<void> {
 }
 
 if (typeof window !== 'undefined') {
-  syncFromSupabase();
+  void syncFromSupabase();
+  let syncTimer: ReturnType<typeof setTimeout> | undefined;
+  subscribeToMcqCloudChanges(() => {
+    if (syncTimer) clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => { void syncFromSupabase(); }, 350);
+  });
 }
 

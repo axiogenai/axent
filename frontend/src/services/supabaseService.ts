@@ -21,6 +21,16 @@ export function isSupabaseConnected(): boolean {
   return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 }
 
+export function subscribeToMcqCloudChanges(onChange: () => void): () => void {
+  const channel = supabase
+    .channel('axent-mcq-live-sync')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_questions' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_exams' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_attempts' }, onChange)
+    .subscribe();
+  return () => { void supabase.removeChannel(channel); };
+}
+
 // ── MCQ QUESTIONS SYNC ────────────────────────────────────────────────────────
 
 export async function fetchQuestionsFromCloud(): Promise<MCQQuestion[] | null> {
@@ -55,7 +65,7 @@ export async function fetchQuestionsFromCloud(): Promise<MCQQuestion[] | null> {
   }
 }
 
-export async function saveQuestionToCloud(q: MCQQuestion): Promise<boolean> {
+async function writeQuestionToCloud(q: MCQQuestion): Promise<boolean> {
   try {
     const row = {
       id: q.id,
@@ -86,7 +96,7 @@ export async function saveQuestionToCloud(q: MCQQuestion): Promise<boolean> {
   }
 }
 
-export async function deleteQuestionFromCloud(id: string): Promise<boolean> {
+async function writeDeleteQuestionFromCloud(id: string): Promise<boolean> {
   try {
     const { error } = await supabase.from('mcq_questions').delete().eq('id', id);
     return !error;
@@ -138,7 +148,7 @@ export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
   }
 }
 
-export async function saveExamToCloud(e: MCQExamConfig): Promise<boolean> {
+async function writeExamToCloud(e: MCQExamConfig): Promise<boolean> {
   try {
     const row = {
       id: e.id,
@@ -178,13 +188,46 @@ export async function saveExamToCloud(e: MCQExamConfig): Promise<boolean> {
   }
 }
 
-export async function deleteExamFromCloud(id: string): Promise<boolean> {
+async function writeDeleteExamFromCloud(id: string): Promise<boolean> {
   try {
     const { error } = await supabase.from('mcq_exams').delete().eq('id', id);
     return !error;
   } catch {
     return false;
   }
+}
+
+const questionWriteQueues = new Map<string, Promise<boolean>>();
+const examWriteQueues = new Map<string, Promise<boolean>>();
+
+function enqueueEntityWrite(
+  queues: Map<string, Promise<boolean>>,
+  id: string,
+  writer: () => Promise<boolean>
+): Promise<boolean> {
+  const previous = queues.get(id) ?? Promise.resolve(true);
+  const current = previous.catch(() => false).then(writer);
+  queues.set(id, current);
+  void current.finally(() => {
+    if (queues.get(id) === current) queues.delete(id);
+  }).catch(() => undefined);
+  return current;
+}
+
+export function saveQuestionToCloud(question: MCQQuestion): Promise<boolean> {
+  return enqueueEntityWrite(questionWriteQueues, question.id, () => writeQuestionToCloud(question));
+}
+
+export function deleteQuestionFromCloud(id: string): Promise<boolean> {
+  return enqueueEntityWrite(questionWriteQueues, id, () => writeDeleteQuestionFromCloud(id));
+}
+
+export function saveExamToCloud(exam: MCQExamConfig): Promise<boolean> {
+  return enqueueEntityWrite(examWriteQueues, exam.id, () => writeExamToCloud(exam));
+}
+
+export function deleteExamFromCloud(id: string): Promise<boolean> {
+  return enqueueEntityWrite(examWriteQueues, id, () => writeDeleteExamFromCloud(id));
 }
 
 // ── MCQ ATTEMPTS SYNC ─────────────────────────────────────────────────────────
@@ -209,6 +252,7 @@ export async function fetchAttemptsFromCloud(): Promise<MCQAttempt[] | null> {
       studentDiv: row.student_div || 'A',
       startTime: Number(row.start_time),
       deadline: Number(row.deadline),
+      lastActivityAt: row.last_activity_at ? Number(row.last_activity_at) : undefined,
       submitTime: row.submit_time ? Number(row.submit_time) : undefined,
       status: row.status,
       assignedQuestions: row.assigned_questions || [],
@@ -230,7 +274,7 @@ export async function fetchAttemptsFromCloud(): Promise<MCQAttempt[] | null> {
   }
 }
 
-export async function saveAttemptToCloud(a: MCQAttempt): Promise<boolean> {
+async function writeAttemptToCloud(a: MCQAttempt): Promise<boolean> {
   try {
     const row = {
       id: a.id,
@@ -243,6 +287,7 @@ export async function saveAttemptToCloud(a: MCQAttempt): Promise<boolean> {
       student_div: a.studentDiv || 'A',
       start_time: a.startTime,
       deadline: a.deadline,
+      last_activity_at: a.lastActivityAt || a.submitTime || a.startTime,
       submit_time: a.submitTime || null,
       status: a.status,
       assigned_questions: a.assignedQuestions,
@@ -258,16 +303,39 @@ export async function saveAttemptToCloud(a: MCQAttempt): Promise<boolean> {
       unfocused_seconds: a.unfocusedSeconds,
       infraction_log: a.infractionLog,
     };
-    const { error } = await supabase.from('mcq_attempts').upsert(row);
-    if (error) {
+    // Existing deployments may not yet have these optional columns. Retry without
+    // the missing fields so a schema upgrade is not required just to save an attempt.
+    const payload: Record<string, unknown> = { ...row };
+    for (let retry = 0; retry < 3; retry++) {
+      const { error } = await supabase.from('mcq_attempts').upsert(payload);
+      if (!error) return true;
+      const missingOptionalColumn = ['student_div', 'last_activity_at'].find((column) =>
+        Object.prototype.hasOwnProperty.call(payload, column) && error.message.toLowerCase().includes(column)
+      );
+      if (missingOptionalColumn) {
+        delete payload[missingOptionalColumn];
+        continue;
+      }
       console.warn('[Supabase] Attempt upsert warning:', error.message);
       return false;
     }
-    return true;
+    return false;
   } catch (err) {
     console.warn('[Supabase] Failed to sync attempt:', err);
     return false;
   }
+}
+
+const attemptWriteQueues = new Map<string, Promise<boolean>>();
+
+export function saveAttemptToCloud(attempt: MCQAttempt): Promise<boolean> {
+  const previous = attemptWriteQueues.get(attempt.id) ?? Promise.resolve(true);
+  const current = previous.catch(() => false).then(() => writeAttemptToCloud(attempt));
+  attemptWriteQueues.set(attempt.id, current);
+  void current.finally(() => {
+    if (attemptWriteQueues.get(attempt.id) === current) attemptWriteQueues.delete(attempt.id);
+  }).catch(() => undefined);
+  return current;
 }
 
 // ── CANDIDATE STATIONS (CCTV) SYNC ───────────────────────────────────────────
