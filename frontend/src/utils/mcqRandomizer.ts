@@ -7,12 +7,21 @@
  * Cryptographically-seeded Fisher-Yates shuffle.
  * Returns a NEW shuffled array, does not mutate input.
  */
+function secureRandomInt(maxExclusive: number): number {
+  if (!Number.isSafeInteger(maxExclusive) || maxExclusive < 1 || maxExclusive > 0x1_0000_0000) {
+    throw new RangeError('maxExclusive must be a positive integer within the uint32 range.');
+  }
+  const uint32Range = 0x1_0000_0000;
+  const limit = Math.floor(uint32Range / maxExclusive) * maxExclusive;
+  const sample = new Uint32Array(1);
+  do { crypto.getRandomValues(sample); } while (sample[0] >= limit);
+  return sample[0] % maxExclusive;
+}
+
 export function fisherYatesShuffle<T>(array: T[]): T[] {
   const arr = [...array];
-  const buf = new Uint32Array(arr.length);
-  crypto.getRandomValues(buf);
   for (let i = arr.length - 1; i > 0; i--) {
-    const j = buf[i] % (i + 1);
+    const j = secureRandomInt(i + 1);
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;

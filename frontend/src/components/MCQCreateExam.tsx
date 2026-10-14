@@ -402,7 +402,7 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ initial, onSave, onBack }) => {
             <input value={form.title} onChange={(e) => set('title', e.target.value)} placeholder="e.g. Quantitative Aptitude & Technical Assessment"
               style={inputStyle} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '12px' }}>
             <div>
               <label style={labelStyle}>Category *</label>
               <select
@@ -425,7 +425,7 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ initial, onSave, onBack }) => {
                 style={inputStyle} />
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '12px' }}>
             <div>
               <label style={labelStyle}>Duration (minutes) *</label>
               <input type="number" min={5} value={form.durationMinutes} onChange={(e) => set('durationMinutes', parseInt(e.target.value) || 30)}
@@ -437,7 +437,7 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ initial, onSave, onBack }) => {
                 style={inputStyle} />
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '12px' }}>
             <div>
               <label style={labelStyle}>Scheduled Start Window (optional — auto-unlocks exam)</label>
               <input

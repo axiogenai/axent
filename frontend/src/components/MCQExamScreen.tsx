@@ -263,9 +263,10 @@ interface RegistrationFormProps {
   allExams: MCQExamConfig[];
   onSelectExam: (examId: string) => void;
   onStart: (student: StudentInfo) => void;
+  startError?: string | null;
 }
 
-const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onSelectExam, onStart }) => {
+const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onSelectExam, onStart, startError }) => {
   const navigate = useNavigate();
   const [mode, setMode] = useState<'manual' | 'token'>('manual');
   
@@ -415,7 +416,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
             </span>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '14px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '8px', marginBottom: '14px' }}>
             {[
               { label: 'Questions', value: String(exam.questionCount) },
               { label: 'Duration', value: `${exam.durationMinutes} min` },
@@ -467,6 +468,12 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
               <span>OR Import with Token</span>
             </button>
           </div>
+
+          {startError && (
+            <div role="alert" style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', marginBottom: '14px' }}>
+              <p style={{ color: 'var(--danger)', fontSize: '12px', margin: 0 }}>{startError}</p>
+            </div>
+          )}
 
           {/* MODE 1: MANUAL ENTRY */}
           {mode === 'manual' && (
@@ -521,7 +528,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
                 </div>
 
                 {/* Department, Semester, Division */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '10px' }}>
                   <div>
                     <label style={labelStyle}>Department *</label>
                     <SimpleSelect
@@ -661,7 +668,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
                     </span>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', fontSize: '11.5px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '8px', fontSize: '11.5px' }}>
                     <div>
                       <span style={{ color: 'var(--text-muted)' }}>Candidate: </span>
                       <strong style={{ color: 'var(--text-primary)' }}>{parsedToken.data.name || 'Candidate'}</strong>
@@ -873,7 +880,7 @@ const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attem
               </span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px 20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '14px 20px' }}>
               <div>
                 <span style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>
                   Candidate Name
@@ -1551,6 +1558,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
   });
 
   const [gradeResult, setGradeResult] = useState<MCQGradeResult | null>(null);
+  const [attemptStartError, setAttemptStartError] = useState<string | null>(null);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const unfocusedStartRef = useRef<number | null>(null);
@@ -1813,17 +1821,35 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     setProctorWarning(null);
     updateStationLockInCloud(stationId, false, undefined, studentData.labId || 'LAB-01');
 
-    const a = startAttempt(
-      exam,
-      studentData.name,
-      studentData.rollNumber,
-      studentData.department,
-      studentData.semester,
-      studentData.division
-    );
+    let a: MCQAttempt;
+    try {
+      a = startAttempt(
+        exam,
+        studentData.name,
+        studentData.rollNumber,
+        studentData.department,
+        studentData.semester,
+        studentData.division
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to start this examination.';
+      setAttemptStartError(message);
+      playSound('warning');
+      return;
+    }
+    setAttemptStartError(null);
     setAttempt(a);
-    setAnswers({});
-    setCurrentIdx(0);
+    // Preserve a recovered attempt instead of wiping answers on duplicate start.
+    setAnswers(a.answers || {});
+    let restoredIndex = 0;
+    try {
+      const savedIndex = Number(localStorage.getItem(`codedna_mcq_current_idx_${a.id}`));
+      if (Number.isInteger(savedIndex) && savedIndex >= 0 && savedIndex < a.assignedQuestions.length) restoredIndex = savedIndex;
+    } catch {}
+    setCurrentIdx(restoredIndex);
+    setSubmitted(false);
+    setGradeResult(null);
+    setAttemptStartError(null);
     playSound('success');
     syncMcqLiveStation(a, exam, studentData, 0, false);
   };
@@ -1833,9 +1859,13 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       playSound('warning');
       return;
     }
+    const saved = saveAnswer(attempt.id, questionId, optionId);
+    if (!saved) {
+      playSound('warning');
+      return;
+    }
     const newAnswers = { ...answers, [questionId]: optionId };
     setAnswers(newAnswers);
-    saveAnswer(attempt.id, questionId, optionId);
     playSound('click');
     const updatedAttempt = { ...attempt, answers: newAnswers };
     setAttempt(updatedAttempt);
@@ -1946,6 +1976,9 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         localStorage.removeItem(`codedna_mcq_current_idx_${attempt.id}`);
       } catch {}
       syncMcqLiveStation(finished, exam, student, currentIdx, true);
+    } else {
+      setSubmitted(false);
+      window.alert('The attempt could not be finalized. Contact the invigilator immediately and keep this page open.');
     }
   }, [attempt, answers, submitted, exam, student, currentIdx]);
 
@@ -1966,6 +1999,9 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         localStorage.removeItem(`codedna_mcq_current_idx_${attempt.id}`);
       } catch {}
       syncMcqLiveStation(finished, exam, student, currentIdx, true);
+    } else {
+      setSubmitted(false);
+      window.alert('Submission failed and is not confirmed. Contact the invigilator and keep this page open.');
     }
   };
 
@@ -2082,8 +2118,9 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       <RegistrationForm
         exam={exam}
         allExams={allExamsList}
-        onSelectExam={(newId) => setActiveExamId(newId)}
+        onSelectExam={(newId) => { setAttemptStartError(null); setActiveExamId(newId); }}
         onStart={handleStart}
+        startError={attemptStartError}
       />
     );
   }
@@ -2202,7 +2239,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
             <div style={{
               background: 'var(--bg-surface)', border: '1px solid var(--border)',
               borderRadius: 'var(--radius-md)', padding: '14px 18px', marginBottom: '22px',
-              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', textAlign: 'left',
+              display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '10px', textAlign: 'left',
               fontSize: '12px'
             }}>
               <div>
@@ -2493,7 +2530,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
             <h3 style={{ margin: '0 0 8px', fontSize: '17px', fontWeight: 800, color: 'var(--text-primary)' }}>End & Submit Examination?</h3>
             <div style={{ marginBottom: '20px' }}>
               <p style={{ margin: '0 0 8px', fontSize: '13px', color: 'var(--text-secondary)' }}>Review your progress before final submission:</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '8px' }}>
                 <div style={{ background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
                   <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--success)' }}>{answeredCount}</div>
                   <div style={{ fontSize: '11px', color: 'var(--success)', textTransform: 'uppercase' }}>Answered</div>

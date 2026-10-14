@@ -163,14 +163,16 @@ export function archiveQuestion(id: string): void {
   }
 }
 
-export function publishQuestion(id: string): void {
+export function publishQuestion(id: string): string[] {
   const all = getAllQuestions();
   const idx = all.findIndex((q) => q.id === id);
-  if (idx >= 0) {
-    all[idx] = { ...all[idx], status: 'PUBLISHED', updatedAt: Date.now() };
-    save(MCQ_STORAGE_KEYS.QUESTIONS, all);
-    saveQuestionToCloud(all[idx]);
-  }
+  if (idx < 0) return ['Question not found.'];
+  const errors = validateQuestion(all[idx]);
+  if (errors.length > 0) return errors;
+  all[idx] = { ...all[idx], status: 'PUBLISHED', updatedAt: Date.now() };
+  save(MCQ_STORAGE_KEYS.QUESTIONS, all);
+  void saveQuestionToCloud(all[idx]);
+  return [];
 }
 
 /** Validate a question has required fields + at least 2 options + exactly 1 correct */
@@ -179,10 +181,13 @@ export function validateQuestion(q: Partial<MCQQuestion>): string[] {
   if (!q.text?.trim()) errors.push('Question text is required.');
   if (!q.subject?.trim()) errors.push('Subject is required.');
   if (!q.topic?.trim()) errors.push('Topic is required.');
-  if (!q.marks || q.marks <= 0) errors.push('Marks must be positive.');
-  if (!q.options || q.options.length < 2) errors.push('At least 2 options required.');
-  if (q.options && q.options.some((o) => !o.text.trim())) errors.push('All options must have text.');
-  if (q.options && q.options.filter((o) => o.isCorrect).length !== 1) {
+  if (!Number.isFinite(q.marks) || (q.marks ?? 0) <= 0) errors.push('Marks must be positive.');
+  if (!Number.isFinite(q.negativeMarks) || (q.negativeMarks ?? -1) < 0) errors.push('Negative marks must be zero or positive.');
+  if (!Array.isArray(q.options) || q.options.length < 2) errors.push('At least 2 options required.');
+  if (Array.isArray(q.options) && q.options.length > 6) errors.push('A question can have at most 6 options.');
+  if (Array.isArray(q.options) && q.options.some((o) => !o?.id || !o.text?.trim())) errors.push('Every option needs a unique ID and non-empty text.');
+  if (Array.isArray(q.options) && new Set(q.options.map((o) => o.id)).size !== q.options.length) errors.push('Option IDs must be unique.');
+  if (Array.isArray(q.options) && q.options.filter((o) => o.isCorrect).length !== 1) {
     errors.push('Exactly one correct option must be selected.');
   }
   return errors;
@@ -256,23 +261,26 @@ export function publishExam(id: string): string[] {
 export function validateExamForPublish(exam: MCQExamConfig): string[] {
   const errors: string[] = [];
   if (!exam.title?.trim()) errors.push('Exam title is required.');
-  if (!exam.durationMinutes || exam.durationMinutes <= 0) errors.push('Duration must be positive.');
+  if (!Number.isFinite(exam.durationMinutes) || exam.durationMinutes <= 0) errors.push('Duration must be positive.');
+  if (!Number.isInteger(exam.questionCount) || exam.questionCount < 1) errors.push('Question count must be at least 1.');
   if (!exam.questionIds || exam.questionIds.length === 0) errors.push('No questions selected.');
+  if (new Set(exam.questionIds).size !== exam.questionIds.length) errors.push('The exam contains duplicate question IDs.');
   if (exam.questionIds.length < exam.questionCount) {
     errors.push(`You selected ${exam.questionIds.length} questions but want ${exam.questionCount}. Add more questions.`);
   }
-  if (!exam.totalMarks || exam.totalMarks <= 0) errors.push('Total marks must be positive.');
+  if (!Number.isFinite(exam.totalMarks) || exam.totalMarks <= 0) errors.push('Total marks must be positive.');
+  if (!Number.isInteger(exam.maxAttempts) || exam.maxAttempts < 1) errors.push('Maximum attempts must be at least 1.');
+  if (exam.startTime && exam.endTime && exam.startTime >= exam.endTime) errors.push('Start time must be before end time.');
 
   const questions = exam.questionIds.map((id) => getQuestionById(id)).filter(Boolean) as MCQQuestion[];
-  const missingOptions = questions.filter((q) => q.options.length < 2);
+  if (questions.length !== exam.questionIds.length) errors.push('One or more selected questions no longer exist.');
+  const unpublished = questions.filter((q) => q.status !== 'PUBLISHED');
+  if (unpublished.length > 0) errors.push(`${unpublished.length} selected question(s) must be published before this exam can be published.`);
+  const missingOptions = questions.filter((q) => !Array.isArray(q.options) || q.options.length < 2 || q.options.some((o) => !o.id || !o.text?.trim()));
   if (missingOptions.length > 0) errors.push(`${missingOptions.length} question(s) have fewer than 2 options.`);
 
-  const missingCorrect = questions.filter((q) => q.options.filter((o) => o.isCorrect).length !== 1);
+  const missingCorrect = questions.filter((q) => !Array.isArray(q.options) || q.options.filter((o) => o.isCorrect).length !== 1);
   if (missingCorrect.length > 0) errors.push(`${missingCorrect.length} question(s) do not have exactly one correct answer.`);
-
-  if (exam.startTime && exam.endTime && exam.startTime >= exam.endTime) {
-    errors.push('Start time must be before end time.');
-  }
 
   return errors;
 }
@@ -323,13 +331,8 @@ export function getActiveAttempt(): MCQAttempt | null {
       }
     }
 
-    // Fallback: check if any attempt in the ledger is currently IN_PROGRESS
-    const all = getAllAttempts();
-    const inProgress = all.find((a) => a.status === 'IN_PROGRESS');
-    if (inProgress) {
-      return inProgress;
-    }
-
+    // Never fall back to another arbitrary in-progress attempt. On shared lab
+    // workstations this can resume the wrong candidate's session.
     return null;
   } catch {
     return null;
@@ -370,9 +373,53 @@ export function startAttempt(
   studentSem: string,
   studentDiv?: string
 ): MCQAttempt {
+  const normalizedRoll = String(studentRoll || '').trim().toLocaleLowerCase();
+  if (!studentName?.trim() || !normalizedRoll) {
+    throw new Error('Candidate name and roll number are required.');
+  }
+
+  // Prevent double-clicks from creating duplicate attempts and resume only the
+  // same candidate's attempt for this exam.
+  const candidateAttempts = getAttemptsForExam(exam.id).filter(
+    (item) => String(item.studentRoll || '').trim().toLocaleLowerCase() === normalizedRoll
+  );
+  const existingActive = candidateAttempts.find((item) => item.status === 'IN_PROGRESS');
+  if (existingActive) return existingActive;
+
+  const now = Date.now();
+  if (exam.status !== 'PUBLISHED') throw new Error('This examination is not published.');
+  if (exam.startTime && now < exam.startTime) throw new Error('This examination has not started yet.');
+  if (exam.endTime && now >= exam.endTime) throw new Error('The examination submission window has closed.');
+  if (candidateAttempts.length >= Math.max(1, exam.maxAttempts || 1)) {
+    throw new Error('You have reached the maximum number of attempts for this examination.');
+  }
+  if (!Array.isArray(exam.questionIds) || exam.questionIds.length < 1) {
+    throw new Error('This examination has no assigned questions.');
+  }
+  if (new Set(exam.questionIds).size !== exam.questionIds.length) {
+    throw new Error('This examination contains duplicate question assignments. Contact the paper setter.');
+  }
+
   const questions = exam.questionIds
     .map((id) => getQuestionById(id))
-    .filter((q): q is MCQQuestion => q !== undefined && q.status !== 'ARCHIVED');
+    .filter((q): q is MCQQuestion => q !== undefined);
+  if (questions.length !== exam.questionIds.length) {
+    throw new Error('One or more assigned questions are missing. Contact the paper setter.');
+  }
+  if (questions.length < exam.questionCount) {
+    throw new Error('The assigned question bank is smaller than the configured question count.');
+  }
+  if (questions.some((q) => q.status !== 'PUBLISHED')) {
+    throw new Error('One or more assigned questions are not published. Contact the paper setter.');
+  }
+  if (questions.some((q) =>
+    !Array.isArray(q.options) ||
+    q.options.length < 2 ||
+    q.options.some((option) => !option.id || !option.text?.trim()) ||
+    q.options.filter((option) => option.isCorrect).length !== 1
+  )) {
+    throw new Error('This examination contains an invalid question. Contact the paper setter.');
+  }
 
   // Build option ID map
   const optionIdsByQuestion: Record<string, string[]> = {};
@@ -398,7 +445,9 @@ export function startAttempt(
       options: q.options.map((o) => ({ id: o.id, text: o.text })), // no isCorrect
       correctOptionId: correctOption?.id ?? '',
       marks: q.marks,
-      negativeMarks: q.negativeMarks,
+      // Respect the exam-level policy; per-question penalties are ignored when
+      // negative marking is disabled for this exam.
+      negativeMarks: exam.negativeMarkingEnabled ? q.negativeMarks : 0,
       explanation: q.explanation,
       subject: q.subject,
       topic: q.topic,
@@ -412,7 +461,6 @@ export function startAttempt(
     };
   });
 
-  const now = Date.now();
   const attempt: MCQAttempt = {
     id: uuid(),
     examId: exam.id,
@@ -423,7 +471,11 @@ export function startAttempt(
     studentSem,
     studentDiv: studentDiv || 'A',
     startTime: now,
-    deadline: now + exam.durationMinutes * 60_000,
+    // The attempt cannot outlive its personal duration or the examination window.
+    deadline: Math.min(
+      now + exam.durationMinutes * 60_000,
+      Number.isFinite(exam.endTime) ? (exam.endTime as number) : Number.POSITIVE_INFINITY
+    ),
     status: 'IN_PROGRESS',
     assignedQuestions,
     answers: {},
@@ -441,44 +493,46 @@ export function startAttempt(
 }
 
 /** Autosave an answer — called on every option selection */
-export function saveAnswer(attemptId: string, questionId: string, optionId: string): void {
+export function saveAnswer(attemptId: string, questionId: string, optionId: string): boolean {
   const all = getAllAttempts();
   const idx = all.findIndex((a) => a.id === attemptId);
-  if (idx < 0) return;
-  all[idx] = {
-    ...all[idx],
-    answers: { ...all[idx].answers, [questionId]: optionId },
-  };
+  if (idx < 0) return false;
+  const attempt = all[idx];
+  if (attempt.status !== 'IN_PROGRESS' || Date.now() >= attempt.deadline) return false;
+  const assigned = attempt.assignedQuestions.find((q) => q.questionId === questionId);
+  if (!assigned) return false;
+  if (optionId !== '' && !assigned.snapshot.options.some((option) => option.id === optionId)) return false;
+
+  all[idx] = { ...attempt, answers: { ...attempt.answers, [questionId]: optionId } };
   save(MCQ_STORAGE_KEYS.ATTEMPTS, all);
-  try {
-    localStorage.setItem('codedna_mcq_active_attempt_backup', JSON.stringify(all[idx]));
-  } catch {}
-  saveAttemptToCloud(all[idx]);
+  try { localStorage.setItem('codedna_mcq_active_attempt_backup', JSON.stringify(all[idx])); } catch {}
+  void saveAttemptToCloud(all[idx]);
+  return true;
 }
 
 /** Record anti-cheat event */
 export function recordInfraction(attemptId: string, event: string): void {
   const all = getAllAttempts();
   const idx = all.findIndex((a) => a.id === attemptId);
-  if (idx < 0) return;
+  if (idx < 0 || all[idx].status !== 'IN_PROGRESS' || !event?.trim()) return;
   const attempt = all[idx];
   all[idx] = {
     ...attempt,
-    tabSwitchCount: attempt.tabSwitchCount + 1,
-    infractionLog: [...attempt.infractionLog, { timestamp: Date.now(), event }],
+    tabSwitchCount: Math.max(0, Number(attempt.tabSwitchCount) || 0) + 1,
+    infractionLog: [...(Array.isArray(attempt.infractionLog) ? attempt.infractionLog : []), { timestamp: Date.now(), event: event.trim().slice(0, 240) }].slice(-200),
   };
   save(MCQ_STORAGE_KEYS.ATTEMPTS, all);
-  saveAttemptToCloud(all[idx]);
+  void saveAttemptToCloud(all[idx]);
 }
 
 /** Update unfocused seconds */
 export function updateUnfocusedTime(attemptId: string, totalSeconds: number): void {
   const all = getAllAttempts();
   const idx = all.findIndex((a) => a.id === attemptId);
-  if (idx < 0) return;
-  all[idx] = { ...all[idx], unfocusedSeconds: totalSeconds };
+  if (idx < 0 || all[idx].status !== 'IN_PROGRESS' || !Number.isFinite(totalSeconds)) return;
+  all[idx] = { ...all[idx], unfocusedSeconds: Math.max(0, totalSeconds) };
   save(MCQ_STORAGE_KEYS.ATTEMPTS, all);
-  saveAttemptToCloud(all[idx]);
+  void saveAttemptToCloud(all[idx]);
 }
 
 // ── GRADING ENGINE ────────────────────────────────────────────────────────────
@@ -549,19 +603,45 @@ export function gradeAttempt(attempt: MCQAttempt): MCQGradeResult {
 export function submitAttempt(
   attemptId: string,
   finalAnswers: Record<string, string>,
-  status: MCQAttemptStatus = 'SUBMITTED'
+  requestedStatus: MCQAttemptStatus = 'SUBMITTED'
 ): MCQGradeResult | null {
   const all = getAllAttempts();
   const idx = all.findIndex((a) => a.id === attemptId);
   if (idx < 0) return null;
+  const existing = all[idx];
 
-  const attempt: MCQAttempt = { ...all[idx], answers: finalAnswers };
-  const grade = gradeAttempt(attempt);
+  // Finalized attempts are immutable; duplicate submissions return the stored grade.
+  if (existing.status !== 'IN_PROGRESS') {
+    return existing.score === undefined ? null : gradeAttempt(existing);
+  }
+
   const now = Date.now();
+  const finalStatus: MCQAttemptStatus =
+    now >= existing.deadline || requestedStatus === 'TIMED_OUT' ? 'TIMED_OUT' : 'SUBMITTED';
+  const assignedById = new Map(existing.assignedQuestions.map((q) => [q.questionId, q]));
 
+  for (const [questionId, optionId] of Object.entries(finalAnswers || {})) {
+    const assigned = assignedById.get(questionId);
+    if (!assigned) return null;
+    if (optionId && !assigned.snapshot.options.some((option) => option.id === optionId)) return null;
+  }
+
+  // Merge the final UI payload with persisted answers so partial payloads cannot
+  // accidentally erase previously saved responses.
+  const sanitizedAnswers: Record<string, string> = {};
+  for (const assigned of existing.assignedQuestions) {
+    const questionId = assigned.questionId;
+    const selected = Object.prototype.hasOwnProperty.call(finalAnswers || {}, questionId)
+      ? finalAnswers[questionId]
+      : existing.answers[questionId];
+    if (selected) sanitizedAnswers[questionId] = selected;
+  }
+
+  const attempt: MCQAttempt = { ...existing, answers: sanitizedAnswers };
+  const grade = gradeAttempt(attempt);
   const finalAttempt: MCQAttempt = {
     ...attempt,
-    status,
+    status: finalStatus,
     submitTime: now,
     gradedAt: now,
     score: grade.score,
@@ -570,12 +650,11 @@ export function submitAttempt(
     unansweredCount: grade.unansweredCount,
     percentageScore: grade.percentageScore,
   };
-
   all[idx] = finalAttempt;
   save(MCQ_STORAGE_KEYS.ATTEMPTS, all);
-  saveAttemptToCloud(finalAttempt);
-  localStorage.removeItem(MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT);
+  void saveAttemptToCloud(finalAttempt);
   try {
+    localStorage.removeItem(MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT);
     localStorage.removeItem('codedna_mcq_active_attempt_backup');
   } catch {}
   return grade;
