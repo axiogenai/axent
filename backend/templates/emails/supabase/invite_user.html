@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authority Invitation — Axent Academic Platform</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0f172a; -webkit-font-smoothing: antialiased;">
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; padding: 40px 15px;">
+    <tr>
+      <td align="center">
+        <!-- Main Card -->
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 580px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);">
+          
+          <!-- Top Header -->
+          <tr>
+            <td style="padding: 28px 32px 24px; border-bottom: 1px solid #f1f5f9; background-color: #ffffff;">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td align="left">
+                    <span style="display: inline-block; font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: -0.02em;">
+                      Ax<span style="color: #18181b;">ent</span>
+                    </span>
+                    <span style="margin-left: 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; background-color: #f1f5f9; border: 1px solid #e2e8f0; padding: 3px 8px; border-radius: 4px;">
+                      Institutional Gateway
+                    </span>
+                  </td>
+                  <td align="right">
+                    <span style="font-size: 11px; color: #94a3b8; font-weight: 500;">Official Invitation</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Body Content -->
+          <tr>
+            <td style="padding: 32px 32px 28px;">
+              <h2 style="margin: 0 0 12px; font-size: 19px; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; line-height: 1.3;">
+                Authority Access Invitation
+              </h2>
+              <p style="margin: 0 0 20px; font-size: 14px; line-height: 1.6; color: #334155;">
+                You have been authorized as an examination administrator on the <strong>Axent Autonomous Examination Platform</strong>. You can now author exam questions, schedule student sittings, and oversee proctored examinations.
+              </p>
+
+              <!-- Credentials Box -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; margin: 0 0 24px;">
+                <tr>
+                  <td style="padding: 16px 20px;">
+                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                      <tr>
+                        <td style="font-size: 12px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">Assigned Institutional Email</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size: 14px; color: #0f172a; font-weight: 700; padding-top: 4px; font-family: 'JetBrains Mono', Consolas, monospace;">
+                          {{ .Email }}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Call to Action Button -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 0 0 24px;">
+                <tr>
+                  <td align="center">
+                    <a href="{{ .ConfirmationURL }}" target="_blank" style="display: block; width: 100%; box-sizing: border-box; text-align: center; background-color: #18181b; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 700; padding: 13px 24px; border-radius: 6px; letter-spacing: 0.01em;">
+                      Accept Invitation & Set Password &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 0 0 16px; font-size: 12.5px; line-height: 1.5; color: #64748b;">
+                Clicking the button above will automatically verify your institutional email and prompt you to establish your secure password. Once configured, you can access both the Paper Setter Portal and Chief Invigilator Console.
+              </p>
+
+              <!-- One-Time Token fallback -->
+              {{ if .Token }}
+              <div style="padding: 14px 16px; background-color: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; margin: 0 0 20px;">
+                <span style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 4px;">
+                  Direct Verification Code
+                </span>
+                <span style="font-size: 18px; font-weight: 800; font-family: 'JetBrains Mono', Consolas, monospace; letter-spacing: 0.15em; color: #0f172a;">
+                  {{ .Token }}
+                </span>
+              </div>
+              {{ end }}
+
+              <!-- Link Fallback -->
+              <p style="margin: 0; font-size: 11.5px; color: #94a3b8; line-height: 1.5; word-break: break-all;">
+                If the button above does not open directly, copy and paste this link into your browser:<br>
+                <a href="{{ .ConfirmationURL }}" style="color: #475569; text-decoration: underline;">{{ .ConfirmationURL }}</a>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 32px; background-color: #f8fafc; border-top: 1px solid #e2e8f0;">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td style="font-size: 11px; color: #94a3b8; line-height: 1.5;">
+                    Security Notice: This invitation was dispatched by an Axent Institutional Administrator. This link expires in 24 hours. If you received this in error, please contact your university examination department.
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

@@ -2672,8 +2672,8 @@ export const MCQExamSelector: React.FC = () => {
   }
 
   return (
-    <div style={{ padding: '28px 24px', maxWidth: '1080px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
-      <div style={{ marginBottom: '20px' }}>
+    <div style={{ padding: '24px 32px', width: '100%', boxSizing: 'border-box' }}>
+      <div style={{ marginBottom: '22px' }}>
         <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
           Available MCQ Examinations
         </h2>
@@ -2697,7 +2697,7 @@ export const MCQExamSelector: React.FC = () => {
           </p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 340px))', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 440px))', gap: '20px' }}>
           {exams.map((exam) => {
             const isScheduledFuture = Boolean(exam.startTime && currentTime < exam.startTime);
             const isConcluded = Boolean(exam.endTime && currentTime > exam.endTime);

@@ -78,6 +78,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => window.removeEventListener('storage', checkMode);
   }, [location.pathname]);
 
+  const isLoginRoute = location.pathname.startsWith('/login');
   const isAdminRoute = location.pathname.startsWith('/admin');
   const isPaperSetterRoute = location.pathname.startsWith('/paper-setter');
   const isMcqRoute = location.pathname.startsWith('/mcq');
@@ -85,7 +86,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   // Determine which navigation tabs to display based on Role and Registered Exam Type
   let activeNavItems: NavItem[] = [];
 
-  if (isPaperSetterRoute) {
+  if (isLoginRoute) {
+    // Authority Gateway / Login — No student tabs!
+    activeNavItems = [];
+  } else if (isPaperSetterRoute) {
     // Paper setter — no admin links, no CCTV, no ADMIN badge
     activeNavItems = [
       { path: '/paper-setter', label: 'Paper Setter', icon: Layers }
@@ -137,7 +141,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           cursor: 'pointer'
         }}
         onClick={() => {
-          if (isPaperSetterRoute) navigate('/paper-setter');
+          if (isLoginRoute) navigate('/login');
+          else if (isPaperSetterRoute) navigate('/paper-setter');
           else if (isAdminRoute) navigate('/admin');
           else if (isMcqRoute || examMode === 'MCQ') navigate('/mcq');
           else navigate('/workspace');
@@ -175,7 +180,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               textTransform: 'uppercase'
             }}
           >
-            {isPaperSetterRoute
+            {isLoginRoute
+              ? 'Authority Gateway'
+              : isPaperSetterRoute
               ? 'Paper Setter'
               : isAdminRoute
               ? 'Invigilator Console'
@@ -239,6 +246,29 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* ── Controls & Mode ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* If on Login route, show button to return to Candidate Examination */}
+        {isLoginRoute ? (
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => navigate(examMode === 'MCQ' ? '/mcq' : '/workspace')}
+            title="Candidate Examination Portal"
+            style={{
+              height: '28px',
+              padding: '0 10px',
+              gap: '5px',
+              fontSize: '11px',
+              fontWeight: 600,
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border)',
+              background: 'var(--bg-surface)',
+              color: 'var(--text-secondary)'
+            }}
+          >
+            <ExternalLink size={12} />
+            <span>Candidate Portal</span>
+          </button>
+        ) : null}
+
         {/* If in Admin, provide 1-click switch to Candidate View */}
         {isAdminRoute ? (
           <button
@@ -288,37 +318,39 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         )}
 
-        {/* Model status */}
-        <div
-          onClick={onOpenSettings}
-          title="Engine & LLM Configuration"
-          className="badge badge-neutral"
-          style={{
-            cursor: 'pointer',
-            height: '28px',
-            padding: '0 10px',
-            gap: '6px',
-            border: '1px solid var(--border)'
-          }}
-        >
-          <SlidersHorizontal size={12} color="var(--accent)" />
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', fontWeight: 600 }}>
-            {engineLabel}
-          </span>
-          <span
-            className={`badge badge-sm ${isRunning ? 'badge-warning' : 'badge-success'}`}
-            style={{ height: '16px', padding: '0 5px', fontSize: '9px', fontWeight: 700 }}
+        {/* Model status - hidden on login route */}
+        {!isLoginRoute && (
+          <div
+            onClick={onOpenSettings}
+            title="Engine & LLM Configuration"
+            className="badge badge-neutral"
+            style={{
+              cursor: 'pointer',
+              height: '28px',
+              padding: '0 10px',
+              gap: '6px',
+              border: '1px solid var(--border)'
+            }}
           >
-            {isRunning ? (
-              <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <Activity size={8} className="spinner-icon" />
-                EXEC
-              </span>
-            ) : (
-              'ONLINE'
-            )}
-          </span>
-        </div>
+            <SlidersHorizontal size={12} color="var(--accent)" />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', fontWeight: 600 }}>
+              {engineLabel}
+            </span>
+            <span
+              className={`badge badge-sm ${isRunning ? 'badge-warning' : 'badge-success'}`}
+              style={{ height: '16px', padding: '0 5px', fontSize: '9px', fontWeight: 700 }}
+            >
+              {isRunning ? (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  <Activity size={8} className="spinner-icon" />
+                  EXEC
+                </span>
+              ) : (
+                'ONLINE'
+              )}
+            </span>
+          </div>
+        )}
 
         {/* Theme Toggle */}
         <button

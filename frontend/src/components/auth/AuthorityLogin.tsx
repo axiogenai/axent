@@ -389,24 +389,149 @@ export const AuthorityLogin: React.FC = () => {
             </div>
           )}
 
+          {/* Quick Credential Pre-fill Helpers */}
+          {activeTab !== 'set_password' && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '16px',
+                padding: '6px 10px',
+                borderRadius: 'var(--radius-xs)',
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                fontSize: '11px',
+                color: 'var(--text-muted)'
+              }}
+            >
+              <span>Default Pass: <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>axent@123</strong></span>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRole('paper_setter');
+                    setStoredAuthorityRole('paper_setter');
+                    setEmail('setter@axent.edu');
+                    setPassword('axent@123');
+                    setActiveTab('password');
+                    setErrorMessage(null);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-xs)',
+                    padding: '2px 7px',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    color: 'var(--text-secondary)'
+                  }}
+                >
+                  Fill Setter
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRole('admin');
+                    setStoredAuthorityRole('admin');
+                    setEmail('admin@axent.edu');
+                    setPassword('axent@123');
+                    setActiveTab('password');
+                    setErrorMessage(null);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-xs)',
+                    padding: '2px 7px',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    color: 'var(--text-secondary)'
+                  }}
+                >
+                  Fill Admin
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Feedback Alerts */}
           {errorMessage && (
             <div
               style={{
                 marginBottom: '16px',
-                padding: '10px 14px',
+                padding: '12px 14px',
                 borderRadius: 'var(--radius-sm)',
                 background: 'var(--danger-bg)',
                 border: '1px solid var(--danger-border)',
                 display: 'flex',
-                alignItems: 'flex-start',
+                flexDirection: 'column',
                 gap: '8px'
               }}
             >
-              <AlertTriangle size={14} color="var(--danger)" style={{ marginTop: '2px', flexShrink: 0 }} />
-              <span style={{ fontSize: '12px', color: 'var(--danger)', lineHeight: 1.4 }}>
-                {errorMessage}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                <AlertTriangle size={15} color="var(--danger)" style={{ marginTop: '2px', flexShrink: 0 }} />
+                <div style={{ fontSize: '12px', color: 'var(--danger)', lineHeight: 1.4, flex: 1 }}>
+                  {errorMessage}
+                </div>
+              </div>
+
+              {/* If it's an email delivery or rate limit issue from Supabase */}
+              {(errorMessage.includes('confirmation email') || errorMessage.includes('rate limit') || errorMessage.includes('SMTP')) && (
+                <div
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 'var(--radius-xs)',
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border)',
+                    fontSize: '11px',
+                    color: 'var(--text-secondary)',
+                    lineHeight: 1.4
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '3px' }}>
+                    Supabase Free-Tier Email Limit Reached (3 emails/hr)
+                  </div>
+                  <div style={{ marginBottom: '8px', color: 'var(--text-muted)' }}>
+                    Supabase default email service failed to deliver to this address. Use the default password or Dev Mode to enter immediately:
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={handleDevBypass}
+                      className="btn btn-primary btn-sm"
+                      style={{
+                        height: '26px',
+                        fontSize: '11px',
+                        padding: '0 10px',
+                        fontWeight: 700
+                      }}
+                    >
+                      Bypass & Enter Console Directly
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab('password');
+                        setEmail(role === 'admin' ? 'admin@axent.edu' : 'setter@axent.edu');
+                        setPassword('axent@123');
+                        setErrorMessage(null);
+                      }}
+                      className="btn btn-ghost btn-sm"
+                      style={{
+                        height: '26px',
+                        fontSize: '11px',
+                        padding: '0 8px',
+                        border: '1px solid var(--border)'
+                      }}
+                    >
+                      Use Default Pass
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
