@@ -722,7 +722,8 @@ export function syncMcqLiveStation(
   exam: MCQExamConfig,
   studentInfo: StudentInfo,
   currentIdx: number,
-  isDone = false
+  isDone = false,
+  extra?: { screenImageData?: string; hasLiveScreenStream?: boolean }
 ): CandidateStation {
   const stations = getLiveStations();
   const activeLab = studentInfo.labId || getActiveLabId() || 'LAB-01';
@@ -795,6 +796,8 @@ export function syncMcqLiveStation(
       totalMarks: attempt.score,
       maxMarks: attempt.maxScore
     } : undefined,
+    screenImageData: extra?.screenImageData !== undefined ? extra.screenImageData : existing?.screenImageData,
+    hasLiveScreenStream: extra?.hasLiveScreenStream !== undefined ? extra.hasLiveScreenStream : existing?.hasLiveScreenStream ?? false,
     isLockedByProctor: isLocked,
     proctorWarningMessage: existing?.proctorWarningMessage,
     lastActive: isDone ? 'Submitted Just Now' : 'Just now',

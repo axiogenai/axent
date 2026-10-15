@@ -949,35 +949,46 @@ export async function generateMCQQuestionsWithAI(
   if (isAptitude) {
     sysPrompt = `You are an elite University & Placement Examination Board Paper-Setter specializing in General Aptitude, Quantitative Ability, Logical Reasoning, and Verbal Ability (similar to CAT, GMAT, GRE, GATE General Aptitude, and top corporate campus recruitment assessments).
 
-CRITICAL DOMAIN DIRECTIVE:
-- DO NOT generate programming code, computer science syntax, Python/Java questions, or software engineering questions under any circumstances.
-- Questions MUST be authentic aptitude and reasoning problems matching the specified topic:
-  * Quantitative Ability: Concrete arithmetic word problems with real numbers, percentages, profit & loss, ratios, simple/compound interest, time & work, speed/distance/time, permutations & combinations, probability, number series, basic algebra/geometry.
-  * Logical Reasoning: Syllogisms, blood relations, seating arrangements, directions, coding-decoding, series completion, analogies, Venn diagrams, statement-assumptions.
-  * Verbal Ability: Vocabulary, sentence correction, reading comprehension, idioms, synonyms/antonyms, para-jumbles, critical reasoning.
-- If the topic combines multiple areas (e.g. "Logical Reasoning, Quantitative, Verbal Aptitude"), balance questions across those exact disciplines!
-- Every question must be clear, unambiguous, and have EXACTLY ONE mathematically or logically verified correct answer among 4 choices.
-- MATHEMATICAL FORMATTING DIRECTIVE: When writing mathematical formulas, powers, roots, or fractions in questions, options, or explanations, format them cleanly using standard mathematical notation or LaTeX (e.g. \\frac{1}{52} or 1/52, x^2, \\sqrt{25}). Do NOT write malformed or broken pseudo-math.
+CRITICAL NON-NEGOTIABLE ACADEMIC RULES:
+1. ZERO PROGRAMMING / ZERO CODE:
+   - Absolutely DO NOT generate programming code, computer science syntax, Python/Java questions, or software engineering questions under any circumstances.
+2. STRICT NO REPEATED QUESTIONS:
+   - Every question must test a completely distinct calculation, scenario, or concept.
+   - NEVER generate duplicate questions, duplicate scenarios, or cosmetic variations of the same problem.
+3. STRICT NO REPEATED OPTIONS (UNIQUE OPTIONS RULE):
+   - In EVERY question, all 4 options MUST be completely distinct, unique, and mutually exclusive.
+   - NEVER generate duplicate options or options that evaluate to the same value (e.g. NEVER repeat the same fraction, number, or text across options).
+4. STRICT PUNCTUATION & CAPITALIZATION:
+   - Every question prompt MUST start with an uppercase letter and MUST end with proper punctuation (a question mark '?' for interrogative questions or a period '.' for statements/completion).
+   - Options MUST NOT contain letter prefixes like "A)", "B.", "1.", "(C)", etc. Provide ONLY the pure choice text or formula.
+   - Ensure grammatically parallel options with consistent capitalization.
+5. MATHEMATICAL & FRACTION FORMULAS (LATEX):
+   - All fractions, roots, powers, and math formulas MUST be wrapped in inline LaTeX dollar signs '$'.
+   - Fractions MUST use standard LaTeX syntax: '$\\frac{numerator}{denominator}$' (e.g. '$\\frac{1}{52}$', '$\\frac{13}{204}$', '$\\frac{3}{4}$', '$\\frac{7}{12}$').
+   - NEVER output raw broken slashes without LaTeX (like '1/ 52' or '13/204'). NEVER output malformed math.
+6. SINGLE FACTUALLY VERIFIED ANSWER:
+   - Exactly ONE option must have "isCorrect": true, and the other 3 options must have "isCorrect": false.
+   - The marked correct answer must be mathematically and logically 100% verified. Provide a step-by-step educational explanation.
 
 OUTPUT FORMAT:
-You MUST respond with a valid JSON object containing a "questions" array of question objects:
+Respond with a valid JSON object matching this schema:
 {
   "questions": [
     {
-      "text": "clearly worded problem prompt with complete scenario and numbers",
+      "text": "Clearly worded problem prompt with complete scenario, numbers, and proper punctuation?",
       "options": [
-        {"text": "Option A text", "isCorrect": true},
-        {"text": "Option B text", "isCorrect": false},
-        {"text": "Option C text", "isCorrect": false},
-        {"text": "Option D text", "isCorrect": false}
+        {"text": "$\\frac{1}{52}$", "isCorrect": true},
+        {"text": "$\\frac{13}{204}$", "isCorrect": false},
+        {"text": "$\\frac{3}{26}$", "isCorrect": false},
+        {"text": "$\\frac{1}{13}$", "isCorrect": false}
       ],
       "subject": "${prompt.subject && prompt.subject !== 'Computer Science' ? prompt.subject : 'General Aptitude & Reasoning'}",
       "topic": "${prompt.topic}",
       "difficulty": "${prompt.difficulty}",
       "marks": 1,
       "negativeMarks": 0.25,
-      "explanation": "complete step-by-step mathematical or logical solution showing why the correct answer is right",
-      "tags": ["Quantitative", "Percentages"]
+      "explanation": "Step-by-step mathematical or logical solution showing why the correct answer is true.",
+      "tags": ["Quantitative", "${prompt.topic}"]
     }
   ]
 }
@@ -990,34 +1001,49 @@ Subject: ${prompt.subject && prompt.subject !== 'Computer Science' ? prompt.subj
 Topic: ${prompt.topic}
 Difficulty: ${prompt.difficulty}
 ${prompt.instructions ? `Special Faculty Instructions: "${prompt.instructions}"` : ''}
-IMPORTANT: Zero programming, zero coding syntax. Output real mathematical, logical, or verbal aptitude questions only!`;
+IMPORTANT: Zero programming, zero coding syntax. Output real mathematical, logical, or verbal aptitude questions only with proper punctuation, clean options, and LaTeX fractions!`;
   } else {
     sysPrompt = `You are a senior university examination board member and professor in ${prompt.subject || 'Computer Science & Engineering'}.
 Your task is to generate high-quality, conceptually rigorous Multiple Choice Questions (MCQ) for college exams.
 
-STRICT TOPIC ADHERENCE:
-- Every question MUST strictly evaluate concepts within "${prompt.topic}" in the subject "${prompt.subject || 'Computer Science'}".
-- Test conceptual understanding, practical problem solving, and analytical reasoning.
-- Provide exactly 4 realistic, distinct choices (A, B, C, D) with EXACTLY ONE unambiguously correct key.
+CRITICAL NON-NEGOTIABLE ACADEMIC RULES:
+1. STRICT TOPIC ADHERENCE:
+   - Every question MUST strictly evaluate concepts within "${prompt.topic}" in the subject "${prompt.subject || 'Computer Science'}".
+   - Test conceptual understanding, practical problem solving, and analytical reasoning.
+2. STRICT NO REPEATED QUESTIONS:
+   - Every question in the assessment MUST explore a distinct concept, problem, or architectural pattern.
+   - NEVER repeat questions or create minor phrasing variations of the same question.
+3. STRICT NO REPEATED OPTIONS (UNIQUE OPTIONS RULE):
+   - In EVERY question, all 4 choices (A, B, C, D) MUST be strictly unique, distinct, and mutually exclusive.
+   - NEVER generate duplicate options or choices with identical meaning/values.
+4. STRICT PUNCTUATION & CAPITALIZATION:
+   - Every question prompt MUST start with an uppercase letter and MUST end with proper punctuation (a question mark '?' or a period '.').
+   - Options MUST NOT contain option letter prefixes such as "A)", "B.", "1.", "(C)", etc. Provide ONLY the choice content with clean capitalization.
+5. MATHEMATICAL & CODE FORMULAS:
+   - Mathematical expressions, complexities, and powers must be properly formatted: e.g. '$\\mathcal{O}(n \\log n)$', '$x^2$', '$\\frac{1}{2}$'.
+   - Code snippets or keywords must be wrapped in backticks (e.g. \`fork()\`, \`malloc()\`, \`async/await\`).
+6. SINGLE FACTUALLY VERIFIED KEY:
+   - Exactly ONE option must have "isCorrect": true, and the other 3 options must have "isCorrect": false.
+   - The correct answer must be academically indisputable. Provide a rigorous explanation.
 
 OUTPUT FORMAT:
-You MUST respond with a valid JSON object containing a "questions" array of question objects:
+Respond with a valid JSON object matching this schema:
 {
   "questions": [
     {
-      "text": "clearly stated question prompt",
+      "text": "Clearly stated question prompt ending with proper punctuation?",
       "options": [
-        {"text": "Option A text", "isCorrect": true},
-        {"text": "Option B text", "isCorrect": false},
-        {"text": "Option C text", "isCorrect": false},
-        {"text": "Option D text", "isCorrect": false}
+        {"text": "Option text without letter prefixes", "isCorrect": true},
+        {"text": "Option text without letter prefixes", "isCorrect": false},
+        {"text": "Option text without letter prefixes", "isCorrect": false},
+        {"text": "Option text without letter prefixes", "isCorrect": false}
       ],
       "subject": "${prompt.subject || 'Computer Science'}",
       "topic": "${prompt.topic}",
       "difficulty": "${prompt.difficulty}",
       "marks": 1,
       "negativeMarks": 0.25,
-      "explanation": "concise explanation of why the correct option is right and others are incorrect",
+      "explanation": "Concise technical explanation of why the correct option is right and others are incorrect.",
       "tags": ["Computer Science", "${prompt.topic}"]
     }
   ]
@@ -1030,7 +1056,7 @@ Subject: ${prompt.subject || 'Computer Science'}
 Topic: ${prompt.topic}
 Difficulty: ${prompt.difficulty}
 ${prompt.instructions ? `Special Faculty Focus Instructions: "${prompt.instructions}"` : ''}
-Ensure questions strictly evaluate "${prompt.topic}".`;
+Ensure questions strictly evaluate "${prompt.topic}" with proper punctuation and no repeated questions or options.`;
   }
 
   try {
@@ -1045,7 +1071,9 @@ Ensure questions strictly evaluate "${prompt.topic}".`;
       throw new Error(`AI model output could not be parsed as a valid question list. Raw: ${content.slice(0, 150)}...`);
     }
 
-    const questions: GeneratedMCQQuestion[] = parsed.map((item: any) => {
+    const defaultSubject = isAptitude ? 'General Aptitude & Reasoning' : (prompt.subject || 'Computer Science');
+
+    const mappedRaw: GeneratedMCQQuestion[] = parsed.map((item: any) => {
       let options = Array.isArray(item.options) ? item.options : [];
       if (options.length !== 4) {
         options = [
@@ -1055,19 +1083,9 @@ Ensure questions strictly evaluate "${prompt.topic}".`;
           { text: options[3]?.text || 'Option D', isCorrect: false }
         ];
       }
-      const correctIdx = options.findIndex((o: any) => o.isCorrect);
-      if (correctIdx === -1) {
-        options[0].isCorrect = true;
-      }
-
-      const defaultSubject = isAptitude ? 'General Aptitude & Reasoning' : (prompt.subject || 'Computer Science');
-
       return {
-        text: String(item.text || (isAptitude ? 'Aptitude & Reasoning Problem' : 'Technical MCQ Question')),
-        options: options.map((o: any) => ({
-          text: String(o.text || ''),
-          isCorrect: Boolean(o.isCorrect)
-        })),
+        text: sanitizeQuestionText(String(item.text || (isAptitude ? 'Aptitude & Reasoning Problem?' : 'Technical MCQ Question?'))),
+        options: deduplicateAndFormatOptions(options),
         subject: String(item.subject || defaultSubject),
         topic: String(item.topic || prompt.topic),
         difficulty: prompt.difficulty,
@@ -1078,6 +1096,8 @@ Ensure questions strictly evaluate "${prompt.topic}".`;
       };
     });
 
+    const questions = deduplicateQuestionsList(mappedRaw);
+
     return { questions, modelUsed };
   } catch (err: any) {
     console.error('Autonomous reasoning question generation failed:', err);
@@ -1087,12 +1107,248 @@ Ensure questions strictly evaluate "${prompt.topic}".`;
   }
 }
 
-// ── AUTONOMOUS QUESTION DEDUPLICATION & UNIQUENESS HELPERS ───────────────────
+// ── AUTONOMOUS QUESTION DEDUPLICATION & FORMATTING HELPERS ───────────────────
+
+/**
+ * Normalizes fractions and mathematical expressions into standard KaTeX notation.
+ * e.g., converts raw 1/52 to $\frac{1}{52}$ or wraps \frac in $...$
+ */
+export function normalizeMathFractions(str: string): string {
+  if (!str) return str;
+  let s = str;
+
+  // If raw \frac{...}{...} without $ delimiters, wrap in $
+  s = s.replace(/(?<!\$)\\frac\{([^{}]+)\}\{([^{}]+)\}(?!\$)/g, '$\\frac{$1}{$2}$');
+
+  // If standalone simple fraction: "1/52", "13/204", "3/4", "-1/2"
+  s = s.replace(/(?<![\w\$\/\\])([+-]?\d+)\s*\/\s*(\d+)(?![\w\$\/\\])/g, '$\\frac{$1}{$2}$');
+
+  return s;
+}
+
+/**
+ * Strips leading numbering or letter markers like "Q1.", "1.", "1)", "(1)", "A)", "Question 1:", etc.
+ * Capitalizes the first letter.
+ * Guarantees proper ending punctuation: '?' for questions, '.' for statements.
+ */
+export function sanitizeQuestionText(text: string): string {
+  if (!text) return 'Examination Question Prompt.';
+  let cleaned = text.trim();
+
+  // Strip leading prefixes: "1.", "Q1:", "Question 1 -", "1) ", "Q. ", etc.
+  cleaned = cleaned.replace(/^(?:Question\s*\d*[:.-]?|Q\d*[:.-]?|\d+[\.\)\:\-]\s*)/i, '').trim();
+
+  // Capitalize first character
+  if (cleaned.length > 0) {
+    cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+
+  // Ensure mathematical fractions in the question text are clean LaTeX
+  cleaned = normalizeMathFractions(cleaned);
+
+  // Check ending punctuation
+  const lastChar = cleaned.slice(-1);
+  if (!['?', '.', '!', ':'].includes(lastChar)) {
+    const lower = cleaned.toLowerCase();
+    const isInterrogative = /^(what|which|how|when|where|why|who|whose|whom|can|could|is|are|was|were|do|does|did|will|would|should|find|calculate|determine|if|evaluate)\b/i.test(cleaned) ||
+      /\b(how many|what is|which of the following|calculate the|find the)\b/i.test(lower);
+    cleaned += isInterrogative ? '?' : '.';
+  }
+
+  return cleaned;
+}
+
+/**
+ * Cleans an option's text:
+ * - Strips leading option labels: "A)", "(A)", "A.", "1.", "a -", etc.
+ * - Formats fractions cleanly as standard LaTeX.
+ * - Capitalizes first letter if text (unless math/code).
+ */
+export function sanitizeOptionText(text: string): string {
+  if (!text) return 'Option';
+  let cleaned = text.trim();
+
+  // Strip leading option letters/numbers: "A) ", "(A) ", "A. ", "1) ", "B: ", "Option A: "
+  cleaned = cleaned.replace(/^(?:\([A-Da-d0-9]\)|[A-Da-d0-9][\.\)\:\-]|Option\s*[A-D][:.-]?)\s*/i, '').trim();
+
+  if (!cleaned) return text.trim() || 'Option';
+
+  // If standalone simple fraction: e.g. "1/52", "13/204", "3/4", "-1/2"
+  const fracMatch = /^([+-]?\d+)\s*\/\s*(\d+)$/.exec(cleaned);
+  if (fracMatch) {
+    return `$\\frac{${fracMatch[1]}}{${fracMatch[2]}}$`;
+  }
+
+  // If starts with \frac without $
+  if (/^\\frac\{/.test(cleaned) && !cleaned.startsWith('$')) {
+    cleaned = `$${cleaned}$`;
+  }
+
+  cleaned = normalizeMathFractions(cleaned);
+
+  // Capitalize first letter if it's plain text and doesn't start with $, code, or symbol
+  if (/^[a-z]/.test(cleaned) && !cleaned.startsWith('$') && !cleaned.startsWith('`')) {
+    cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+
+  return cleaned;
+}
+
+/**
+ * Normalizes option content for strict duplicate detection.
+ * Strips formatting, dollar signs, spaces, and case.
+ */
+export function normalizeOptionForDeduplication(text: string): string {
+  return (text || '')
+    .toLowerCase()
+    .replace(/^(?:\([a-z0-9]\)|[a-z0-9][\.\)\:\-])\s*/i, '')
+    .replace(/[\$\{\}\s\\_]/g, '')
+    .replace(/\\frac/g, '')
+    .trim();
+}
+
+/**
+ * Strictly ensures 4 unique options per question.
+ * If the AI generated duplicate options (e.g. repeated fraction or identical text),
+ * generates a distinct mathematical/conceptual distractor so NO TWO OPTIONS ARE REPEATED!
+ */
+export function deduplicateAndFormatOptions(
+  rawOptions: Array<{ text: string; isCorrect: boolean }>
+): Array<{ text: string; isCorrect: boolean }> {
+  const sanitized = (rawOptions || []).map((o) => ({
+    text: sanitizeOptionText(o.text),
+    isCorrect: Boolean(o.isCorrect)
+  }));
+
+  while (sanitized.length < 4) {
+    sanitized.push({
+      text: `Option ${String.fromCharCode(65 + sanitized.length)}`,
+      isCorrect: false
+    });
+  }
+
+  const seenNorms = new Set<string>();
+  const finalOptions: Array<{ text: string; isCorrect: boolean }> = [];
+
+  for (let idx = 0; idx < 4; idx++) {
+    const item = sanitized[idx];
+    let norm = normalizeOptionForDeduplication(item.text);
+
+    if (!seenNorms.has(norm) && norm.length > 0) {
+      seenNorms.add(norm);
+      finalOptions.push(item);
+    } else {
+      // Duplicate detected! Synthesize a distinct distractor
+      let replacement = '';
+      
+      const fracMatch = /\$\\frac\{([+-]?\d+)\}\{(\d+)\}\$/.exec(item.text) || /^([+-]?\d+)\/(\d+)$/.exec(item.text);
+      if (fracMatch) {
+        const n = parseInt(fracMatch[1], 10) || 1;
+        const d = parseInt(fracMatch[2], 10) || 2;
+        const candidateFracs = [
+          `$\\frac{${n + 1}}{${d}}$`,
+          `$\\frac{${Math.max(1, n - 1)}}{${d}}$`,
+          `$\\frac{${n * 2}}{${d}}$`,
+          `$\\frac{${n}}{${d * 2}}$`,
+          `$\\frac{${n + 2}}{${d}}$`,
+          `$\\frac{${n}}{${d + 1}}$`,
+          `$\\frac{${n + 3}}{${d}}$`,
+          '$\\frac{1}{2}$',
+          '$\\frac{1}{4}$',
+          '$\\frac{3}{4}$',
+          'None of these'
+        ];
+        for (const cand of candidateFracs) {
+          const candNorm = normalizeOptionForDeduplication(cand);
+          if (!seenNorms.has(candNorm)) {
+            replacement = cand;
+            seenNorms.add(candNorm);
+            break;
+          }
+        }
+      }
+
+      if (!replacement) {
+        const numMatch = /^[+-]?\d+(?:\.\d+)?$/.exec(item.text.trim());
+        if (numMatch) {
+          const val = parseFloat(numMatch[0]);
+          const candidates = [val + 1, val + 2, val - 1, val * 2, val + 5, val + 10];
+          for (const cand of candidates) {
+            const candStr = String(cand);
+            const candNorm = normalizeOptionForDeduplication(candStr);
+            if (!seenNorms.has(candNorm)) {
+              replacement = candStr;
+              seenNorms.add(candNorm);
+              break;
+            }
+          }
+        }
+      }
+
+      if (!replacement) {
+        const genericFallbacks = [
+          'None of the mentioned',
+          'Cannot be determined from the given data',
+          'All of the above',
+          'Alternative value'
+        ];
+        for (const fallback of genericFallbacks) {
+          const fNorm = normalizeOptionForDeduplication(fallback);
+          if (!seenNorms.has(fNorm)) {
+            replacement = fallback;
+            seenNorms.add(fNorm);
+            break;
+          }
+        }
+        if (!replacement) {
+          replacement = `Option ${String.fromCharCode(65 + idx)} (Alternative)`;
+          seenNorms.add(normalizeOptionForDeduplication(replacement));
+        }
+      }
+
+      finalOptions.push({
+        text: replacement,
+        isCorrect: false
+      });
+    }
+  }
+
+  // Guarantee strictly ONE correct answer
+  const correctCount = finalOptions.filter((o) => o.isCorrect).length;
+  if (correctCount !== 1) {
+    const firstCorrectIdx = finalOptions.findIndex((o) => o.isCorrect);
+    const targetIdx = firstCorrectIdx >= 0 ? firstCorrectIdx : 0;
+    finalOptions.forEach((o, i) => {
+      o.isCorrect = i === targetIdx;
+    });
+  }
+
+  return finalOptions;
+}
+
+/**
+ * Deduplicates questions in a list: ensures no identical or high-overlap questions,
+ * and ensures all options within every question are strictly unique and formatted.
+ */
+export function deduplicateQuestionsList(questions: GeneratedMCQQuestion[]): GeneratedMCQQuestion[] {
+  const result: GeneratedMCQQuestion[] = [];
+  for (const q of questions) {
+    const cleanText = sanitizeQuestionText(q.text);
+    if (!isDuplicateQuestion(cleanText, result)) {
+      result.push({
+        ...q,
+        text: cleanText,
+        options: deduplicateAndFormatOptions(q.options)
+      });
+    }
+  }
+  return result;
+}
 
 export function normalizeQuestionText(text: string): string {
   return (text || '')
     .toLowerCase()
-    .replace(/^\s*(?:q\d*[:.]|\d+[:.)]|-|\*)\s*/i, '') // strip leading "Q1.", "1.", "1)", etc.
+    .replace(/^(?:question\s*\d*[:.-]?|q\d*[:.-]?|\d+[\.\)\:\-]\s*)/i, '') // strip leading "Q1.", "1.", "1)", etc.
     .replace(/[^\w\s]/g, '') // strip punctuation
     .replace(/\s+/g, ' ') // collapse whitespace
     .trim();
@@ -1102,6 +1358,12 @@ export function calculateQuestionSimilarity(textA: string, textB: string): numbe
   const normA = normalizeQuestionText(textA);
   const normB = normalizeQuestionText(textB);
   if (normA === normB && normA.length > 0) return 1.0;
+  if (!normA || !normB) return 0;
+
+  // Exact substring containment
+  if (normA.length > 25 && normB.length > 25 && (normA.includes(normB) || normB.includes(normA))) {
+    return 0.85;
+  }
 
   const wordsA = new Set(normA.split(' ').filter((w) => w.length > 2));
   const wordsB = new Set(normB.split(' ').filter((w) => w.length > 2));
@@ -1121,8 +1383,8 @@ export function isDuplicateQuestion(candidateText: string, existingQuestions: { 
 
   for (const existing of existingQuestions) {
     const sim = calculateQuestionSimilarity(candidateText, existing.text);
-    // 65% word overlap or identical normalized text indicates semantic/scenario duplicate
-    if (sim >= 0.65) return true;
+    // 55% word overlap or identical normalized text indicates semantic/scenario duplicate
+    if (sim >= 0.55) return true;
   }
   return false;
 }
@@ -1278,6 +1540,9 @@ Respond ONLY in valid JSON matching this schema:
           opt.isCorrect = oIdx === finalCorrectIdx;
         });
 
+        // Re-verify strictly non-repeated options and clean formatting
+        q.options = deduplicateAndFormatOptions(q.options);
+
         auditItems.push({
           questionIndex: chunkStartIdx + qSubIdx + 1,
           questionText: q.text,
@@ -1306,6 +1571,8 @@ Respond ONLY in valid JSON matching this schema:
         q.options.forEach((opt, oIdx) => {
           opt.isCorrect = oIdx === finalCorrectIdx;
         });
+
+        q.options = deduplicateAndFormatOptions(q.options);
 
         auditItems.push({
           questionIndex: chunkStartIdx + qSubIdx + 1,
@@ -1407,8 +1674,13 @@ export async function generateFullExamPaperWithAI(
   const uniqueGenerated: (GeneratedMCQQuestion & { marks: number; negativeMarks: number })[] = [];
 
   for (const q of rawCollected) {
-    if (!isDuplicateQuestion(q.text, uniqueGenerated)) {
-      uniqueGenerated.push(q);
+    const cleanText = sanitizeQuestionText(q.text);
+    if (!isDuplicateQuestion(cleanText, uniqueGenerated)) {
+      uniqueGenerated.push({
+        ...q,
+        text: cleanText,
+        options: deduplicateAndFormatOptions(q.options)
+      });
     }
   }
 
@@ -1436,9 +1708,12 @@ export async function generateFullExamPaperWithAI(
     });
 
     for (const q of extraBatch.questions) {
-      if (uniqueGenerated.length < totalCount && !isDuplicateQuestion(q.text, uniqueGenerated)) {
+      const cleanText = sanitizeQuestionText(q.text);
+      if (uniqueGenerated.length < totalCount && !isDuplicateQuestion(cleanText, uniqueGenerated)) {
         uniqueGenerated.push({
           ...q,
+          text: cleanText,
+          options: deduplicateAndFormatOptions(q.options),
           marks: defaultPerQMarks,
           negativeMarks: req.negativeMarkingEnabled ? (req.negativeMarkPenalty ?? 0.25) : 0
         });
@@ -1475,8 +1750,8 @@ export async function generateFullExamPaperWithAI(
     const qId = `q_ai_${now}_${i}_${Math.random().toString(36).substring(2, 7)}`;
     const questionObj: MCQQuestion = {
       id: qId,
-      text: raw.text,
-      options: raw.options.map((opt, optIdx) => ({
+      text: sanitizeQuestionText(raw.text),
+      options: deduplicateAndFormatOptions(raw.options).map((opt, optIdx) => ({
         id: `opt_${optIdx + 1}_${Math.random().toString(36).substring(2, 7)}`,
         text: opt.text,
         isCorrect: Boolean(opt.isCorrect)

@@ -5,7 +5,6 @@ import {
   Sun,
   Moon,
   Layers,
-  Settings,
   Code2,
   FileText,
   ShieldAlert,
@@ -21,7 +20,7 @@ import { ContinuousTabs } from './watermelon-ui';
 interface NavbarProps {
   theme: ThemeMode;
   onToggleTheme: () => void;
-  onOpenSettings: () => void;
+  onOpenSettings?: () => void;
   isRunning?: boolean;
 }
 
@@ -246,26 +245,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <LogOut size={12} />
             <span>Sign Out</span>
-          </button>
-        )}
-
-        {/* Settings Button - available to authorities */}
-        {(isAdminRoute || isPaperSetterRoute) && (
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={onOpenSettings}
-            title="System & AI Settings"
-            style={{
-              width: '32px',
-              height: '32px',
-              padding: 0,
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--border)',
-              background: 'var(--bg-surface)',
-              color: 'var(--text-secondary)'
-            }}
-          >
-            <Settings size={14} />
           </button>
         )}
 

@@ -4,7 +4,7 @@ import {
   Clock, ChevronLeft, ChevronRight, CheckCircle, CheckCircle2, Circle, AlertTriangle,
   Send, BookOpen, RotateCcw, Award, X, Eye, EyeOff, BarChart2, KeyRound,
   Copy, Check, Lock, Unlock, Code2, ArrowRight, ShieldAlert, Shield, Monitor, Download, CheckSquare, FileCheck, LogOut, MessageCircle, Calendar,
-  Maximize2, Minimize2
+  Maximize2, Minimize2, Video, VideoOff
 } from 'lucide-react';
 import { MCQAttempt, MCQExamConfig, MCQGradeResult, MCQ_STORAGE_KEYS } from '../types/mcq';
 import {
@@ -108,6 +108,9 @@ const FormattedQuestionContent: React.FC<FormattedQuestionContentProps> = ({ con
 
   if (!content) return null;
 
+  // Clean redundant leading option markers like "A) ", "(A) ", "A. ", "1. ", "Option A: "
+  const cleanedContent = content.replace(/^(?:\([A-Da-d0-9]\)|[A-Da-d0-9][\.\)\:\-]|Option\s*[A-D][:.-]?)\s*/i, '');
+
   const handleCopyCode = (code: string, idx: number) => {
     try {
       navigator.clipboard.writeText(code);
@@ -123,9 +126,9 @@ const FormattedQuestionContent: React.FC<FormattedQuestionContentProps> = ({ con
   let match: RegExpExecArray | null;
   let blockIndex = 0;
 
-  while ((match = codeBlockRegex.exec(content)) !== null) {
+  while ((match = codeBlockRegex.exec(cleanedContent)) !== null) {
     if (match.index > lastIndex) {
-      const textChunk = content.substring(lastIndex, match.index);
+      const textChunk = cleanedContent.substring(lastIndex, match.index);
       elements.push(
         <span key={`text-${lastIndex}`}>
           {renderInlineSpans(textChunk, `inline-${lastIndex}`)}
@@ -222,8 +225,8 @@ const FormattedQuestionContent: React.FC<FormattedQuestionContentProps> = ({ con
     lastIndex = match.index + match[0].length;
   }
 
-  if (lastIndex < content.length) {
-    const trailingChunk = content.substring(lastIndex);
+  if (lastIndex < cleanedContent.length) {
+    const trailingChunk = cleanedContent.substring(lastIndex);
     elements.push(
       <span key={`text-${lastIndex}`}>
         {renderInlineSpans(trailingChunk, `inline-${lastIndex}`)}
@@ -240,7 +243,10 @@ const FormattedQuestionContent: React.FC<FormattedQuestionContentProps> = ({ con
 
 function renderKatexHtml(latex: string, displayMode: boolean = false): string | null {
   try {
-    return katex.renderToString(latex.trim(), {
+    let clean = latex.trim();
+    // Normalize simple fraction like "1/52" or "3/4" in math mode into real stacked \frac{1}{52}
+    clean = clean.replace(/^([+-]?\d+)\s*\/\s*(\d+)$/, '\\frac{$1}{$2}');
+    return katex.renderToString(clean, {
       displayMode,
       throwOnError: false
     });
@@ -1832,6 +1838,100 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
   const [unlockPasskey, setUnlockPasskey] = useState('');
   const [unlockError, setUnlockError] = useState<string | null>(null);
 
+  // ── CCTV SCREEN SHARING STREAM & PROCTORING REFS ──
+  const [isScreenSharing, setIsScreenSharing] = useState<boolean>(false);
+  const screenTrackRef = useRef<MediaStreamTrack | null>(null);
+  const screenVideoRef = useRef<HTMLVideoElement | null>(null);
+  const screenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const screenIntervalRef = useRef<any>(null);
+  const lastScreenFrameRef = useRef<string | undefined>(undefined);
+
+  // ── REAL CCTV SCREEN STREAM CAPTURE (WEBSCREEN API) ──
+  const startScreenProctoring = async () => {
+    try {
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getDisplayMedia) {
+        return;
+      }
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { cursor: 'always' } as any,
+        audio: false
+      });
+
+      const track = stream.getVideoTracks()[0];
+      screenTrackRef.current = track;
+
+      if (!screenVideoRef.current) {
+        const vid = document.createElement('video');
+        vid.autoplay = true;
+        vid.muted = true;
+        vid.playsInline = true;
+        screenVideoRef.current = vid;
+      }
+      screenVideoRef.current.srcObject = stream;
+      await screenVideoRef.current.play();
+
+      setIsScreenSharing(true);
+      playSound('success');
+
+      screenIntervalRef.current = setInterval(() => {
+        if (!screenVideoRef.current || !screenTrackRef.current || screenTrackRef.current.readyState !== 'live') {
+          stopScreenProctoring();
+          return;
+        }
+        if (!screenCanvasRef.current) {
+          screenCanvasRef.current = document.createElement('canvas');
+          screenCanvasRef.current.width = 480;
+          screenCanvasRef.current.height = 270;
+        }
+        const ctx = screenCanvasRef.current.getContext('2d');
+        if (ctx && screenVideoRef.current.videoWidth > 0) {
+          ctx.drawImage(screenVideoRef.current, 0, 0, 480, 270);
+          const dataUrl = screenCanvasRef.current.toDataURL('image/jpeg', 0.6);
+          lastScreenFrameRef.current = dataUrl;
+          if (attempt && exam) {
+            syncMcqLiveStation(attempt, exam, student, currentIdx, false, {
+              screenImageData: dataUrl,
+              hasLiveScreenStream: true
+            });
+          }
+        }
+      }, 1800);
+
+      track.onended = () => {
+        stopScreenProctoring();
+      };
+    } catch (err) {
+      console.warn('[CCTV] Screen proctoring permission denied or canceled:', err);
+      setIsScreenSharing(false);
+    }
+  };
+
+  const stopScreenProctoring = () => {
+    if (screenIntervalRef.current) {
+      clearInterval(screenIntervalRef.current);
+      screenIntervalRef.current = null;
+    }
+    if (screenTrackRef.current) {
+      screenTrackRef.current.stop();
+      screenTrackRef.current = null;
+    }
+    setIsScreenSharing(false);
+    lastScreenFrameRef.current = undefined;
+    if (attempt && exam) {
+      syncMcqLiveStation(attempt, exam, student, currentIdx, false, {
+        hasLiveScreenStream: false,
+        screenImageData: undefined
+      });
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (screenIntervalRef.current) clearInterval(screenIntervalRef.current);
+      if (screenTrackRef.current) screenTrackRef.current.stop();
+    };
+  }, []);
+
   // Dedicated Confirmation & Alert Modal State
   const [modalConfig, setModalConfig] = useState<{
     isOpen: boolean;
@@ -1935,6 +2035,59 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
   const [proctorWarning, setProctorWarning] = useState<string | null>(null);
   const [now, setNow] = useState<number>(() => getSynchronizedNow());
   const [isFullscreen, setIsFullscreen] = useState<boolean>(() => isCurrentlyFullscreen());
+
+  const isStrictLocked = Boolean((isLockedByProctor || (attempt && attempt.tabSwitchCount >= 3)) && attempt && attempt.status === 'IN_PROGRESS');
+
+  // Strict Hardware Lockdown: Intercept and freeze all Keyboard, Mouse, Pointer, Touch & Scroll events
+  useEffect(() => {
+    if (!isStrictLocked) return;
+
+    const blockEvent = (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      if (target && target.closest('[data-proctor-unlock-exempt="true"]')) {
+        return;
+      }
+      e.stopPropagation();
+      e.preventDefault();
+      return false;
+    };
+
+    const blockKeys = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && target.closest('[data-proctor-unlock-exempt="true"]')) {
+        return;
+      }
+      e.stopPropagation();
+      e.preventDefault();
+      return false;
+    };
+
+    window.addEventListener('keydown', blockKeys, true);
+    window.addEventListener('keyup', blockKeys, true);
+    window.addEventListener('keypress', blockKeys, true);
+    window.addEventListener('mousedown', blockEvent, true);
+    window.addEventListener('mouseup', blockEvent, true);
+    window.addEventListener('click', blockEvent, true);
+    window.addEventListener('dblclick', blockEvent, true);
+    window.addEventListener('contextmenu', blockEvent, true);
+    window.addEventListener('wheel', blockEvent, { capture: true, passive: false });
+    window.addEventListener('touchstart', blockEvent, { capture: true, passive: false });
+    window.addEventListener('touchmove', blockEvent, { capture: true, passive: false });
+
+    return () => {
+      window.removeEventListener('keydown', blockKeys, true);
+      window.removeEventListener('keyup', blockKeys, true);
+      window.removeEventListener('keypress', blockKeys, true);
+      window.removeEventListener('mousedown', blockEvent, true);
+      window.removeEventListener('mouseup', blockEvent, true);
+      window.removeEventListener('click', blockEvent, true);
+      window.removeEventListener('dblclick', blockEvent, true);
+      window.removeEventListener('contextmenu', blockEvent, true);
+      window.removeEventListener('wheel', blockEvent, true);
+      window.removeEventListener('touchstart', blockEvent, true);
+      window.removeEventListener('touchmove', blockEvent, true);
+    };
+  }, [isStrictLocked]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(getSynchronizedNow()), 1000);
@@ -2234,8 +2387,10 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     setGradeResult(null);
     setAttemptStartError(null);
     playSound('success');
-    void requestExamFullscreen();
-    syncMcqLiveStation(a, exam, studentData, 0, false);
+    syncMcqLiveStation(a, exam, studentData, 0, false, {
+      screenImageData: lastScreenFrameRef.current,
+      hasLiveScreenStream: isScreenSharing
+    });
   };
 
   const handleSelectOption = (questionId: string, optionId: string) => {
@@ -2253,7 +2408,10 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     playSound('click');
     const updatedAttempt = { ...attempt, answers: newAnswers };
     setAttempt(updatedAttempt);
-    syncMcqLiveStation(updatedAttempt, exam, student, currentIdx, false);
+    syncMcqLiveStation(updatedAttempt, exam, student, currentIdx, false, {
+      screenImageData: lastScreenFrameRef.current,
+      hasLiveScreenStream: isScreenSharing
+    });
   };
 
   const handleNavigateQuestion = (newIdx: number) => {
@@ -2267,7 +2425,10 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         localStorage.setItem(`codedna_mcq_current_idx_${attempt.id}`, String(newIdx));
       } catch {}
       if (exam) {
-        syncMcqLiveStation(attempt, exam, student, newIdx, false);
+        syncMcqLiveStation(attempt, exam, student, newIdx, false, {
+          screenImageData: lastScreenFrameRef.current,
+          hasLiveScreenStream: isScreenSharing
+        });
       }
     }
   };
@@ -2345,6 +2506,8 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         setModalConfig((prev) => ({ ...prev, isOpen: false }));
         setSubmitted(true);
         setIsLockedByProctor(false);
+        stopScreenProctoring();
+        void exitExamFullscreen();
         recordInfraction(attempt.id, 'DISQUALIFIED_BY_PROCTOR');
         const result = submitAttempt(attempt.id, answers, 'ABANDONED');
         if (result) {
@@ -2358,7 +2521,10 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
             wrongCount: result.wrongCount
           };
           setAttempt(finished);
-          syncMcqLiveStation(finished, exam, student, currentIdx, true);
+          syncMcqLiveStation(finished, exam, student, currentIdx, true, {
+            screenImageData: lastScreenFrameRef.current,
+            hasLiveScreenStream: false
+          });
           if (!(await persistAttemptToCloud(attempt.id))) {
             showAlert('Cloud Sync Incomplete', 'The attempt was finalized on this device, but cloud sync failed. Keep this device open and notify the invigilator.', 'warning');
           }
@@ -2371,6 +2537,8 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     if (!attempt || submitted || !exam) return;
     setSubmitted(true);
     playSound('warning');
+    stopScreenProctoring();
+    void exitExamFullscreen();
 
     // Authoritative submission with automatic grade fallback
     const result = submitAttempt(attempt.id, answers, 'TIMED_OUT') || gradeAttempt(attempt);
@@ -2389,14 +2557,10 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       localStorage.removeItem(`codedna_mcq_current_idx_${attempt.id}`);
     } catch {}
 
-    // Automatically exit fullscreen so student can see scorecard comfortably
-    try {
-      if (document.fullscreenElement) {
-        void document.exitFullscreen();
-      }
-    } catch {}
-
-    syncMcqLiveStation(finished, exam, student, currentIdx, true);
+    syncMcqLiveStation(finished, exam, student, currentIdx, true, {
+      screenImageData: lastScreenFrameRef.current,
+      hasLiveScreenStream: false
+    });
     void persistAttemptToCloud(attempt.id);
   }, [attempt, answers, submitted, exam, student, currentIdx]);
 
@@ -2407,6 +2571,9 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     }
     setSubmitted(true);
     setShowSubmitConfirm(false);
+    stopScreenProctoring();
+    void exitExamFullscreen();
+
     const result = submitAttempt(attempt.id, answers, 'SUBMITTED');
     if (result) {
       setGradeResult(result);
@@ -2416,7 +2583,10 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       try {
         localStorage.removeItem(`codedna_mcq_current_idx_${attempt.id}`);
       } catch {}
-      syncMcqLiveStation(finished, exam, student, currentIdx, true);
+      syncMcqLiveStation(finished, exam, student, currentIdx, true, {
+        screenImageData: lastScreenFrameRef.current,
+        hasLiveScreenStream: false
+      });
       if (!(await persistAttemptToCloud(attempt.id))) {
         showAlert('Cloud Sync Notice', 'Your result was saved on this device, but cloud sync failed. Keep this device open and notify the invigilator before exiting.', 'warning');
       }
@@ -2737,18 +2907,20 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         </div>
       )}
 
-      {/* Proctor Full Lockdown Screen Overlay */}
-      {(isLockedByProctor || (attempt && attempt.tabSwitchCount >= 3)) && attempt && attempt.status === 'IN_PROGRESS' && (
+      {/* Proctor Full Lockdown Screen Overlay (Strict Hardware Freeze) */}
+      {(isLockedByProctor || (attempt && attempt.tabSwitchCount >= 3) || isStrictLocked) && attempt && attempt.status === 'IN_PROGRESS' && (
         <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          background: 'rgba(9, 9, 11, 0.95)', backdropFilter: 'blur(10px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px'
+          position: 'fixed', inset: 0, zIndex: 2147483647,
+          background: 'rgba(9, 9, 11, 0.98)', backdropFilter: 'blur(16px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px',
+          userSelect: 'none', cursor: 'not-allowed'
         }}>
           <div style={{
-            maxWidth: '520px', width: '100%',
+            maxWidth: '540px', width: '100%',
             background: 'var(--bg-elevated)', border: '1px solid var(--danger)',
             borderRadius: 'var(--radius-lg)', padding: '32px', textAlign: 'center',
-            boxShadow: '0 20px 50px rgba(0,0,0,0.6)'
+            boxShadow: '0 25px 60px rgba(0,0,0,0.85)',
+            cursor: 'default'
           }}>
             <div style={{
               width: '60px', height: '60px', borderRadius: '50%',
@@ -2766,22 +2938,22 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
               color: 'var(--danger)', fontSize: '11px', fontWeight: 800,
               textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px'
             }}>
-              <span>ACADEMIC FREEZE · {attempt.tabSwitchCount >= 3 ? `${attempt.tabSwitchCount}/3 INFRACTIONS EXCEEDED` : 'PROCTOR LOCKDOWN'}</span>
+              <span>STRICT ACADEMIC LOCKDOWN · {attempt.tabSwitchCount >= 3 ? `${attempt.tabSwitchCount}/3 INFRACTIONS EXCEEDED` : 'PROCTOR INTERVENTION'}</span>
             </div>
 
             <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 10px' }}>
-              Examination Session Frozen
+              Workstation Hardware Locked
             </h2>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 18px' }}>
               {attempt.tabSwitchCount >= 3
-                ? `Workstation automatically locked: You switched tabs or minimized the examination window ${attempt.tabSwitchCount} times (maximum permitted: 3). All question selections, navigation, and submissions are frozen.`
-                : 'Your examination terminal has been locked by the invigilator. Interactions are frozen until released by the proctor.'}
+                ? `Academic integrity violation: Candidate switched tabs or left the active examination window ${attempt.tabSwitchCount} times. Physical keyboard and mouse interactions are strictly frozen until unlocked by an invigilator.`
+                : 'Your examination terminal has been strictly frozen by the central proctor. All mouse and keyboard inputs are locked until released by authorized faculty.'}
             </p>
 
             {/* Candidate Dossier Summary */}
             <div style={{
               background: 'var(--bg-surface)', border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)', padding: '14px 18px', marginBottom: '22px',
+              borderRadius: 'var(--radius-md)', padding: '14px 18px', marginBottom: '18px',
               display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '10px', textAlign: 'left',
               fontSize: '12px'
             }}>
@@ -2803,8 +2975,76 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
               </div>
             </div>
 
+            {/* Authorized Proctor Unlock Input (Exempt from hardware block) */}
+            <div
+              data-proctor-unlock-exempt="true"
+              style={{
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                padding: '16px',
+                marginBottom: '18px',
+                textAlign: 'left'
+              }}
+            >
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Invigilator Passkey Release
+              </label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="password"
+                  value={unlockPasskey}
+                  onChange={(e) => {
+                    setUnlockPasskey(e.target.value);
+                    if (unlockError) setUnlockError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handlePardonUnlock(false);
+                    }
+                  }}
+                  placeholder="Enter Proctor PIN (e.g. 1234, admin)"
+                  style={{
+                    flex: 1,
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '8px 12px',
+                    color: 'var(--text-primary)',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => handlePardonUnlock(false)}
+                  style={{
+                    background: 'var(--accent)',
+                    color: 'var(--accent-contrast)',
+                    border: 'none',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0 16px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Unlock
+                </button>
+              </div>
+              {unlockError && (
+                <div style={{ color: 'var(--danger)', fontSize: '11px', marginTop: '6px', fontWeight: 600 }}>
+                  {unlockError}
+                </div>
+              )}
+            </div>
+
             {/* Direct Termination Action */}
-            <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px', display: 'flex', justifyContent: 'center' }}>
+            <div
+              data-proctor-unlock-exempt="true"
+              style={{ borderTop: '1px solid var(--border)', paddingTop: '16px', display: 'flex', justifyContent: 'center' }}
+            >
               <button
                 type="button"
                 onClick={handleDisqualifyCandidate}
@@ -2860,6 +3100,49 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
           {/* Timer */}
           <TimerBadge deadline={attempt.deadline} onExpire={handleTimerExpire} />
+
+          {/* Live CCTV Proctor Screen Share Toggle */}
+          <button
+            type="button"
+            onClick={() => {
+              if (isScreenSharing) {
+                stopScreenProctoring();
+              } else {
+                startScreenProctoring();
+              }
+            }}
+            title={isScreenSharing ? 'Stop CCTV Screen Stream' : 'Share Screen (CCTV Proctoring)'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 12px',
+              background: isScreenSharing ? 'var(--bg-surface)' : 'rgba(239, 68, 68, 0.1)',
+              border: isScreenSharing ? '1px solid var(--border)' : '1px solid rgba(239, 68, 68, 0.35)',
+              borderRadius: 'var(--radius-sm)',
+              color: isScreenSharing ? 'var(--text-secondary)' : 'var(--danger)',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            {isScreenSharing ? <VideoOff size={13} /> : <Video size={13} />}
+            <span style={{ fontSize: '11px', fontWeight: 700 }}>
+              {isScreenSharing ? 'CCTV On' : 'Share Screen (CCTV)'}
+            </span>
+            {isScreenSharing && (
+              <span
+                style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  background: 'var(--success)',
+                  display: 'inline-block'
+                }}
+              />
+            )}
+          </button>
 
           {/* Fullscreen Kiosk Mode Toggle */}
           <button
@@ -2952,6 +3235,53 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           >
             <Maximize2 size={12} />
             <span>Maximize Screen</span>
+          </button>
+        </div>
+      )}
+
+      {/* CCTV Screen Sharing Required Surveillance Banner */}
+      {!isScreenSharing && (
+        <div
+          style={{
+            maxWidth: '1520px',
+            margin: '8px auto 0',
+            width: 'calc(100% - 56px)',
+            background: 'rgba(239, 68, 68, 0.08)',
+            border: '1px solid rgba(239, 68, 68, 0.25)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '8px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            color: 'var(--danger)',
+            fontSize: '12px',
+            fontWeight: 600
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Video size={15} />
+            <span>Proctor Surveillance Notice: Live CCTV screen feed is inactive. Click 'Share Screen (CCTV)' to stream your workstation to the proctoring console.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => startScreenProctoring()}
+            style={{
+              background: 'var(--danger)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: 'var(--radius-sm)',
+              padding: '5px 12px',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Video size={12} />
+            <span>Share Screen (CCTV)</span>
           </button>
         </div>
       )}

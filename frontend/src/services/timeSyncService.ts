@@ -252,25 +252,36 @@ export async function requestExamFullscreen(): Promise<boolean> {
   if (isCurrentlyFullscreen()) return true;
 
   try {
-    const docEl = document.documentElement as any;
+    const docEl = (document.documentElement || document.body) as any;
     if (docEl.requestFullscreen) {
       await docEl.requestFullscreen();
-      return true;
     } else if (docEl.webkitRequestFullscreen) {
       await docEl.webkitRequestFullscreen();
-      return true;
     } else if (docEl.mozRequestFullScreen) {
       await docEl.mozRequestFullScreen();
-      return true;
     } else if (docEl.msRequestFullscreen) {
       await docEl.msRequestFullscreen();
-      return true;
     }
+
+    // Force Windows DWM & Chromium GPU layer invalidation to avoid blank white screen bug
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        window.dispatchEvent(new Event('resize'));
+        if (document.body) {
+          document.body.style.transform = 'translateZ(0)';
+          setTimeout(() => {
+            if (document.body) document.body.style.transform = '';
+            window.dispatchEvent(new Event('resize'));
+          }, 60);
+        }
+      });
+    }
+
+    return true;
   } catch (err) {
     console.warn('[FullScreen] Fullscreen request was denied or canceled:', err);
     return false;
   }
-  return false;
 }
 
 /**
@@ -284,20 +295,30 @@ export async function exitExamFullscreen(): Promise<boolean> {
     const doc = document as any;
     if (doc.exitFullscreen) {
       await doc.exitFullscreen();
-      return true;
     } else if (doc.webkitExitFullscreen) {
       await doc.webkitExitFullscreen();
-      return true;
     } else if (doc.mozCancelFullScreen) {
       await doc.mozCancelFullScreen();
-      return true;
     } else if (doc.msExitFullscreen) {
       await doc.msExitFullscreen();
-      return true;
     }
+
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        window.dispatchEvent(new Event('resize'));
+        if (document.body) {
+          document.body.style.transform = 'translateZ(0)';
+          setTimeout(() => {
+            if (document.body) document.body.style.transform = '';
+            window.dispatchEvent(new Event('resize'));
+          }, 60);
+        }
+      });
+    }
+
+    return true;
   } catch (err) {
     console.warn('[FullScreen] Exit fullscreen failed:', err);
     return false;
   }
-  return false;
 }

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import { Navbar } from './components/Navbar';
-import { SettingsModal } from './components/SettingsModal';
 import { Workspace } from './components/Workspace';
 import { FinalReport } from './components/FinalReport';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -97,7 +96,6 @@ export const App: React.FC = () => {
     playSound('click');
   };
 
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [compilerResult, setCompilerResult] = useState<CompilerExecutionResult | null>(null);
 
   // Candidate Submission State with persistent localStorage backing
@@ -352,7 +350,6 @@ export const App: React.FC = () => {
         <Navbar
           theme={theme}
           onToggleTheme={toggleTheme}
-          onOpenSettings={() => setIsSettingsOpen(true)}
           isRunning={isExecuting}
         />
       )}
@@ -475,12 +472,6 @@ export const App: React.FC = () => {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        onConfigChanged={() => {}}
-      />
     </div>
   );
 };

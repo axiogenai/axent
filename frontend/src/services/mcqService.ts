@@ -549,7 +549,10 @@ export function startAttempt(
     const snapshot: MCQQuestionSnapshot = {
       questionId: q.id,
       text: q.text,
-      options: q.options.map((o) => ({ id: o.id, text: o.text })), // no isCorrect
+      options: q.options.map((o) => ({
+        id: o.id,
+        text: o.text.replace(/^(?:\([A-Da-d0-9]\)|[A-Da-d0-9][\.\)\:\-]|Option\s*[A-D][:.-]?)\s*/i, '').trim()
+      })),
       correctOptionId: '', // Sanitized: Authoritatively resolved on submit to prevent DevTools/storage inspection
       marks: q.marks,
       // Respect the exam-level policy; per-question penalties are ignored when

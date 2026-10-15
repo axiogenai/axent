@@ -11,7 +11,10 @@ import {
   getAllQuestions, saveQuestion, createQuestion, deleteQuestion, clearAllQuestions,
   duplicateQuestion, archiveQuestion, publishQuestion, validateQuestion, buildOption, onMcqDataChanged
 } from '../services/mcqService';
-import { generateMCQQuestionsWithAI, GeneratedMCQQuestion } from '../services/groqService';
+import {
+  generateMCQQuestionsWithAI,
+  GeneratedMCQQuestion
+} from '../services/groqService';
 import { isSupabaseConnected } from '../services/supabaseService';
 import { playSound } from '../utils/sounds';
 import { ConfirmationModal } from './ConfirmationModal';
