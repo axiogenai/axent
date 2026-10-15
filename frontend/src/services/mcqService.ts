@@ -284,7 +284,7 @@ export function saveExam(exam: MCQExamConfig): MCQExamConfig {
   return updated;
 }
 
-export function deleteExam(id: string): void {
+export async function deleteExam(id: string): Promise<boolean> {
   recordExamDeleted(id);
   const all = getAllExams().filter((e) => e.id !== id);
   save(MCQ_STORAGE_KEYS.EXAMS, all);
@@ -293,9 +293,10 @@ export function deleteExam(id: string): void {
   const attempts = getAllAttempts().filter((a) => a.examId !== id);
   save(MCQ_STORAGE_KEYS.ATTEMPTS, attempts);
 
-  void deleteExamFromCloud(id);
+  const ok = await deleteExamFromCloud(id);
   notifyExamsChanged();
   notifyMcqDataChanged();
+  return ok;
 }
 
 export function publishExam(id: string): string[] {
@@ -805,74 +806,32 @@ export async function syncFromSupabase(): Promise<void> {
       fetchQuestionsFromCloud(), fetchExamsFromCloud(), fetchAttemptsFromCloud()
     ]);
 
-    // 1. Reconcile Questions: replace local storage with cloud data, syncing any local-only items up to cloud
+    // 1. Reconcile Questions: Supabase cloud is authoritative
     if (cloudQ !== null) {
-      const clearedTime = Number(sessionStorage.getItem('axent_question_bank_cleared') || '0');
-      const isRecentlyCleared = clearedTime > 0 && Date.now() - clearedTime < 60000;
-      if (isRecentlyCleared && cloudQ.length === 0) {
-        save(MCQ_STORAGE_KEYS.QUESTIONS, []);
-      } else {
-        const localQ = getAllQuestions();
-        const cloudIds = new Set(cloudQ.map((q) => q.id));
-        if (!isRecentlyCleared) {
-          for (const q of localQ) {
-            if (!cloudIds.has(q.id)) {
-              void saveQuestionToCloud(q);
-            }
-          }
-        }
-        save(MCQ_STORAGE_KEYS.QUESTIONS, cloudQ);
-      }
+      save(MCQ_STORAGE_KEYS.QUESTIONS, cloudQ);
       notifyMcqDataChanged();
     }
 
-    // 2. Reconcile Exams: replace local storage with cloud data, syncing any local-only items up to cloud
+    // 2. Reconcile Exams: Supabase cloud is authoritative
     if (cloudE !== null) {
       const deletedIds = getDeletedExamIds();
-      const filteredCloud = cloudE.filter((e) => !deletedIds.has(e.id));
-      const localE = getAllExams().filter((e) => !deletedIds.has(e.id));
-      const cloudIds = new Set(filteredCloud.map((e) => e.id));
 
-      for (const ex of localE) {
-        if (!cloudIds.has(ex.id) && !deletedIds.has(ex.id)) {
-          void saveExamToCloud(ex);
-        }
-      }
-
-      // Purge any cloud exams that were marked deleted locally
+      // Ensure any cloud exams that were marked deleted locally get purged from cloud
       for (const ex of cloudE) {
         if (deletedIds.has(ex.id)) {
           void deleteExamFromCloud(ex.id);
         }
       }
 
-      const reconciled = filteredCloud.map((ce) => {
-        const localMatch = localE.find((le) => le.id === ce.id);
-        if (localMatch) {
-          const resultDeclarationMode =
-            ce.resultDeclarationMode || localMatch.resultDeclarationMode || 'IMMEDIATE';
-          const whatsappGroupName = ce.whatsappGroupName || localMatch.whatsappGroupName || '';
-          const whatsappGroupLink = ce.whatsappGroupLink || localMatch.whatsappGroupLink || '';
-          return { ...ce, resultDeclarationMode, whatsappGroupName, whatsappGroupLink };
-        }
-        return ce;
-      });
-      save(MCQ_STORAGE_KEYS.EXAMS, reconciled);
+      // Filter out deleted IDs and save directly as authoritative
+      const activeExams = cloudE.filter((e) => !deletedIds.has(e.id));
+      save(MCQ_STORAGE_KEYS.EXAMS, activeExams);
       notifyExamsChanged();
     }
 
-    // 3. Reconcile Attempts: replace local storage with cloud data, temporarily cached for 1 week
+    // 3. Reconcile Attempts: Supabase cloud is authoritative
     if (cloudA !== null) {
-      const localA = getAllAttempts();
-      const cloudIds = new Set(cloudA.map((a) => a.id));
-      for (const a of localA) {
-        if (!cloudIds.has(a.id)) {
-          void saveAttemptToCloud(a);
-        }
-      }
-
       const cutoff = Date.now() - ONE_WEEK_MS;
-      // Retain active sessions plus concluded attempts from the last 7 days (1 week temp cache)
       const recentCloudAttempts = cloudA.filter(
         (a) => a.status === 'IN_PROGRESS' || (a.submitTime || a.startTime || 0) >= cutoff
       );

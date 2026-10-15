@@ -67,6 +67,15 @@ export const App: React.FC = () => {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('codedna_theme', theme);
+
+    // Dynamically update browser tab favicon to match active theme
+    const activeFavicon = theme === 'dark' ? '/favicon-32x32.png' : '/favicon-light-32x32.png';
+    const favicons = document.querySelectorAll<HTMLLinkElement>('link[rel="icon"]');
+    favicons.forEach((el) => {
+      if (!el.hasAttribute('media')) {
+        el.href = activeFavicon;
+      }
+    });
   }, [theme]);
 
   const toggleTheme = () => {

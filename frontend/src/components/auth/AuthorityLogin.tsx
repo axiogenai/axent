@@ -56,6 +56,10 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
   const redirectTarget = searchParams.get('redirect') || defaultRedirect;
 
   const [role, setRole] = useState<AuthorityRole>(effectiveRole);
+  const isDarkMode = typeof window !== 'undefined' && (
+    document.documentElement.getAttribute('data-theme') === 'dark' ||
+    localStorage.getItem('codedna_theme') === 'dark'
+  );
 
   const [activeTab, setActiveTab] = useState<AuthTab>(() => {
     if (typeParam === 'recovery' || typeParam === 'invite') return 'set_password';
@@ -110,13 +114,14 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
 
     const trimmedEmail = email.trim().toLowerCase();
     if (!trimmedEmail) {
-      setErrorMessage('Institutional email address is required.');
+      setErrorMessage('Institutional Authority ID or email address is required.');
       playSound('warning');
       return;
     }
+    const isMasterAuth = trimmedEmail === 'teamaxiogen' || trimmedEmail === 'teamaxiogen@axent.edu' || trimmedEmail === 'teamaxiogen@axent.in';
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(trimmedEmail)) {
-      setErrorMessage('Please provide a valid institutional email format.');
+    if (!isMasterAuth && !emailRegex.test(trimmedEmail)) {
+      setErrorMessage('Please provide a valid institutional email or Authority ID (e.g. Teamaxiogen).');
       playSound('warning');
       return;
     }
@@ -310,12 +315,11 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
               <img
-                src="/axent-lightmode.png"
+                src={isDarkMode ? '/axent-logo.png' : '/axent-lightmode.png'}
                 alt="Axent"
                 style={{
-                  height: '36px',
+                  height: '28px',
                   width: 'auto',
-                  maxWidth: '160px',
                   display: 'block',
                   objectFit: 'contain'
                 }}
@@ -609,12 +613,11 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
             <img
-              src="/axent-lightmode.png"
+              src={isDarkMode ? '/axent-logo.png' : '/axent-lightmode.png'}
               alt="Axent"
               style={{
-                height: '32px',
+                height: '28px',
                 width: 'auto',
-                maxWidth: '150px',
                 display: 'block',
                 objectFit: 'contain'
               }}

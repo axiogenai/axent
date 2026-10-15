@@ -439,10 +439,10 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
     setShowDiscardConfirm(true);
   };
 
-  const confirmDiscardDraft = () => {
+  const confirmDiscardDraft = async () => {
     if (reviewedExam) {
-      deleteExam(reviewedExam.id);
-      reviewedQuestions.forEach((q) => deleteQuestion(q.id));
+      await deleteExam(reviewedExam.id);
+      await Promise.all(reviewedQuestions.map((q) => deleteQuestion(q.id)));
     }
     playSound('click');
     setShowDiscardConfirm(false);

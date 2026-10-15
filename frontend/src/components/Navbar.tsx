@@ -150,9 +150,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           src={theme === 'dark' ? '/axent-logo.png' : '/axent-lightmode.png'}
           alt="Axent"
           style={{
-            height: '28px',
+            height: '24px',
             width: 'auto',
-            maxWidth: '130px',
             display: 'block',
             objectFit: 'contain'
           }}

@@ -200,11 +200,12 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
         cancelText="Cancel"
         tone="danger"
         icon="danger"
-        onConfirm={() => {
+        onConfirm={async () => {
           if (confirmDelete) {
-            deleteExam(confirmDelete);
-            reload();
+            const idToDelete = confirmDelete;
             setConfirmDelete(null);
+            await deleteExam(idToDelete);
+            reload();
             playSound('trash');
           }
         }}

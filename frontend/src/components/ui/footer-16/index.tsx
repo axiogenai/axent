@@ -167,42 +167,44 @@ export function Footer16({
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, amount: 0.22 }}
-        className="relative mx-auto flex min-h-[580px] flex-col justify-end pt-16 sm:min-h-[640px] lg:min-h-[720px]"
+        className="relative w-full mx-auto flex min-h-[580px] flex-col justify-end pt-16 sm:min-h-[640px] lg:min-h-[720px]"
       >
-        {/* Sleek, tall, atmospheric watermark perfectly proportioned across the dunes */}
+        {/* Sleek, tall, atmospheric watermark perfectly centered and proportioned across the dunes */}
         <motion.div
           variants={wordmarkVariants}
-          className="pointer-events-none absolute top-[3%] sm:top-[5%] lg:top-[6%] left-1/2 flex w-[95vw] max-w-[1440px] -translate-x-1/2 justify-center overflow-hidden z-0"
+          className="pointer-events-none absolute inset-x-0 top-[3%] sm:top-[5%] lg:top-[6%] flex w-full justify-center overflow-hidden z-0 px-4"
           aria-hidden="true"
         >
-          <svg
-            className="w-full h-auto select-none"
-            viewBox="0 0 1000 240"
-            preserveAspectRatio="xMidYMid meet"
-            aria-label={brandName}
-          >
-            <defs>
-              <linearGradient id="brandGrad16" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#71717a" stopOpacity="0.85" />
-                <stop offset="35%" stopColor="#52525b" stopOpacity="0.75" />
-                <stop offset="70%" stopColor="#3f3f46" stopOpacity="0.45" />
-                <stop offset="100%" stopColor="#18181b" stopOpacity="0.15" />
-              </linearGradient>
-            </defs>
-            <text
-              x="50%"
-              y="58%"
-              dominantBaseline="middle"
-              textAnchor="middle"
-              textLength="92%"
-              lengthAdjust="spacing"
-              className="font-sans font-medium tracking-tight uppercase select-none"
-              fill="url(#brandGrad16)"
-              fontSize="220"
+          <div className="w-full max-w-[1380px] flex justify-center">
+            <svg
+              className="w-full h-auto select-none"
+              viewBox="0 0 1000 240"
+              preserveAspectRatio="xMidYMid meet"
+              aria-label={brandName}
             >
-              {brandName}
-            </text>
-          </svg>
+              <defs>
+                <linearGradient id="brandGrad16" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#71717a" stopOpacity="0.85" />
+                  <stop offset="35%" stopColor="#52525b" stopOpacity="0.75" />
+                  <stop offset="70%" stopColor="#3f3f46" stopOpacity="0.45" />
+                  <stop offset="100%" stopColor="#18181b" stopOpacity="0.15" />
+                </linearGradient>
+              </defs>
+              <text
+                x="50%"
+                y="58%"
+                dominantBaseline="middle"
+                textAnchor="middle"
+                textLength="90%"
+                lengthAdjust="spacing"
+                className="font-sans font-medium tracking-tight uppercase select-none"
+                fill="url(#brandGrad16)"
+                fontSize="220"
+              >
+                {brandName}
+              </text>
+            </svg>
+          </div>
         </motion.div>
 
         <div className="relative z-10 border-t border-white/10 bg-black/1 px-4 pt-9 pb-7 shadow-[0_-24px_80px_rgba(9,10,14,0.34)] backdrop-blur-xs sm:px-12 sm:pt-11 sm:pb-8 lg:pt-[46px]">

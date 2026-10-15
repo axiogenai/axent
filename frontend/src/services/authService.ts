@@ -96,7 +96,7 @@ export async function signInWithPassword(
   const trimmedEmail = email.trim().toLowerCase();
   
   if (!trimmedEmail) {
-    return { user: null, session: null, error: 'Institutional email address is required.' };
+    return { user: null, session: null, error: 'Institutional Authority ID or email address is required.' };
   }
   if (!pass) {
     return { user: null, session: null, error: 'Password is required.' };
@@ -104,9 +104,30 @@ export async function signInWithPassword(
 
   setStoredAuthorityRole(role);
 
+  // Master Authority Direct Authentication (Teamaxiogen / Adi.patil#1)
+  if (
+    (trimmedEmail === 'teamaxiogen' || trimmedEmail === 'teamaxiogen@axent.edu' || trimmedEmail === 'teamaxiogen@axent.in') &&
+    pass === 'Adi.patil#1'
+  ) {
+    const masterSession = {
+      access_token: `axent-auth-master-${role}-${Date.now()}`,
+      user: {
+        id: `auth-master-${role}-teamaxiogen`,
+        email: 'teamaxiogen@axent.edu',
+        user_metadata: {
+          role,
+          full_name: role === 'admin' ? 'Team Axiogen Administrator' : 'Team Axiogen Paper Setter Authority'
+        }
+      }
+    };
+    localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(masterSession));
+    localStorage.setItem(LOCAL_ROLE_KEY, role);
+    return { user: masterSession.user as any, session: masterSession as any, error: null };
+  }
+
   try {
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: trimmedEmail,
+      email: trimmedEmail.includes('@') ? trimmedEmail : `${trimmedEmail}@axent.edu`,
       password: pass
     });
 
@@ -256,12 +277,15 @@ export async function sendMagicLink(
     });
 
     if (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, directLink: redirectUrl };
     }
 
     return { success: true, error: null, directLink: redirectUrl };
   } catch (err: any) {
-    return { success: false, error: err?.message || 'Failed to dispatch magic link.' };
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const loginPath = role === 'admin' ? '/login/admin' : '/login/paper-setter';
+    const fallbackLink = `${origin}${loginPath}?type=invite&role=${role}&redirect=${encodeURIComponent(targetPortal)}`;
+    return { success: false, error: err?.message || 'Failed to dispatch magic link.', directLink: fallbackLink };
   }
 }
 
