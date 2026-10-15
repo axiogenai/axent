@@ -86,7 +86,6 @@ export const Navbar: React.FC<NavbarProps> = ({
     activeNavItems = [
       { path: '/mcq', label: 'Exam Hall', icon: ListChecks },
       { path: '/paper-setter', label: 'Paper Setter', icon: Layers },
-      { path: '/workspace', label: 'Code Lab', icon: Code2 },
       { path: '/admin', label: 'CCTV Proctoring', icon: ShieldAlert }
     ];
   } else if (isLoginRoute) {
@@ -105,11 +104,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     // Registered MCQ Examination — Clean view, no redundant pill in navbar
     activeNavItems = [];
   } else {
-    // Registered Coding Examination — Show ONLY Code & Test (and Report)
-    activeNavItems = [
-      { path: '/workspace', label: 'Code & Test', icon: Code2 },
-      { path: '/report', label: 'Report & Dossier', icon: FileText }
-    ];
+    activeNavItems = [];
   }
 
   const activeId = activeNavItems.find((item) => location.pathname.startsWith(item.path))?.path ?? location.pathname;
@@ -180,7 +175,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {isLoginRoute ? (
           <button
             className="btn btn-ghost btn-sm"
-            onClick={() => navigate(examMode === 'MCQ' ? '/mcq' : '/workspace')}
+            onClick={() => navigate('/mcq')}
             title="Candidate Examination Portal"
             style={{
               height: '28px',
@@ -203,7 +198,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {isAdminRoute ? (
           <button
             className="btn btn-ghost btn-sm"
-            onClick={() => navigate(examMode === 'MCQ' ? '/mcq' : '/workspace')}
+            onClick={() => navigate('/mcq')}
             title="Open Candidate Examination View"
             style={{
               height: '28px',

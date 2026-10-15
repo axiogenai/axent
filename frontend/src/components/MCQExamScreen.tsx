@@ -23,7 +23,8 @@ import {
   isCurrentlyFullscreen,
   requestExamFullscreen,
   exitExamFullscreen,
-  formatSynchronizedTime
+  formatSynchronizedTime,
+  triggerViewportReflow
 } from '../services/timeSyncService';
 import katex from 'katex';
 
@@ -509,8 +510,12 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
       localStorage.setItem('codedna_student_profile', JSON.stringify(student));
     } catch {}
 
-    void requestExamFullscreen();
     onStart(student);
+    setTimeout(() => {
+      void requestExamFullscreen().then(() => {
+        triggerViewportReflow();
+      });
+    }, 60);
   };
 
   const handleApplyToken = () => {
@@ -571,8 +576,12 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
       }
     }
 
-    void requestExamFullscreen();
     onStart(student);
+    setTimeout(() => {
+      void requestExamFullscreen().then(() => {
+        triggerViewportReflow();
+      });
+    }, 60);
   };
 
   return (
@@ -2051,16 +2060,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       localStorage.removeItem(`codedna_lock_lab_${student.labId || 'LAB-01'}`);
     }
 
-    // 2. Hardware liberation: release pointer lock, exit fullscreen, terminate screen share
-    try {
-      if (document.exitPointerLock) document.exitPointerLock();
-    } catch {}
-    try {
-      await exitExamFullscreen();
-    } catch {}
-    stopScreenProctoring();
-
-    // 3. Conclude & grade examination authoritatively
+    // 2. Conclude & grade examination authoritatively
     setSubmitted(true);
     const result = submitAttempt(currentAttemptId, answers, 'SUBMITTED') || gradeAttempt(attempt);
     setGradeResult(result);
@@ -2078,6 +2078,17 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     try {
       localStorage.removeItem(`codedna_mcq_current_idx_${currentAttemptId}`);
     } catch {}
+
+    // 3. Hardware liberation: release pointer lock, exit fullscreen, terminate screen share
+    stopScreenProctoring();
+    setTimeout(() => {
+      try {
+        if (document.exitPointerLock) document.exitPointerLock();
+      } catch {}
+      void exitExamFullscreen().then(() => {
+        triggerViewportReflow();
+      });
+    }, 60);
 
     // 4. Update cloud & proctor monitoring ledger
     const activeConfig = exam || allExamsList.find((e) => e.id === attempt.examId);
@@ -2622,12 +2633,14 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     setSubmitted(true);
     setShowSubmitConfirm(false);
     stopScreenProctoring();
-    try {
-      if (document.exitPointerLock) document.exitPointerLock();
-    } catch {}
-    try {
-      await exitExamFullscreen();
-    } catch {}
+    setTimeout(() => {
+      try {
+        if (document.exitPointerLock) document.exitPointerLock();
+      } catch {}
+      void exitExamFullscreen().then(() => {
+        triggerViewportReflow();
+      });
+    }, 60);
 
     const result = submitAttempt(attempt.id, answers, 'SUBMITTED');
     if (result) {
@@ -2932,36 +2945,49 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
   const effectiveGradeResult = gradeResult || (isConcludedOrSubmitted && attempt ? gradeAttempt(attempt) : null);
   const resolvedExam = exam || (attempt ? allExamsList.find((e) => e.id === attempt.examId) : null);
 
-  if (isConcludedOrSubmitted && effectiveGradeResult && resolvedExam) {
-    const isHoldResults =
-      attempt.status !== 'TIMED_OUT' && (
-        resolvedExam.resultDeclarationMode === 'WHATSAPP_GROUP' ||
-        (typeof resolvedExam.instructions === 'string' && (
-          resolvedExam.instructions.includes('WHATSAPP_GROUP') ||
-          resolvedExam.instructions.toLowerCase().includes('whatsapp') ||
-          resolvedExam.instructions.toLowerCase().includes('manual')
-        ))
-      );
+  if (isConcludedOrSubmitted) {
+    if (effectiveGradeResult && resolvedExam && attempt) {
+      const isHoldResults =
+        attempt.status !== 'TIMED_OUT' && (
+          resolvedExam.resultDeclarationMode === 'WHATSAPP_GROUP' ||
+          (typeof resolvedExam.instructions === 'string' && (
+            resolvedExam.instructions.includes('WHATSAPP_GROUP') ||
+            resolvedExam.instructions.toLowerCase().includes('whatsapp') ||
+            resolvedExam.instructions.toLowerCase().includes('manual')
+          ))
+        );
 
-    if (isHoldResults) {
+      if (isHoldResults) {
+        return (
+          <WhatsAppHoldResultsView
+            attempt={attempt}
+            exam={resolvedExam}
+            onExit={handleExitToCatalog}
+          />
+        );
+      }
+
       return (
-        <WhatsAppHoldResultsView
+        <ResultsView
           attempt={attempt}
           exam={resolvedExam}
+          grade={effectiveGradeResult}
+          showExplanations={resolvedExam.showExplanationsAfterSubmit}
+          onRestart={resolvedExam.maxAttempts > 1 ? () => { setAttempt(null); setGradeResult(null); setSubmitted(false); } : undefined}
           onExit={handleExitToCatalog}
         />
       );
     }
 
     return (
-      <ResultsView
-        attempt={attempt}
-        exam={resolvedExam}
-        grade={effectiveGradeResult}
-        showExplanations={resolvedExam.showExplanationsAfterSubmit}
-        onRestart={resolvedExam.maxAttempts > 1 ? () => { setAttempt(null); setGradeResult(null); setSubmitted(false); } : undefined}
-        onExit={handleExitToCatalog}
-      />
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)', padding: '24px' }}>
+        <div style={{ maxWidth: '440px', width: '100%', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '32px 24px', textAlign: 'center' }}>
+          <CheckCircle2 size={40} style={{ color: 'var(--success)', margin: '0 auto 12px' }} />
+          <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px' }}>Examination Concluded & Submitted</h2>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 20px', lineHeight: 1.5 }}>Your responses have been securely recorded. Workstation lock has been liberated.</p>
+          <button className="btn btn-primary btn-sm" onClick={handleExitToCatalog}>Return to Exam Portal</button>
+        </div>
+      </div>
     );
   }
 

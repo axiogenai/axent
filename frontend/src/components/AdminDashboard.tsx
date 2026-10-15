@@ -1115,8 +1115,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     )}
                   </div>
 
-                  {/* CCTV Screen Stream: Live Captured Screen OR Live Code Mirror */}
-                  {station.screenImageData ? (
+                  {/* CCTV Screen Stream: If Submitted, show concluded status. Otherwise Live Captured Screen OR Live Answering / Code Mirror */}
+                  {isSubmitted ? (
+                    <div
+                      style={{
+                        height: '145px',
+                        background: '#09090b',
+                        padding: '12px 14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        textAlign: 'center',
+                        gap: '8px',
+                        borderBottom: '1px solid var(--border)'
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '50%',
+                          background: 'rgba(34, 197, 94, 0.12)',
+                          border: '1px solid rgba(34, 197, 94, 0.3)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'var(--success)'
+                        }}
+                      >
+                        <CheckCircle2 size={16} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          Examination Concluded
+                        </div>
+                        <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          Workstation Disengaged &bull; Score: <strong style={{ color: 'var(--text-primary)' }}>{station.marks?.totalMarks ?? 0}/{station.marks?.maxMarks ?? 50}</strong>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setSelectedStationId(station.id)}
+                          style={{ height: '24px', fontSize: '10.5px', padding: '0 8px' }}
+                        >
+                          Inspect Audit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => handleRemoveSingleStation(station.id)}
+                          style={{ height: '24px', fontSize: '10.5px', padding: '0 8px', color: 'var(--text-muted)' }}
+                          title="Dismiss from CCTV grid"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    </div>
+                  ) : station.screenImageData ? (
                     <div
                       style={{
                         height: '145px',

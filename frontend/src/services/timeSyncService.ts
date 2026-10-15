@@ -244,12 +244,42 @@ export function isCurrentlyFullscreen(): boolean {
 }
 
 /**
+ * Dispatches multiple staggered layout recalculations and forces a synchronous reflow
+ * to guarantee that Chromium on Windows DWM repaints the DirectComposition swapchain immediately.
+ */
+export function triggerViewportReflow(): void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  try {
+    void document.body?.offsetHeight;
+    window.dispatchEvent(new Event('resize'));
+  } catch {}
+  [30, 80, 180, 320].forEach((delay) => {
+    setTimeout(() => {
+      try {
+        void document.body?.offsetHeight;
+        window.dispatchEvent(new Event('resize'));
+      } catch {}
+    }, delay);
+  });
+}
+
+// Automatically catch native fullscreen events
+if (typeof document !== 'undefined') {
+  ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach((evt) => {
+    document.addEventListener(evt, triggerViewportReflow);
+  });
+}
+
+/**
  * Request cross-browser native fullscreen mode on the root document.
  * Must be triggered directly inside a user interaction (like button click) to satisfy browser security.
  */
 export async function requestExamFullscreen(): Promise<boolean> {
   if (typeof document === 'undefined') return false;
-  if (isCurrentlyFullscreen()) return true;
+  if (isCurrentlyFullscreen()) {
+    triggerViewportReflow();
+    return true;
+  }
 
   try {
     const docEl = (document.documentElement || document.body) as any;
@@ -263,16 +293,11 @@ export async function requestExamFullscreen(): Promise<boolean> {
       await docEl.msRequestFullscreen();
     }
 
-    // Safe, non-destructive viewport layout recalculation without body transform mutation
-    if (typeof window !== 'undefined') {
-      window.requestAnimationFrame(() => {
-        window.dispatchEvent(new Event('resize'));
-      });
-    }
-
+    triggerViewportReflow();
     return true;
   } catch (err) {
     console.warn('[FullScreen] Fullscreen request was denied or canceled:', err);
+    triggerViewportReflow();
     return false;
   }
 }
@@ -282,7 +307,10 @@ export async function requestExamFullscreen(): Promise<boolean> {
  */
 export async function exitExamFullscreen(): Promise<boolean> {
   if (typeof document === 'undefined') return false;
-  if (!isCurrentlyFullscreen()) return true;
+  if (!isCurrentlyFullscreen()) {
+    triggerViewportReflow();
+    return true;
+  }
 
   try {
     const doc = document as any;
@@ -296,16 +324,11 @@ export async function exitExamFullscreen(): Promise<boolean> {
       await doc.msExitFullscreen();
     }
 
-    // Safe layout recalculation
-    if (typeof window !== 'undefined') {
-      window.requestAnimationFrame(() => {
-        window.dispatchEvent(new Event('resize'));
-      });
-    }
-
+    triggerViewportReflow();
     return true;
   } catch (err) {
     console.warn('[FullScreen] Exit fullscreen failed:', err);
+    triggerViewportReflow();
     return false;
   }
 }
