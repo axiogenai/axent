@@ -136,9 +136,9 @@ export function Footer16({
       src="/axent-logo.png"
       alt="Axent"
       style={{
-        height: '42px',
+        height: '24px',
         width: 'auto',
-        maxWidth: '200px',
+        maxWidth: '160px',
         display: 'block',
         objectFit: 'contain'
       }}

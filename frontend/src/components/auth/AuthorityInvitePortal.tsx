@@ -273,44 +273,6 @@ export const AuthorityInvitePortal: React.FC = () => {
         {/* ── 1. LOCKED SECURITY GATE (Authentication Required) ── */}
         {!isAuthenticated ? (
           <div style={{ padding: '24px 30px' }}>
-            {/* Quick helper banner */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: '18px',
-                padding: '8px 12px',
-                borderRadius: 'var(--radius-xs)',
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border)',
-                fontSize: '11px',
-                color: 'var(--text-muted)'
-              }}
-            >
-              <span>Configured ID: <strong style={{ color: 'var(--text-primary)' }}>Teamaxiogen</strong></span>
-              <button
-                type="button"
-                onClick={() => {
-                  setGateId('Teamaxiogen');
-                  setGatePass('Adi.patil#1');
-                  setGateError(null);
-                }}
-                style={{
-                  background: 'none',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-xs)',
-                  padding: '3px 8px',
-                  fontSize: '10.5px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  color: 'var(--text-secondary)'
-                }}
-              >
-                Fill Preset
-              </button>
-            </div>
-
             {gateError && (
               <div
                 style={{
@@ -357,7 +319,7 @@ export const AuthorityInvitePortal: React.FC = () => {
                     required
                     value={gateId}
                     onChange={(e) => setGateId(e.target.value)}
-                    placeholder="Enter ID (Teamaxiogen)"
+                    placeholder="Enter Authority ID"
                     style={{
                       width: '100%',
                       padding: '10px 12px 10px 36px',
@@ -590,68 +552,6 @@ export const AuthorityInvitePortal: React.FC = () => {
 
             {/* Form Container */}
             <form onSubmit={handleDispatch} style={{ padding: '10px 30px 24px' }}>
-              {/* Quick Demo Presets */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginBottom: '16px',
-                  padding: '8px 12px',
-                  borderRadius: 'var(--radius-xs)',
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border)',
-                  fontSize: '11px',
-                  color: 'var(--text-muted)'
-                }}
-              >
-                <span>Quick Demo Presets:</span>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRole('paper_setter');
-                      setEmail('setter.invite@axent.edu');
-                      setFullName('Dr. Arvind Narayanan');
-                      setDepartment('Computer Science');
-                    }}
-                    style={{
-                      background: 'none',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-xs)',
-                      padding: '2px 8px',
-                      fontSize: '10.5px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      color: 'var(--text-secondary)'
-                    }}
-                  >
-                    Setter Demo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRole('admin');
-                      setEmail('proctor.invite@axent.edu');
-                      setFullName('Prof. Meenakshi Sundaram');
-                      setDepartment('Office of the Controller of Exams');
-                    }}
-                    style={{
-                      background: 'none',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-xs)',
-                      padding: '2px 8px',
-                      fontSize: '10.5px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      color: 'var(--text-secondary)'
-                    }}
-                  >
-                    Admin Demo
-                  </button>
-                </div>
-              </div>
-
               {/* Feedback Alerts */}
               {errorMessage && (
                 <div

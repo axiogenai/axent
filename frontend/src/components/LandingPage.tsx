@@ -26,9 +26,9 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
             src="/axent-logo.png"
             alt="Axent"
             style={{
-              height: '52px',
+              height: '22px',
               width: 'auto',
-              maxWidth: '240px',
+              maxWidth: '180px',
               display: 'block',
               objectFit: 'contain'
             }}

@@ -60,7 +60,7 @@ export default function Hero1({
         <img
             src="/axent-logo.png"
             alt="Axent"
-            style={{ height: '52px', width: 'auto', display: 'block', objectFit: 'contain' }}
+            style={{ height: '22px', width: 'auto', display: 'block', objectFit: 'contain' }}
         />
     ),
     navLinks = DEFAULT_NAV,

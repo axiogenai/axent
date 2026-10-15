@@ -67,6 +67,12 @@ function uuid(): string {
   return crypto.randomUUID();
 }
 
+const LEGACY_PURGED_EXAM_IDS = new Set([
+  'exam_ai_1792002620989_o59vr',
+  'exam_ai_1791992440598_l90vb',
+  'exam_ai_1791973836300_7pzmy'
+]);
+
 // ── LEGACY MOCK DATA PURGE (Zero Hardcoded / Seed Data Enforcement) ───────────
 function purgeLegacySeedData(): void {
   try {
@@ -87,7 +93,8 @@ function purgeLegacySeedData(): void {
         const cleaned = parsed.filter((e: any) => 
           !String(e.id || '').startsWith('exam-aptitude-') && 
           !String(e.id || '').startsWith('exam-ise-') &&
-          !String(e.id || '').startsWith('seed-')
+          !String(e.id || '').startsWith('seed-') &&
+          !LEGACY_PURGED_EXAM_IDS.has(String(e.id || ''))
         );
         if (cleaned.length !== parsed.length) {
           localStorage.setItem(MCQ_STORAGE_KEYS.EXAMS, JSON.stringify(cleaned));

@@ -8,7 +8,7 @@ import {
 import { MCQAttempt, MCQExamConfig, MCQGradeResult, MCQ_STORAGE_KEYS } from '../types/mcq';
 import {
   getAllExams, getActiveAttempt, getAllAttempts, getAttemptsForExam, startAttempt, saveAnswer,
-  submitAttempt, recordInfraction, updateUnfocusedTime, onMcqDataChanged, persistAttemptToCloud
+  submitAttempt, recordInfraction, updateUnfocusedTime, onMcqDataChanged, onExamsChanged, syncFromSupabase, persistAttemptToCloud
 } from '../services/mcqService';
 import { playSound } from '../utils/sounds';
 import { parseExamToken } from '../utils/tokenParser';
@@ -2863,7 +2863,24 @@ const inputStyle: React.CSSProperties = {
 export const MCQExamSelector: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryExamId = searchParams.get('examId');
-  const exams = getAllExams().filter((e) => e.status === 'PUBLISHED');
+  const [exams, setExams] = useState<MCQExamConfig[]>(() =>
+    getAllExams().filter((e) => e.status === 'PUBLISHED')
+  );
+
+  useEffect(() => {
+    const refresh = () => {
+      setExams(getAllExams().filter((e) => e.status === 'PUBLISHED'));
+    };
+    const unsubData = onMcqDataChanged(refresh);
+    const unsubExams = onExamsChanged(refresh);
+    window.addEventListener('storage', refresh);
+    void syncFromSupabase().then(refresh);
+    return () => {
+      unsubData();
+      unsubExams();
+      window.removeEventListener('storage', refresh);
+    };
+  }, []);
 
   // If candidate has an active attempt in progress, ALWAYS restore that exam immediately!
   const activeAttempt = getActiveAttempt();
