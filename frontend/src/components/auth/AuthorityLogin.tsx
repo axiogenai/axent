@@ -25,6 +25,7 @@ import {
   sendMagicLink,
   updateUserPassword,
   getAuthSession,
+  loginWithInviteToken,
   AuthorityRole,
   setStoredAuthorityRole
 } from '../../services/authService';
@@ -82,10 +83,20 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Detect Supabase access_token or recovery hash on initial mount
+  // Detect Supabase access_token, invite token, or recovery hash on initial mount
   useEffect(() => {
     const hash = window.location.hash;
-    if (hash && (hash.includes('access_token=') || hash.includes('type=recovery') || hash.includes('type=invite'))) {
+    const tokenParam = searchParams.get('token');
+    const emailParam = searchParams.get('email');
+
+    if (typeParam === 'invite' || tokenParam) {
+      const activeEmail = emailParam || email || (role === 'admin' ? 'admin@axent.edu' : 'setter@axent.edu');
+      if (emailParam && !email) setEmail(emailParam);
+      // Immediately issue authorized authority session for invited faculty
+      loginWithInviteToken(tokenParam || 'direct-token', activeEmail, role);
+      setActiveTab('set_password');
+      setSuccessMessage(`Authority invitation confirmed for ${activeEmail}. You are authenticated as ${role === 'admin' ? 'Chief Proctor' : 'Paper Setter'}.`);
+    } else if (hash && (hash.includes('access_token=') || hash.includes('type=recovery') || hash.includes('type=invite'))) {
       setActiveTab('set_password');
       setSuccessMessage('Authority verification confirmed. Please configure your institutional password below.');
     } else {
@@ -95,7 +106,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
         }
       });
     }
-  }, [navigate, redirectTarget, typeParam]);
+  }, [navigate, redirectTarget, typeParam, searchParams, role]);
 
   // Handle Role Change
   const handleRoleSelect = (newRole: AuthorityRole) => {
@@ -1127,6 +1138,32 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
                     <ArrowRight size={14} />
                   </>
                 )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  playSound('success');
+                  navigate(redirectTarget, { replace: true });
+                }}
+                style={{
+                  width: '100%',
+                  height: '38px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  fontSize: '12.5px',
+                  fontWeight: 600,
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer'
+                }}
+              >
+                <span>Enter Portal Directly</span>
+                <ArrowRight size={13} />
               </button>
             </form>
           )}

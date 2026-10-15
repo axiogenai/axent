@@ -9,7 +9,7 @@ import {
 import { MCQAttempt, MCQExamConfig, MCQGradeResult, MCQ_STORAGE_KEYS } from '../types/mcq';
 import {
   getAllExams, getActiveAttempt, getAllAttempts, getAttemptsForExam, startAttempt, saveAnswer,
-  submitAttempt, recordInfraction, updateUnfocusedTime, onMcqDataChanged, onExamsChanged, syncFromSupabase, persistAttemptToCloud
+  submitAttempt, gradeAttempt, getRecentSessionAttempt, recordInfraction, updateUnfocusedTime, onMcqDataChanged, onExamsChanged, syncFromSupabase, persistAttemptToCloud
 } from '../services/mcqService';
 import { playSound } from '../utils/sounds';
 import { parseExamToken } from '../utils/tokenParser';
@@ -25,11 +25,14 @@ import {
   exitExamFullscreen,
   formatSynchronizedTime
 } from '../services/timeSyncService';
+import katex from 'katex';
 
 // ── Timer hook ────────────────────────────────────────────────────────────────
 function useCountdown(deadline: number, onExpire: () => void) {
   const [remaining, setRemaining] = useState(() => Math.max(0, deadline - getSynchronizedNow()));
   const expiredRef = useRef(false);
+  const onExpireRef = useRef(onExpire);
+  onExpireRef.current = onExpire;
 
   useEffect(() => {
     expiredRef.current = false;
@@ -39,7 +42,7 @@ function useCountdown(deadline: number, onExpire: () => void) {
       setRemaining(r);
       if (r === 0 && !expiredRef.current) {
         expiredRef.current = true;
-        onExpire();
+        onExpireRef.current();
       }
     };
     tick();
@@ -50,7 +53,7 @@ function useCountdown(deadline: number, onExpire: () => void) {
       clearInterval(id);
       window.removeEventListener('codedna_timesync', handleTimeSync);
     };
-  }, [deadline, onExpire]);
+  }, [deadline]);
 
   const minutes = Math.floor(remaining / 60_000);
   const seconds = Math.floor((remaining % 60_000) / 1000);
@@ -235,6 +238,140 @@ const FormattedQuestionContent: React.FC<FormattedQuestionContentProps> = ({ con
   );
 };
 
+function renderKatexHtml(latex: string, displayMode: boolean = false): string | null {
+  try {
+    return katex.renderToString(latex.trim(), {
+      displayMode,
+      throwOnError: false
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parses inline text to detect and render:
+ * 1. Plain fractions (e.g. 1/52, 13/204, 3/4, -1/2)
+ * 2. LaTeX display math ($$...$$, \[...\])
+ * 3. Inline LaTeX math ($...$, \(...\))
+ * 4. Raw LaTeX commands (\frac, \sqrt, \times, etc.)
+ * 5. Algebraic exponents (e.g. x^2, 2^10)
+ */
+function renderMathAndFractions(text: string, prefix: string): React.ReactNode[] {
+  if (!text) return [];
+  const trimmed = text.trim();
+
+  // 1. Direct standalone fraction: "1/52", "-3/4", "13 / 204"
+  const simpleFractionMatch = /^([+-]?\d+)\s*\/\s*(\d+)$/.exec(trimmed);
+  if (simpleFractionMatch) {
+    const html = renderKatexHtml(`\\frac{${simpleFractionMatch[1]}}{${simpleFractionMatch[2]}}`, false);
+    if (html) {
+      return [
+        <span
+          key={`${prefix}-single-frac`}
+          className="codedna-math-fraction"
+          style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }}
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      ];
+    }
+  }
+
+  // 2. Starts with a raw LaTeX command: e.g. "\frac{1}{52}" or "\sqrt{x}"
+  if (/^\\[a-zA-Z]/.test(trimmed)) {
+    const html = renderKatexHtml(trimmed, false);
+    if (html) {
+      return [
+        <span
+          key={`${prefix}-raw-latex`}
+          className="codedna-math-latex"
+          style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }}
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      ];
+    }
+  }
+
+  // 3. Tokenize by LaTeX delimiters ($$...$$, \[...\], $...$, \(...\)),
+  // raw \frac/\sqrt commands, exponents (x^2), or embedded fractions (1/52)
+  const tokenRegex = /(\$\$(?:[^\$]+)\$\$|\\\[(?:[\s\S]+?)\\\]|\$(?:[^\$]+)\$|\\\((?:[\s\S]+?)\\\)|\\frac\{[^{}]*\}\{[^{}]*\}|\\sqrt\{[^{}]*\}|(?<![\w\\])[a-zA-Z0-9]+\^[a-zA-Z0-9]+|(?<![\d\/])[+-]?\d+\s*\/\s*\d+(?![\d\/]))/g;
+
+  const nodes: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let tokenIdx = 0;
+
+  while ((match = tokenRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(text.substring(lastIndex, match.index));
+    }
+    const token = match[0];
+    const key = `${prefix}-math-${tokenIdx++}`;
+
+    if (token.startsWith('$$') && token.endsWith('$$')) {
+      const html = renderKatexHtml(token.slice(2, -2), true);
+      nodes.push(
+        html ? (
+          <span key={key} className="codedna-math-display" style={{ display: 'block', margin: '6px 0' }} dangerouslySetInnerHTML={{ __html: html }} />
+        ) : token
+      );
+    } else if (token.startsWith('\\[') && token.endsWith('\\]')) {
+      const html = renderKatexHtml(token.slice(2, -2), true);
+      nodes.push(
+        html ? (
+          <span key={key} className="codedna-math-display" style={{ display: 'block', margin: '6px 0' }} dangerouslySetInnerHTML={{ __html: html }} />
+        ) : token
+      );
+    } else if (token.startsWith('$') && token.endsWith('$')) {
+      const html = renderKatexHtml(token.slice(1, -1), false);
+      nodes.push(
+        html ? (
+          <span key={key} className="codedna-math-inline" style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }} dangerouslySetInnerHTML={{ __html: html }} />
+        ) : token
+      );
+    } else if (token.startsWith('\\(') && token.endsWith('\\)')) {
+      const html = renderKatexHtml(token.slice(2, -2), false);
+      nodes.push(
+        html ? (
+          <span key={key} className="codedna-math-inline" style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }} dangerouslySetInnerHTML={{ __html: html }} />
+        ) : token
+      );
+    } else if (token.startsWith('\\frac') || token.startsWith('\\sqrt')) {
+      const html = renderKatexHtml(token, false);
+      nodes.push(
+        html ? (
+          <span key={key} className="codedna-math-inline" style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }} dangerouslySetInnerHTML={{ __html: html }} />
+        ) : token
+      );
+    } else if (/^[+-]?\d+\s*\/\s*\d+$/.test(token.trim())) {
+      const [n, d] = token.split('/').map((s) => s.trim());
+      const html = renderKatexHtml(`\\frac{${n}}{${d}}`, false);
+      nodes.push(
+        html ? (
+          <span key={key} className="codedna-math-fraction" style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }} dangerouslySetInnerHTML={{ __html: html }} />
+        ) : token
+      );
+    } else if (/^[a-zA-Z0-9]+\^[a-zA-Z0-9]+$/.test(token.trim())) {
+      const html = renderKatexHtml(token.trim(), false);
+      nodes.push(
+        html ? (
+          <span key={key} className="codedna-math-inline" style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }} dangerouslySetInnerHTML={{ __html: html }} />
+        ) : token
+      );
+    } else {
+      nodes.push(token);
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.substring(lastIndex));
+  }
+
+  return nodes;
+}
+
 function renderInlineSpans(text: string, prefix: string): React.ReactNode {
   const inlineRegex = /`([^`]+)`/g;
   const spans: React.ReactNode[] = [];
@@ -243,11 +380,12 @@ function renderInlineSpans(text: string, prefix: string): React.ReactNode {
 
   while ((m = inlineRegex.exec(text)) !== null) {
     if (m.index > last) {
-      spans.push(text.substring(last, m.index));
+      const textChunk = text.substring(last, m.index);
+      spans.push(...renderMathAndFractions(textChunk, `${prefix}-txt-${last}`));
     }
     spans.push(
       <code
-        key={`${prefix}-${m.index}`}
+        key={`${prefix}-code-${m.index}`}
         style={{
           fontFamily: "var(--font-mono, 'JetBrains Mono', Consolas, monospace)",
           fontSize: '0.88em',
@@ -266,7 +404,8 @@ function renderInlineSpans(text: string, prefix: string): React.ReactNode {
   }
 
   if (last < text.length) {
-    spans.push(text.substring(last));
+    const trailingChunk = text.substring(last);
+    spans.push(...renderMathAndFractions(trailingChunk, `${prefix}-txt-${last}`));
   }
 
   return <span style={{ whiteSpace: 'pre-wrap' }}>{spans}</span>;
@@ -1066,13 +1205,15 @@ interface ResultsViewProps {
 
 const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExplanations, onRestart, onExit }) => {
   // STRICT INSTITUTIONAL GUARD:
-  // If exam is configured for WhatsApp Group Release, NEVER leak scores or answer keys!
+  // If exam is configured for WhatsApp Group Release, hold results unless exam timed out or instant release is allowed
   const isWhatsAppRelease =
-    exam.resultDeclarationMode === 'WHATSAPP_GROUP' ||
-    (typeof exam.instructions === 'string' && (
-      exam.instructions.includes('WHATSAPP_GROUP') ||
-      exam.instructions.toLowerCase().includes('whatsapp')
-    ));
+    attempt.status !== 'TIMED_OUT' && (
+      exam.resultDeclarationMode === 'WHATSAPP_GROUP' ||
+      (typeof exam.instructions === 'string' && (
+        exam.instructions.includes('WHATSAPP_GROUP') ||
+        exam.instructions.toLowerCase().includes('whatsapp')
+      ))
+    );
 
   if (isWhatsAppRelease) {
     return (
@@ -1100,6 +1241,64 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-main)', padding: '28px 32px' }}>
       <div style={{ maxWidth: '1440px', margin: '0 auto', width: '100%' }}>
+        {/* Time Expired Auto-Submit Banner */}
+        {attempt.status === 'TIMED_OUT' && (
+          <div
+            style={{
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+              padding: '14px 20px',
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '14px',
+              boxShadow: 'var(--shadow-sm)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <Clock size={18} color="var(--warning)" />
+              </div>
+              <div>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Examination Concluded: Time Expired
+                </span>
+                <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                  Your allotted examination duration has elapsed. All answered questions were securely finalized, submitted, and graded automatically.
+                </p>
+              </div>
+            </div>
+            <span
+              style={{
+                fontSize: '10.5px',
+                fontWeight: 700,
+                padding: '3px 10px',
+                borderRadius: 'var(--radius-pill)',
+                background: 'var(--warning-bg)',
+                border: '1px solid var(--warning-border)',
+                color: 'var(--warning)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em'
+              }}
+            >
+              Auto-Submitted
+            </span>
+          </div>
+        )}
+
         {/* Top Official Ledger Header */}
         <div
           style={{
@@ -1838,25 +2037,45 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     // Restore active attempt if exists
     const active = getActiveAttempt();
     if (active && active.examId === activeExamId && active.status === 'IN_PROGRESS') {
-      setAttempt(active);
-      setAnswers(active.answers);
-      setCurrentIdx(0);
-      if (active.tabSwitchCount >= 3) {
-        setIsLockedByProctor(true);
-        setProctorWarning(`ACADEMIC FREEZE: ${active.tabSwitchCount}/3 Infractions Exceeded! Workstation frozen.`);
+      if (getSynchronizedNow() >= active.deadline) {
+        // Automatically finalize and display results if deadline elapsed!
+        const result = submitAttempt(active.id, active.answers, 'TIMED_OUT') || gradeAttempt(active);
+        const finished = { ...active, status: 'TIMED_OUT' as const, score: result.score, correctCount: result.correctCount, wrongCount: result.wrongCount };
+        setAttempt(finished);
+        setAnswers(active.answers);
+        setGradeResult(result);
+        setSubmitted(true);
+      } else {
+        setAttempt(active);
+        setAnswers(active.answers);
+        setCurrentIdx(0);
+        if (active.tabSwitchCount >= 3) {
+          setIsLockedByProctor(true);
+          setProctorWarning(`ACADEMIC FREEZE: ${active.tabSwitchCount}/3 Infractions Exceeded! Workstation frozen.`);
+        }
+        if (active.studentName) {
+          const rollDigits = (active.studentRoll || '').replace(/[^0-9]/g, '');
+          const derivedStation = rollDigits.length > 0 ? `Station #${String(parseInt(rollDigits.slice(-2), 10) || 1).padStart(2, '0')}` : 'Station #01';
+          setStudent((prev) => ({
+            ...prev,
+            name: active.studentName,
+            rollNumber: active.studentRoll,
+            department: active.studentDept,
+            semester: active.studentSem,
+            division: active.studentDiv || 'A',
+            stationNumber: prev.stationNumber && prev.stationNumber !== 'Station #01' ? prev.stationNumber : derivedStation
+          }));
+        }
       }
-      if (active.studentName) {
-        const rollDigits = (active.studentRoll || '').replace(/[^0-9]/g, '');
-        const derivedStation = rollDigits.length > 0 ? `Station #${String(parseInt(rollDigits.slice(-2), 10) || 1).padStart(2, '0')}` : 'Station #01';
-        setStudent((prev) => ({
-          ...prev,
-          name: active.studentName,
-          rollNumber: active.studentRoll,
-          department: active.studentDept,
-          semester: active.studentSem,
-          division: active.studentDiv || 'A',
-          stationNumber: prev.stationNumber && prev.stationNumber !== 'Station #01' ? prev.stationNumber : derivedStation
-        }));
+    } else {
+      // Check for finished or timed-out attempt for this exam session to display scorecard immediately
+      const recent = getRecentSessionAttempt(activeExamId);
+      if (recent && (recent.status === 'TIMED_OUT' || recent.status === 'SUBMITTED')) {
+        const grade = gradeAttempt(recent);
+        setAttempt(recent);
+        setAnswers(recent.answers || {});
+        setGradeResult(grade);
+        setSubmitted(true);
       }
     }
   }, [activeExamId]);
@@ -2151,23 +2370,34 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
   const handleTimerExpire = useCallback(async () => {
     if (!attempt || submitted || !exam) return;
     setSubmitted(true);
-    const result = submitAttempt(attempt.id, answers, 'TIMED_OUT');
-    if (result) {
-      setGradeResult(result);
-      playSound('warning');
-      const finished = { ...attempt, status: 'TIMED_OUT' as const, score: result.score, correctCount: result.correctCount, wrongCount: result.wrongCount };
-      setAttempt(finished);
-      try {
-        localStorage.removeItem(`codedna_mcq_current_idx_${attempt.id}`);
-      } catch {}
-      syncMcqLiveStation(finished, exam, student, currentIdx, true);
-      if (!(await persistAttemptToCloud(attempt.id))) {
-        showAlert('Cloud Sync Notice', 'Time expired and the result was saved locally, but cloud sync failed. Keep this device open and notify the invigilator.', 'warning');
+    playSound('warning');
+
+    // Authoritative submission with automatic grade fallback
+    const result = submitAttempt(attempt.id, answers, 'TIMED_OUT') || gradeAttempt(attempt);
+    setGradeResult(result);
+
+    const finished = {
+      ...attempt,
+      status: 'TIMED_OUT' as const,
+      score: result.score,
+      correctCount: result.correctCount,
+      wrongCount: result.wrongCount
+    };
+    setAttempt(finished);
+
+    try {
+      localStorage.removeItem(`codedna_mcq_current_idx_${attempt.id}`);
+    } catch {}
+
+    // Automatically exit fullscreen so student can see scorecard comfortably
+    try {
+      if (document.fullscreenElement) {
+        void document.exitFullscreen();
       }
-    } else {
-      setSubmitted(false);
-      showAlert('Finalization Failed', 'The attempt could not be finalized. Contact the invigilator immediately and keep this page open.', 'danger');
-    }
+    } catch {}
+
+    syncMcqLiveStation(finished, exam, student, currentIdx, true);
+    void persistAttemptToCloud(attempt.id);
   }, [attempt, answers, submitted, exam, student, currentIdx]);
 
   const handleSubmit = async () => {
@@ -2431,12 +2661,14 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
   // ── Results screen ──
   if (submitted && gradeResult) {
     const isHoldResults =
-      exam.resultDeclarationMode === 'WHATSAPP_GROUP' ||
-      (typeof exam.instructions === 'string' && (
-        exam.instructions.includes('WHATSAPP_GROUP') ||
-        exam.instructions.toLowerCase().includes('whatsapp') ||
-        exam.instructions.toLowerCase().includes('manual')
-      ));
+      attempt.status !== 'TIMED_OUT' && (
+        exam.resultDeclarationMode === 'WHATSAPP_GROUP' ||
+        (typeof exam.instructions === 'string' && (
+          exam.instructions.includes('WHATSAPP_GROUP') ||
+          exam.instructions.toLowerCase().includes('whatsapp') ||
+          exam.instructions.toLowerCase().includes('manual')
+        ))
+      );
 
     if (isHoldResults) {
       return (

@@ -389,6 +389,33 @@ export function getActiveAttempt(): MCQAttempt | null {
   }
 }
 
+/**
+ * Retrieve the most recent completed or active attempt for the current browser session.
+ * Used to immediately restore and display results even if the exam timed out or was submitted.
+ */
+export function getRecentSessionAttempt(examId?: string): MCQAttempt | null {
+  try {
+    const finishedId = sessionStorage.getItem('codedna_mcq_last_finished_attempt');
+    if (finishedId) {
+      const a = getAttemptById(finishedId);
+      if (a && (!examId || a.examId === examId)) return a;
+    }
+    const sessionAttemptId = sessionStorage.getItem('codedna_mcq_session_attempt');
+    if (sessionAttemptId) {
+      const a = getAttemptById(sessionAttemptId);
+      if (a && (!examId || a.examId === examId)) return a;
+    }
+    const all = getAllAttempts();
+    if (examId) {
+      const examAttempts = all.filter((a) => a.examId === examId);
+      if (examAttempts.length > 0) {
+        return examAttempts[examAttempts.length - 1];
+      }
+    }
+  } catch {}
+  return null;
+}
+
 function saveAttempt(attempt: MCQAttempt): void {
   const all = getAllAttempts();
   const idx = all.findIndex((a) => a.id === attempt.id);
@@ -407,6 +434,7 @@ function saveAttempt(attempt: MCQAttempt): void {
       localStorage.removeItem('codedna_mcq_active_attempt_backup');
       localStorage.removeItem(MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT);
       sessionStorage.removeItem('codedna_mcq_session_attempt');
+      sessionStorage.setItem('codedna_mcq_last_finished_attempt', attempt.id);
     }
   } catch {}
   saveAttemptToCloud(attempt);
@@ -713,8 +741,8 @@ export function submitAttempt(
 
   for (const [questionId, optionId] of Object.entries(finalAnswers || {})) {
     const assigned = assignedById.get(questionId);
-    if (!assigned) return null;
-    if (optionId && !assigned.snapshot.options.some((option) => option.id === optionId)) return null;
+    if (!assigned) continue;
+    if (optionId && !assigned.snapshot.options.some((option) => option.id === optionId)) continue;
   }
 
   // Merge the final UI payload with persisted answers so partial payloads cannot

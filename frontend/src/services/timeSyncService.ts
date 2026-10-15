@@ -78,60 +78,59 @@ export async function syncServerTime(): Promise<number> {
   isSyncing = true;
 
   try {
-    const targetUrl = `${SUPABASE_URL}/rest/v1/`;
-    const t0 = Date.now();
+    const endpointsToTry: { url: string; headers: Record<string, string> }[] = [];
+    if (typeof window !== 'undefined' && window.location.origin) {
+      endpointsToTry.push({ url: window.location.origin, headers: {} });
+    }
+    endpointsToTry.push({
+      url: `${SUPABASE_URL}/rest/v1/`,
+      headers: { apikey: SUPABASE_ANON_KEY }
+    });
 
-    let res: Response | null = null;
-    try {
-      res = await fetch(targetUrl, {
-        method: 'HEAD',
-        headers: { apikey: SUPABASE_ANON_KEY },
-        cache: 'no-store'
-      });
-    } catch {
-      // Fallback to origin server if external Supabase endpoint is unreachable
-      if (typeof window !== 'undefined' && window.location.origin) {
-        res = await fetch(window.location.origin, {
+    for (const ep of endpointsToTry) {
+      try {
+        const t0 = Date.now();
+        const res = await fetch(ep.url, {
           method: 'HEAD',
+          headers: ep.headers,
           cache: 'no-store'
         });
-      }
-    }
+        const t1 = Date.now();
 
-    const t1 = Date.now();
+        const dateHeader = res.headers ? res.headers.get('date') : null;
+        if (dateHeader) {
+          const serverTime = new Date(dateHeader).getTime();
+          if (!isNaN(serverTime) && serverTime > 0) {
+            const rtt = Math.max(0, t1 - t0);
+            // Midpoint compensation for latency
+            const estimatedServerNow = serverTime + Math.round(rtt / 2);
+            const computedOffset = estimatedServerNow - t1;
 
-    if (res && res.headers) {
-      const dateHeader = res.headers.get('date');
-      if (dateHeader) {
-        const serverTime = new Date(dateHeader).getTime();
-        if (!isNaN(serverTime) && serverTime > 0) {
-          const rtt = Math.max(0, t1 - t0);
-          // Midpoint compensation for latency
-          const estimatedServerNow = serverTime + Math.round(rtt / 2);
-          const computedOffset = estimatedServerNow - t1;
+            // Apply slight smoothing if we already had a sync
+            if (isSynced && Math.abs(computedOffset - cachedOffset) < 3000) {
+              cachedOffset = Math.round((cachedOffset * 3 + computedOffset) / 4);
+            } else {
+              cachedOffset = computedOffset;
+            }
 
-          // Apply slight smoothing if we already had a sync
-          if (isSynced && Math.abs(computedOffset - cachedOffset) < 3000) {
-            cachedOffset = Math.round((cachedOffset * 3 + computedOffset) / 4);
-          } else {
-            cachedOffset = computedOffset;
+            isSynced = true;
+            lastSyncTimestamp = t1;
+
+            try {
+              sessionStorage.setItem('codedna_server_time_offset', String(cachedOffset));
+            } catch {}
+
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('codedna_timesync', {
+                detail: { offset: cachedOffset, serverNow: getSynchronizedNow() }
+              }));
+            }
+
+            return cachedOffset;
           }
-
-          isSynced = true;
-          lastSyncTimestamp = t1;
-
-          try {
-            sessionStorage.setItem('codedna_server_time_offset', String(cachedOffset));
-          } catch {}
-
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('codedna_timesync', {
-              detail: { offset: cachedOffset, serverNow: getSynchronizedNow() }
-            }));
-          }
-
-          return cachedOffset;
         }
+      } catch {
+        // try next endpoint
       }
     }
   } catch (err) {
