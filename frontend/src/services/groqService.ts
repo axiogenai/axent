@@ -963,6 +963,7 @@ export interface GeneratedMCQPrompt {
   difficulty: 'EASY' | 'MEDIUM' | 'HARD';
   subject?: string;
   examCategory?: 'Aptitude' | 'ISE' | string;
+  syllabusText?: string;
   instructions?: string;
 }
 
@@ -1045,8 +1046,71 @@ Category: General Aptitude & Placement
 Subject: ${prompt.subject && prompt.subject !== 'Computer Science' ? prompt.subject : 'General Aptitude & Reasoning'}
 Topic: ${prompt.topic}
 Difficulty: ${prompt.difficulty}
-${prompt.instructions ? `Special Faculty Instructions: "${prompt.instructions}"` : ''}
-IMPORTANT: Zero programming, zero coding syntax. Output real mathematical, logical, or verbal aptitude questions only with proper punctuation, clean options, and LaTeX fractions!`;
+${prompt.instructions ? `Special Faculty Instructions: "${prompt.instructions}"` : ''}`;
+  } else if (prompt.examCategory === 'ISE' || prompt.syllabusText) {
+    const rawSyllabus = (prompt.syllabusText || prompt.topic || '').trim();
+    sysPrompt = `You are a distinguished University Chief Examiner and Senior Professor in ${prompt.subject || 'Engineering & Sciences'}.
+You are creating an official university In-Semester Examination (ISE) question paper based strictly upon the approved syllabus and unit curriculum.
+
+APPROVED COURSE SYLLABUS & UNITS:
+"""
+${rawSyllabus}
+"""
+
+CRITICAL NON-NEGOTIABLE ISE ACADEMIC RULES:
+1. STRICT SYLLABUS & UNIT CURRICULUM GROUNDING:
+   - Every question MUST evaluate authentic academic concepts, theoretical definitions, algorithmic principles, code tracing, output predictions, or design patterns directly mentioned in the syllabus text.
+   - Questions must be comprehensively distributed across all units/modules identified in the syllabus.
+   - ZERO non-academic aptitude puzzles, zero speed/distance/trains, zero blood relations, zero dice/calendar math, and zero generic verbal analogies.
+2. RIGOROUS UNIVERSITY ASSESSMENT STANDARDS:
+   - Formulate questions that test deep conceptual understanding, analytical thinking, edge cases, and practical application (Bloom's Taxonomy Level 2 to Level 5).
+3. STRICT NO REPEATED QUESTIONS:
+   - Every question must test a completely distinct concept, unit module, or scenario.
+4. STRICT NO REPEATED OPTIONS (UNIQUE OPTIONS RULE):
+   - In EVERY question, all 4 choices MUST be completely unique, plausible distractors, and mutually exclusive.
+5. STRICT PUNCTUATION & CAPITALIZATION:
+   - Every question prompt MUST start with an uppercase letter and MUST end with proper punctuation ('?' or '.').
+   - Options MUST NOT contain letter prefixes like "A)", "B.", "1.", "(C)", etc. Provide ONLY the pure choice text.
+6. MATHEMATICAL & CODE FORMULAS:
+   - Mathematical expressions, complexities, and powers must use LaTeX: e.g. '$\\mathcal{O}(n \\log n)$', '$x^2$', '$\\frac{1}{2}$'.
+   - Code snippets or keywords must be wrapped in backticks or code formatting (e.g. fork(), malloc(), std::vector).
+7. SINGLE FACTUALLY VERIFIED KEY:
+   - Exactly ONE option must have "isCorrect": true, and the other 3 options must have "isCorrect": false.
+   - The correct answer must be academically indisputable. Provide a rigorous step-by-step technical explanation.
+
+OUTPUT FORMAT:
+Respond with a valid JSON object matching this schema:
+{
+  "questions": [
+    {
+      "text": "Academic question prompt ending with proper punctuation?",
+      "options": [
+        {"text": "Option text without letter prefixes", "isCorrect": true},
+        {"text": "Option text without letter prefixes", "isCorrect": false},
+        {"text": "Option text without letter prefixes", "isCorrect": false},
+        {"text": "Option text without letter prefixes", "isCorrect": false}
+      ],
+      "subject": "${prompt.subject || 'Course'}",
+      "topic": "Unit / Concept Title from Syllabus",
+      "difficulty": "${prompt.difficulty}",
+      "marks": 1,
+      "negativeMarks": 0.25,
+      "explanation": "Thorough university-level technical explanation citing academic principles.",
+      "tags": ["${prompt.subject || 'Course'}", "ISE"]
+    }
+  ]
+}
+
+Return ONLY this valid JSON object. Do not wrap in markdown or backticks.`;
+
+    userMsg = `Generate ${count} university-level In-Semester Examination (ISE) MCQ questions for:
+Course Subject: ${prompt.subject || 'Engineering Course'}
+Difficulty Level: ${prompt.difficulty}
+${prompt.instructions ? `Special Faculty Focus: "${prompt.instructions}"\n` : ''}
+Syllabus / Unit Text:
+${rawSyllabus}
+
+Carefully analyze the units in the syllabus and generate authentic, high-quality ISE examination questions. Return valid JSON only.`;
   } else {
     sysPrompt = `You are a senior university examination board member and professor in ${prompt.subject || 'Computer Science & Engineering'}.
 Your task is to generate high-quality, conceptually rigorous Multiple Choice Questions (MCQ) for college exams.
@@ -1448,6 +1512,7 @@ export interface AIPaperGenerationRequest {
   title: string;
   subject: string;
   topic: string;
+  syllabusText?: string;
   sections?: AIPaperSectionSpec[];
   examCategory?: string;
   instructions?: string;
@@ -1497,7 +1562,7 @@ export interface AIPaperGenerationResult {
  */
 export async function crossValidateGeneratedQuestions(
   questions: (GeneratedMCQQuestion & { marks: number; negativeMarks: number })[],
-  context: { subject: string; topic: string; examCategory?: string },
+  context: { subject: string; topic: string; examCategory?: string; syllabusText?: string },
   onProgress?: (status: string) => void
 ): Promise<{
   validatedQuestions: (GeneratedMCQQuestion & { marks: number; negativeMarks: number })[];
@@ -1814,6 +1879,7 @@ export async function generateFullExamPaperWithAI(
           subject: req.subject,
           topic: req.topic,
           examCategory: req.examCategory,
+          syllabusText: req.syllabusText,
           instructions: req.instructions,
           difficulty,
           count: chunks[i]
@@ -1863,12 +1929,20 @@ export async function generateFullExamPaperWithAI(
         ? `\nSTRICT ANTI-DUPLICATION RULE: The following questions have ALREADY been generated. You MUST NOT repeat, paraphrase, or generate questions similar to these:\n- ${avoidSnippets.join('\n- ')}\nGenerate completely distinct, novel questions with different variables, numbers, scenarios, and themes.`
         : '';
 
+      const dominantDifficulty: 'EASY' | 'MEDIUM' | 'HARD' =
+        hardCount >= mediumCount && hardCount >= easyCount
+          ? 'HARD'
+          : easyCount >= mediumCount && easyCount >= hardCount
+          ? 'EASY'
+          : 'MEDIUM';
+
       const extraBatch = await generateMCQQuestionsWithAI({
         subject: req.subject,
         topic: req.topic,
         examCategory: req.examCategory,
+        syllabusText: req.syllabusText,
         instructions: (req.instructions || '') + antiDuplicationDirective,
-        difficulty: 'MEDIUM',
+        difficulty: dominantDifficulty,
         count: Math.min(missing + 1, 4)
       });
 
@@ -1901,7 +1975,7 @@ export async function generateFullExamPaperWithAI(
   // Independently verify answer keys, options, and derivations before committing to Question Bank
   const { validatedQuestions, report: auditReport } = await crossValidateGeneratedQuestions(
     allGenerated,
-    { subject: req.subject, topic: req.topic, examCategory: req.examCategory },
+    { subject: req.subject, topic: req.topic, examCategory: req.examCategory, syllabusText: req.syllabusText },
     onProgress
   );
   allGenerated = validatedQuestions;

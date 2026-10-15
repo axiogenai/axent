@@ -50,6 +50,7 @@ import {
 import { MCQExamConfig, MCQQuestion, MCQResultDeclarationMode } from '../types/mcq';
 import { playSound } from '../utils/sounds';
 import { ConfirmationModal } from './ConfirmationModal';
+import { WatermelonSchedulePicker } from './watermelon/WatermelonSchedulePicker';
 
 function toLocalDatetimeString(timestamp?: number): string {
   if (!timestamp) return '';
@@ -97,10 +98,11 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
   const [configPage, setConfigPage] = useState<1 | 2>(1);
 
   // Generator Form State
-  const [title, setTitle] = useState('');
-  const [examCategory, setExamCategory] = useState<string>('Aptitude');
-  const [subject, setSubject] = useState('');
+  const [title, setTitle] = useState('General Aptitude Assessment');
+  const [examCategory, setExamCategory] = useState<'Aptitude' | 'ISE'>('Aptitude');
+  const [subject, setSubject] = useState('General Aptitude & Reasoning');
   const [topic, setTopic] = useState('');
+  const [syllabusText, setSyllabusText] = useState('');
   const [instructions, setInstructions] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(45);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
@@ -125,30 +127,65 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
     difficulty: 'EASY' | 'MEDIUM' | 'HARD';
     marks: number;
   }>>([
-    { id: 'sec_1', topic: 'Logical Reasoning', count: 15, difficulty: 'MEDIUM', marks: 1 },
-    { id: 'sec_2', topic: 'Blood Relations', count: 15, difficulty: 'MEDIUM', marks: 1 }
+    { id: 'sec_1', topic: 'Logical Reasoning', count: 10, difficulty: 'MEDIUM', marks: 1 },
+    { id: 'sec_2', topic: 'Quantitative Aptitude', count: 10, difficulty: 'MEDIUM', marks: 1 },
+    { id: 'sec_3', topic: 'Verbal Ability', count: 10, difficulty: 'MEDIUM', marks: 1 }
   ]);
 
-  // Difficulty & Question Configuration for Single Mode
+  // Difficulty & Question Configuration for Single Mode and ISE
   const [totalQuestions, setTotalQuestions] = useState(30);
+  const [easyCount, setEasyCount] = useState(0);
+  const [mediumCount, setMediumCount] = useState(0);
+  const [hardCount, setHardCount] = useState(30);
   const [marksPerQuestion, setMarksPerQuestion] = useState(1);
-  const [totalMarks, setTotalMarks] = useState(30);
-  const [overallSeverity, setOverallSeverity] = useState<'EASY' | 'MEDIUM' | 'HARD'>('MEDIUM');
+  const [overallSeverity, setOverallSeverity] = useState<'EASY' | 'MEDIUM' | 'HARD' | 'CUSTOM'>('HARD');
+
+  const handleSetSeverity = (sev: 'EASY' | 'MEDIUM' | 'HARD' | 'BALANCED') => {
+    if (sev === 'HARD') {
+      setEasyCount(0);
+      setMediumCount(0);
+      setHardCount(totalQuestions);
+      setOverallSeverity('HARD');
+    } else if (sev === 'MEDIUM') {
+      setEasyCount(0);
+      setMediumCount(totalQuestions);
+      setHardCount(0);
+      setOverallSeverity('MEDIUM');
+    } else if (sev === 'EASY') {
+      setEasyCount(totalQuestions);
+      setMediumCount(0);
+      setHardCount(0);
+      setOverallSeverity('EASY');
+    } else if (sev === 'BALANCED') {
+      const e = Math.floor(totalQuestions / 3);
+      const m = Math.floor(totalQuestions / 3);
+      const h = totalQuestions - e - m;
+      setEasyCount(e);
+      setMediumCount(m);
+      setHardCount(h);
+      setOverallSeverity('CUSTOM');
+    }
+    playSound('click');
+  };
 
   // Computed total questions and marks derived strictly without cyclic loops
   const effectiveTotalQuestions = useMemo(() => {
-    if (topicMode === 'sections') {
-      return sections.reduce((sum, s) => sum + (Number(s.count) || 0), 0);
+    if (examCategory === 'Aptitude') {
+      if (topicMode === 'sections') {
+        return sections.reduce((sum, s) => sum + (Number(s.count) || 0), 0);
+      }
+      return totalQuestions;
     }
-    return totalQuestions;
-  }, [topicMode, sections, totalQuestions]);
+    // ISE mode: explicit sum of easy, medium, hard
+    return (Number(easyCount) || 0) + (Number(mediumCount) || 0) + (Number(hardCount) || 0);
+  }, [examCategory, topicMode, sections, totalQuestions, easyCount, mediumCount, hardCount]);
 
   const effectiveTotalMarks = useMemo(() => {
-    if (topicMode === 'sections') {
+    if (examCategory === 'Aptitude' && topicMode === 'sections') {
       return sections.reduce((sum, s) => sum + ((Number(s.count) || 0) * (Number(s.marks) || 1)), 0);
     }
-    return totalMarks;
-  }, [topicMode, sections, totalMarks]);
+    return effectiveTotalQuestions * (Number(marksPerQuestion) || 1);
+  }, [examCategory, topicMode, sections, effectiveTotalQuestions, marksPerQuestion]);
 
   const handleAddSection = () => {
     setSections((prev) => [
@@ -179,32 +216,66 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
     );
   };
 
+  const handleCategoryChange = (cat: 'Aptitude' | 'ISE') => {
+    setExamCategory(cat);
+    setError(null);
+    if (cat === 'Aptitude') {
+      setSubject('General Aptitude & Reasoning');
+      setTitle('General Aptitude Assessment');
+      setTopicMode('sections');
+      setSections([
+        { id: 'sec_1', topic: 'Logical Reasoning', count: 10, difficulty: 'MEDIUM', marks: 1 },
+        { id: 'sec_2', topic: 'Quantitative Aptitude', count: 10, difficulty: 'MEDIUM', marks: 1 },
+        { id: 'sec_3', topic: 'Verbal Ability', count: 10, difficulty: 'MEDIUM', marks: 1 }
+      ]);
+    } else {
+      if (subject === 'General Aptitude & Reasoning') {
+        setSubject('');
+      }
+      setTitle(subject ? `${subject} In-Semester Examination (ISE)` : 'In-Semester Examination (ISE)');
+      setTopicMode('single');
+    }
+    playSound('click');
+  };
+
+  const handleLoadSampleSyllabus = () => {
+    setSubject('Data Structures & Algorithms');
+    setTitle('Data Structures & Algorithms ISE');
+    setSyllabusText(
+      `Unit 1: Linear Data Structures - Arrays, Stacks, Queues, Circular Queues, Linked Lists (Singly, Doubly, Circular) and applications.\n` +
+      `Unit 2: Trees & Hierarchical Structures - Binary Trees, Tree Traversals (Inorder, Preorder, Postorder), Binary Search Trees (BST), AVL Trees, Heaps and Priority Queues.\n` +
+      `Unit 3: Graphs & Networks - Graph representations (Adjacency Matrix, Adjacency List), BFS, DFS, Shortest Path (Dijkstra, Bellman-Ford), Minimum Spanning Trees (Prim, Kruskal).\n` +
+      `Unit 4: Sorting, Searching & Hashing - QuickSort, MergeSort, HeapSort, Linear/Binary Search, Hash functions, Collision resolution (Chaining, Open Addressing).`
+    );
+    playSound('click');
+  };
+
   const handleApplyPreset = (preset: 'aptitude' | 'verbal' | 'technical') => {
     if (preset === 'aptitude') {
       setExamCategory('Aptitude');
       setSubject('General Aptitude & Reasoning');
       setTitle('General Aptitude & Logical Reasoning Assessment');
       setSections([
-        { id: 'sec_1', topic: 'Logical Reasoning', count: 15, difficulty: 'MEDIUM', marks: 1 },
-        { id: 'sec_2', topic: 'Blood Relations', count: 15, difficulty: 'MEDIUM', marks: 1 },
-        { id: 'sec_3', topic: 'Quantitative Aptitude', count: 15, difficulty: 'MEDIUM', marks: 1 }
+        { id: 'sec_1', topic: 'Logical Reasoning', count: 10, difficulty: 'MEDIUM', marks: 1 },
+        { id: 'sec_2', topic: 'Quantitative Aptitude', count: 10, difficulty: 'MEDIUM', marks: 1 },
+        { id: 'sec_3', topic: 'Verbal Ability', count: 10, difficulty: 'MEDIUM', marks: 1 }
       ]);
     } else if (preset === 'verbal') {
       setExamCategory('Aptitude');
       setSubject('Verbal Ability & Comprehension');
-      setTitle('Verbal Ability & Critical Reasoning Assessment');
+      setTitle('Verbal Ability Assessment');
       setSections([
         { id: 'sec_1', topic: 'Reading Comprehension', count: 15, difficulty: 'MEDIUM', marks: 1 },
         { id: 'sec_2', topic: 'Syllogisms & Analogies', count: 15, difficulty: 'MEDIUM', marks: 1 }
       ]);
     } else if (preset === 'technical') {
-      setExamCategory('ISE');
-      setSubject('Computer Science & Engineering');
-      setTitle('Computer Science Technical Assessment');
+      setExamCategory('Aptitude');
+      setSubject('Computer Science');
+      setTitle('CS Technical Assessment');
       setSections([
-        { id: 'sec_1', topic: 'Data Structures & Arrays', count: 15, difficulty: 'MEDIUM', marks: 1 },
-        { id: 'sec_2', topic: 'Object-Oriented Programming (OOP)', count: 15, difficulty: 'MEDIUM', marks: 1 },
-        { id: 'sec_3', topic: 'Database Management Systems (DBMS)', count: 10, difficulty: 'MEDIUM', marks: 1 }
+        { id: 'sec_1', topic: 'Data Structures & Algorithms', count: 15, difficulty: 'HARD', marks: 1 },
+        { id: 'sec_2', topic: 'Operating Systems & DBMS', count: 15, difficulty: 'MEDIUM', marks: 1 },
+        { id: 'sec_3', topic: 'Computer Networks', count: 10, difficulty: 'MEDIUM', marks: 1 }
       ]);
     }
     playSound('click');
@@ -244,11 +315,47 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
   // ── ADVANCE FROM PAGE 1 (BLUEPRINT) TO PAGE 2 (RULES & TIMING) ──────────────
   const handleNextPage = () => {
     setError(null);
-    if (!subject.trim()) {
-      if (examCategory === 'Aptitude') {
+    if (examCategory === 'ISE') {
+      if (!subject.trim()) {
+        setError('Please enter a Subject / Course title for the ISE examination.');
+        return;
+      }
+      if (!syllabusText.trim()) {
+        setError('Please paste or enter the course syllabus / unit curriculum for the ISE examination.');
+        return;
+      }
+      if (totalQuestions <= 0) {
+        setError('Total questions must be greater than zero.');
+        return;
+      }
+    } else {
+      // Aptitude mode
+      if (!subject.trim()) {
         setSubject('General Aptitude & Reasoning');
+      }
+      if (topicMode === 'sections') {
+        if (sections.length === 0) {
+          setError('Please configure at least one aptitude section.');
+          return;
+        }
+        const emptyTopic = sections.find((s) => !s.topic.trim());
+        if (emptyTopic) {
+          setError('Please enter a topic name for all sections.');
+          return;
+        }
+        if (effectiveTotalQuestions <= 0) {
+          setError('Total questions across sections must be greater than zero.');
+          return;
+        }
       } else {
-        setSubject(sections[0]?.topic ? `${sections[0].topic} Assessment` : 'General Assessment');
+        if (!topic.trim()) {
+          setError('Please provide at least one topic or syllabus theme.');
+          return;
+        }
+        if (totalQuestions <= 0) {
+          setError('Total questions must be greater than zero.');
+          return;
+        }
       }
     }
     setConfigPage(2);
@@ -264,7 +371,20 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
     }
     setError(null);
 
-    if (topicMode === 'sections') {
+    if (examCategory === 'ISE') {
+      if (!subject.trim()) {
+        setError('Please provide a Subject / Course title for the ISE exam.');
+        return;
+      }
+      if (!syllabusText.trim()) {
+        setError('Please enter or paste the course syllabus / unit curriculum.');
+        return;
+      }
+      if (totalQuestions <= 0) {
+        setError('Total questions must be greater than zero.');
+        return;
+      }
+    } else if (topicMode === 'sections') {
       if (sections.length === 0) {
         setError('Please configure at least one topic section.');
         return;
@@ -294,20 +414,45 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
     playSound('click');
 
     try {
-      const finalTitle = title.trim() || (
-        topicMode === 'sections'
-          ? `${sections.map((s) => s.topic.trim()).filter(Boolean).slice(0, 2).join(' & ')} Examination`
-          : `${topic.trim()} Examination`
-      );
-
-      const finalSubject = subject.trim() || (examCategory === 'Aptitude' ? 'General Aptitude & Reasoning' : 'Computer Science');
-      const finalTopic = topicMode === 'sections'
-        ? sections.map((s) => s.topic.trim()).filter(Boolean).join(', ')
-        : topic.trim();
-
       let payload: AIPaperGenerationRequest;
 
-      if (topicMode === 'sections') {
+      if (examCategory === 'ISE') {
+        const finalEasy = Number(easyCount) || 0;
+        const finalMed = Number(mediumCount) || 0;
+        const finalHard = Number(hardCount) || 0;
+        const finalTotal = finalEasy + finalMed + finalHard;
+
+        if (finalTotal <= 0) {
+          setError('Total questions must be greater than zero. Please set question counts for Easy, Medium, or Hard.');
+          setStep('config');
+          return;
+        }
+
+        const basePerQ = marksPerQuestion || 1;
+
+        payload = {
+          title: title.trim() || `${subject.trim()} In-Semester Examination (ISE)`,
+          subject: subject.trim(),
+          topic: `ISE Syllabus Curriculum (${subject.trim()})`,
+          syllabusText: syllabusText.trim(),
+          examCategory: 'ISE',
+          instructions: instructions.trim(),
+          durationMinutes,
+          easyCount: finalEasy,
+          mediumCount: finalMed,
+          hardCount: finalHard,
+          easyMarks: basePerQ,
+          mediumMarks: basePerQ,
+          hardMarks: basePerQ,
+          negativeMarkingEnabled,
+          negativeMarkPenalty,
+          autoPublish: false
+        };
+      } else if (topicMode === 'sections') {
+        const finalTitle = title.trim() || `${sections.map((s) => s.topic.trim()).filter(Boolean).slice(0, 2).join(' & ')} Examination`;
+        const finalSubject = subject.trim() || 'General Aptitude & Reasoning';
+        const finalTopic = sections.map((s) => s.topic.trim()).filter(Boolean).join(', ');
+
         payload = {
           title: finalTitle,
           subject: finalSubject,
@@ -319,7 +464,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
             difficulty: s.difficulty,
             marks: Math.max(1, Number(s.marks) || 1)
           })),
-          examCategory,
+          examCategory: 'Aptitude',
           instructions: instructions.trim(),
           durationMinutes,
           easyCount: 0,
@@ -330,35 +475,25 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
           autoPublish: false // Explicitly DRAFT: Faculty reviews before publishing
         };
       } else {
-        const computedEasyCount = overallSeverity === 'EASY'
-          ? Math.max(1, Math.round(totalQuestions * 0.7))
-          : overallSeverity === 'HARD'
-          ? Math.max(0, Math.round(totalQuestions * 0.15))
-          : Math.max(1, Math.round(totalQuestions * 0.25));
+        const finalTitle = title.trim() || `${topic.trim()} Examination`;
+        const finalSubject = subject.trim() || 'General Aptitude & Reasoning';
+        const finalTopic = topic.trim();
 
-        const computedMedCount = overallSeverity === 'EASY'
-          ? Math.round(totalQuestions * 0.2)
-          : overallSeverity === 'HARD'
-          ? Math.round(totalQuestions * 0.35)
-          : Math.max(1, Math.round(totalQuestions * 0.55));
-
-        let computedHardCount = Math.max(0, totalQuestions - computedEasyCount - computedMedCount);
-        if (computedEasyCount + computedMedCount + computedHardCount !== totalQuestions) {
-          computedHardCount = Math.max(0, totalQuestions - computedEasyCount - computedMedCount);
-        }
-
-        const basePerQ = marksPerQuestion || Math.max(1, Math.round(totalMarks / totalQuestions));
+        const finalEasy = Number(easyCount) || 0;
+        const finalMed = Number(mediumCount) || 0;
+        const finalHard = Number(hardCount) || 0;
+        const basePerQ = marksPerQuestion || 1;
 
         payload = {
           title: finalTitle,
           subject: finalSubject,
           topic: finalTopic,
-          examCategory,
+          examCategory: 'Aptitude',
           instructions: instructions.trim(),
           durationMinutes,
-          easyCount: computedEasyCount,
-          mediumCount: computedMedCount,
-          hardCount: computedHardCount,
+          easyCount: finalEasy,
+          mediumCount: finalMed,
+          hardCount: finalHard,
           easyMarks: basePerQ,
           mediumMarks: basePerQ,
           hardMarks: basePerQ,
@@ -980,7 +1115,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                   </label>
                   <select
                     value={examCategory}
-                    onChange={(e) => setExamCategory(e.target.value)}
+                    onChange={(e) => handleCategoryChange(e.target.value as 'Aptitude' | 'ISE')}
                     style={{
                       width: '100%',
                       boxSizing: 'border-box',
@@ -990,29 +1125,26 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                       borderRadius: 'var(--radius-sm)',
                       color: 'var(--text-primary)',
                       fontSize: '12px',
+                      fontWeight: 700,
                       cursor: 'pointer'
                     }}
                   >
-                    <option value="Aptitude">Aptitude & Campus Placement</option>
-                    <option value="Internal Assessment (CIE)">Internal Assessment (CIE / Midterm)</option>
-                    <option value="Semester End Exam (SEE)">Semester End Examination (SEE)</option>
-                    <option value="Technical Evaluation">Technical & Domain Assessment</option>
-                    <option value="Weekly Lab Practical">Weekly Lab / Practice Test</option>
-                    <option value="College Coding Competition">College Contest / Hackathon</option>
-                    <option value="Multiple Choice Question (MCQ) Examination">General Objective Paper</option>
+                    <option value="Aptitude">Aptitude</option>
+                    <option value="ISE">ISE</option>
                   </select>
                 </div>
               </div>
 
-              {/* Topic & Question Quota Configuration */}
-              <div
-                style={{
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '14px'
-                }}
-              >
+              {/* ── CONDITIONAL MODE: APTITUDE VS ISE ── */}
+              {examCategory === 'Aptitude' ? (
+                <div
+                  style={{
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '14px'
+                  }}
+                >
                 {/* Topic Distribution Mode Switcher */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1396,7 +1528,6 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                             const count = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
                             if (!isNaN(count)) {
                               setTotalQuestions(count);
-                              if (count > 0) setTotalMarks(count * (marksPerQuestion || 1));
                             }
                           }}
                           placeholder="e.g. 30"
@@ -1429,7 +1560,6 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                             const m = e.target.value === '' ? 1 : parseInt(e.target.value, 10);
                             if (!isNaN(m)) {
                               setMarksPerQuestion(m);
-                              if (m > 0) setTotalMarks((totalQuestions || 1) * m);
                             }
                           }}
                           placeholder="e.g. 1"
@@ -1447,23 +1577,16 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                         />
                       </div>
 
-                      {/* Total Marks */}
+                      {/* Total Marks (Calculated) */}
                       <div>
                         <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
                           Total Marks
                         </label>
                         <input
                           type="number"
-                          min="1"
-                          max="1000"
+                          readOnly
                           className="no-spin"
-                          value={totalMarks || ''}
-                          onChange={(e) => {
-                            const marks = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                            if (!isNaN(marks)) {
-                              setTotalMarks(marks);
-                            }
-                          }}
+                          value={effectiveTotalMarks}
                           placeholder="e.g. 30"
                           style={{
                             width: '100%',
@@ -1472,9 +1595,9 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                             background: 'var(--bg-elevated)',
                             border: '1px solid var(--border)',
                             borderRadius: 'var(--radius-sm)',
-                            color: 'var(--text-primary)',
+                            color: 'var(--accent)',
                             fontSize: '13px',
-                            fontWeight: 600
+                            fontWeight: 700
                           }}
                         />
                       </div>
@@ -1536,7 +1659,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                           Marks / Question: <strong style={{ color: 'var(--text-primary)' }}>{marksPerQuestion} pt{marksPerQuestion > 1 ? 's' : ''}</strong>
                         </span>
                         <span style={{ color: 'var(--text-secondary)' }}>
-                          Total Marks: <strong style={{ color: 'var(--accent)' }}>{totalMarks} pts</strong>
+                          Total Marks: <strong style={{ color: 'var(--accent)' }}>{effectiveTotalMarks} pts</strong>
                         </span>
                       </div>
                       <div style={{ color: 'var(--text-muted)' }}>
@@ -1546,6 +1669,357 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                   </div>
                 )}
               </div>
+            ) : (
+                /* ── ISE MODE: SYLLABUS & UNIT CURRICULUM DRIVEN ── */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {/* Subject Quick Chips */}
+                  <div>
+                    <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
+                      Quick University Course Subjects:
+                    </span>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {[
+                        'Data Structures & Algorithms',
+                        'Operating Systems',
+                        'Database Management Systems (DBMS)',
+                        'Computer Networks',
+                        'Object-Oriented Programming (OOP)'
+                      ].map((sub) => (
+                        <button
+                          key={sub}
+                          type="button"
+                          onClick={() => {
+                            setSubject(sub);
+                            setTitle(`${sub} In-Semester Examination (ISE)`);
+                            playSound('click');
+                          }}
+                          style={{
+                            padding: '3px 8px',
+                            fontSize: '11px',
+                            fontWeight: 500,
+                            borderRadius: 'var(--radius-xs)',
+                            background: subject === sub ? 'var(--accent)' : 'var(--bg-elevated)',
+                            color: subject === sub ? 'var(--accent-contrast)' : 'var(--text-secondary)',
+                            border: '1px solid var(--border)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {sub}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Course Syllabus / Unit Curriculum Card */}
+                  <div
+                    style={{
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '14px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <BookOpen size={14} color="var(--accent)" />
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          Course Syllabus & Unit Curriculum (Paste or type entire unit syllabus) *
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleLoadSampleSyllabus}
+                        style={{
+                          padding: '3px 8px',
+                          fontSize: '10.5px',
+                          fontWeight: 600,
+                          borderRadius: 'var(--radius-xs)',
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Load Sample Unit Syllabus
+                      </button>
+                    </div>
+
+                    <textarea
+                      rows={6}
+                      value={syllabusText}
+                      onChange={(e) => setSyllabusText(e.target.value)}
+                      placeholder={`Paste your entire course syllabus / unit breakdown here...\nFor example:\nUnit 1: Linear Data Structures - Arrays, Stacks, Queues, Circular Queues, Linked Lists and applications.\nUnit 2: Trees & Hierarchical Structures - Binary Trees, Tree Traversals, BST, AVL Trees, Heaps.\nUnit 3: Graphs & Networks - Graph representations, BFS, DFS, Dijkstra, Minimum Spanning Trees.\nUnit 4: Sorting, Searching & Hashing - QuickSort, MergeSort, Binary Search, Hash functions, Collisions.`}
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '10px 12px',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-primary)',
+                        fontSize: '12px',
+                        lineHeight: '1.5',
+                        resize: 'vertical',
+                        fontFamily: 'inherit'
+                      }}
+                      required
+                    />
+
+                    <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                      CodeDNA AI analyzes every unit and automatically distributes university-level examination questions across the entire curriculum.
+                    </span>
+                  </div>
+
+                  {/* Question Quotas & Difficulty Controls */}
+                  <div
+                    style={{
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '14px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Layers size={14} color="var(--accent)" />
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          Question Quota & Exact Difficulty Breakdown
+                        </span>
+                      </div>
+
+                      {/* Quick Severity Buttons */}
+                      <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-elevated)', padding: '2px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleSetSeverity('HARD')}
+                          style={{
+                            padding: '3px 8px',
+                            fontSize: '10.5px',
+                            fontWeight: 700,
+                            borderRadius: 'var(--radius-xs)',
+                            border: 'none',
+                            background: overallSeverity === 'HARD' ? 'var(--danger)' : 'transparent',
+                            color: overallSeverity === 'HARD' ? '#ffffff' : 'var(--text-muted)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          All Hard ({effectiveTotalQuestions || 30})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSetSeverity('MEDIUM')}
+                          style={{
+                            padding: '3px 8px',
+                            fontSize: '10.5px',
+                            fontWeight: 700,
+                            borderRadius: 'var(--radius-xs)',
+                            border: 'none',
+                            background: overallSeverity === 'MEDIUM' ? 'var(--warning)' : 'transparent',
+                            color: overallSeverity === 'MEDIUM' ? '#18181b' : 'var(--text-muted)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          All Medium ({effectiveTotalQuestions || 30})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSetSeverity('EASY')}
+                          style={{
+                            padding: '3px 8px',
+                            fontSize: '10.5px',
+                            fontWeight: 700,
+                            borderRadius: 'var(--radius-xs)',
+                            border: 'none',
+                            background: overallSeverity === 'EASY' ? 'var(--success)' : 'transparent',
+                            color: overallSeverity === 'EASY' ? '#ffffff' : 'var(--text-muted)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          All Easy ({effectiveTotalQuestions || 30})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSetSeverity('BALANCED')}
+                          style={{
+                            padding: '3px 8px',
+                            fontSize: '10.5px',
+                            fontWeight: 700,
+                            borderRadius: 'var(--radius-xs)',
+                            border: 'none',
+                            background: overallSeverity === 'CUSTOM' ? 'var(--accent)' : 'transparent',
+                            color: overallSeverity === 'CUSTOM' ? 'var(--accent-contrast)' : 'var(--text-muted)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Balanced Mix
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 4 Direct Numeric Input Columns */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--success)', marginBottom: '4px' }}>
+                          Easy Questions
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          className="no-spin"
+                          value={easyCount}
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                            if (!isNaN(val)) {
+                              setEasyCount(val);
+                              setOverallSeverity('CUSTOM');
+                            }
+                          }}
+                          style={{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            padding: '6px 8px',
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 'var(--radius-sm)',
+                            color: 'var(--text-primary)',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            textAlign: 'center'
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--warning)', marginBottom: '4px' }}>
+                          Medium Questions
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          className="no-spin"
+                          value={mediumCount}
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                            if (!isNaN(val)) {
+                              setMediumCount(val);
+                              setOverallSeverity('CUSTOM');
+                            }
+                          }}
+                          style={{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            padding: '6px 8px',
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 'var(--radius-sm)',
+                            color: 'var(--text-primary)',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            textAlign: 'center'
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--danger)', marginBottom: '4px' }}>
+                          Hard Questions
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          className="no-spin"
+                          value={hardCount}
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                            if (!isNaN(val)) {
+                              setHardCount(val);
+                              setOverallSeverity('CUSTOM');
+                            }
+                          }}
+                          style={{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            padding: '6px 8px',
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 'var(--radius-sm)',
+                            color: 'var(--text-primary)',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            textAlign: 'center'
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                          Marks / Question
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="20"
+                          className="no-spin"
+                          value={marksPerQuestion}
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? 1 : parseInt(e.target.value, 10);
+                            if (!isNaN(val)) setMarksPerQuestion(val);
+                          }}
+                          style={{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            padding: '6px 8px',
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 'var(--radius-sm)',
+                            color: 'var(--text-primary)',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            textAlign: 'center'
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* ISE Summary Strip */}
+                    <div
+                      style={{
+                        padding: '8px 12px',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '8px',
+                        fontSize: '11px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>
+                          Total Questions: <strong style={{ color: 'var(--text-primary)' }}>{effectiveTotalQuestions}</strong>
+                        </span>
+                        <span style={{ color: 'var(--text-secondary)' }}>
+                          Total Marks: <strong style={{ color: 'var(--accent)' }}>{effectiveTotalMarks} pts</strong>
+                        </span>
+                      </div>
+                      <div style={{ color: 'var(--text-muted)' }}>
+                        Exact Quota: <span style={{ color: 'var(--success)', fontWeight: 700 }}>{easyCount} Easy</span> • <span style={{ color: 'var(--warning)', fontWeight: 700 }}>{mediumCount} Medium</span> • <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{hardCount} Hard</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               <datalist id="ai-available-topics">
                 {availableTopics.map((t) => (
                   <option key={t} value={t} />
@@ -1741,129 +2215,16 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                 )}
               </div>
 
-              {/* Scheduled Examination Window (Optional) */}
-              <div
-                style={{
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '12px 14px'
+              {/* Scheduled Examination Window (Watermelon UI Component) */}
+              <WatermelonSchedulePicker
+                startTime={startTime}
+                endTime={endTime}
+                durationMinutes={durationMinutes}
+                onChange={(start, end) => {
+                  setStartTime(start);
+                  setEndTime(end);
                 }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    <Calendar size={13} color="var(--accent)" />
-                    <span>Scheduled Examination Window (Optional)</span>
-                  </div>
-                  {startTime && (
-                    <span style={{ fontSize: '10px', color: 'var(--warning)', fontWeight: 700, padding: '1px 6px', borderRadius: 'var(--radius-pill)', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)' }}>
-                      Waiting Room Active
-                    </span>
-                  )}
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '8px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                      Scheduled Start Time (Auto-unlocks exam)
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={toLocalDatetimeString(startTime)}
-                      onChange={(e) => setStartTime(parseLocalDatetimeString(e.target.value))}
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        padding: '6px 10px',
-                        background: 'var(--bg-elevated)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius-sm)',
-                        color: 'var(--text-primary)',
-                        fontSize: '11.5px'
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                      Scheduled End Time (Auto-closes exam)
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={toLocalDatetimeString(endTime)}
-                      onChange={(e) => setEndTime(parseLocalDatetimeString(e.target.value))}
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        padding: '6px 10px',
-                        background: 'var(--bg-elevated)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius-sm)',
-                        color: 'var(--text-primary)',
-                        fontSize: '11.5px'
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStartTime(undefined);
-                      setEndTime(undefined);
-                    }}
-                    style={{
-                      padding: '3px 8px',
-                      fontSize: '10.5px',
-                      borderRadius: 'var(--radius-xs)',
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border)',
-                      color: 'var(--text-secondary)',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Live Immediately
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const now = Date.now();
-                      setStartTime(now + 5 * 60000);
-                      setEndTime(now + (durationMinutes + 15) * 60000);
-                    }}
-                    style={{
-                      padding: '3px 8px',
-                      fontSize: '10.5px',
-                      borderRadius: 'var(--radius-xs)',
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border)',
-                      color: 'var(--text-secondary)',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    +1 Hr Window (Starts in 5m)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const now = Date.now();
-                      setStartTime(now + 60 * 60000);
-                      setEndTime(now + (durationMinutes + 75) * 60000);
-                    }}
-                    style={{
-                      padding: '3px 8px',
-                      fontSize: '10.5px',
-                      borderRadius: 'var(--radius-xs)',
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border)',
-                      color: 'var(--text-secondary)',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    +2 Hr Window
-                  </button>
-                </div>
-              </div>
+              />
 
               {/* Focus Instructions */}
               <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 14px' }}>
@@ -2339,183 +2700,19 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     </button>
                   </div>
 
-                  {/* 1. SCHEDULE & ACCESS WINDOW */}
-                  <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Calendar size={13} color="var(--accent)" />
-                        <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          Synchronized Examination Window
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '11px' }}>
-                        {reviewedExam.startTime ? (
-                          <span style={{ color: 'var(--warning)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--warning)' }} />
-                            Waiting Room Commences {formatSchedulePreview(reviewedExam.startTime)}
-                          </span>
-                        ) : (
-                          <span style={{ color: 'var(--success)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--success)' }} />
-                            Immediate Access on Publish
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', marginBottom: '8px' }}>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
-                          Scheduled Start Time (Auto-Unlocks Terminal)
-                        </label>
-                        <input
-                          type="datetime-local"
-                          value={toLocalDatetimeString(reviewedExam.startTime)}
-                          onChange={(e) =>
-                            setReviewedExam({
-                              ...reviewedExam,
-                              startTime: parseLocalDatetimeString(e.target.value)
-                            })
-                          }
-                          style={{
-                            width: '100%',
-                            boxSizing: 'border-box',
-                            padding: '6px 10px',
-                            background: 'var(--bg-surface)',
-                            border: '1px solid var(--border)',
-                            borderRadius: 'var(--radius-sm)',
-                            color: 'var(--text-primary)',
-                            fontSize: '11.5px',
-                            outline: 'none'
-                          }}
-                        />
-                      </div>
-
-                      <div>
-                        <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
-                          Scheduled End Time (Auto-Closes Terminal)
-                        </label>
-                        <input
-                          type="datetime-local"
-                          value={toLocalDatetimeString(reviewedExam.endTime)}
-                          onChange={(e) =>
-                            setReviewedExam({
-                              ...reviewedExam,
-                              endTime: parseLocalDatetimeString(e.target.value)
-                            })
-                          }
-                          style={{
-                            width: '100%',
-                            boxSizing: 'border-box',
-                            padding: '6px 10px',
-                            background: 'var(--bg-surface)',
-                            border: '1px solid var(--border)',
-                            borderRadius: 'var(--radius-sm)',
-                            color: 'var(--text-primary)',
-                            fontSize: '11.5px',
-                            outline: 'none'
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setReviewedExam({
-                            ...reviewedExam,
-                            startTime: undefined,
-                            endTime: undefined
-                          });
-                          playSound('click');
-                        }}
-                        style={{
-                          padding: '3px 8px',
-                          fontSize: '10.5px',
-                          borderRadius: 'var(--radius-xs)',
-                          background: 'var(--bg-surface)',
-                          border: '1px solid var(--border)',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Live Immediately
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const now = Date.now();
-                          setReviewedExam({
-                            ...reviewedExam,
-                            startTime: now + 5 * 60000,
-                            endTime: now + (reviewedExam.durationMinutes + 15) * 60000
-                          });
-                          playSound('click');
-                        }}
-                        style={{
-                          padding: '3px 8px',
-                          fontSize: '10.5px',
-                          borderRadius: 'var(--radius-xs)',
-                          background: 'var(--bg-surface)',
-                          border: '1px solid var(--border)',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Start in 5 mins
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const now = Date.now();
-                          setReviewedExam({
-                            ...reviewedExam,
-                            startTime: now + 60 * 60000,
-                            endTime: now + (reviewedExam.durationMinutes + 75) * 60000
-                          });
-                          playSound('click');
-                        }}
-                        style={{
-                          padding: '3px 8px',
-                          fontSize: '10.5px',
-                          borderRadius: 'var(--radius-xs)',
-                          background: 'var(--bg-surface)',
-                          border: '1px solid var(--border)',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Start in 1 hour
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const tomorrow = new Date();
-                          tomorrow.setDate(tomorrow.getDate() + 1);
-                          tomorrow.setHours(10, 0, 0, 0);
-                          const start = tomorrow.getTime();
-                          setReviewedExam({
-                            ...reviewedExam,
-                            startTime: start,
-                            endTime: start + (reviewedExam.durationMinutes + 30) * 60000
-                          });
-                          playSound('click');
-                        }}
-                        style={{
-                          padding: '3px 8px',
-                          fontSize: '10.5px',
-                          borderRadius: 'var(--radius-xs)',
-                          background: 'var(--bg-surface)',
-                          border: '1px solid var(--border)',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Tomorrow 10:00 AM
-                      </button>
-                    </div>
-                  </div>
+                  {/* 1. SCHEDULE & ACCESS WINDOW (Watermelon UI Component) */}
+                  <WatermelonSchedulePicker
+                    startTime={reviewedExam.startTime}
+                    endTime={reviewedExam.endTime}
+                    durationMinutes={reviewedExam.durationMinutes || durationMinutes}
+                    onChange={(start, end) => {
+                      setReviewedExam({
+                        ...reviewedExam,
+                        startTime: start,
+                        endTime: end
+                      });
+                    }}
+                  />
 
                   {/* 2. ANTI-CHEAT & INTEGRITY CONTROLS */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>

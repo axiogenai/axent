@@ -137,6 +137,18 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Ensure browser native date/time pickers inherit dark theme and avoid bright white OS popups */
+input[type="datetime-local"],
+input[type="date"],
+input[type="time"] {
+  color-scheme: dark;
+}
+[data-theme="light"] input[type="datetime-local"],
+[data-theme="light"] input[type="date"],
+[data-theme="light"] input[type="time"] {
+  color-scheme: light;
+}
+
 #root {
   min-height: 100vh;
   display: flex;
