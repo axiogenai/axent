@@ -850,3 +850,63 @@ input[type=number].no-spin {
   appearance: textfield;
 }
 
+/* ═════════════════════════════════════════════════════════════════════════════
+   MCQ Examination Catalog: Full-Width Horizontal Slim Cards Architecture
+   ═════════════════════════════════════════════════════════════════════════════ */
+.mcq-catalog-container {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.mcq-catalog-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 1080px) {
+  .mcq-catalog-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mcq-horizontal-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-sizing: border-box;
+  width: 100%;
+  gap: 16px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.mcq-horizontal-card:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-surface);
+}
+
+@media (max-width: 768px) {
+  .mcq-horizontal-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .mcq-horizontal-card-actions {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+
