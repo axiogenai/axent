@@ -31,16 +31,16 @@ export interface Footer16Props {
 
 const defaultColumns: Footer16Column[] = [
   {
-    title: 'Examination Halls',
+    title: 'Student Access',
     links: [
-      { label: 'Student MCQ Hall', href: '/mcq' },
-      { label: 'Paper Setter Portal', href: '/paper-setter' },
-      { label: 'Coding Practical Workspace', href: '/workspace' },
-      { label: 'Invigilator CCTV Command', href: '/admin' },
+      { label: 'Examination Hall', href: '/mcq' },
+      { label: 'How to Enter Exam', href: '#features' },
+      { label: 'Integrity & Security', href: '#security' },
+      { label: 'Contact Invigilator', href: '#' },
     ],
   },
   {
-    title: 'Platform Architecture',
+    title: 'Platform Features',
     links: [
       { label: 'Dual Stream Proctoring', href: '#features' },
       { label: 'Real-Time Keystroke Forensics', href: '#features' },
@@ -54,7 +54,7 @@ const defaultColumns: Footer16Column[] = [
       { label: 'team.axiogen.in', href: 'https://team.axiogen.in', external: true },
       { label: 'Axiogen Cloud Infrastructure', href: 'https://api.axiogen.in', external: true },
       { label: 'Axiogen Vault Storage', href: 'https://api.axiogen.in/vault', external: true },
-      { label: 'System Telemetry', href: '#telemetry' },
+      { label: 'System Telemetry', href: '#features' },
     ],
   },
 ];
@@ -67,8 +67,8 @@ const defaultLegalLinks: Footer16Link[] = [
 
 const defaultSocials: Footer16Social[] = [
   { label: 'team.axiogen.in', href: 'https://team.axiogen.in', icon: 'globe' },
-  { label: 'Terminal Core', href: '/workspace', icon: 'terminal' },
-  { label: 'Proctor Security', href: '/admin', icon: 'shield' },
+  { label: 'Platform Security', href: '#security', icon: 'shield' },
+  { label: 'Candidate Terminal', href: '/mcq', icon: 'terminal' },
 ];
 
 const socialIcons = {
@@ -221,9 +221,9 @@ export function Footer16({
                   src="/axent-logo.png"
                   alt="Axent"
                   style={{
-                    height: '32px',
+                    height: '42px',
                     width: 'auto',
-                    maxWidth: '160px',
+                    maxWidth: '200px',
                     display: 'block',
                     objectFit: 'contain'
                   }}
@@ -233,7 +233,7 @@ export function Footer16({
                 {tagline}
               </p>
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-zinc-800 bg-zinc-900/60 text-xs text-zinc-300">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="w-2 h-2 rounded-full bg-zinc-500" />
                 <span>Synchronized with</span>
                 <a
                   href="https://team.axiogen.in"

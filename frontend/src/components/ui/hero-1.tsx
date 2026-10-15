@@ -25,6 +25,10 @@ export interface Hero1Props {
     ctaLabel?: string;
     /** CTA button href */
     ctaHref?: string;
+    /** Secondary CTA button label */
+    secondaryCtaLabel?: string;
+    /** Secondary CTA button href */
+    secondaryCtaHref?: string;
     /** Small description text at the bottom-left */
     description?: string;
     /** Social links rendered at the bottom-right */
@@ -40,15 +44,14 @@ export interface Hero1Props {
 }
 
 const DEFAULT_NAV: NavLink[] = [
-    { label: "MCQ Examination", href: "/mcq", active: true },
-    { label: "Paper Setter", href: "/paper-setter" },
-    { label: "Coding Workspace", href: "/workspace" },
-    { label: "CCTV Control", href: "/admin" },
+    { label: "Examination Hall", href: "/mcq", active: true },
+    { label: "Instructions", href: "#features" },
+    { label: "Integrity Standard", href: "#security" },
 ];
 
 const DEFAULT_SOCIAL: SocialLink[] = [
     { label: "team.axiogen.in", href: "https://team.axiogen.in" },
-    { label: "Documentation", href: "#features" },
+    { label: "Instructions", href: "#features" },
     { label: "Security Ledger", href: "#security" },
 ];
 
@@ -57,7 +60,7 @@ export default function Hero1({
         <img
             src="/axent-logo.png"
             alt="Axent"
-            style={{ height: '28px', width: 'auto', display: 'block', objectFit: 'contain' }}
+            style={{ height: '52px', width: 'auto', display: 'block', objectFit: 'contain' }}
         />
     ),
     navLinks = DEFAULT_NAV,
@@ -70,10 +73,12 @@ export default function Hero1({
     ),
     ctaLabel = "Enter Student Examination Hall",
     ctaHref = "/mcq",
+    secondaryCtaLabel,
+    secondaryCtaHref,
     description = "Enterprise-grade academic assessment, real-time dual stream invigilation,\nand zero-tamper cryptographic examination ledgers.",
     socialLinks = DEFAULT_SOCIAL,
-    signInLabel = "Authority Login",
-    signInHref = "/authority",
+    signInLabel,
+    signInHref,
     onNavLinkClick,
     className,
 }: Hero1Props) {
@@ -200,14 +205,16 @@ export default function Hero1({
                     </ul>
                 </nav>
 
-                <div className="hidden md:block ml-4">
-                    <a
-                        href={signInHref}
-                        className="inline-flex items-center justify-center px-5 py-2 rounded-lg border border-white text-white text-sm font-medium bg-transparent hover:border-white/50 hover:bg-white/5 transition-all duration-300"
-                    >
-                        {signInLabel}
-                    </a>
-                </div>
+                {signInLabel && signInHref && (
+                    <div className="hidden md:block ml-4">
+                        <a
+                            href={signInHref}
+                            className="inline-flex items-center justify-center px-5 py-2 rounded-lg border border-white/20 text-white text-sm font-medium bg-transparent hover:border-white/50 hover:bg-white/5 transition-all duration-300"
+                        >
+                            {signInLabel}
+                        </a>
+                    </div>
+                )}
 
                 <button
                     onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -268,19 +275,21 @@ export default function Hero1({
                             ))}
                         </nav>
 
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.25 }}
-                            className="flex flex-col gap-6"
-                        >
-                            <a
-                                href={signInHref}
-                                className="w-full py-3.5 rounded-full border border-white/20 text-white text-center text-base font-medium bg-white/5 hover:bg-white/10 transition-colors"
+                        {signInLabel && signInHref && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.25 }}
+                                className="flex flex-col gap-6"
                             >
-                                {signInLabel}
-                            </a>
-                        </motion.div>
+                                <a
+                                    href={signInHref}
+                                    className="w-full py-3.5 rounded-full border border-white/20 text-white text-center text-base font-medium bg-white/5 hover:bg-white/10 transition-colors"
+                                >
+                                    {signInLabel}
+                                </a>
+                            </motion.div>
+                        )}
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -312,13 +321,15 @@ export default function Hero1({
                             </span>
                         </a>
 
-                        <a
-                            href="/paper-setter"
-                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-white/20 text-white text-sm font-medium hover:border-white/50 hover:bg-white/5 transition-all duration-300"
-                        >
-                            <span>Paper Setter Portal</span>
-                            <ArrowUpRight className="w-3.5 h-3.5 text-white/60" />
-                        </a>
+                        {secondaryCtaLabel && secondaryCtaHref && (
+                            <a
+                                href={secondaryCtaHref}
+                                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-white/20 text-white text-sm font-medium hover:border-white/50 hover:bg-white/5 transition-all duration-300"
+                            >
+                                <span>{secondaryCtaLabel}</span>
+                                <ArrowUpRight className="w-3.5 h-3.5 text-white/60" />
+                            </a>
+                        )}
                     </motion.div>
                 </div>
 

@@ -3,21 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import {
   ShieldCheck,
   GraduationCap,
-  Layers,
   ArrowRight,
-  Terminal,
-  Tv,
   CheckCircle2,
   Lock,
-  Cpu,
   Database,
-  BarChart3,
   Clock,
-  ExternalLink
+  Sparkles,
+  EyeOff
 } from 'lucide-react';
 import Hero1 from './ui/hero-1';
 import { Footer16 } from './ui/footer-16';
-import { WatermelonBentoCard, WatermelonStatCard } from './watermelon-ui';
+import { WatermelonStatCard } from './watermelon-ui';
 import { ThemeMode } from '../types/dna';
 import { playSound } from '../utils/sounds';
 
@@ -30,6 +26,13 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
 
   const handleNav = (path: string) => {
     playSound('click');
+    if (path.startsWith('#')) {
+      const el = document.querySelector(path);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+        return;
+      }
+    }
     navigate(path);
   };
 
@@ -42,19 +45,18 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
             src="/axent-logo.png"
             alt="Axent"
             style={{
-              height: '30px',
+              height: '52px',
               width: 'auto',
-              maxWidth: '140px',
+              maxWidth: '240px',
               display: 'block',
               objectFit: 'contain'
             }}
           />
         }
         navLinks={[
-          { label: 'MCQ Exam Hall', href: '/mcq', active: true },
-          { label: 'Paper Setter Portal', href: '/paper-setter' },
-          { label: 'Coding Workspace', href: '/workspace' },
-          { label: 'CCTV Control', href: '/admin' },
+          { label: 'Examination Hall', href: '/mcq', active: true },
+          { label: 'Exam Guidelines', href: '#features' },
+          { label: 'Integrity Architecture', href: '#security' },
         ]}
         headline={
           <>
@@ -68,11 +70,9 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         description={'Enterprise-grade academic assessment, real-time dual-stream invigilation,\nand zero-tamper cryptographic examination ledgers.'}
         socialLinks={[
           { label: 'team.axiogen.in', href: 'https://team.axiogen.in' },
-          { label: 'Cloud Ledger', href: '#features' },
-          { label: 'Security Standard', href: '#security' },
+          { label: 'Integrity Standard', href: '#security' },
+          { label: 'Candidate Guide', href: '#features' },
         ]}
-        signInLabel="Authority Login"
-        signInHref="/login"
         onNavLinkClick={(link) => handleNav(link.href)}
       />
 
@@ -81,7 +81,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-zinc-800 bg-zinc-900/60 text-xs font-mono text-zinc-400 mb-3">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-zinc-500" />
               <span>Axent Assessment Core v2.4 · Live Telemetry</span>
             </div>
             <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-white">
@@ -101,10 +101,10 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
             icon={<ShieldCheck size={18} />}
           />
           <WatermelonStatCard
-            label="AI Paper Generator"
-            value="Autonomous"
-            subtext="Instant question & rubric split"
-            icon={<Cpu size={18} />}
+            label="Anti-Cheating Engine"
+            value="Active"
+            subtext="Tab switch & focus monitoring"
+            icon={<Lock size={18} />}
           />
           <WatermelonStatCard
             label="Dual-Stream Proctor"
@@ -113,132 +113,69 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
             icon={<Clock size={18} />}
           />
           <WatermelonStatCard
-            label="Cloud Database"
+            label="Cloud Ledger"
             value="Synchronized"
-            subtext="Instant CSV exports & ledger"
+            subtext="Tamper-proof score records"
             icon={<Database size={18} />}
           />
         </div>
       </section>
 
-      {/* ── 3. FOUR ROLE-BASED PORTALS (BENTO SHOWCASE) ── */}
+      {/* ── 3. CANDIDATE EXAMINATION ACCESS (ONLY FOR STUDENTS) ── */}
       <section className="py-12 px-6 md:px-12 lg:px-20 max-w-7xl mx-auto w-full">
-        <div className="text-center max-w-2xl mx-auto mb-12">
+        <div className="text-center max-w-2xl mx-auto mb-10">
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-white mb-3">
-            Integrated Academic Roles & Portals
+            Candidate Examination Access
           </h2>
           <p className="text-sm text-zinc-400">
-            Dedicated environments configured specifically for students, professors, invigilators, and academic heads.
+            Secure, tamper-proof digital examination environment with automated countdowns, synchronized papers, and instant result calculation.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* 1. Student Exam Hall */}
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-6 flex flex-col justify-between hover:border-zinc-700 transition-colors">
-            <div>
-              <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white mb-4">
-                <GraduationCap size={20} />
-              </div>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-lg font-bold text-white">
+        {/* Single Student Card */}
+        <div className="max-w-3xl mx-auto rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8 md:p-10 transition-colors hover:border-zinc-700">
+          <div className="flex flex-col md:flex-row md:items-start gap-6">
+            <div className="w-14 h-14 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white shrink-0">
+              <GraduationCap size={28} />
+            </div>
+            <div className="flex-1">
+              <div className="flex flex-wrap items-center gap-3 mb-3">
+                <h3 className="text-xl font-bold text-white">
                   Student Examination Hall
                 </h3>
-                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded border border-zinc-800 bg-zinc-900 text-zinc-400">
+                <span className="text-[10px] font-mono uppercase px-2.5 py-1 rounded border border-zinc-800 bg-zinc-900 text-zinc-400">
                   CANDIDATE ACCESS
                 </span>
               </div>
-              <p className="text-sm text-zinc-400 leading-relaxed mb-4">
-                Anti-tamper MCQ examination interface. Displays waiting rooms for upcoming tests, real-time timer countdowns, and instant sanitized answer submissions.
+              <p className="text-sm text-zinc-400 leading-relaxed mb-6">
+                Anti-tamper MCQ examination interface. Displays waiting rooms with live countdowns for scheduled tests, locks answer keys securely, records candidate response telemetry, and submits grades instantly to the centralized cloud ledger upon completion.
               </p>
-            </div>
-            <button
-              onClick={() => handleNav('/mcq')}
-              className="inline-flex items-center justify-between w-full px-4 py-2.5 rounded-lg border border-zinc-800 bg-zinc-900 text-white text-sm font-semibold hover:border-zinc-600 hover:bg-zinc-800/80 transition-colors cursor-pointer"
-            >
-              <span>Enter Examination Hall</span>
-              <ArrowRight size={15} />
-            </button>
-          </div>
 
-          {/* 2. Paper Setter Portal */}
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-6 flex flex-col justify-between hover:border-zinc-700 transition-colors">
-            <div>
-              <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white mb-4">
-                <Layers size={20} />
+              {/* Feature bullets */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+                {[
+                  'Cryptographic answer key protection',
+                  'Synchronized exam start countdown',
+                  'Instant automated result calculation',
+                  'Focus blur & tab-switch logging',
+                  'Clean distraction-free interface',
+                  'Cloud-backed real-time score ledger'
+                ].map((feat) => (
+                  <div key={feat} className="flex items-center gap-2 text-xs text-zinc-400">
+                    <CheckCircle2 size={13} className="text-zinc-500 shrink-0" />
+                    <span>{feat}</span>
+                  </div>
+                ))}
               </div>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-lg font-bold text-white">
-                  Paper Setter Studio
-                </h3>
-                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded border border-zinc-800 bg-zinc-900 text-zinc-400">
-                  PROFESSOR PORTAL
-                </span>
-              </div>
-              <p className="text-sm text-zinc-400 leading-relaxed mb-4">
-                Design custom questions or leverage the Autonomous AI Paper Generator with 3 intuitive parameters (Questions, Marks, Severity). Manage the central question bank with one-click purge and permanent cloud deletion.
-              </p>
-            </div>
-            <button
-              onClick={() => handleNav('/paper-setter')}
-              className="inline-flex items-center justify-between w-full px-4 py-2.5 rounded-lg border border-zinc-800 bg-zinc-900 text-white text-sm font-semibold hover:border-zinc-600 hover:bg-zinc-800/80 transition-colors cursor-pointer"
-            >
-              <span>Open Paper Setter Studio</span>
-              <ArrowRight size={15} />
-            </button>
-          </div>
 
-          {/* 3. Code Lab Practical Workspace */}
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-6 flex flex-col justify-between hover:border-zinc-700 transition-colors">
-            <div>
-              <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white mb-4">
-                <Terminal size={20} />
-              </div>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-lg font-bold text-white">
-                  Coding Practical Workspace
-                </h3>
-                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded border border-zinc-800 bg-zinc-900 text-zinc-400">
-                  LAB WORKSTATION
-                </span>
-              </div>
-              <p className="text-sm text-zinc-400 leading-relaxed mb-4">
-                Sandboxed online IDE for Python, C++, Java, and JavaScript. Keystroke telemetry recording, paste-ratio monitoring, non-blocking lock alerts, and automated Viva Voce defense questioning.
-              </p>
+              <button
+                onClick={() => handleNav('/mcq')}
+                className="inline-flex items-center gap-3 px-6 py-3 rounded-xl bg-white text-black text-sm font-bold hover:bg-zinc-100 transition-colors cursor-pointer"
+              >
+                <span>Enter Examination Hall</span>
+                <ArrowRight size={16} />
+              </button>
             </div>
-            <button
-              onClick={() => handleNav('/workspace')}
-              className="inline-flex items-center justify-between w-full px-4 py-2.5 rounded-lg border border-zinc-800 bg-zinc-900 text-white text-sm font-semibold hover:border-zinc-600 hover:bg-zinc-800/80 transition-colors cursor-pointer"
-            >
-              <span>Launch Code Lab Workspace</span>
-              <ArrowRight size={15} />
-            </button>
-          </div>
-
-          {/* 4. CCTV Invigilator Command */}
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-6 flex flex-col justify-between hover:border-zinc-700 transition-colors">
-            <div>
-              <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white mb-4">
-                <Tv size={20} />
-              </div>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-lg font-bold text-white">
-                  CCTV Invigilator Command
-                </h3>
-                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded border border-zinc-800 bg-zinc-900 text-zinc-400">
-                  PROCTOR CONTROL
-                </span>
-              </div>
-              <p className="text-sm text-zinc-400 leading-relaxed mb-4">
-                Real-time invigilation grid with remote candidate workstation feeds, dual-monitor violation warnings, tab blur logging, and instant disqualification authority.
-              </p>
-            </div>
-            <button
-              onClick={() => handleNav('/admin')}
-              className="inline-flex items-center justify-between w-full px-4 py-2.5 rounded-lg border border-zinc-800 bg-zinc-900 text-white text-sm font-semibold hover:border-zinc-600 hover:bg-zinc-800/80 transition-colors cursor-pointer"
-            >
-              <span>Access Invigilator Grid</span>
-              <ArrowRight size={15} />
-            </button>
           </div>
         </div>
       </section>
