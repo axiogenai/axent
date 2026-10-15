@@ -207,14 +207,44 @@ export function getAllCollegeLabs(): CollegeLabInfo[] {
   return [];
 }
 
+export function notifyLabsChanged(labs: CollegeLabInfo[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(new CustomEvent('codedna_labs_changed', { detail: labs }));
+    localStorage.setItem('codedna_labs_tick', String(Date.now()));
+  } catch {}
+}
+
 export async function syncCollegeLabsFromCloud(): Promise<CollegeLabInfo[]> {
   try {
     const cloudLabs = await fetchCollegeLabsFromCloud();
-    if (cloudLabs) {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(cloudLabs));
+    const localLabs = getAllCollegeLabs();
+
+    if (cloudLabs && cloudLabs.length > 0) {
+      // Merge: cloud is authoritative, but ensure any locally created offline labs get preserved and uploaded
+      const map = new Map<string, CollegeLabInfo>();
+      for (const cl of cloudLabs) {
+        map.set(cl.labId.toUpperCase(), cl);
       }
-      return cloudLabs;
+      for (const ll of localLabs) {
+        const key = ll.labId.toUpperCase();
+        if (!map.has(key)) {
+          map.set(key, ll);
+          // Auto-reconcile: push offline-created local lab up to Supabase cloud
+          void saveCollegeLabToCloud(ll);
+        }
+      }
+      const reconciled = Array.from(map.values());
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(reconciled));
+        notifyLabsChanged(reconciled);
+      }
+      return reconciled;
+    } else if (localLabs.length > 0) {
+      // Cloud table was empty or freshly provisioned: backfill all existing local labs to cloud!
+      for (const lab of localLabs) {
+        void saveCollegeLabToCloud(lab);
+      }
     }
   } catch (err) {
     console.warn('[Axent] Failed to sync college labs from cloud:', err);
@@ -224,7 +254,7 @@ export async function syncCollegeLabsFromCloud(): Promise<CollegeLabInfo[]> {
 
 export function saveCollegeLab(lab: CollegeLabInfo): CollegeLabInfo[] {
   const current = getAllCollegeLabs();
-  const idx = current.findIndex((l) => l.labId === lab.labId);
+  const idx = current.findIndex((l) => l.labId.toUpperCase() === lab.labId.toUpperCase());
   let updated: CollegeLabInfo[];
   if (idx >= 0) {
     updated = [...current];
@@ -234,26 +264,34 @@ export function saveCollegeLab(lab: CollegeLabInfo): CollegeLabInfo[] {
   }
   if (typeof window !== 'undefined') {
     localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(updated));
+    notifyLabsChanged(updated);
   }
-  saveCollegeLabToCloud(lab);
+  void saveCollegeLabToCloud(lab);
   return updated;
 }
 
 export function deleteCollegeLab(labId: string): CollegeLabInfo[] {
   const current = getAllCollegeLabs();
-  const updated = current.filter((l) => l.labId !== labId);
+  const updated = current.filter((l) => l.labId.toUpperCase() !== labId.toUpperCase());
   if (typeof window !== 'undefined') {
     localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(updated));
+    notifyLabsChanged(updated);
   }
-  deleteCollegeLabFromCloud(labId);
+  void deleteCollegeLabFromCloud(labId);
   return updated;
 }
 
 export function resetCollegeLabs(): CollegeLabInfo[] {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(CUSTOM_LABS_KEY);
+    notifyLabsChanged([]);
   }
   return [];
+}
+
+// Automatically sync college labs on load
+if (typeof window !== 'undefined') {
+  void syncCollegeLabsFromCloud();
 }
 
 // ── PURGE CORRUPTED / LEGACY ENTRIES FROM LOCAL STORAGE ──

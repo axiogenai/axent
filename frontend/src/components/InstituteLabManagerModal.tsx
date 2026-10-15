@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Building2,
   Plus,
@@ -18,7 +18,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { CollegeLabInfo } from '../types/dna';
-import { getAllCollegeLabs, saveCollegeLab, deleteCollegeLab, resetCollegeLabs } from '../services/adminService';
+import { getAllCollegeLabs, saveCollegeLab, deleteCollegeLab, resetCollegeLabs, syncCollegeLabsFromCloud } from '../services/adminService';
 import { playSound } from '../utils/sounds';
 import { ConfirmationModal } from './ConfirmationModal';
 
@@ -39,6 +39,14 @@ export const InstituteLabManagerModal: React.FC<InstituteLabManagerModalProps> =
   const [labs, setLabs] = useState<CollegeLabInfo[]>(() => getAllCollegeLabs());
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      void syncCollegeLabsFromCloud().then((fresh) => {
+        if (fresh && fresh.length > 0) setLabs(fresh);
+      });
+    }
+  }, [isOpen]);
 
   // New Lab Form State
   const [newLabId, setNewLabId] = useState('');

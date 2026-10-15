@@ -10,6 +10,7 @@ import {
 import {
   COLLEGE_LABS,
   getAllCollegeLabs,
+  syncCollegeLabsFromCloud,
   getLiveStations,
   getStationsForLab,
   getCampusStats,
@@ -165,6 +166,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       clearInterval(interval);
     };
   }, [selectedLabId]);
+
+  // Synchronize and subscribe to college lab inventory from Supabase Cloud
+  useEffect(() => {
+    void syncCollegeLabsFromCloud().then((labs) => {
+      if (labs && labs.length > 0) setAllLabs(labs);
+    });
+
+    const handleLabsChanged = (e: Event) => {
+      const custom = e as CustomEvent<CollegeLabInfo[]>;
+      if (custom?.detail && Array.isArray(custom.detail)) {
+        setAllLabs(custom.detail);
+      } else {
+        setAllLabs(getAllCollegeLabs());
+      }
+    };
+
+    window.addEventListener('codedna_labs_changed', handleLabsChanged);
+    window.addEventListener('storage', handleLabsChanged);
+    return () => {
+      window.removeEventListener('codedna_labs_changed', handleLabsChanged);
+      window.removeEventListener('storage', handleLabsChanged);
+    };
+  }, []);
 
   const campusStats = getCampusStats();
   const currentLabInfo = allLabs.find((l) => l.labId === selectedLabId) || allLabs[0];

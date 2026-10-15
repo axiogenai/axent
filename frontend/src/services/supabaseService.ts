@@ -30,6 +30,7 @@ export function subscribeToMcqCloudChanges(onChange: () => void): () => void {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_questions' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_exams' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_attempts' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'college_labs' }, onChange)
     .subscribe();
   return () => { void supabase.removeChannel(channel); };
 }
