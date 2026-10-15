@@ -3942,70 +3942,6 @@ export const MCQExamSelector: React.FC = () => {
   const [exams, setExams] = useState<MCQExamConfig[]>(() =>
     getAllExams().filter((e) => e.status === 'PUBLISHED')
   );
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'ALL' | 'LIVE' | 'UPCOMING' | 'CONCLUDED'>('ALL');
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isFullscreenMode, setIsFullscreenMode] = useState(() => isCurrentlyFullscreen());
-
-  const [studentProfile, setStudentProfile] = useState<StudentInfo | null>(() => {
-    try {
-      const raw = localStorage.getItem('codedna_student_profile');
-      if (raw) return JSON.parse(raw);
-    } catch {}
-    return null;
-  });
-
-  useEffect(() => {
-    const handleStorage = () => {
-      try {
-        const raw = localStorage.getItem('codedna_student_profile');
-        setStudentProfile(raw ? JSON.parse(raw) : null);
-      } catch {}
-    };
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
-  }, []);
-
-  useEffect(() => {
-    const onFsChange = () => setIsFullscreenMode(isCurrentlyFullscreen());
-    document.addEventListener('fullscreenchange', onFsChange);
-    document.addEventListener('webkitfullscreenchange', onFsChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', onFsChange);
-      document.removeEventListener('webkitfullscreenchange', onFsChange);
-    };
-  }, []);
-
-  const handleToggleFullscreen = () => {
-    if (isFullscreenMode) {
-      exitExamFullscreen();
-    } else {
-      requestExamFullscreen();
-    }
-  };
-
-  const handleManualRefresh = async () => {
-    setIsSyncing(true);
-    try {
-      await syncFromSupabase();
-      setExams(getAllExams().filter((e) => e.status === 'PUBLISHED'));
-    } finally {
-      setTimeout(() => setIsSyncing(false), 450);
-    }
-  };
-
-  const handleSwitchCandidate = () => {
-    try {
-      sessionStorage.removeItem('codedna_mcq_session_attempt');
-      sessionStorage.removeItem('codedna_mcq_last_finished_attempt');
-      localStorage.removeItem('codedna_mcq_active_attempt_backup');
-      localStorage.removeItem('codedna_mcq_active_attempt');
-      localStorage.removeItem('codedna_active_exam_mode');
-      localStorage.removeItem('codedna_student_profile');
-      setStudentProfile(null);
-    } catch {}
-    window.location.reload();
-  };
 
   useEffect(() => {
     const refresh = () => {
@@ -4104,43 +4040,6 @@ export const MCQExamSelector: React.FC = () => {
     performExit();
   };
 
-  const liveCount = useMemo(() => {
-    return exams.filter((e) => {
-      const isScheduledFuture = Boolean(e.startTime && currentTime < e.startTime);
-      const isConcluded = Boolean(e.endTime && currentTime > e.endTime);
-      return !isScheduledFuture && !isConcluded;
-    }).length;
-  }, [exams, currentTime]);
-
-  const upcomingCount = useMemo(() => {
-    return exams.filter((e) => Boolean(e.startTime && currentTime < e.startTime)).length;
-  }, [exams, currentTime]);
-
-  const concludedCount = useMemo(() => {
-    return exams.filter((e) => Boolean(e.endTime && currentTime > e.endTime)).length;
-  }, [exams, currentTime]);
-
-  const filteredExams = useMemo(() => {
-    return exams.filter((exam) => {
-      const isScheduledFuture = Boolean(exam.startTime && currentTime < exam.startTime);
-      const isConcluded = Boolean(exam.endTime && currentTime > exam.endTime);
-      const isLive = !isScheduledFuture && !isConcluded;
-
-      if (activeTab === 'LIVE' && !isLive) return false;
-      if (activeTab === 'UPCOMING' && !isScheduledFuture) return false;
-      if (activeTab === 'CONCLUDED' && !isConcluded) return false;
-
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchTitle = exam.title.toLowerCase().includes(q);
-        const matchTopic = (exam.topic || '').toLowerCase().includes(q);
-        const matchCat = (exam.examCategory || exam.subject || '').toLowerCase().includes(q);
-        if (!matchTitle && !matchTopic && !matchCat) return false;
-      }
-      return true;
-    });
-  }, [exams, activeTab, searchQuery, currentTime]);
-
   if (effectiveExamId) {
     return (
       <ErrorBoundary
@@ -4177,7 +4076,7 @@ export const MCQExamSelector: React.FC = () => {
   }
 
   return (
-    <div className="mcq-catalog-container" style={{ padding: '24px 32px 48px' }}>
+    <div style={{ padding: '24px 32px', width: '100%', boxSizing: 'border-box' }}>
       {urlTamperNotice && (
         <div
           style={{
@@ -4214,693 +4113,306 @@ export const MCQExamSelector: React.FC = () => {
         </div>
       )}
 
-      {/* ── Top Portal Command Bar ── */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: '20px',
-          flexWrap: 'wrap',
-          marginBottom: '20px',
-          borderBottom: '1px solid var(--border)',
-          paddingBottom: '20px'
-        }}
-      >
-        <div>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '10.5px',
-              fontWeight: 800,
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              color: 'var(--text-dim)',
-              marginBottom: '6px'
-            }}
-          >
-            <Shield size={12} color="var(--text-muted)" />
-            <span>Institutional Examination Hall · AY 2025–26</span>
-          </div>
-          <h2
-            style={{
-              fontSize: '22px',
-              fontWeight: 800,
-              color: 'var(--text-primary)',
-              margin: '0 0 4px',
-              letterSpacing: '-0.025em'
-            }}
-          >
-            Available MCQ Examinations
-          </h2>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-            Select your assigned examination session to commence or enter the synchronized waiting room.
-          </p>
-        </div>
-
-        {/* Telemetry & Portal Action Badges */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {/* Synchronized NTP Clock */}
-          <div
-            title="NTP Server Time Clock — Millisecond accuracy synchronized with cloud registry"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              height: '34px',
-              padding: '0 12px',
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)'
-            }}
-          >
-            <Clock size={13} color="var(--text-muted)" />
-            <span
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '12px',
-                fontWeight: 600,
-                color: 'var(--text-primary)'
-              }}
-            >
-              {new Date(currentTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-            </span>
-            <span
-              style={{
-                fontSize: '10px',
-                fontWeight: 700,
-                padding: '1px 6px',
-                borderRadius: 'var(--radius-pill)',
-                background: 'var(--success-bg)',
-                color: 'var(--success)',
-                border: '1px solid var(--success-border)',
-                letterSpacing: '0.04em'
-              }}
-            >
-              NTP Synced
-            </span>
-          </div>
-
-          {/* Cloud Sync Button */}
-          <button
-            type="button"
-            onClick={() => void handleManualRefresh()}
-            title="Sync latest published examination sessions from Supabase cloud"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              height: '34px',
-              padding: '0 12px',
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              cursor: 'pointer',
-              color: 'var(--text-secondary)',
-              fontSize: '12px',
-              fontWeight: 600,
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <RefreshCw size={12} className={isSyncing ? 'animate-spin' : ''} />
-            <span>{isSyncing ? 'Syncing...' : 'Cloud Sync'}</span>
-          </button>
-
-          {/* Fullscreen Portal Mode Toggle */}
-          <button
-            type="button"
-            onClick={handleToggleFullscreen}
-            title={isFullscreenMode ? 'Exit Fullscreen' : 'Enter Fullscreen Examination Mode'}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              height: '34px',
-              padding: '0 12px',
-              background: isFullscreenMode ? 'var(--bg-surface)' : 'var(--bg-elevated)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              cursor: 'pointer',
-              color: 'var(--text-primary)',
-              fontSize: '12px',
-              fontWeight: 600,
-              transition: 'all 0.15s ease'
-            }}
-          >
-            {isFullscreenMode ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-            <span>{isFullscreenMode ? 'Exit Fullscreen' : 'Fullscreen'}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ── Filter & Search Toolbar ── */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '16px',
-          marginBottom: '20px',
-          flexWrap: 'wrap'
-        }}
-      >
-        {/* Search input */}
-        <div style={{ position: 'relative', minWidth: '280px', flex: '1', maxWidth: '440px' }}>
-          <Search
-            size={13}
-            style={{
-              position: 'absolute',
-              left: '12px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'var(--text-muted)'
-            }}
-          />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Filter examinations by title, subject, or topic..."
-            style={{
-              width: '100%',
-              height: '34px',
-              padding: '0 32px 0 34px',
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              color: 'var(--text-primary)',
-              fontSize: '12.5px',
-              outline: 'none',
-              boxSizing: 'border-box'
-            }}
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              style={{
-                position: 'absolute',
-                right: '8px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                background: 'none',
-                border: 'none',
-                color: 'var(--text-muted)',
-                cursor: 'pointer',
-                padding: '4px'
-              }}
-            >
-              <X size={12} />
-            </button>
-          )}
-        </div>
-
-        {/* Tab Filters */}
-        <div
+      {/* Clean Header */}
+      <div style={{ marginBottom: '22px' }}>
+        <h2
           style={{
-            display: 'flex',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '2.5px',
-            gap: '2px'
+            fontSize: '20px',
+            fontWeight: 800,
+            color: 'var(--text-primary)',
+            margin: '0 0 4px',
+            letterSpacing: '-0.02em'
           }}
         >
-          <button
-            type="button"
-            onClick={() => setActiveTab('ALL')}
-            style={{
-              background: activeTab === 'ALL' ? 'var(--bg-elevated)' : 'transparent',
-              border: activeTab === 'ALL' ? '1px solid var(--border)' : '1px solid transparent',
-              color: activeTab === 'ALL' ? 'var(--text-primary)' : 'var(--text-muted)',
-              fontSize: '11.5px',
-              fontWeight: activeTab === 'ALL' ? 700 : 500,
-              padding: '4px 10px',
-              borderRadius: 'var(--radius-xs)',
-              cursor: 'pointer',
-              transition: 'all 0.12s ease'
-            }}
-          >
-            All ({exams.length})
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('LIVE')}
-            style={{
-              background: activeTab === 'LIVE' ? 'var(--bg-elevated)' : 'transparent',
-              border: activeTab === 'LIVE' ? '1px solid var(--border)' : '1px solid transparent',
-              color: activeTab === 'LIVE' ? 'var(--success)' : 'var(--text-muted)',
-              fontSize: '11.5px',
-              fontWeight: activeTab === 'LIVE' ? 700 : 500,
-              padding: '4px 10px',
-              borderRadius: 'var(--radius-xs)',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              transition: 'all 0.12s ease'
-            }}
-          >
-            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--success)' }} />
-            Live ({liveCount})
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('UPCOMING')}
-            style={{
-              background: activeTab === 'UPCOMING' ? 'var(--bg-elevated)' : 'transparent',
-              border: activeTab === 'UPCOMING' ? '1px solid var(--border)' : '1px solid transparent',
-              color: activeTab === 'UPCOMING' ? 'var(--warning)' : 'var(--text-muted)',
-              fontSize: '11.5px',
-              fontWeight: activeTab === 'UPCOMING' ? 700 : 500,
-              padding: '4px 10px',
-              borderRadius: 'var(--radius-xs)',
-              cursor: 'pointer',
-              transition: 'all 0.12s ease'
-            }}
-          >
-            Upcoming ({upcomingCount})
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('CONCLUDED')}
-            style={{
-              background: activeTab === 'CONCLUDED' ? 'var(--bg-elevated)' : 'transparent',
-              border: activeTab === 'CONCLUDED' ? '1px solid var(--border)' : '1px solid transparent',
-              color: activeTab === 'CONCLUDED' ? 'var(--text-primary)' : 'var(--text-muted)',
-              fontSize: '11.5px',
-              fontWeight: activeTab === 'CONCLUDED' ? 700 : 500,
-              padding: '4px 10px',
-              borderRadius: 'var(--radius-xs)',
-              cursor: 'pointer',
-              transition: 'all 0.12s ease'
-            }}
-          >
-            Concluded ({concludedCount})
-          </button>
-        </div>
+          Available MCQ Examinations
+        </h2>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
+          Select your assigned examination session to commence or enter the synchronized waiting room.
+        </p>
       </div>
 
-      {/* ── Main High-Density Catalog Layout ── */}
-      <div className="mcq-catalog-layout">
-        {/* Left Column: Horizontal Slim Cards Stack */}
-        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {filteredExams.length === 0 ? (
-            <div
-              style={{
-                textAlign: 'center',
-                padding: '60px 24px',
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-md)'
-              }}
-            >
-              <BookOpen size={34} style={{ marginBottom: '14px', opacity: 0.35, color: 'var(--text-muted)' }} />
-              <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 6px' }}>
-                {searchQuery || activeTab !== 'ALL'
-                  ? 'No examinations matched your filters'
-                  : 'No active examinations scheduled'}
-              </p>
-              <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: '0 0 16px' }}>
-                {searchQuery || activeTab !== 'ALL'
-                  ? 'Try broadening your search term or selecting another status filter.'
-                  : 'Check back closer to your scheduled session or consult your laboratory invigilator.'}
-              </p>
-              {(searchQuery || activeTab !== 'ALL') && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setActiveTab('ALL');
-                  }}
-                  className="btn btn-secondary btn-sm"
-                  style={{ height: '30px', padding: '0 14px', fontSize: '12px' }}
-                >
-                  Reset All Filters
-                </button>
-              )}
-            </div>
-          ) : (
-            filteredExams.map((exam) => {
-              const isScheduledFuture = Boolean(exam.startTime && currentTime < exam.startTime);
-              const isConcluded = Boolean(exam.endTime && currentTime > exam.endTime);
-              const isLive = !isScheduledFuture && !isConcluded;
+      {exams.length === 0 ? (
+        <div
+          style={{
+            textAlign: 'center',
+            padding: '60px 24px',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)'
+          }}
+        >
+          <BookOpen size={34} style={{ marginBottom: '14px', opacity: 0.35, color: 'var(--text-muted)' }} />
+          <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 6px' }}>
+            No active examinations scheduled
+          </p>
+          <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: 0 }}>
+            Check back closer to your examination time or consult your laboratory invigilator.
+          </p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+          {exams.map((exam) => {
+            const isScheduledFuture = Boolean(exam.startTime && currentTime < exam.startTime);
+            const isConcluded = Boolean(exam.endTime && currentTime > exam.endTime);
+            const isLive = !isScheduledFuture && !isConcluded;
 
-              let countdownStr = '';
-              if (isScheduledFuture && exam.startTime) {
-                const diffMs = Math.max(0, exam.startTime - currentTime);
-                const totalSecs = Math.floor(diffMs / 1000);
-                const diffHours = Math.floor(totalSecs / 3600);
-                const remMins = Math.floor((totalSecs % 3600) / 60);
-                const remSecs = totalSecs % 60;
-                countdownStr = `${diffHours > 0 ? `${diffHours}h ` : ''}${remMins}m ${String(remSecs).padStart(2, '0')}s`;
-              }
+            let countdownStr = '';
+            if (isScheduledFuture && exam.startTime) {
+              const diffMs = Math.max(0, exam.startTime - currentTime);
+              const totalSecs = Math.floor(diffMs / 1000);
+              const diffHours = Math.floor(totalSecs / 3600);
+              const remMins = Math.floor((totalSecs % 3600) / 60);
+              const remSecs = totalSecs % 60;
+              countdownStr = `${diffHours > 0 ? `${diffHours}h ` : ''}${remMins}m ${String(remSecs).padStart(2, '0')}s`;
+            }
 
-              const formatScheduleTime = (ts: number) =>
-                new Date(ts).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            const formatScheduleTime = (ts: number) =>
+              new Date(ts).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-              return (
-                <div
-                  key={exam.id}
-                  onClick={() => {
-                    if (!isConcluded) {
-                      handleSelectExam(exam.id);
-                    }
-                  }}
-                  className="mcq-horizontal-card"
-                  style={{
-                    cursor: isConcluded ? 'not-allowed' : 'pointer',
-                    opacity: isConcluded ? 0.65 : 1
-                  }}
-                >
-                  {/* Left Side: Category, Title, Topic & Metric Chips */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 0 }}>
-                    {/* Category Micro-Badge */}
-                    <span
-                      style={{
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        color: 'var(--text-secondary)',
-                        background: 'var(--bg-surface)',
-                        border: '1px solid var(--border)',
-                        padding: '3px 8px',
-                        borderRadius: 'var(--radius-xs)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.04em',
-                        flexShrink: 0
-                      }}
-                    >
-                      {exam.examCategory || exam.subject || 'Assessment'}
-                    </span>
+            return (
+              <div
+                key={exam.id}
+                onClick={() => {
+                  if (!isConcluded) {
+                    handleSelectExam(exam.id);
+                  }
+                }}
+                className="mcq-horizontal-card"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '14px 20px',
+                  background: isConcluded ? 'var(--bg-surface)' : 'var(--bg-elevated)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-md)',
+                  boxSizing: 'border-box',
+                  width: '100%',
+                  gap: '16px',
+                  cursor: isConcluded ? 'not-allowed' : 'pointer',
+                  opacity: isConcluded ? 0.65 : 1,
+                  transition: 'border-color 0.15s ease, background 0.15s ease'
+                }}
+                onMouseEnter={(e) => {
+                  if (!isConcluded) {
+                    e.currentTarget.style.borderColor = 'var(--border-strong)';
+                    e.currentTarget.style.background = 'var(--bg-surface)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isConcluded) {
+                    e.currentTarget.style.borderColor = 'var(--border)';
+                    e.currentTarget.style.background = isConcluded ? 'var(--bg-surface)' : 'var(--bg-elevated)';
+                  }
+                }}
+              >
+                {/* Left Side: Category, Title, Topic & Metric Chips */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 0 }}>
+                  {/* Category Micro-Badge */}
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: 'var(--text-secondary)',
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border)',
+                      padding: '3px 8px',
+                      borderRadius: 'var(--radius-xs)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      flexShrink: 0
+                    }}
+                  >
+                    {exam.examCategory || exam.subject || 'Assessment'}
+                  </span>
 
-                    {/* Title + Metadata Cluster */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', minWidth: 0, flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <h3
-                          style={{
-                            margin: 0,
-                            fontSize: '14.5px',
-                            fontWeight: 700,
-                            color: 'var(--text-primary)',
-                            lineHeight: 1.3
-                          }}
-                        >
-                          {exam.title}
-                        </h3>
-                        {exam.topic && (
-                          <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>
-                            · {exam.topic}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Inline Metric Chips Row */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                        <div
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '2px 7px',
-                            borderRadius: 'var(--radius-xs)',
-                            background: 'var(--bg-surface)',
-                            border: '1px solid var(--border)',
-                            fontSize: '11px',
-                            color: 'var(--text-secondary)'
-                          }}
-                        >
-                          <BookOpen size={11} color="var(--text-muted)" />
-                          <span>{exam.questionCount} Questions</span>
-                        </div>
-
-                        <div
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '2px 7px',
-                            borderRadius: 'var(--radius-xs)',
-                            background: 'var(--bg-surface)',
-                            border: '1px solid var(--border)',
-                            fontSize: '11px',
-                            color: 'var(--text-secondary)'
-                          }}
-                        >
-                          <Clock size={11} color="var(--text-muted)" />
-                          <span>{exam.durationMinutes} Mins</span>
-                        </div>
-
-                        <div
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '2px 7px',
-                            borderRadius: 'var(--radius-xs)',
-                            background: 'var(--bg-surface)',
-                            border: '1px solid var(--border)',
-                            fontSize: '11px',
-                            color: 'var(--text-secondary)'
-                          }}
-                        >
-                          <Award size={11} color="var(--text-muted)" />
-                          <span>{exam.totalMarks} Marks</span>
-                        </div>
-
-                        <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginLeft: '4px' }}>
-                          {exam.negativeMarkingEnabled ? 'Negative: -0.25' : 'No negative marking'}
+                  {/* Title + Metadata Cluster */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <h3
+                        style={{
+                          margin: 0,
+                          fontSize: '14.5px',
+                          fontWeight: 700,
+                          color: 'var(--text-primary)',
+                          lineHeight: 1.3
+                        }}
+                      >
+                        {exam.title}
+                      </h3>
+                      {exam.topic && (
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>
+                          · {exam.topic}
                         </span>
+                      )}
+                    </div>
 
-                        {isScheduledFuture && exam.startTime && (
-                          <span style={{ fontSize: '11px', color: 'var(--warning)', display: 'inline-flex', alignItems: 'center', gap: '4px', marginLeft: '6px' }}>
-                            <Calendar size={11} />
-                            Starts: {formatScheduleTime(exam.startTime)}
-                          </span>
-                        )}
-                        {!isScheduledFuture && exam.endTime && (
-                          <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginLeft: '6px' }}>
-                            Closes: {formatScheduleTime(exam.endTime)}
-                          </span>
-                        )}
+                    {/* Inline Metric Chips Row */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '2px 7px',
+                          borderRadius: 'var(--radius-xs)',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                          fontSize: '11px',
+                          color: 'var(--text-secondary)'
+                        }}
+                      >
+                        <BookOpen size={11} color="var(--text-muted)" />
+                        <span>{exam.questionCount} Questions</span>
                       </div>
+
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '2px 7px',
+                          borderRadius: 'var(--radius-xs)',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                          fontSize: '11px',
+                          color: 'var(--text-secondary)'
+                        }}
+                      >
+                        <Clock size={11} color="var(--text-muted)" />
+                        <span>{exam.durationMinutes} Mins</span>
+                      </div>
+
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '2px 7px',
+                          borderRadius: 'var(--radius-xs)',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                          fontSize: '11px',
+                          color: 'var(--text-secondary)'
+                        }}
+                      >
+                        <Award size={11} color="var(--text-muted)" />
+                        <span>{exam.totalMarks} Marks</span>
+                      </div>
+
+                      <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginLeft: '4px' }}>
+                        {exam.negativeMarkingEnabled ? 'Negative: -0.25' : 'No negative marking'}
+                      </span>
+
+                      {isScheduledFuture && exam.startTime && (
+                        <span style={{ fontSize: '11px', color: 'var(--warning)', display: 'inline-flex', alignItems: 'center', gap: '4px', marginLeft: '6px' }}>
+                          <Calendar size={11} />
+                          Starts: {formatScheduleTime(exam.startTime)}
+                        </span>
+                      )}
+                      {!isScheduledFuture && exam.endTime && (
+                        <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginLeft: '6px' }}>
+                          Closes: {formatScheduleTime(exam.endTime)}
+                        </span>
+                      )}
                     </div>
                   </div>
-
-                  {/* Right Side: Status Badge & Action CTA */}
-                  <div className="mcq-horizontal-card-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
-                    {isLive && (
-                      <span
-                        style={{
-                          fontSize: '10.5px',
-                          fontWeight: 700,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                          padding: '3px 10px',
-                          borderRadius: 'var(--radius-pill)',
-                          background: 'var(--success-bg)',
-                          color: 'var(--success)',
-                          border: '1px solid var(--success-border)',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px'
-                        }}
-                      >
-                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--success)' }} />
-                        Live Examination
-                      </span>
-                    )}
-
-                    {isScheduledFuture && (
-                      <span
-                        style={{
-                          fontSize: '10.5px',
-                          fontWeight: 700,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                          padding: '3px 10px',
-                          borderRadius: 'var(--radius-pill)',
-                          background: 'var(--warning-bg)',
-                          color: 'var(--warning)',
-                          border: '1px solid var(--warning-border)',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '5px'
-                        }}
-                      >
-                        <Clock size={11} /> Opens in {countdownStr}
-                      </span>
-                    )}
-
-                    {isConcluded && (
-                      <span
-                        style={{
-                          fontSize: '10.5px',
-                          fontWeight: 600,
-                          textTransform: 'uppercase',
-                          padding: '3px 9px',
-                          borderRadius: 'var(--radius-pill)',
-                          background: 'var(--bg-surface)',
-                          color: 'var(--text-muted)',
-                          border: '1px solid var(--border)'
-                        }}
-                      >
-                        Concluded
-                      </span>
-                    )}
-
-                    {isLive && (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        style={{ height: '32px', padding: '0 16px', fontSize: '12px', gap: '5px', fontWeight: 700 }}
-                      >
-                        <span>Start Exam</span>
-                        <ChevronRight size={13} />
-                      </button>
-                    )}
-
-                    {isScheduledFuture && (
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        style={{ height: '32px', padding: '0 14px', fontSize: '12px', gap: '5px' }}
-                      >
-                        <Clock size={12} color="var(--warning)" />
-                        <span>Waiting Room</span>
-                        <ChevronRight size={13} />
-                      </button>
-                    )}
-
-                    {isConcluded && (
-                      <span style={{ fontSize: '11.5px', color: 'var(--text-dim)', paddingRight: '4px' }}>Session Closed</span>
-                    )}
-                  </div>
                 </div>
-              );
-            })
-          )}
+
+                {/* Right Side: Status Badge & Action CTA */}
+                <div className="mcq-horizontal-card-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+                  {isLive && (
+                    <span
+                      style={{
+                        fontSize: '10.5px',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        padding: '3px 10px',
+                        borderRadius: 'var(--radius-pill)',
+                        background: 'var(--success-bg)',
+                        color: 'var(--success)',
+                        border: '1px solid var(--success-border)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--success)' }} />
+                      Live Examination
+                    </span>
+                  )}
+
+                  {isScheduledFuture && (
+                    <span
+                      style={{
+                        fontSize: '10.5px',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        padding: '3px 10px',
+                        borderRadius: 'var(--radius-pill)',
+                        background: 'var(--warning-bg)',
+                        color: 'var(--warning)',
+                        border: '1px solid var(--warning-border)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                    >
+                      <Clock size={11} /> Opens in {countdownStr}
+                    </span>
+                  )}
+
+                  {isConcluded && (
+                    <span
+                      style={{
+                        fontSize: '10.5px',
+                        fontWeight: 600,
+                        textTransform: 'uppercase',
+                        padding: '3px 9px',
+                        borderRadius: 'var(--radius-pill)',
+                        background: 'var(--bg-surface)',
+                        color: 'var(--text-muted)',
+                        border: '1px solid var(--border)'
+                      }}
+                    >
+                      Concluded
+                    </span>
+                  )}
+
+                  {isLive && (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      style={{ height: '32px', padding: '0 16px', fontSize: '12px', gap: '5px', fontWeight: 700 }}
+                    >
+                      <span>Start Exam</span>
+                      <ChevronRight size={13} />
+                    </button>
+                  )}
+
+                  {isScheduledFuture && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ height: '32px', padding: '0 14px', fontSize: '12px', gap: '5px' }}
+                    >
+                      <Clock size={12} color="var(--warning)" />
+                      <span>Waiting Room</span>
+                      <ChevronRight size={13} />
+                    </button>
+                  )}
+
+                  {isConcluded && (
+                    <span style={{ fontSize: '11.5px', color: 'var(--text-dim)', paddingRight: '4px' }}>Session Closed</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
-
-        {/* Right Column: Workstation Dossier & Surveillance Guidelines */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Workstation Dossier Card */}
-          <div
-            style={{
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)',
-              padding: '16px 18px'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <Terminal size={14} color="var(--text-muted)" />
-              <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-secondary)' }}>
-                Candidate Workstation
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '6px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Candidate:</span>
-                <strong style={{ color: 'var(--text-primary)' }}>{studentProfile?.name || 'Assigned Candidate'}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '6px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Roll / USN:</span>
-                <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{studentProfile?.rollNumber || 'Terminal Registered'}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '6px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Workstation:</span>
-                <strong style={{ color: 'var(--text-primary)' }}>{studentProfile?.stationNumber || 'Station #01'}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Mode:</span>
-                <strong style={{ color: 'var(--success)' }}>MCQ Evaluation</strong>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleSwitchCandidate}
-              className="btn btn-secondary btn-sm"
-              style={{
-                width: '100%',
-                marginTop: '14px',
-                height: '30px',
-                fontSize: '11.5px',
-                gap: '6px',
-                justifyContent: 'center'
-              }}
-            >
-              <UserPlus size={12} />
-              <span>Switch Candidate / Next Login</span>
-            </button>
-          </div>
-
-          {/* Academic Integrity Protocols Card */}
-          <div
-            style={{
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)',
-              padding: '16px 18px'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <ShieldAlert size={14} color="var(--warning)" />
-              <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--warning)' }}>
-                Surveillance & Protocols
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                <Maximize2 size={13} style={{ flexShrink: 0, marginTop: '2px', color: 'var(--text-muted)' }} />
-                <span><strong>Fullscreen Mode Enforced:</strong> Candidates must remain in fullscreen throughout the test.</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                <Video size={13} style={{ flexShrink: 0, marginTop: '2px', color: 'var(--text-muted)' }} />
-                <span><strong>Live CCTV Proctoring:</strong> Active screen and browser integrity events are monitored live.</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: '2px', color: 'var(--danger)' }} />
-                <span><strong>3-Strike Hardware Lockdown:</strong> Tab-switching 3 times will lock mouse and keyboard permanently.</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                <Wifi size={13} style={{ flexShrink: 0, marginTop: '2px', color: 'var(--success)' }} />
-                <span><strong>Cloud Auto-Save:</strong> Selected answers are synchronized to institutional cloud servers in real time.</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Diagnostic Telemetry Card */}
-          <div
-            style={{
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)',
-              padding: '12px 16px'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', marginBottom: '6px' }}>
-              <span style={{ color: 'var(--text-muted)' }}>NTP Clock Drift:</span>
-              <span style={{ color: 'var(--success)', fontWeight: 600 }}>&lt; 50ms (OK)</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '6px' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Cloud DB Sync:</span>
-              <span style={{ color: 'var(--success)', fontWeight: 600 }}>Connected</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Sandbox State:</span>
-              <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Secure</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 };
