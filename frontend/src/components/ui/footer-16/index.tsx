@@ -29,7 +29,6 @@ export interface Footer16Props {
   brandLogo?: React.ReactNode;
   tagline?: string;
   columns?: Footer16Column[];
-  legalLinks?: Footer16Link[];
   socials?: Footer16Social[];
   copyright?: string;
   backgroundImage?: string;
@@ -54,19 +53,22 @@ const defaultColumns: Footer16Column[] = [
       { label: 'Security Standard', href: '#' },
     ],
   },
-];
-
-const defaultLegalLinks: Footer16Link[] = [
-  { label: 'Privacy Policy', href: '#' },
-  { label: 'Terms of Service', href: '#' },
-  { label: 'Institutional Audit Policy', href: '#' },
+  {
+    title: 'Integrity',
+    links: [
+      { label: 'Real-Time Facial Telemetry', href: '#' },
+      { label: 'AI Gaze Vectoring', href: '#' },
+      { label: 'Hardware Attestation', href: '#' },
+      { label: 'Tamper-Proof Audit', href: '#' },
+    ],
+  },
 ];
 
 const defaultSocials: Footer16Social[] = [
-  { label: 'Twitter', href: 'https://team.axiogen.in', icon: 'twitter' },
-  { label: 'LinkedIn', href: 'https://team.axiogen.in', icon: 'linkedin' },
-  { label: 'Instagram', href: 'https://team.axiogen.in', icon: 'instagram' },
   { label: 'Facebook', href: 'https://team.axiogen.in', icon: 'facebook' },
+  { label: 'Twitter', href: 'https://team.axiogen.in', icon: 'twitter' },
+  { label: 'Instagram', href: 'https://team.axiogen.in', icon: 'instagram' },
+  { label: 'LinkedIn', href: 'https://team.axiogen.in', icon: 'linkedin' },
 ];
 
 const backgroundUrl = 'https://assets.watermelon.sh/footer-16-bg.avif';
@@ -144,7 +146,6 @@ export function Footer16({
   ),
   tagline = 'Autonomous Academic Examination & Proctoring Platform.\nEngineered for uncompromised institutional integrity, real-time forensics,\nand cryptographic audit ledgers.',
   columns = defaultColumns,
-  legalLinks = defaultLegalLinks,
   socials = defaultSocials,
   copyright = '© 2026 Axent · Engineered by team.axiogen.in. All institutional rights reserved.',
   backgroundImage = backgroundUrl,
@@ -168,34 +169,36 @@ export function Footer16({
         viewport={{ once: true, amount: 0.22 }}
         className="relative mx-auto flex min-h-[580px] flex-col justify-end pt-16 sm:min-h-[640px] lg:min-h-[720px]"
       >
-        {/* Fully centered, bold, crisp watermark visible on all screen sizes */}
+        {/* Sleek, tall, atmospheric watermark perfectly proportioned across the dunes */}
         <motion.div
           variants={wordmarkVariants}
-          className="pointer-events-none absolute top-[5%] sm:top-[8%] lg:top-[10%] left-0 right-0 flex w-full justify-center overflow-hidden z-0 px-4"
+          className="pointer-events-none absolute top-[3%] sm:top-[5%] lg:top-[6%] left-1/2 flex w-[95vw] max-w-[1440px] -translate-x-1/2 justify-center overflow-hidden z-0"
           aria-hidden="true"
         >
           <svg
-            className="w-full max-w-6xl h-auto select-none"
-            viewBox="0 0 1000 200"
+            className="w-full h-auto select-none"
+            viewBox="0 0 1000 240"
             preserveAspectRatio="xMidYMid meet"
             aria-label={brandName}
           >
             <defs>
               <linearGradient id="brandGrad16" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#f4f4f5" stopOpacity="0.85" />
-                <stop offset="45%" stopColor="#a1a1aa" stopOpacity="0.6" />
-                <stop offset="100%" stopColor="#3f3f46" stopOpacity="0.15" />
+                <stop offset="0%" stopColor="#71717a" stopOpacity="0.85" />
+                <stop offset="35%" stopColor="#52525b" stopOpacity="0.75" />
+                <stop offset="70%" stopColor="#3f3f46" stopOpacity="0.45" />
+                <stop offset="100%" stopColor="#18181b" stopOpacity="0.15" />
               </linearGradient>
             </defs>
             <text
               x="50%"
-              y="55%"
+              y="58%"
               dominantBaseline="middle"
               textAnchor="middle"
-              className="font-sans font-black tracking-widest uppercase select-none"
+              textLength="92%"
+              lengthAdjust="spacing"
+              className="font-sans font-medium tracking-tight uppercase select-none"
               fill="url(#brandGrad16)"
-              fontSize="160"
-              style={{ letterSpacing: '0.14em' }}
+              fontSize="220"
             >
               {brandName}
             </text>
@@ -203,9 +206,9 @@ export function Footer16({
         </motion.div>
 
         <div className="relative z-10 border-t border-white/10 bg-black/1 px-4 pt-9 pb-7 shadow-[0_-24px_80px_rgba(9,10,14,0.34)] backdrop-blur-xs sm:px-12 sm:pt-11 sm:pb-8 lg:pt-[46px]">
-          <div className="grid gap-10 lg:grid-cols-[minmax(240px,1.2fr)_minmax(400px,1fr)] lg:gap-x-20">
+          <div className="grid gap-10 lg:grid-cols-[minmax(240px,1fr)_minmax(500px,1.2fr)] lg:gap-x-16">
             {/* Brand column */}
-            <motion.div variants={riseVariants} className="max-w-2xl">
+            <motion.div variants={riseVariants} className="max-w-xl">
               <a
                 href="/"
                 className="group inline-flex min-h-10 items-start gap-2 text-zinc-50 transition-[opacity,transform] duration-200 ease-out hover:opacity-85 active:scale-[0.96]"
@@ -227,11 +230,11 @@ export function Footer16({
               </p>
             </motion.div>
 
-            {/* Links Columns (Clean, no Axiogen Ecosystem column) */}
+            {/* Links Columns (3 balanced columns matching reference) */}
             <motion.nav
               variants={sectionVariants}
               aria-label="Footer navigation"
-              className="grid grid-cols-1 gap-7 min-[480px]:grid-cols-2 min-[480px]:gap-x-12 lg:gap-x-16"
+              className="grid grid-cols-1 gap-7 min-[480px]:grid-cols-3 min-[480px]:gap-x-8 lg:gap-x-12"
             >
               {columns.map((column) => (
                 <motion.div variants={riseVariants} key={column.title}>
@@ -262,53 +265,35 @@ export function Footer16({
 
           <motion.div
             variants={riseVariants}
-            className="mt-6 flex flex-col border-t border-white/11 pt-4 sm:mt-9 sm:flex-row sm:items-start gap-2 sm:justify-between"
+            className="mt-6 flex flex-col border-t border-white/10 pt-4 sm:mt-9 sm:flex-row sm:items-center sm:justify-between"
           >
             <p className="text-sm font-normal text-zinc-400/76">
               {copyright}
             </p>
 
-            <div className="flex flex-col sm:items-end">
-              <motion.ul
-                variants={listVariants}
-                className="flex items-center gap-1 sm:justify-end"
-                aria-label="Social links"
-              >
-                {socials.map((social) => {
-                  const Icon = socialIcons[social.icon] || FaFacebookF;
+            <motion.ul
+              variants={listVariants}
+              className="flex items-center gap-1 sm:justify-end mt-3 sm:mt-0"
+              aria-label="Social links"
+            >
+              {socials.map((social) => {
+                const Icon = socialIcons[social.icon] || FaFacebookF;
 
-                  return (
-                    <motion.li variants={linkVariants} key={social.label}>
-                      <a
-                        href={social.href}
-                        target={social.href.startsWith('http') ? '_blank' : undefined}
-                        rel={social.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-                        aria-label={social.label}
-                        className="group relative flex size-10 items-center justify-start text-zinc-400 transition-[color,transform] duration-200 ease-out hover:text-zinc-50 active:scale-[0.96]"
-                      >
-                        <Icon className="group-hover:blur-0 size-4 transition-[opacity,scale,filter] duration-200 ease-out group-hover:scale-110 group-hover:opacity-100" />
-                      </a>
-                    </motion.li>
-                  );
-                })}
-              </motion.ul>
-
-              <motion.ul
-                variants={listVariants}
-                className="flex flex-wrap items-center gap-x-5 sm:justify-end mt-2"
-              >
-                {legalLinks.map((link) => (
-                  <motion.li variants={linkVariants} key={link.label}>
+                return (
+                  <motion.li variants={linkVariants} key={social.label}>
                     <a
-                      href={link.href}
-                      className="inline-flex min-h-5 items-center text-sm leading-none font-normal text-zinc-300/80 transition-colors duration-200 ease-out hover:text-zinc-50"
+                      href={social.href}
+                      target={social.href.startsWith('http') ? '_blank' : undefined}
+                      rel={social.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+                      aria-label={social.label}
+                      className="group relative flex size-9 items-center justify-center text-zinc-400 transition-[color,transform] duration-200 ease-out hover:text-zinc-50 active:scale-[0.96]"
                     >
-                      {link.label}
+                      <Icon className="size-4 transition-[opacity,scale] duration-200 ease-out group-hover:scale-110 group-hover:opacity-100" />
                     </a>
                   </motion.li>
-                ))}
-              </motion.ul>
-            </div>
+                );
+              })}
+            </motion.ul>
           </motion.div>
         </div>
       </motion.div>

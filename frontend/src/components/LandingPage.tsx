@@ -50,8 +50,6 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         socialLinks={[
           { label: 'team.axiogen.in', href: 'https://team.axiogen.in' },
         ]}
-        signInLabel="Authority Login"
-        signInHref="/login"
         onNavLinkClick={(link) => handleNav(link.href)}
       />
 

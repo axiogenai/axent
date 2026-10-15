@@ -7,7 +7,7 @@ import { FinalReport } from './components/FinalReport';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MCQHub } from './components/MCQHub';
 import { PaperSetterPortal } from './components/PaperSetterPortal';
-import { AuthorityLogin } from './components/auth/AuthorityLogin';
+import { AuthorityLogin, PaperSetterLogin, AdminLogin } from './components/auth/AuthorityLogin';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { LandingPage } from './components/LandingPage';
 import {
@@ -379,6 +379,26 @@ export const App: React.FC = () => {
           <Route
             path="/login"
             element={<AuthorityLogin />}
+          />
+          <Route
+            path="/login/paper-setter"
+            element={<PaperSetterLogin />}
+          />
+          <Route
+            path="/login/setter"
+            element={<PaperSetterLogin />}
+          />
+          <Route
+            path="/setter-login"
+            element={<PaperSetterLogin />}
+          />
+          <Route
+            path="/login/admin"
+            element={<AdminLogin />}
+          />
+          <Route
+            path="/admin-login"
+            element={<AdminLogin />}
           />
           <Route
             path="/mcq"

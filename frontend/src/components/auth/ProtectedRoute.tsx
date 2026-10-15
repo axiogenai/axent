@@ -57,9 +57,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
     );
   }
 
-  // If unauthenticated, redirect to login with query params
+  // If unauthenticated, redirect to dedicated authority login portal
   if (!isAuthenticated) {
-    const targetUrl = `/login?redirect=${encodeURIComponent(location.pathname)}&role=${requiredRole}`;
+    const targetUrl = requiredRole === 'admin'
+      ? `/login/admin?redirect=${encodeURIComponent(location.pathname)}`
+      : `/login/paper-setter?redirect=${encodeURIComponent(location.pathname)}`;
     return <Navigate to={targetUrl} replace />;
   }
 

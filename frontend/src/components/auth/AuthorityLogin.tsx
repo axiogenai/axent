@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
 import {
   Hexagon,
   Shield,
@@ -32,19 +32,30 @@ import { playSound } from '../../utils/sounds';
 
 type AuthTab = 'signin' | 'register' | 'magic_link' | 'set_password';
 
-export const AuthorityLogin: React.FC = () => {
+export interface AuthorityLoginProps {
+  fixedRole?: AuthorityRole;
+}
+
+export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
 
-  // Route target redirect and preselected role
-  const redirectTarget = searchParams.get('redirect') || '/paper-setter';
+  const isSetterPath = location.pathname.includes('setter');
+  const isAdminPath = location.pathname.includes('admin');
   const roleParam = searchParams.get('role');
   const typeParam = searchParams.get('type');
 
-  const [role, setRole] = useState<AuthorityRole>(() => {
-    if (roleParam === 'admin' || redirectTarget.includes('admin')) return 'admin';
-    return 'paper_setter';
-  });
+  // Dedicated standalone role if requested via prop, dedicated route, or query param
+  const effectiveRole: AuthorityRole =
+    fixedRole ||
+    (isAdminPath ? 'admin' : (isSetterPath ? 'paper_setter' : (roleParam === 'admin' ? 'admin' : 'paper_setter')));
+  const isDedicatedPortal = Boolean(fixedRole || isSetterPath || isAdminPath || roleParam);
+
+  const defaultRedirect = effectiveRole === 'admin' ? '/admin' : '/paper-setter';
+  const redirectTarget = searchParams.get('redirect') || defaultRedirect;
+
+  const [role, setRole] = useState<AuthorityRole>(effectiveRole);
 
   const [activeTab, setActiveTab] = useState<AuthTab>(() => {
     if (typeParam === 'recovery' || typeParam === 'invite') return 'set_password';
@@ -266,6 +277,241 @@ export const AuthorityLogin: React.FC = () => {
   const isPasswordValid = newPassword.length >= 8;
   const doPasswordsMatch = newPassword.length > 0 && newPassword === confirmPassword;
 
+  if (!isDedicatedPortal) {
+    return (
+      <div
+        style={{
+          minHeight: 'calc(100vh - 52px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '40px 16px',
+          background: 'var(--bg-main)'
+        }}
+      >
+        <div
+          style={{
+            maxWidth: '680px',
+            width: '100%',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: 'var(--shadow-md)',
+            overflow: 'hidden'
+          }}
+        >
+          {/* Header */}
+          <div
+            style={{
+              padding: '28px 32px 20px',
+              borderBottom: '1px solid var(--border)',
+              background: 'var(--bg-surface)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+              <img
+                src="/axent-lightmode.png"
+                alt="Axent"
+                style={{
+                  height: '36px',
+                  width: 'auto',
+                  maxWidth: '160px',
+                  display: 'block',
+                  objectFit: 'contain'
+                }}
+              />
+              <div>
+                <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--accent)' }}>
+                  Axent Assessment Authority
+                </span>
+                <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+                  Institutional Gateways
+                </h1>
+              </div>
+            </div>
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              Select your designated academic access portal to authenticate and enter.
+            </p>
+          </div>
+
+          {/* Separate Gateway Portals Grid */}
+          <div style={{ padding: '28px 32px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px' }}>
+            {/* 1. Paper Setter Gateway Card */}
+            <div
+              style={{
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--bg-surface)',
+                padding: '24px 20px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                gap: '16px'
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                  <div
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: 'var(--radius-xs)',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--accent)'
+                    }}
+                  >
+                    <Layers size={18} />
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--accent)' }}>
+                      FACULTY PORTAL
+                    </span>
+                    <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Paper Setter Gateway
+                    </h2>
+                  </div>
+                </div>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
+                  For university faculty, question authors, and academic examiners. Author problem statements, configure test rubrics, and publish assessments.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  playSound('click');
+                  navigate('/login/paper-setter');
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: 'var(--radius-xs)',
+                  border: '1px solid var(--accent)',
+                  background: 'var(--accent)',
+                  color: 'var(--accent-fg)',
+                  fontSize: '12.5px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                <span>Enter Paper Setter Gateway</span>
+                <ArrowRight size={14} />
+              </button>
+            </div>
+
+            {/* 2. Chief Proctor & Admin Gateway Card */}
+            <div
+              style={{
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--bg-surface)',
+                padding: '24px 20px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                gap: '16px'
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                  <div
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: 'var(--radius-xs)',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--danger, #ef4444)'
+                    }}
+                  >
+                    <ShieldAlert size={18} />
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--danger, #ef4444)' }}>
+                      ADMINISTRATION & PROCTORING
+                    </span>
+                    <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Chief Proctor & Admin
+                    </h2>
+                  </div>
+                </div>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
+                  For Chief Proctors, Exam Superintendents, and invigilators. Real-time CCTV surveillance, live proctoring telemetry, and cryptographic exam audit logs.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  playSound('click');
+                  navigate('/login/admin');
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: 'var(--radius-xs)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-elevated)',
+                  color: 'var(--text-primary)',
+                  fontSize: '12.5px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                <span>Enter Chief Proctor Gateway</span>
+                <ArrowRight size={14} />
+              </button>
+            </div>
+          </div>
+
+          {/* Footer student link */}
+          <div
+            style={{
+              padding: '14px 32px',
+              borderTop: '1px solid var(--border)',
+              background: 'var(--bg-surface)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => navigate('/mcq')}
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                fontSize: '12px',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <GraduationCap size={14} color="var(--accent)" />
+              <span>Are you a student taking an exam? <strong>Go to Candidate Portal</strong></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -288,7 +534,7 @@ export const AuthorityLogin: React.FC = () => {
           overflow: 'hidden'
         }}
       >
-        {/* ── Watermelon UI Architecture: Brand Header ── */}
+        {/* ── Dedicated Brand Header (Role Specific) ── */}
         <div
           style={{
             padding: '24px 28px 18px',
@@ -309,75 +555,27 @@ export const AuthorityLogin: React.FC = () => {
               }}
             />
             <div>
-              <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--accent)' }}>
-                Axent Assessment Authority
+              <span
+                style={{
+                  fontSize: '10.5px',
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  color: role === 'admin' ? 'var(--danger, #ef4444)' : 'var(--accent)'
+                }}
+              >
+                {role === 'admin' ? 'Administration & Proctoring' : 'Faculty Examination Portal'}
               </span>
               <h1 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-                Institutional Gateway
+                {role === 'admin' ? 'Chief Proctor & Admin Portal' : 'Paper Setter Gateway'}
               </h1>
             </div>
           </div>
           <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.45 }}>
-            Authorized portal for paper setters, faculty invigilators, and academic chief proctors.
+            {role === 'admin'
+              ? 'Authorized portal for live CCTV invigilation, real-time telemetry, and candidate integrity audits.'
+              : 'Authorized portal for faculty question authoring, syllabus configuration, and test deployment.'}
           </p>
-        </div>
-
-        {/* ── Role Switcher: Paper Setter vs Admin ── */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            background: 'var(--bg-surface)',
-            borderBottom: '1px solid var(--border)',
-            padding: '4px 6px',
-            gap: '4px'
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => handleRoleSelect('paper_setter')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              padding: '8px 12px',
-              fontSize: '12px',
-              fontWeight: 600,
-              borderRadius: 'var(--radius-xs)',
-              border: role === 'paper_setter' ? '1px solid var(--border)' : '1px solid transparent',
-              background: role === 'paper_setter' ? 'var(--bg-elevated)' : 'transparent',
-              color: role === 'paper_setter' ? 'var(--text-primary)' : 'var(--text-muted)',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <Layers size={13} color={role === 'paper_setter' ? 'var(--accent)' : 'inherit'} />
-            <span>Paper Setter</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleRoleSelect('admin')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              padding: '8px 12px',
-              fontSize: '12px',
-              fontWeight: 600,
-              borderRadius: 'var(--radius-xs)',
-              border: role === 'admin' ? '1px solid var(--border)' : '1px solid transparent',
-              background: role === 'admin' ? 'var(--bg-elevated)' : 'transparent',
-              color: role === 'admin' ? 'var(--text-primary)' : 'var(--text-muted)',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <ShieldAlert size={13} color={role === 'admin' ? 'var(--accent)' : 'inherit'} />
-            <span>Chief Proctor / Admin</span>
-          </button>
         </div>
 
         {/* ── Watermelon UI Tabs List (Sign In / Register) ── */}
@@ -445,54 +643,58 @@ export const AuthorityLogin: React.FC = () => {
                 color: 'var(--text-muted)'
               }}
             >
-              <span>Default Pass: <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>axent@123</strong></span>
+              <span>
+                Default Pass:{' '}
+                <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+                  axent@123
+                </strong>
+              </span>
               <div style={{ display: 'flex', gap: '5px' }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRole('paper_setter');
-                    setStoredAuthorityRole('paper_setter');
-                    setEmail('setter@axent.edu');
-                    setPassword('axent@123');
-                    setActiveTab('signin');
-                    setErrorMessage(null);
-                  }}
-                  style={{
-                    background: 'none',
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-xs)',
-                    padding: '2px 7px',
-                    fontSize: '10.5px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    color: 'var(--text-secondary)'
-                  }}
-                >
-                  Fill Setter
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRole('admin');
-                    setStoredAuthorityRole('admin');
-                    setEmail('admin@axent.edu');
-                    setPassword('axent@123');
-                    setActiveTab('signin');
-                    setErrorMessage(null);
-                  }}
-                  style={{
-                    background: 'none',
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-xs)',
-                    padding: '2px 7px',
-                    fontSize: '10.5px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    color: 'var(--text-secondary)'
-                  }}
-                >
-                  Fill Admin
-                </button>
+                {role === 'paper_setter' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail('setter@axent.edu');
+                      setPassword('axent@123');
+                      setActiveTab('signin');
+                      setErrorMessage(null);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-xs)',
+                      padding: '2px 7px',
+                      fontSize: '10.5px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      color: 'var(--text-secondary)'
+                    }}
+                  >
+                    Fill Setter Demo
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail('admin@axent.edu');
+                      setPassword('axent@123');
+                      setActiveTab('signin');
+                      setErrorMessage(null);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-xs)',
+                      padding: '2px 7px',
+                      fontSize: '10.5px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      color: 'var(--text-secondary)'
+                    }}
+                  >
+                    Fill Admin Demo
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -1026,6 +1228,22 @@ export const AuthorityLogin: React.FC = () => {
               Direct Access (Dev Mode)
             </button>
           </div>
+
+          {role === 'paper_setter' ? (
+            <div style={{ textAlign: 'center', marginTop: '14px', fontSize: '11.5px', color: 'var(--text-muted)' }}>
+              Need Chief Proctor & Invigilation Portal?{' '}
+              <Link to="/login/admin" style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>
+                Go to Admin Gateway →
+              </Link>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', marginTop: '14px', fontSize: '11.5px', color: 'var(--text-muted)' }}>
+              Need Paper Setter Portal?{' '}
+              <Link to="/login/paper-setter" style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>
+                Go to Paper Setter Gateway →
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* ── Card Footer: Return to Candidate Terminal ── */}
@@ -1062,5 +1280,8 @@ export const AuthorityLogin: React.FC = () => {
     </div>
   );
 };
+
+export const PaperSetterLogin: React.FC = () => <AuthorityLogin fixedRole="paper_setter" />;
+export const AdminLogin: React.FC = () => <AuthorityLogin fixedRole="admin" />;
 
 export default AuthorityLogin;
