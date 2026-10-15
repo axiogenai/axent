@@ -1859,6 +1859,25 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     return null;
   });
 
+  // Guarantee 100% uniqueness: deduplicate assigned questions by questionId and normalized text at top level
+  const assignedQuestions = useMemo(() => {
+    const raw = Array.isArray(attempt?.assignedQuestions) ? attempt.assignedQuestions : [];
+    const seenIds = new Set<string>();
+    const seenTexts = new Set<string>();
+    const deduped: typeof raw = [];
+
+    for (const aq of raw) {
+      if (!aq || !aq.questionId) continue;
+      if (seenIds.has(aq.questionId)) continue;
+      const normText = (aq.snapshot?.text || '').toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+      if (normText && seenTexts.has(normText)) continue;
+      seenIds.add(aq.questionId);
+      if (normText) seenTexts.add(normText);
+      deduped.push(aq);
+    }
+    return deduped.length > 0 ? deduped : raw;
+  }, [attempt?.assignedQuestions]);
+
   const [answers, setAnswers] = useState<Record<string, string>>(() => {
     if (activeAttempt && activeAttempt.status === 'IN_PROGRESS' && activeAttempt.examId === initialExamId) {
       return activeAttempt.answers || {};
@@ -3098,25 +3117,6 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
   }
 
   // ── Active exam ──
-  // Guarantee 100% uniqueness: deduplicate assigned questions by questionId and normalized text
-  const assignedQuestions = useMemo(() => {
-    const raw = Array.isArray(attempt?.assignedQuestions) ? attempt.assignedQuestions : [];
-    const seenIds = new Set<string>();
-    const seenTexts = new Set<string>();
-    const deduped: typeof raw = [];
-
-    for (const aq of raw) {
-      if (!aq || !aq.questionId) continue;
-      if (seenIds.has(aq.questionId)) continue;
-      const normText = (aq.snapshot?.text || '').toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
-      if (normText && seenTexts.has(normText)) continue;
-      seenIds.add(aq.questionId);
-      if (normText) seenTexts.add(normText);
-      deduped.push(aq);
-    }
-    return deduped.length > 0 ? deduped : raw;
-  }, [attempt?.assignedQuestions]);
-
   const totalQ = assignedQuestions.length;
   const currentAQ = totalQ > 0 ? assignedQuestions[Math.min(currentIdx, Math.max(0, totalQ - 1))] : null;
   if (!currentAQ || totalQ === 0) {

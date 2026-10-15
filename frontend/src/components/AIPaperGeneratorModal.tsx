@@ -801,13 +801,23 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     <input
                       type="number"
                       min="1"
-                      max="100"
-                      value={totalQuestions}
+                      max="200"
+                      className="no-spin"
+                      value={totalQuestions || ''}
                       onChange={(e) => {
-                        const count = Math.max(1, parseInt(e.target.value, 10) || 1);
-                        setTotalQuestions(count);
-                        setTotalMarks(count * marksPerQuestion);
+                        const count = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                        if (!isNaN(count)) {
+                          setTotalQuestions(count);
+                          if (count > 0) setTotalMarks(count * (marksPerQuestion || 1));
+                        }
                       }}
+                      onBlur={() => {
+                        if (!totalQuestions || totalQuestions < 1) {
+                          setTotalQuestions(30);
+                          setTotalMarks(30 * (marksPerQuestion || 1));
+                        }
+                      }}
+                      placeholder="e.g. 30"
                       style={{
                         width: '100%',
                         boxSizing: 'border-box',
@@ -827,36 +837,38 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
                       Marks / Question
                     </label>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      {[1, 2, 4].map((m) => {
-                        const isSelected = marksPerQuestion === m;
-                        return (
-                          <button
-                            key={m}
-                            type="button"
-                            onClick={() => {
-                              setMarksPerQuestion(m);
-                              setTotalMarks(totalQuestions * m);
-                            }}
-                            style={{
-                              flex: 1,
-                              padding: '8px 2px',
-                              borderRadius: 'var(--radius-sm)',
-                              border: isSelected ? '1.5px solid var(--accent)' : '1px solid var(--border)',
-                              background: isSelected ? 'var(--bg-surface)' : 'var(--bg-elevated)',
-                              color: isSelected ? 'var(--accent)' : 'var(--text-secondary)',
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              textAlign: 'center',
-                              transition: 'all 0.15s ease'
-                            }}
-                          >
-                            {m} pt{m > 1 ? 's' : ''}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      className="no-spin"
+                      value={marksPerQuestion || ''}
+                      onChange={(e) => {
+                        const m = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                        if (!isNaN(m)) {
+                          setMarksPerQuestion(m);
+                          if (m > 0) setTotalMarks((totalQuestions || 1) * m);
+                        }
+                      }}
+                      onBlur={() => {
+                        if (!marksPerQuestion || marksPerQuestion < 1) {
+                          setMarksPerQuestion(1);
+                          setTotalMarks((totalQuestions || 30) * 1);
+                        }
+                      }}
+                      placeholder="e.g. 1"
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '8px 10px',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-primary)',
+                        fontSize: '13px',
+                        fontWeight: 600
+                      }}
+                    />
                   </div>
 
                   {/* Total Marks */}
@@ -867,13 +879,24 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     <input
                       type="number"
                       min="1"
-                      max="500"
-                      value={totalMarks}
+                      max="1000"
+                      className="no-spin"
+                      value={totalMarks || ''}
                       onChange={(e) => {
-                        const marks = Math.max(1, parseInt(e.target.value, 10) || 1);
-                        setTotalMarks(marks);
-                        setMarksPerQuestion(Math.max(1, Math.round(marks / totalQuestions)));
+                        const marks = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                        if (!isNaN(marks)) {
+                          setTotalMarks(marks);
+                          if (marks > 0 && totalQuestions > 0) {
+                            setMarksPerQuestion(Math.max(1, Math.round(marks / totalQuestions)));
+                          }
+                        }
                       }}
+                      onBlur={() => {
+                        if (!totalMarks || totalMarks < 1) {
+                          setTotalMarks(Math.max(1, (totalQuestions || 30) * (marksPerQuestion || 1)));
+                        }
+                      }}
+                      placeholder="e.g. 30"
                       style={{
                         width: '100%',
                         boxSizing: 'border-box',
@@ -963,9 +986,17 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                   <input
                     type="number"
                     min="5"
-                    max="180"
-                    value={durationMinutes}
-                    onChange={(e) => setDurationMinutes(parseInt(e.target.value, 10) || 30)}
+                    max="300"
+                    className="no-spin"
+                    value={durationMinutes || ''}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                      if (!isNaN(val)) setDurationMinutes(val);
+                    }}
+                    onBlur={() => {
+                      if (!durationMinutes || durationMinutes < 5) setDurationMinutes(30);
+                    }}
+                    placeholder="e.g. 30"
                     style={{
                       width: '100%',
                       padding: '8px 10px',

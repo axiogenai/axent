@@ -838,3 +838,15 @@ pre, code { overflow-wrap: anywhere; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Clean numeric inputs without forced browser spin buttons */
+input[type=number].no-spin::-webkit-inner-spin-button,
+input[type=number].no-spin::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number].no-spin {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+

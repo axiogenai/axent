@@ -1168,61 +1168,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
             </form>
           )}
 
-          {/* Institutional Developer Fallback */}
-          <div
-            style={{
-              marginTop: '22px',
-              paddingTop: '16px',
-              borderTop: '1px solid var(--border)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '10px'
-            }}
-          >
-            <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-              Campus LAN / Offline Mode?
-            </span>
-            <button
-              type="button"
-              onClick={handleDevBypass}
-              style={{
-                background: 'none',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-xs)',
-                padding: '4px 10px',
-                fontSize: '11px',
-                color: 'var(--text-muted)',
-                cursor: 'pointer',
-                fontWeight: 600
-              }}
-            >
-              Direct Access (Dev Mode)
-            </button>
-          </div>
 
-          {role === 'paper_setter' ? (
-            <div style={{ textAlign: 'center', marginTop: '14px', fontSize: '11.5px', color: 'var(--text-muted)' }}>
-              Need Chief Proctor & Invigilation Portal?{' '}
-              <Link to="/login/admin" style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>
-                Go to Admin Gateway →
-              </Link>
-            </div>
-          ) : (
-            <div style={{ textAlign: 'center', marginTop: '14px', fontSize: '11.5px', color: 'var(--text-muted)' }}>
-              Need Paper Setter Portal?{' '}
-              <Link to="/login/paper-setter" style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>
-                Go to Paper Setter Gateway →
-              </Link>
-            </div>
-          )}
-
-          <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '11px', color: 'var(--text-dim)' }}>
-            Need an invitation link dispatched?{' '}
-            <Link to="/invite" style={{ color: 'var(--text-secondary)', fontWeight: 600, textDecoration: 'none' }}>
-              Open Authority Invite Portal →
-            </Link>
-          </div>
         </div>
 
         {/* ── Card Footer: Return to Candidate Terminal ── */}
