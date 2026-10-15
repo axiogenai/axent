@@ -27,6 +27,7 @@ import {
   fetchExamsFromCloud,
   fetchAttemptsFromCloud
 } from './supabaseService';
+import { getSynchronizedNow } from './timeSyncService';
 
 // ── Persistence helpers ───────────────────────────────────────────────────────
 
@@ -440,7 +441,7 @@ export function startAttempt(
     return existingActive;
   }
 
-  const now = Date.now();
+  const now = getSynchronizedNow();
   if (exam.status !== 'PUBLISHED') throw new Error('This examination is not published.');
   if (exam.startTime && now < exam.startTime) throw new Error('This examination has not started yet.');
   if (exam.endTime && now >= exam.endTime) throw new Error('The examination submission window has closed.');
@@ -552,12 +553,12 @@ export function saveAnswer(attemptId: string, questionId: string, optionId: stri
   const idx = all.findIndex((a) => a.id === attemptId);
   if (idx < 0) return false;
   const attempt = all[idx];
-  if (attempt.status !== 'IN_PROGRESS' || Date.now() >= attempt.deadline) return false;
+  if (attempt.status !== 'IN_PROGRESS' || getSynchronizedNow() >= attempt.deadline) return false;
   const assigned = attempt.assignedQuestions.find((q) => q.questionId === questionId);
   if (!assigned) return false;
   if (optionId !== '' && !assigned.snapshot.options.some((option) => option.id === optionId)) return false;
 
-  all[idx] = { ...attempt, answers: { ...attempt.answers, [questionId]: optionId }, lastActivityAt: Date.now() };
+  all[idx] = { ...attempt, answers: { ...attempt.answers, [questionId]: optionId }, lastActivityAt: getSynchronizedNow() };
   save(MCQ_STORAGE_KEYS.ATTEMPTS, all);
   try { localStorage.setItem('codedna_mcq_active_attempt_backup', JSON.stringify(all[idx])); } catch {}
   void saveAttemptToCloud(all[idx]);
@@ -676,7 +677,7 @@ export function submitAttempt(
     return existing.score === undefined ? null : gradeAttempt(existing);
   }
 
-  const now = Date.now();
+  const now = getSynchronizedNow();
   const finalStatus: MCQAttemptStatus =
     now >= existing.deadline || requestedStatus === 'TIMED_OUT'
       ? 'TIMED_OUT'

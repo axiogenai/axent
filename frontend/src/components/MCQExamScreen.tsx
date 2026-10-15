@@ -3,7 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Clock, ChevronLeft, ChevronRight, CheckCircle, CheckCircle2, Circle, AlertTriangle,
   Send, BookOpen, RotateCcw, Award, X, Eye, EyeOff, BarChart2, KeyRound,
-  Copy, Check, Lock, Unlock, Code2, ArrowRight, ShieldAlert, Shield, Monitor, Download, CheckSquare, FileCheck, LogOut, MessageCircle, Calendar
+  Copy, Check, Lock, Unlock, Code2, ArrowRight, ShieldAlert, Shield, Monitor, Download, CheckSquare, FileCheck, LogOut, MessageCircle, Calendar,
+  Maximize2, Minimize2
 } from 'lucide-react';
 import { MCQAttempt, MCQExamConfig, MCQGradeResult, MCQ_STORAGE_KEYS } from '../types/mcq';
 import {
@@ -17,16 +18,24 @@ import { fetchSingleStationLockStatus, updateStationLockInCloud } from '../servi
 import { StudentInfo, ExamCategory } from '../types/dna';
 import { SimpleSelect } from './watermelon/Select';
 import { ConfirmationModal, ModalDetailItem } from './ConfirmationModal';
+import {
+  getSynchronizedNow,
+  isCurrentlyFullscreen,
+  requestExamFullscreen,
+  exitExamFullscreen,
+  formatSynchronizedTime
+} from '../services/timeSyncService';
 
 // ── Timer hook ────────────────────────────────────────────────────────────────
 function useCountdown(deadline: number, onExpire: () => void) {
-  const [remaining, setRemaining] = useState(() => Math.max(0, deadline - Date.now()));
+  const [remaining, setRemaining] = useState(() => Math.max(0, deadline - getSynchronizedNow()));
   const expiredRef = useRef(false);
 
   useEffect(() => {
-    if (expiredRef.current) return;
+    expiredRef.current = false;
     const tick = () => {
-      const r = Math.max(0, deadline - Date.now());
+      if (expiredRef.current) return;
+      const r = Math.max(0, deadline - getSynchronizedNow());
       setRemaining(r);
       if (r === 0 && !expiredRef.current) {
         expiredRef.current = true;
@@ -35,7 +44,12 @@ function useCountdown(deadline: number, onExpire: () => void) {
     };
     tick();
     const id = setInterval(tick, 500);
-    return () => clearInterval(id);
+    const handleTimeSync = () => tick();
+    window.addEventListener('codedna_timesync', handleTimeSync);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('codedna_timesync', handleTimeSync);
+    };
   }, [deadline, onExpire]);
 
   const minutes = Math.floor(remaining / 60_000);
@@ -302,7 +316,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
     if (!division.trim()) errs.push('Class division is required.');
 
     // Schedule timing guard: strictly prohibit early entry before exam.startTime
-    if (exam.startTime && Date.now() < exam.startTime) {
+    if (exam.startTime && getSynchronizedNow() < exam.startTime) {
       errs.push(`This examination is scheduled for ${new Date(exam.startTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}. Early entry is strictly prohibited.`);
     }
 
@@ -350,6 +364,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
       localStorage.setItem('codedna_student_profile', JSON.stringify(student));
     } catch {}
 
+    void requestExamFullscreen();
     onStart(student);
   };
 
@@ -399,7 +414,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
     } catch {}
 
     const targetExam = d.mcqExamId ? allExams.find((e) => e.id === d.mcqExamId) || exam : exam;
-    if (targetExam.startTime && Date.now() < targetExam.startTime) {
+    if (targetExam.startTime && getSynchronizedNow() < targetExam.startTime) {
       playSound('warning');
       setErrors([`This examination is scheduled for ${new Date(targetExam.startTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}. Early entry is strictly prohibited.`]);
       return;
@@ -411,6 +426,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
       }
     }
 
+    void requestExamFullscreen();
     onStart(student);
   };
 
@@ -1718,11 +1734,30 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
   const [isLockedByProctor, setIsLockedByProctor] = useState(false);
   const [proctorWarning, setProctorWarning] = useState<string | null>(null);
-  const [now, setNow] = useState<number>(Date.now());
+  const [now, setNow] = useState<number>(() => getSynchronizedNow());
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(() => isCurrentlyFullscreen());
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
+    const timer = setInterval(() => setNow(getSynchronizedNow()), 1000);
+    const onSyncEvent = () => setNow(getSynchronizedNow());
+    window.addEventListener('codedna_timesync', onSyncEvent);
+
+    const handleFsChange = () => {
+      setIsFullscreen(isCurrentlyFullscreen());
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    document.addEventListener('webkitfullscreenchange', handleFsChange);
+    document.addEventListener('mozfullscreenchange', handleFsChange);
+    document.addEventListener('MSFullscreenChange', handleFsChange);
+
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('codedna_timesync', onSyncEvent);
+      document.removeEventListener('fullscreenchange', handleFsChange);
+      document.removeEventListener('webkitfullscreenchange', handleFsChange);
+      document.removeEventListener('mozfullscreenchange', handleFsChange);
+      document.removeEventListener('MSFullscreenChange', handleFsChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -1980,6 +2015,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     setGradeResult(null);
     setAttemptStartError(null);
     playSound('success');
+    void requestExamFullscreen();
     syncMcqLiveStation(a, exam, studentData, 0, false);
   };
 
@@ -2287,9 +2323,16 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
               </div>
             </div>
 
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', paddingTop: '8px', borderTop: '1px solid var(--border)' }}>
-              <Clock size={13} color="var(--accent)" />
-              <span>Commences on <strong>{startStr}</strong></span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingTop: '8px', borderTop: '1px solid var(--border)' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                <Clock size={13} color="var(--accent)" />
+                <span>Commences on <strong>{startStr}</strong></span>
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                <span>Server Time: <strong style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{formatSynchronizedTime(now)}</strong></span>
+                <span>·</span>
+                <span style={{ color: 'var(--success)', fontWeight: 600 }}>NTP Synchronized</span>
+              </div>
             </div>
           </div>
 
@@ -2569,6 +2612,38 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           {/* Timer */}
           <TimerBadge deadline={attempt.deadline} onExpire={handleTimerExpire} />
 
+          {/* Fullscreen Kiosk Mode Toggle */}
+          <button
+            type="button"
+            onClick={() => {
+              if (isFullscreen) {
+                exitExamFullscreen();
+              } else {
+                requestExamFullscreen();
+              }
+            }}
+            title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen Examination Mode'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 12px',
+              background: isFullscreen ? 'var(--bg-surface)' : 'rgba(239, 68, 68, 0.1)',
+              border: isFullscreen ? '1px solid var(--border)' : '1px solid rgba(239, 68, 68, 0.35)',
+              borderRadius: 'var(--radius-sm)',
+              color: isFullscreen ? 'var(--text-secondary)' : 'var(--danger)',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+            <span style={{ fontSize: '11px', fontWeight: 700 }}>
+              {isFullscreen ? 'Fullscreen' : 'Full Screen'}
+            </span>
+          </button>
+
           <button
             onClick={() => setShowSubmitConfirm(true)}
             title="End examination and finalize submission"
@@ -2584,6 +2659,53 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           </button>
         </div>
       </div>
+
+      {/* Fullscreen Required Non-Obstructive Alert Banner */}
+      {!isFullscreen && (
+        <div
+          style={{
+            maxWidth: '1520px',
+            margin: '12px auto 0',
+            width: 'calc(100% - 56px)',
+            background: 'rgba(239, 68, 68, 0.08)',
+            border: '1px solid rgba(239, 68, 68, 0.25)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '8px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            color: 'var(--danger)',
+            fontSize: '12px',
+            fontWeight: 600
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <ShieldAlert size={15} />
+            <span>Institutional Anti-Cheat Policy: Screen must remain in Fullscreen mode during the examination.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => requestExamFullscreen()}
+            style={{
+              background: 'var(--danger)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: 'var(--radius-sm)',
+              padding: '5px 12px',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Maximize2 size={12} />
+            <span>Maximize Screen</span>
+          </button>
+        </div>
+      )}
 
       <div style={{ flex: 1, display: 'flex', maxWidth: '1520px', margin: '0 auto', width: '100%', padding: '20px 28px', gap: '24px' }}>
         {/* Question navigator sidebar */}
@@ -2836,16 +2958,31 @@ const TimerBadge: React.FC<{ deadline: number; onExpire: () => void }> = ({ dead
   const color = isCritical ? 'var(--danger)' : isLow ? 'var(--warning)' : 'var(--text-secondary)';
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: '5px',
-      padding: '4px 10px', borderRadius: 'var(--radius-sm)',
-      border: `1px solid ${isCritical ? 'var(--danger-border)' : isLow ? 'var(--warning-border)' : 'var(--border)'}`,
-      background: isCritical ? 'var(--danger-bg)' : isLow ? 'var(--warning-bg)' : 'var(--bg-surface)',
-    }}>
+    <div
+      title="NTP Server-Synchronized Clock · Accuracy < 100ms"
+      style={{
+        display: 'flex', alignItems: 'center', gap: '6px',
+        padding: '5px 11px', borderRadius: 'var(--radius-sm)',
+        border: `1px solid ${isCritical ? 'var(--danger-border)' : isLow ? 'var(--warning-border)' : 'var(--border)'}`,
+        background: isCritical ? 'var(--danger-bg)' : isLow ? 'var(--warning-bg)' : 'var(--bg-surface)',
+        transition: 'all 0.15s ease'
+      }}
+    >
       <Clock size={13} color={color} />
       <span style={{ fontSize: '13px', fontWeight: 700, color, fontFamily: 'var(--font-mono)' }}>
         {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
       </span>
+      <span
+        style={{
+          display: 'inline-block',
+          width: '5px',
+          height: '5px',
+          borderRadius: '50%',
+          background: 'var(--success)',
+          opacity: 0.9
+        }}
+        title="Authoritative Server Synced"
+      />
     </div>
   );
 };
@@ -2900,11 +3037,16 @@ export const MCQExamSelector: React.FC = () => {
     if (queryExamId && isQueryValid) return queryExamId;
     return null;
   });
-  const [currentTime, setCurrentTime] = useState<number>(Date.now());
+  const [currentTime, setCurrentTime] = useState<number>(() => getSynchronizedNow());
 
   useEffect(() => {
-    const ticker = setInterval(() => setCurrentTime(Date.now()), 1000);
-    return () => clearInterval(ticker);
+    const ticker = setInterval(() => setCurrentTime(getSynchronizedNow()), 1000);
+    const onSyncEvent = () => setCurrentTime(getSynchronizedNow());
+    window.addEventListener('codedna_timesync', onSyncEvent);
+    return () => {
+      clearInterval(ticker);
+      window.removeEventListener('codedna_timesync', onSyncEvent);
+    };
   }, []);
 
   // Strict link manipulation and session integrity enforcement

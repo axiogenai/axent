@@ -53,6 +53,7 @@ import {
 } from 'lucide-react';
 import { playSound } from '../utils/sounds';
 import { ConfirmationModal } from './ConfirmationModal';
+import { getSynchronizedNow, requestExamFullscreen } from '../services/timeSyncService';
 import {
   parseExamToken,
   generateExamToken,
@@ -831,6 +832,9 @@ export const Workspace: React.FC<WorkspaceProps> = ({
     }
     const registered = Boolean(info.name?.trim() && info.rollNumber?.trim());
     setIsCandidateRegistered(registered);
+    if (registered) {
+      void requestExamFullscreen();
+    }
 
     if (typeof window !== 'undefined') {
       try {
@@ -1055,7 +1059,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
     if (isExamSubmitted || analysisResults !== null || !isCandidateRegistered) return;
 
     const interval = setInterval(() => {
-      const now = Date.now();
+      const now = getSynchronizedNow();
       const elapsed = Math.max(0, Math.floor((now - sessionStartTime) / 1000));
       setSessionSecondsElapsed(elapsed);
 
