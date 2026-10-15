@@ -94,10 +94,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     // Authority Gateway / Login — No student tabs!
     activeNavItems = [];
   } else if (isPaperSetterRoute) {
-    // Paper setter — no admin links, no CCTV, no ADMIN badge
-    activeNavItems = [
-      { path: '/paper-setter', label: 'Paper Setter', icon: Layers }
-    ];
+    // Paper setter — clean header, no redundant pills
+    activeNavItems = [];
   } else if (isAdminRoute) {
     // Invigilator & Examination Administration Navigation
     activeNavItems = [
@@ -105,10 +103,8 @@ export const Navbar: React.FC<NavbarProps> = ({
       { path: '/paper-setter', label: 'Paper Setter Portal', icon: Layers }
     ];
   } else if (isMcqRoute || examMode === 'MCQ') {
-    // Registered MCQ Examination — Show ONLY MCQ
-    activeNavItems = [
-      { path: '/mcq', label: 'MCQ Examination', icon: ListChecks, badge: 'EXAM', badgeColor: 'neutral' }
-    ];
+    // Registered MCQ Examination — Clean view, no redundant pill in navbar
+    activeNavItems = [];
   } else {
     // Registered Coding Examination — Show ONLY Code & Test (and Report)
     activeNavItems = [
@@ -178,40 +174,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             badgeTone: badgeColor === 'danger' ? 'danger' : badgeColor === 'warning' ? 'warning' : 'neutral'
           }))}
         />
-      ) : activeNavItems.length === 1 ? (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '4px 12px',
-            fontSize: '12px',
-            fontWeight: 600,
-            color: 'var(--text-primary)'
-          }}
-        >
-          {React.createElement(activeNavItems[0].icon, { size: 13, color: 'var(--text-secondary)' })}
-          <span>{activeNavItems[0].label}</span>
-          {activeNavItems[0].badge && (
-            <span
-              style={{
-                fontSize: '9.5px',
-                fontWeight: 700,
-                padding: '1px 5px',
-                borderRadius: 'var(--radius-xs)',
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border)',
-                color: 'var(--text-muted)',
-                marginLeft: '4px'
-              }}
-            >
-              {activeNavItems[0].badge}
-            </span>
-          )}
-        </div>
       ) : null}
 
       {/* ── Controls & Mode ── */}
