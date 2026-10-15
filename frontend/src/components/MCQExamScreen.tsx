@@ -659,133 +659,46 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
           {(() => {
             const cleanInstructions = (exam.instructions || '').replace(/<!--AXENT_META:[\s\S]*?-->/g, '').trim();
             return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {cleanInstructions && (
-                  <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '11px 13px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px' }}>
-                      <FileCheck size={13} style={{ color: 'var(--text-muted)' }} />
-                      <span style={{ fontSize: '10.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
-                        Paper Setter Notice
-                      </span>
-                    </div>
+                  <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
                     <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                       {cleanInstructions}
                     </p>
                   </div>
                 )}
 
-                {/* Institutional Examination Rules & Conduct Guidelines */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', marginTop: '2px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '6px', borderBottom: '1px solid var(--border)' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-primary)' }}>
-                      Examination Rules & Conduct Guidelines
+                {/* Compact Institutional Rules Card */}
+                <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '5px', borderBottom: '1px solid var(--border)' }}>
+                    <span style={{ fontSize: '10.5px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-primary)' }}>
+                      Quick Exam Rules
                     </span>
-                    <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                      Mandatory
+                    <span style={{ fontSize: '9.5px', fontWeight: 700, padding: '1px 6px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                      Terminal Proctored
                     </span>
                   </div>
 
-                  {/* Rule 1: Anti-Cheat & Tab-Switching */}
-                  <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                        <ShieldAlert size={14} style={{ color: 'var(--text-primary)' }} />
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          Anti-Cheat & Tab-Switch Monitoring
-                        </span>
-                      </div>
-                      <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
-                        3-Strike Lockout
-                      </span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                      <ShieldAlert size={13} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
+                      <span><strong style={{ color: 'var(--text-primary)' }}>Tab Switching:</strong> Max 3 infractions allowed before terminal locks.</span>
                     </div>
-                    <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.45 }}>
-                      Switching browser tabs, minimizing the window, opening developer tools, or exiting full-screen triggers an immediate infraction warning. Reaching 3 infractions permanently freezes and locks your terminal.
-                    </p>
-                  </div>
 
-                  {/* Rule 2: Randomization */}
-                  <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                        <Shuffle size={14} style={{ color: 'var(--text-primary)' }} />
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          Fisher-Yates Question Randomization
-                        </span>
-                      </div>
-                      <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
-                        Token Permutation
-                      </span>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                      <Shuffle size={13} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
+                      <span><strong style={{ color: 'var(--text-primary)' }}>Anti-Copy:</strong> Questions & options are shuffled per student.</span>
                     </div>
-                    <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.45 }}>
-                      Question sequence and answer option letters (A, B, C, D) are uniquely permuted per candidate token. Answers on adjacent lab stations will not match your questions.
-                    </p>
-                  </div>
 
-                  {/* Rule 3: Marking Policy */}
-                  <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                        <Award size={14} style={{ color: 'var(--text-primary)' }} />
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          Evaluation & Marking Scheme
-                        </span>
-                      </div>
-                      <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
-                        {exam.negativeMarkingEnabled ? 'Negative Marking' : 'Standard Marking'}
-                      </span>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                      <Award size={13} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
+                      <span><strong style={{ color: 'var(--text-primary)' }}>Marking:</strong> {exam.negativeMarkingEnabled ? 'Negative marking active for incorrect choices.' : 'No negative marks. Attempt all questions.'}</span>
                     </div>
-                    <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.45 }}>
-                      {exam.negativeMarkingEnabled
-                        ? 'Negative marking is enabled for this paper. Incorrect selections incur penalty deductions. Unanswered questions carry zero penalty.'
-                        : 'No negative marking is applied for incorrect answers. Candidates are advised to attempt all questions before concluding.'}
-                    </p>
-                  </div>
 
-                  {/* Rule 4: Auto-Save & Offline Fault Tolerance */}
-                  <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                        <Wifi size={14} style={{ color: 'var(--text-primary)' }} />
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          Real-Time Auto-Save & Offline Fault Tolerance
-                        </span>
-                      </div>
-                      <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
-                        Zero Data Loss
-                      </span>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                      <Wifi size={13} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
+                      <span><strong style={{ color: 'var(--text-primary)' }}>Auto-Save:</strong> Responses save locally; auto-submits on time expiry.</span>
                     </div>
-                    <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.45 }}>
-                      Every selected response is encrypted and committed immediately to local browser storage. If network drops or the system reboots, your session resumes seamlessly with zero lost answers.
-                    </p>
-                  </div>
-
-                  {/* Rule 5: Navigation & Submission Lock */}
-                  <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                        <Lock size={14} style={{ color: 'var(--text-primary)' }} />
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          Navigation & Submission Finality
-                        </span>
-                      </div>
-                      <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
-                        {exam.allowReview !== false ? 'Review Permitted' : 'Sequential Only'}
-                      </span>
-                    </div>
-                    <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.45 }}>
-                      {exam.allowReview !== false
-                        ? 'Candidates may revisit questions freely using the question palette and review marked items prior to submission.'
-                        : 'Questions must be answered sequentially. Once navigated, prior answers cannot be modified.'}{' '}
-                      The test auto-submits when the timer reaches 00:00. Once submitted, your score and attempt record are permanently locked.
-                    </p>
-                  </div>
-
-                  {/* Pre-Flight Note */}
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '10px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
-                    <AlertTriangle size={14} style={{ color: 'var(--text-secondary)', flexShrink: 0, marginTop: '2px' }} />
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                      Verify that your Name, Roll Number, and assigned Lab/Station match institutional records before clicking Start Assessment.
-                    </span>
                   </div>
                 </div>
               </div>
