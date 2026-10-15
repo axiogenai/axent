@@ -175,8 +175,10 @@ export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
         startTime: row.start_time ? Number(row.start_time) : undefined,
         endTime: row.end_time ? Number(row.end_time) : undefined,
         totalMarks: Number(row.total_marks) || 0,
-        questionCount: Number(row.question_count) || 10,
-        questionIds: row.question_ids || [],
+        questionCount: (Array.isArray(row.question_ids) && row.question_ids.length > 0)
+          ? row.question_ids.length
+          : (Number(row.question_count) || 0),
+        questionIds: Array.isArray(row.question_ids) ? row.question_ids : [],
         shuffleQuestions: Boolean(row.shuffle_questions),
         shuffleOptions: Boolean(row.shuffle_options),
         negativeMarkingEnabled: Boolean(row.negative_marking_enabled),
@@ -222,8 +224,8 @@ async function writeExamToCloud(e: MCQExamConfig): Promise<boolean> {
       start_time: e.startTime || null,
       end_time: e.endTime || null,
       total_marks: e.totalMarks,
-      question_count: e.questionCount,
-      question_ids: e.questionIds,
+      question_count: e.questionCount ?? (Array.isArray(e.questionIds) ? e.questionIds.length : 0),
+      question_ids: Array.isArray(e.questionIds) ? e.questionIds : [],
       shuffle_questions: e.shuffleQuestions,
       shuffle_options: e.shuffleOptions,
       negative_marking_enabled: e.negativeMarkingEnabled,

@@ -1391,10 +1391,19 @@ export function isDuplicateQuestion(candidateText: string, existingQuestions: { 
 
 // ── FULL AI EXAM PAPER GENERATOR (TOPIC + EASY/MED/HARD + AUTO-PUBLISH) ──
 
+export interface AIPaperSectionSpec {
+  id?: string;
+  topic: string;
+  count: number;
+  difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
+  marks?: number;
+}
+
 export interface AIPaperGenerationRequest {
   title: string;
   subject: string;
   topic: string;
+  sections?: AIPaperSectionSpec[];
   examCategory?: 'Aptitude' | 'ISE';
   instructions?: string;
   durationMinutes: number;
@@ -1607,116 +1616,228 @@ export async function generateFullExamPaperWithAI(
   req: AIPaperGenerationRequest,
   onProgress?: (status: string) => void
 ): Promise<AIPaperGenerationResult> {
+  const isSectionBased = Array.isArray(req.sections) && req.sections.length > 0;
+  const sections = isSectionBased ? req.sections! : [];
+
   const easyCount = Math.max(0, req.easyCount || 0);
   const mediumCount = Math.max(0, req.mediumCount || 0);
   const hardCount = Math.max(0, req.hardCount || 0);
-  const totalCount = easyCount + mediumCount + hardCount;
+  const singleTopicTotal = easyCount + mediumCount + hardCount;
+  const totalCount = isSectionBased
+    ? sections.reduce((acc, s) => acc + Math.max(0, s.count || 0), 0)
+    : singleTopicTotal;
 
   if (totalCount === 0) {
-    throw new Error('Please specify at least 1 question across Easy, Medium, or Hard difficulty.');
+    throw new Error('Please specify at least 1 question across your topics or difficulty categories.');
   }
-
-  onProgress?.(`Contacting Autonomous Reasoning Engine to generate ${totalCount} questions for "${req.topic}"...`);
-
-  const generateBatch = async (
-    difficulty: 'EASY' | 'MEDIUM' | 'HARD',
-    count: number,
-    marks: number
-  ) => {
-    if (count <= 0) return [];
-    
-    // Chunk into requests of max 4 questions so token velocity stays well within Groq 8k TPM limits
-    const chunks: number[] = [];
-    let remaining = count;
-    while (remaining > 0) {
-      const take = Math.min(remaining, 4);
-      chunks.push(take);
-      remaining -= take;
-    }
-
-    onProgress?.(`Generating ${count} ${difficulty.toLowerCase()} question(s) on ${req.topic}...`);
-    
-    const combined: GeneratedMCQQuestion[] = [];
-    for (let i = 0; i < chunks.length; i++) {
-      if (i > 0) {
-        await sleep(1400); // Pacing delay to maintain token velocity under 8k TPM
-      }
-      onProgress?.(`Generating ${difficulty.toLowerCase()} questions (${i + 1}/${chunks.length})...`);
-      const r = await generateMCQQuestionsWithAI({
-        subject: req.subject,
-        topic: req.topic,
-        examCategory: req.examCategory,
-        instructions: req.instructions,
-        difficulty,
-        count: chunks[i]
-      });
-      combined.push(...r.questions);
-    }
-
-    return combined.map((q) => ({
-      ...q,
-      marks,
-      negativeMarks: req.negativeMarkingEnabled ? (req.negativeMarkPenalty ?? 0.25) : 0
-    }));
-  };
 
   const defaultPerQMarks = req.easyMarks ?? 1;
-
-  // Generate difficulty batches sequentially with pacing delays to strictly prevent Groq 429 TPM exhaustion
-  const easyList = await generateBatch('EASY', easyCount, req.easyMarks ?? defaultPerQMarks);
-  if (easyCount > 0 && mediumCount > 0) await sleep(1400);
-  const medList = await generateBatch('MEDIUM', mediumCount, req.mediumMarks ?? defaultPerQMarks);
-  if ((easyCount > 0 || mediumCount > 0) && hardCount > 0) await sleep(1400);
-  const hardList = await generateBatch('HARD', hardCount, req.hardMarks ?? defaultPerQMarks);
-
-  // Collect and strictly deduplicate all questions across batches
-  const rawCollected = [...easyList, ...medList, ...hardList];
   const uniqueGenerated: (GeneratedMCQQuestion & { marks: number; negativeMarks: number })[] = [];
 
-  for (const q of rawCollected) {
-    const cleanText = sanitizeQuestionText(q.text);
-    if (!isDuplicateQuestion(cleanText, uniqueGenerated)) {
-      uniqueGenerated.push({
-        ...q,
-        text: cleanText,
-        options: deduplicateAndFormatOptions(q.options)
-      });
+  if (isSectionBased) {
+    onProgress?.(`Contacting Autonomous Reasoning Engine for ${sections.length} topics (${totalCount} total questions)...`);
+
+    for (let sIdx = 0; sIdx < sections.length; sIdx++) {
+      const sec = sections[sIdx];
+      const secTopic = (sec.topic || '').trim();
+      const secCount = Math.max(0, sec.count || 0);
+      const secDiff = sec.difficulty || 'MEDIUM';
+      const secMarks = sec.marks ?? defaultPerQMarks;
+
+      if (secCount <= 0 || !secTopic) continue;
+
+      if (sIdx > 0) {
+        await sleep(1400); // Pacing delay to keep within Groq TPM limits
+      }
+
+      onProgress?.(`Topic ${sIdx + 1}/${sections.length}: Generating ${secCount} ${secDiff.toLowerCase()} question(s) for "${secTopic}"...`);
+
+      const chunks: number[] = [];
+      let remaining = secCount;
+      while (remaining > 0) {
+        const take = Math.min(remaining, 4);
+        chunks.push(take);
+        remaining -= take;
+      }
+
+      const secGenerated: (GeneratedMCQQuestion & { marks: number; negativeMarks: number })[] = [];
+
+      for (let i = 0; i < chunks.length; i++) {
+        if (i > 0) {
+          await sleep(1400);
+        }
+        onProgress?.(`[${secTopic}] Generating questions (${i + 1}/${chunks.length})...`);
+        const r = await generateMCQQuestionsWithAI({
+          subject: req.subject,
+          topic: secTopic,
+          examCategory: req.examCategory,
+          instructions: req.instructions,
+          difficulty: secDiff,
+          count: chunks[i]
+        });
+
+        for (const q of r.questions) {
+          const cleanText = sanitizeQuestionText(q.text);
+          if (!isDuplicateQuestion(cleanText, uniqueGenerated)) {
+            const item = {
+              ...q,
+              subject: req.subject,
+              topic: secTopic,
+              difficulty: secDiff,
+              text: cleanText,
+              options: deduplicateAndFormatOptions(q.options),
+              marks: secMarks,
+              negativeMarks: req.negativeMarkingEnabled ? (req.negativeMarkPenalty ?? 0.25) : 0,
+              tags: [secTopic]
+            };
+            secGenerated.push(item);
+            uniqueGenerated.push(item);
+          }
+        }
+      }
+
+      // Backfill retry loop specifically for this section's topic
+      let backfillAttempts = 0;
+      while (secGenerated.length < secCount && backfillAttempts < 5) {
+        backfillAttempts++;
+        if (backfillAttempts > 1) await sleep(1400);
+        const missing = secCount - secGenerated.length;
+        onProgress?.(`[${secTopic}] Synthesizing ${missing} unique question(s) to reach exact ${secCount} for "${secTopic}"...`);
+
+        const avoidSnippets = uniqueGenerated.map((q) => q.text.substring(0, 50)).slice(-10);
+        const antiDuplicationDirective = avoidSnippets.length > 0
+          ? `\nSTRICT ANTI-DUPLICATION RULE: The following questions have ALREADY been generated. You MUST NOT repeat, paraphrase, or generate questions similar to these:\n- ${avoidSnippets.join('\n- ')}\nGenerate completely distinct, novel questions for topic "${secTopic}".`
+          : '';
+
+        const extraBatch = await generateMCQQuestionsWithAI({
+          subject: req.subject,
+          topic: secTopic,
+          examCategory: req.examCategory,
+          instructions: (req.instructions || '') + antiDuplicationDirective,
+          difficulty: secDiff,
+          count: Math.min(missing + 1, 4)
+        });
+
+        for (const q of extraBatch.questions) {
+          const cleanText = sanitizeQuestionText(q.text);
+          if (secGenerated.length < secCount && !isDuplicateQuestion(cleanText, uniqueGenerated)) {
+            const item = {
+              ...q,
+              subject: req.subject,
+              topic: secTopic,
+              difficulty: secDiff,
+              text: cleanText,
+              options: deduplicateAndFormatOptions(q.options),
+              marks: secMarks,
+              negativeMarks: req.negativeMarkingEnabled ? (req.negativeMarkPenalty ?? 0.25) : 0,
+              tags: [secTopic]
+            };
+            secGenerated.push(item);
+            uniqueGenerated.push(item);
+          }
+        }
+      }
     }
-  }
+  } else {
+    // Single topic flow
+    onProgress?.(`Contacting Autonomous Reasoning Engine to generate ${totalCount} questions for "${req.topic}"...`);
 
-  // Guaranteed Backfill Retry Loop: strictly reach exact totalCount with 100% UNIQUE questions
-  let backfillAttempts = 0;
-  while (uniqueGenerated.length < totalCount && backfillAttempts < 5) {
-    backfillAttempts++;
-    if (backfillAttempts > 1) await sleep(1400);
-    const missing = totalCount - uniqueGenerated.length;
-    onProgress?.(`Synthesizing ${missing} unique question(s) to guarantee ${totalCount} non-duplicate questions...`);
+    const generateBatch = async (
+      difficulty: 'EASY' | 'MEDIUM' | 'HARD',
+      count: number,
+      marks: number
+    ) => {
+      if (count <= 0) return [];
+      
+      const chunks: number[] = [];
+      let remaining = count;
+      while (remaining > 0) {
+        const take = Math.min(remaining, 4);
+        chunks.push(take);
+        remaining -= take;
+      }
 
-    // Pass latest generated question snippets so the AI strictly avoids repeating any of them
-    const avoidSnippets = uniqueGenerated.map((q) => q.text.substring(0, 50)).slice(-10);
-    const antiDuplicationDirective = avoidSnippets.length > 0
-      ? `\nSTRICT ANTI-DUPLICATION RULE: The following questions have ALREADY been generated. You MUST NOT repeat, paraphrase, or generate questions similar to these:\n- ${avoidSnippets.join('\n- ')}\nGenerate completely distinct, novel questions with different variables, numbers, scenarios, and themes.`
-      : '';
+      onProgress?.(`Generating ${count} ${difficulty.toLowerCase()} question(s) on ${req.topic}...`);
+      
+      const combined: GeneratedMCQQuestion[] = [];
+      for (let i = 0; i < chunks.length; i++) {
+        if (i > 0) {
+          await sleep(1400); // Pacing delay to maintain token velocity under 8k TPM
+        }
+        onProgress?.(`Generating ${difficulty.toLowerCase()} questions (${i + 1}/${chunks.length})...`);
+        const r = await generateMCQQuestionsWithAI({
+          subject: req.subject,
+          topic: req.topic,
+          examCategory: req.examCategory,
+          instructions: req.instructions,
+          difficulty,
+          count: chunks[i]
+        });
+        combined.push(...r.questions);
+      }
 
-    const extraBatch = await generateMCQQuestionsWithAI({
-      subject: req.subject,
-      topic: req.topic,
-      examCategory: req.examCategory,
-      instructions: (req.instructions || '') + antiDuplicationDirective,
-      difficulty: 'MEDIUM',
-      count: Math.min(missing + 1, 4)
-    });
+      return combined.map((q) => ({
+        ...q,
+        marks,
+        negativeMarks: req.negativeMarkingEnabled ? (req.negativeMarkPenalty ?? 0.25) : 0
+      }));
+    };
 
-    for (const q of extraBatch.questions) {
+    // Generate difficulty batches sequentially with pacing delays to strictly prevent Groq 429 TPM exhaustion
+    const easyList = await generateBatch('EASY', easyCount, req.easyMarks ?? defaultPerQMarks);
+    if (easyCount > 0 && mediumCount > 0) await sleep(1400);
+    const medList = await generateBatch('MEDIUM', mediumCount, req.mediumMarks ?? defaultPerQMarks);
+    if ((easyCount > 0 || mediumCount > 0) && hardCount > 0) await sleep(1400);
+    const hardList = await generateBatch('HARD', hardCount, req.hardMarks ?? defaultPerQMarks);
+
+    // Collect and strictly deduplicate all questions across batches
+    const rawCollected = [...easyList, ...medList, ...hardList];
+
+    for (const q of rawCollected) {
       const cleanText = sanitizeQuestionText(q.text);
-      if (uniqueGenerated.length < totalCount && !isDuplicateQuestion(cleanText, uniqueGenerated)) {
+      if (!isDuplicateQuestion(cleanText, uniqueGenerated)) {
         uniqueGenerated.push({
           ...q,
           text: cleanText,
-          options: deduplicateAndFormatOptions(q.options),
-          marks: defaultPerQMarks,
-          negativeMarks: req.negativeMarkingEnabled ? (req.negativeMarkPenalty ?? 0.25) : 0
+          options: deduplicateAndFormatOptions(q.options)
         });
+      }
+    }
+
+    // Guaranteed Backfill Retry Loop: strictly reach exact totalCount with 100% UNIQUE questions
+    let backfillAttempts = 0;
+    while (uniqueGenerated.length < totalCount && backfillAttempts < 5) {
+      backfillAttempts++;
+      if (backfillAttempts > 1) await sleep(1400);
+      const missing = totalCount - uniqueGenerated.length;
+      onProgress?.(`Synthesizing ${missing} unique question(s) to guarantee ${totalCount} non-duplicate questions...`);
+
+      // Pass latest generated question snippets so the AI strictly avoids repeating any of them
+      const avoidSnippets = uniqueGenerated.map((q) => q.text.substring(0, 50)).slice(-10);
+      const antiDuplicationDirective = avoidSnippets.length > 0
+        ? `\nSTRICT ANTI-DUPLICATION RULE: The following questions have ALREADY been generated. You MUST NOT repeat, paraphrase, or generate questions similar to these:\n- ${avoidSnippets.join('\n- ')}\nGenerate completely distinct, novel questions with different variables, numbers, scenarios, and themes.`
+        : '';
+
+      const extraBatch = await generateMCQQuestionsWithAI({
+        subject: req.subject,
+        topic: req.topic,
+        examCategory: req.examCategory,
+        instructions: (req.instructions || '') + antiDuplicationDirective,
+        difficulty: 'MEDIUM',
+        count: Math.min(missing + 1, 4)
+      });
+
+      for (const q of extraBatch.questions) {
+        const cleanText = sanitizeQuestionText(q.text);
+        if (uniqueGenerated.length < totalCount && !isDuplicateQuestion(cleanText, uniqueGenerated)) {
+          uniqueGenerated.push({
+            ...q,
+            text: cleanText,
+            options: deduplicateAndFormatOptions(q.options),
+            marks: defaultPerQMarks,
+            negativeMarks: req.negativeMarkingEnabled ? (req.negativeMarkPenalty ?? 0.25) : 0
+          });
+        }
       }
     }
   }
@@ -1724,8 +1845,8 @@ export async function generateFullExamPaperWithAI(
   // Trim to exact totalCount if slightly more were accumulated
   let allGenerated = uniqueGenerated.slice(0, totalCount);
 
-  // Strictly enforce uniform marks if specified (e.g. 1 mark per question)
-  if (req.easyMarks && req.easyMarks === req.mediumMarks && req.mediumMarks === req.hardMarks) {
+  // Strictly enforce uniform marks if specified (e.g. 1 mark per question for single-topic)
+  if (!isSectionBased && req.easyMarks && req.easyMarks === req.mediumMarks && req.mediumMarks === req.hardMarks) {
     allGenerated.forEach(q => {
       q.marks = req.easyMarks!;
     });

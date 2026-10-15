@@ -34,7 +34,8 @@ import {
   generateFullExamPaperWithAI,
   AIPaperGenerationRequest,
   AIPaperGenerationResult,
-  CrossValidationReport
+  CrossValidationReport,
+  AIPaperSectionSpec
 } from '../services/groqService';
 import {
   saveExam,
@@ -111,11 +112,99 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
     [allExistingQuestions]
   );
 
-  // Difficulty & Question Configuration (Simplified per Paper Setter standard)
+  // Multi-Topic / Section Breakdown Configuration
+  const [topicMode, setTopicMode] = useState<'sections' | 'single'>('sections');
+  const [sections, setSections] = useState<Array<{
+    id: string;
+    topic: string;
+    count: number;
+    difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+    marks: number;
+  }>>([
+    { id: 'sec_1', topic: 'Logical Reasoning', count: 15, difficulty: 'MEDIUM', marks: 1 },
+    { id: 'sec_2', topic: 'Blood Relations', count: 15, difficulty: 'MEDIUM', marks: 1 }
+  ]);
+
+  // Difficulty & Question Configuration for Single Mode
   const [totalQuestions, setTotalQuestions] = useState(30);
   const [marksPerQuestion, setMarksPerQuestion] = useState(1);
   const [totalMarks, setTotalMarks] = useState(30);
   const [overallSeverity, setOverallSeverity] = useState<'EASY' | 'MEDIUM' | 'HARD'>('MEDIUM');
+
+  // Computed total questions and marks derived strictly without cyclic loops
+  const effectiveTotalQuestions = useMemo(() => {
+    if (topicMode === 'sections') {
+      return sections.reduce((sum, s) => sum + (Number(s.count) || 0), 0);
+    }
+    return totalQuestions;
+  }, [topicMode, sections, totalQuestions]);
+
+  const effectiveTotalMarks = useMemo(() => {
+    if (topicMode === 'sections') {
+      return sections.reduce((sum, s) => sum + ((Number(s.count) || 0) * (Number(s.marks) || 1)), 0);
+    }
+    return totalMarks;
+  }, [topicMode, sections, totalMarks]);
+
+  const handleAddSection = () => {
+    setSections((prev) => [
+      ...prev,
+      {
+        id: `sec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        topic: '',
+        count: 10,
+        difficulty: 'MEDIUM',
+        marks: 1
+      }
+    ]);
+    playSound('click');
+  };
+
+  const handleRemoveSection = (id: string) => {
+    if (sections.length <= 1) return;
+    setSections((prev) => prev.filter((s) => s.id !== id));
+    playSound('click');
+  };
+
+  const handleUpdateSection = (
+    id: string,
+    updates: Partial<{ topic: string; count: number; difficulty: 'EASY' | 'MEDIUM' | 'HARD'; marks: number }>
+  ) => {
+    setSections((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
+    );
+  };
+
+  const handleApplyPreset = (preset: 'aptitude' | 'verbal' | 'technical') => {
+    if (preset === 'aptitude') {
+      setExamCategory('Aptitude');
+      setSubject('General Aptitude & Reasoning');
+      setTitle('General Aptitude & Logical Reasoning Assessment');
+      setSections([
+        { id: 'sec_1', topic: 'Logical Reasoning', count: 15, difficulty: 'MEDIUM', marks: 1 },
+        { id: 'sec_2', topic: 'Blood Relations', count: 15, difficulty: 'MEDIUM', marks: 1 },
+        { id: 'sec_3', topic: 'Quantitative Aptitude', count: 15, difficulty: 'MEDIUM', marks: 1 }
+      ]);
+    } else if (preset === 'verbal') {
+      setExamCategory('Aptitude');
+      setSubject('Verbal Ability & Comprehension');
+      setTitle('Verbal Ability & Critical Reasoning Assessment');
+      setSections([
+        { id: 'sec_1', topic: 'Reading Comprehension', count: 15, difficulty: 'MEDIUM', marks: 1 },
+        { id: 'sec_2', topic: 'Syllogisms & Analogies', count: 15, difficulty: 'MEDIUM', marks: 1 }
+      ]);
+    } else if (preset === 'technical') {
+      setExamCategory('ISE');
+      setSubject('Computer Science & Engineering');
+      setTitle('Computer Science Technical Assessment');
+      setSections([
+        { id: 'sec_1', topic: 'Data Structures & Arrays', count: 15, difficulty: 'MEDIUM', marks: 1 },
+        { id: 'sec_2', topic: 'Object-Oriented Programming (OOP)', count: 15, difficulty: 'MEDIUM', marks: 1 },
+        { id: 'sec_3', topic: 'Database Management Systems (DBMS)', count: 10, difficulty: 'MEDIUM', marks: 1 }
+      ]);
+    }
+    playSound('click');
+  };
 
   // Negative Marking & Settings
   const [negativeMarkingEnabled, setNegativeMarkingEnabled] = useState(true);
@@ -148,22 +237,34 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
 
   if (!isOpen) return null;
 
-  const totalQuestionsConfigured = totalQuestions;
-  const totalMarksConfigured = totalMarks;
-
   // ── 1. GENERATE DRAFT WITH AI ────────────────────────────────────────────────
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (!topic.trim()) {
-      setError('Please provide at least one topic or syllabus theme.');
-      return;
-    }
-
-    if (totalQuestionsConfigured <= 0) {
-      setError('Total questions must be greater than zero.');
-      return;
+    if (topicMode === 'sections') {
+      if (sections.length === 0) {
+        setError('Please configure at least one topic section.');
+        return;
+      }
+      const emptyTopic = sections.find((s) => !s.topic.trim());
+      if (emptyTopic) {
+        setError('Please enter a syllabus topic name for all sections.');
+        return;
+      }
+      if (effectiveTotalQuestions <= 0) {
+        setError('Total questions across sections must be greater than zero.');
+        return;
+      }
+    } else {
+      if (!topic.trim()) {
+        setError('Please provide at least one topic or syllabus theme.');
+        return;
+      }
+      if (totalQuestions <= 0) {
+        setError('Total questions must be greater than zero.');
+        return;
+      }
     }
 
     setStep('loading');
@@ -171,42 +272,79 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
     playSound('click');
 
     try {
-      const computedEasyCount = overallSeverity === 'EASY'
-        ? Math.max(1, Math.round(totalQuestions * 0.7))
-        : overallSeverity === 'HARD'
-        ? Math.max(0, Math.round(totalQuestions * 0.15))
-        : Math.max(1, Math.round(totalQuestions * 0.25));
+      const finalTitle = title.trim() || (
+        topicMode === 'sections'
+          ? `${sections.map((s) => s.topic.trim()).filter(Boolean).slice(0, 2).join(' & ')} Examination`
+          : `${topic.trim()} Examination`
+      );
 
-      const computedMedCount = overallSeverity === 'EASY'
-        ? Math.round(totalQuestions * 0.2)
-        : overallSeverity === 'HARD'
-        ? Math.round(totalQuestions * 0.35)
-        : Math.max(1, Math.round(totalQuestions * 0.55));
+      const finalSubject = subject.trim() || (examCategory === 'Aptitude' ? 'General Aptitude & Reasoning' : 'Computer Science');
+      const finalTopic = topicMode === 'sections'
+        ? sections.map((s) => s.topic.trim()).filter(Boolean).join(', ')
+        : topic.trim();
 
-      let computedHardCount = Math.max(0, totalQuestions - computedEasyCount - computedMedCount);
-      if (computedEasyCount + computedMedCount + computedHardCount !== totalQuestions) {
-        computedHardCount = Math.max(0, totalQuestions - computedEasyCount - computedMedCount);
+      let payload: AIPaperGenerationRequest;
+
+      if (topicMode === 'sections') {
+        payload = {
+          title: finalTitle,
+          subject: finalSubject,
+          topic: finalTopic,
+          sections: sections.map((s) => ({
+            id: s.id,
+            topic: s.topic.trim(),
+            count: Math.max(1, Number(s.count) || 1),
+            difficulty: s.difficulty,
+            marks: Math.max(1, Number(s.marks) || 1)
+          })),
+          examCategory,
+          instructions: instructions.trim(),
+          durationMinutes,
+          easyCount: 0,
+          mediumCount: 0,
+          hardCount: 0,
+          negativeMarkingEnabled,
+          negativeMarkPenalty,
+          autoPublish: false // Explicitly DRAFT: Faculty reviews before publishing
+        };
+      } else {
+        const computedEasyCount = overallSeverity === 'EASY'
+          ? Math.max(1, Math.round(totalQuestions * 0.7))
+          : overallSeverity === 'HARD'
+          ? Math.max(0, Math.round(totalQuestions * 0.15))
+          : Math.max(1, Math.round(totalQuestions * 0.25));
+
+        const computedMedCount = overallSeverity === 'EASY'
+          ? Math.round(totalQuestions * 0.2)
+          : overallSeverity === 'HARD'
+          ? Math.round(totalQuestions * 0.35)
+          : Math.max(1, Math.round(totalQuestions * 0.55));
+
+        let computedHardCount = Math.max(0, totalQuestions - computedEasyCount - computedMedCount);
+        if (computedEasyCount + computedMedCount + computedHardCount !== totalQuestions) {
+          computedHardCount = Math.max(0, totalQuestions - computedEasyCount - computedMedCount);
+        }
+
+        const basePerQ = marksPerQuestion || Math.max(1, Math.round(totalMarks / totalQuestions));
+
+        payload = {
+          title: finalTitle,
+          subject: finalSubject,
+          topic: finalTopic,
+          examCategory,
+          instructions: instructions.trim(),
+          durationMinutes,
+          easyCount: computedEasyCount,
+          mediumCount: computedMedCount,
+          hardCount: computedHardCount,
+          easyMarks: basePerQ,
+          mediumMarks: basePerQ,
+          hardMarks: basePerQ,
+          negativeMarkingEnabled,
+          negativeMarkPenalty,
+          autoPublish: false
+        };
       }
-
-      const basePerQ = marksPerQuestion || Math.max(1, Math.round(totalMarks / totalQuestions));
-
-      const payload: AIPaperGenerationRequest = {
-        title: title.trim() || `${topic.trim()} Examination`,
-        subject: subject.trim() || (examCategory === 'Aptitude' ? 'General Aptitude & Reasoning' : 'Computer Science'),
-        topic: topic.trim(),
-        examCategory,
-        instructions: instructions.trim(),
-        durationMinutes,
-        easyCount: computedEasyCount,
-        mediumCount: computedMedCount,
-        hardCount: computedHardCount,
-        easyMarks: basePerQ,
-        mediumMarks: basePerQ,
-        hardMarks: basePerQ,
-        negativeMarkingEnabled,
-        negativeMarkPenalty,
-        autoPublish: false // Explicitly DRAFT: Faculty must review and confirm before publishing
-      };
 
       const res = await generateFullExamPaperWithAI(payload, (status) => {
         setProgressMsg(status);
@@ -664,7 +802,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
           {/* ── STEP 1: CONFIG FORM ── */}
           {step === 'config' && (
             <form onSubmit={handleGenerate} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.9fr 0.9fr', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
                     Exam Category *
@@ -698,7 +836,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     list="ai-available-subjects"
                     value={subject}
                     onChange={(e) => setSubject(e.target.value)}
-                    placeholder="e.g. Computer Science, Mechanical..."
+                    placeholder="e.g. General Aptitude & Reasoning, Computer Science..."
                     style={{
                       width: '100%',
                       padding: '8px 10px',
@@ -716,46 +854,16 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     ))}
                   </datalist>
                 </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                    Syllabus Topic or Theme *
-                  </label>
-                  <input
-                    list="ai-available-topics"
-                    value={topic}
-                    onChange={(e) => {
-                      setTopic(e.target.value);
-                      if (!title) setTitle(`${e.target.value} Examination`);
-                    }}
-                    placeholder="e.g. Data Structures, Arrays, Stacks, Trees..."
-                    style={{
-                      width: '100%',
-                      padding: '8px 10px',
-                      background: 'var(--bg-surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-sm)',
-                      color: 'var(--text-primary)',
-                      fontSize: '12px'
-                    }}
-                    required
-                  />
-                  <datalist id="ai-available-topics">
-                    {availableTopics.map((t) => (
-                      <option key={t} value={t} />
-                    ))}
-                  </datalist>
-                </div>
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                  Official Exam Title
+                  Official Examination Title (Optional)
                 </label>
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Data Structures CIE Mid-Term Assessment"
+                  placeholder="e.g. Campus Placement Aptitude & Logical Reasoning Assessment"
                   style={{
                     width: '100%',
                     padding: '8px 10px',
@@ -768,7 +876,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                 />
               </div>
 
-              {/* Difficulty Breakdown Matrix */}
+              {/* Topic & Question Quota Configuration */}
               <div
                 style={{
                   background: 'var(--bg-surface)',
@@ -777,205 +885,545 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                   padding: '14px'
                 }}
               >
-                <div
-                  style={{
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    color: 'var(--text-primary)',
-                    marginBottom: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <Sliders size={13} />
-                  <span>Question & Marks Specification</span>
+                {/* Topic Distribution Mode Switcher */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <BookOpen size={14} color="var(--accent)" />
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Topic & Question Quota Configuration
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-elevated)', padding: '2px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                    <button
+                      type="button"
+                      onClick={() => setTopicMode('sections')}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        borderRadius: 'var(--radius-xs)',
+                        border: 'none',
+                        background: topicMode === 'sections' ? 'var(--bg-surface)' : 'transparent',
+                        color: topicMode === 'sections' ? 'var(--text-primary)' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <Layers size={11} color={topicMode === 'sections' ? 'var(--accent)' : 'inherit'} />
+                      <span>Multi-Topic Breakdown</span>
+                      <span style={{ fontSize: '9px', padding: '1px 5px', borderRadius: 'var(--radius-pill)', background: 'var(--accent)', color: '#000', fontWeight: 800 }}>PRO</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTopicMode('single')}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        borderRadius: 'var(--radius-xs)',
+                        border: 'none',
+                        background: topicMode === 'single' ? 'var(--bg-surface)' : 'transparent',
+                        color: topicMode === 'single' ? 'var(--text-primary)' : 'var(--text-muted)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Single Syllabus Theme
+                    </button>
+                  </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '12px' }}>
-                  {/* Total Questions */}
-                  <div>
-                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                      Total Questions
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="200"
-                      className="no-spin"
-                      value={totalQuestions || ''}
-                      onChange={(e) => {
-                        const count = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                        if (!isNaN(count)) {
-                          setTotalQuestions(count);
-                          if (count > 0) setTotalMarks(count * (marksPerQuestion || 1));
-                        }
-                      }}
-                      onBlur={() => {
-                        if (!totalQuestions || totalQuestions < 1) {
-                          setTotalQuestions(30);
-                          setTotalMarks(30 * (marksPerQuestion || 1));
-                        }
-                      }}
-                      placeholder="e.g. 30"
+                {/* MODE 1: MULTI-TOPIC / SECTION BREAKDOWN */}
+                {topicMode === 'sections' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {/* Table Header */}
+                    <div
                       style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        padding: '8px 10px',
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 105px 110px 85px 75px 36px',
+                        gap: '8px',
+                        padding: '0 8px',
+                        fontSize: '10.5px',
+                        fontWeight: 700,
+                        color: 'var(--text-secondary)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em'
+                      }}
+                    >
+                      <span>Topic / Module Name *</span>
+                      <span style={{ textAlign: 'center' }}>Questions</span>
+                      <span>Difficulty</span>
+                      <span style={{ textAlign: 'center' }}>Marks / Q</span>
+                      <span style={{ textAlign: 'center' }}>Subtotal</span>
+                      <span></span>
+                    </div>
+
+                    {/* Section Rows */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {sections.map((sec, idx) => (
+                        <div
+                          key={sec.id}
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: '1fr 105px 110px 85px 75px 36px',
+                            gap: '8px',
+                            alignItems: 'center',
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 'var(--radius-sm)',
+                            padding: '8px'
+                          }}
+                        >
+                          {/* Topic Input */}
+                          <div>
+                            <input
+                              list="ai-available-topics"
+                              value={sec.topic}
+                              onChange={(e) => handleUpdateSection(sec.id, { topic: e.target.value })}
+                              placeholder={idx === 0 ? "e.g. Logical Reasoning" : idx === 1 ? "e.g. Blood Relations" : "e.g. Quantitative Aptitude"}
+                              style={{
+                                width: '100%',
+                                boxSizing: 'border-box',
+                                padding: '6px 8px',
+                                background: 'var(--bg-surface)',
+                                border: '1px solid var(--border)',
+                                borderRadius: 'var(--radius-sm)',
+                                color: 'var(--text-primary)',
+                                fontSize: '12px',
+                                fontWeight: 600
+                              }}
+                              required
+                            />
+                          </div>
+
+                          {/* Questions Count */}
+                          <div>
+                            <input
+                              type="number"
+                              min="1"
+                              max="100"
+                              className="no-spin"
+                              value={sec.count || ''}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                                if (!isNaN(val)) {
+                                  handleUpdateSection(sec.id, { count: val });
+                                }
+                              }}
+                              placeholder="15"
+                              style={{
+                                width: '100%',
+                                boxSizing: 'border-box',
+                                padding: '6px 8px',
+                                background: 'var(--bg-surface)',
+                                border: '1px solid var(--border)',
+                                borderRadius: 'var(--radius-sm)',
+                                color: 'var(--text-primary)',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                textAlign: 'center'
+                              }}
+                              required
+                            />
+                          </div>
+
+                          {/* Difficulty */}
+                          <div>
+                            <select
+                              value={sec.difficulty}
+                              onChange={(e) => handleUpdateSection(sec.id, { difficulty: e.target.value as 'EASY' | 'MEDIUM' | 'HARD' })}
+                              style={{
+                                width: '100%',
+                                boxSizing: 'border-box',
+                                padding: '6px 6px',
+                                background: 'var(--bg-surface)',
+                                border: '1px solid var(--border)',
+                                borderRadius: 'var(--radius-sm)',
+                                color: sec.difficulty === 'EASY' ? 'var(--success)' : sec.difficulty === 'HARD' ? 'var(--danger)' : 'var(--warning)',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <option value="EASY">Easy</option>
+                              <option value="MEDIUM">Medium</option>
+                              <option value="HARD">Hard</option>
+                            </select>
+                          </div>
+
+                          {/* Marks per Question */}
+                          <div>
+                            <input
+                              type="number"
+                              min="1"
+                              max="20"
+                              className="no-spin"
+                              value={sec.marks || ''}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? 1 : parseInt(e.target.value, 10);
+                                if (!isNaN(val)) {
+                                  handleUpdateSection(sec.id, { marks: val });
+                                }
+                              }}
+                              placeholder="1"
+                              style={{
+                                width: '100%',
+                                boxSizing: 'border-box',
+                                padding: '6px 8px',
+                                background: 'var(--bg-surface)',
+                                border: '1px solid var(--border)',
+                                borderRadius: 'var(--radius-sm)',
+                                color: 'var(--text-primary)',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                textAlign: 'center'
+                              }}
+                            />
+                          </div>
+
+                          {/* Subtotal */}
+                          <div style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)', textAlign: 'center' }}>
+                            {(Number(sec.count) || 0) * (Number(sec.marks) || 1)} pt{(Number(sec.count) || 0) * (Number(sec.marks) || 1) !== 1 ? 's' : ''}
+                          </div>
+
+                          {/* Remove Button */}
+                          <div style={{ display: 'flex', justifyContent: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSection(sec.id)}
+                              disabled={sections.length <= 1}
+                              title={sections.length <= 1 ? "At least one topic section is required" : "Remove topic section"}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: sections.length <= 1 ? 'var(--text-dim)' : 'var(--danger)',
+                                cursor: sections.length <= 1 ? 'not-allowed' : 'pointer',
+                                padding: '4px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                opacity: sections.length <= 1 ? 0.3 : 0.8
+                              }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Add Section & Quick Presets Row */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
+                      <button
+                        type="button"
+                        onClick={handleAddSection}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 12px',
+                          borderRadius: 'var(--radius-sm)',
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--text-primary)',
+                          fontSize: '11.5px',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Plus size={13} color="var(--accent)" />
+                        <span>Add Topic / Section</span>
+                      </button>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>Quick Presets:</span>
+                        <button
+                          type="button"
+                          onClick={() => handleApplyPreset('aptitude')}
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: 'var(--radius-xs)',
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border)',
+                            color: 'var(--text-secondary)',
+                            fontSize: '10.5px',
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Aptitude (45 Qs)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApplyPreset('verbal')}
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: 'var(--radius-xs)',
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border)',
+                            color: 'var(--text-secondary)',
+                            fontSize: '10.5px',
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Verbal (30 Qs)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApplyPreset('technical')}
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: 'var(--radius-xs)',
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border)',
+                            color: 'var(--text-secondary)',
+                            fontSize: '10.5px',
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          CS Technical (40 Qs)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Real-Time Matrix Total Summary Strip */}
+                    <div
+                      style={{
+                        marginTop: '6px',
+                        padding: '8px 12px',
                         background: 'var(--bg-elevated)',
                         border: '1px solid var(--border)',
                         borderRadius: 'var(--radius-sm)',
-                        color: 'var(--text-primary)',
-                        fontSize: '13px',
-                        fontWeight: 600
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '8px',
+                        fontSize: '11px'
                       }}
-                    />
-                  </div>
-
-                  {/* Marks per Question */}
-                  <div>
-                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                      Marks / Question
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="100"
-                      className="no-spin"
-                      value={marksPerQuestion || ''}
-                      onChange={(e) => {
-                        const m = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                        if (!isNaN(m)) {
-                          setMarksPerQuestion(m);
-                          if (m > 0) setTotalMarks((totalQuestions || 1) * m);
-                        }
-                      }}
-                      onBlur={() => {
-                        if (!marksPerQuestion || marksPerQuestion < 1) {
-                          setMarksPerQuestion(1);
-                          setTotalMarks((totalQuestions || 30) * 1);
-                        }
-                      }}
-                      placeholder="e.g. 1"
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        padding: '8px 10px',
-                        background: 'var(--bg-elevated)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius-sm)',
-                        color: 'var(--text-primary)',
-                        fontSize: '13px',
-                        fontWeight: 600
-                      }}
-                    />
-                  </div>
-
-                  {/* Total Marks */}
-                  <div>
-                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                      Total Marks
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="1000"
-                      className="no-spin"
-                      value={totalMarks || ''}
-                      onChange={(e) => {
-                        const marks = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                        if (!isNaN(marks)) {
-                          setTotalMarks(marks);
-                          if (marks > 0 && totalQuestions > 0) {
-                            setMarksPerQuestion(Math.max(1, Math.round(marks / totalQuestions)));
-                          }
-                        }
-                      }}
-                      onBlur={() => {
-                        if (!totalMarks || totalMarks < 1) {
-                          setTotalMarks(Math.max(1, (totalQuestions || 30) * (marksPerQuestion || 1)));
-                        }
-                      }}
-                      placeholder="e.g. 30"
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        padding: '8px 10px',
-                        background: 'var(--bg-elevated)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius-sm)',
-                        color: 'var(--text-primary)',
-                        fontSize: '13px',
-                        fontWeight: 600
-                      }}
-                    />
-                  </div>
-
-                  {/* Overall Severity */}
-                  <div>
-                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                      Overall Severity
-                    </label>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
-                      {(['EASY', 'MEDIUM', 'HARD'] as const).map((sev) => {
-                        const isSelected = overallSeverity === sev;
-                        const color = sev === 'EASY' ? 'var(--success)' : sev === 'MEDIUM' ? 'var(--warning)' : 'var(--danger)';
-                        return (
-                          <button
-                            key={sev}
-                            type="button"
-                            onClick={() => setOverallSeverity(sev)}
-                            style={{
-                              padding: '8px 4px',
-                              borderRadius: 'var(--radius-sm)',
-                              border: isSelected ? `1.5px solid ${color}` : '1px solid var(--border)',
-                              background: isSelected ? 'var(--bg-surface)' : 'var(--bg-elevated)',
-                              color: isSelected ? color : 'var(--text-secondary)',
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              textAlign: 'center',
-                              transition: 'all 0.15s ease'
-                            }}
-                          >
-                            {sev}
-                          </button>
-                        );
-                      })}
+                    >
+                      <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>
+                          Total Questions: <strong style={{ color: 'var(--text-primary)' }}>{effectiveTotalQuestions}</strong>
+                        </span>
+                        <span style={{ color: 'var(--text-secondary)' }}>
+                          Total Marks: <strong style={{ color: 'var(--accent)' }}>{effectiveTotalMarks} pts</strong>
+                        </span>
+                        <span style={{ color: 'var(--text-secondary)' }}>
+                          Active Topics: <strong style={{ color: 'var(--text-primary)' }}>{sections.length}</strong>
+                        </span>
+                      </div>
+                      <div style={{ color: 'var(--text-muted)' }}>
+                        Quotas: {sections.map(s => `${s.count || 0} ${s.topic || 'Topic'}`).join(' • ')}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: '8px',
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-sm)',
-                    padding: '8px 12px',
-                    fontSize: '11px'
-                  }}
-                >
-                  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>
-                      Total Questions: <strong style={{ color: 'var(--text-primary)' }}>{totalQuestions}</strong>
-                    </span>
-                    <span style={{ color: 'var(--text-secondary)' }}>
-                      Marks / Question: <strong style={{ color: 'var(--text-primary)' }}>{marksPerQuestion} pt{marksPerQuestion > 1 ? 's' : ''}</strong>
-                    </span>
-                    <span style={{ color: 'var(--text-secondary)' }}>
-                      Total Marks: <strong style={{ color: 'var(--accent)' }}>{totalMarks} pts</strong>
-                    </span>
+                {/* MODE 2: SINGLE SYLLABUS THEME */}
+                {topicMode === 'single' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                        Syllabus Topic or Theme *
+                      </label>
+                      <input
+                        list="ai-available-topics"
+                        value={topic}
+                        onChange={(e) => {
+                          setTopic(e.target.value);
+                          if (!title) setTitle(`${e.target.value} Examination`);
+                        }}
+                        placeholder="e.g. Data Structures, Arrays, Stacks, Trees..."
+                        style={{
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          padding: '8px 10px',
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-sm)',
+                          color: 'var(--text-primary)',
+                          fontSize: '12px',
+                          fontWeight: 600
+                        }}
+                        required={topicMode === 'single'}
+                      />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
+                      {/* Total Questions */}
+                      <div>
+                        <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                          Total Questions
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="200"
+                          className="no-spin"
+                          value={totalQuestions || ''}
+                          onChange={(e) => {
+                            const count = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                            if (!isNaN(count)) {
+                              setTotalQuestions(count);
+                              if (count > 0) setTotalMarks(count * (marksPerQuestion || 1));
+                            }
+                          }}
+                          placeholder="e.g. 30"
+                          style={{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            padding: '8px 10px',
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 'var(--radius-sm)',
+                            color: 'var(--text-primary)',
+                            fontSize: '13px',
+                            fontWeight: 600
+                          }}
+                        />
+                      </div>
+
+                      {/* Marks per Question */}
+                      <div>
+                        <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                          Marks / Question
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          className="no-spin"
+                          value={marksPerQuestion || ''}
+                          onChange={(e) => {
+                            const m = e.target.value === '' ? 1 : parseInt(e.target.value, 10);
+                            if (!isNaN(m)) {
+                              setMarksPerQuestion(m);
+                              if (m > 0) setTotalMarks((totalQuestions || 1) * m);
+                            }
+                          }}
+                          placeholder="e.g. 1"
+                          style={{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            padding: '8px 10px',
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 'var(--radius-sm)',
+                            color: 'var(--text-primary)',
+                            fontSize: '13px',
+                            fontWeight: 600
+                          }}
+                        />
+                      </div>
+
+                      {/* Total Marks */}
+                      <div>
+                        <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                          Total Marks
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="1000"
+                          className="no-spin"
+                          value={totalMarks || ''}
+                          onChange={(e) => {
+                            const marks = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                            if (!isNaN(marks)) {
+                              setTotalMarks(marks);
+                            }
+                          }}
+                          placeholder="e.g. 30"
+                          style={{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            padding: '8px 10px',
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 'var(--radius-sm)',
+                            color: 'var(--text-primary)',
+                            fontSize: '13px',
+                            fontWeight: 600
+                          }}
+                        />
+                      </div>
+
+                      {/* Overall Severity */}
+                      <div>
+                        <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                          Overall Severity
+                        </label>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
+                          {(['EASY', 'MEDIUM', 'HARD'] as const).map((sev) => {
+                            const isSelected = overallSeverity === sev;
+                            const color = sev === 'EASY' ? 'var(--success)' : sev === 'MEDIUM' ? 'var(--warning)' : 'var(--danger)';
+                            return (
+                              <button
+                                key={sev}
+                                type="button"
+                                onClick={() => setOverallSeverity(sev)}
+                                style={{
+                                  padding: '8px 4px',
+                                  borderRadius: 'var(--radius-sm)',
+                                  border: isSelected ? `1.5px solid ${color}` : '1px solid var(--border)',
+                                  background: isSelected ? 'var(--bg-surface)' : 'var(--bg-elevated)',
+                                  color: isSelected ? color : 'var(--text-secondary)',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  textAlign: 'center',
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                {sev}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '8px',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '8px 12px',
+                        fontSize: '11px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>
+                          Total Questions: <strong style={{ color: 'var(--text-primary)' }}>{totalQuestions}</strong>
+                        </span>
+                        <span style={{ color: 'var(--text-secondary)' }}>
+                          Marks / Question: <strong style={{ color: 'var(--text-primary)' }}>{marksPerQuestion} pt{marksPerQuestion > 1 ? 's' : ''}</strong>
+                        </span>
+                        <span style={{ color: 'var(--text-secondary)' }}>
+                          Total Marks: <strong style={{ color: 'var(--accent)' }}>{totalMarks} pts</strong>
+                        </span>
+                      </div>
+                      <div style={{ color: 'var(--text-muted)' }}>
+                        Severity Profile: <span style={{ fontWeight: 700, color: overallSeverity === 'EASY' ? 'var(--success)' : overallSeverity === 'MEDIUM' ? 'var(--warning)' : 'var(--danger)' }}>{overallSeverity}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ color: 'var(--text-muted)' }}>
-                    Severity Profile: <span style={{ fontWeight: 700, color: overallSeverity === 'EASY' ? 'var(--success)' : overallSeverity === 'MEDIUM' ? 'var(--warning)' : 'var(--danger)' }}>{overallSeverity}</span>
-                  </div>
-                </div>
+                )}
               </div>
+              <datalist id="ai-available-topics">
+                {availableTopics.map((t) => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
 
               {/* Duration & Negative Penalty */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -1410,7 +1858,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     }}
                   >
                     <GraduationCap size={15} style={{ flexShrink: 0 }} />
-                    <span>Generate Questions for Review ({totalQuestionsConfigured})</span>
+                    <span>Generate Questions for Review ({effectiveTotalQuestions})</span>
                   </button>
                 </div>
               </div>
