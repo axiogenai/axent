@@ -168,22 +168,23 @@ export function Footer16({
         viewport={{ once: true, amount: 0.22 }}
         className="relative mx-auto flex min-h-[580px] flex-col justify-end pt-16 sm:min-h-[640px] lg:min-h-[720px]"
       >
-        {/* Fully centered, responsive watermark visible on all screen sizes */}
+        {/* Fully centered, bold, crisp watermark visible on all screen sizes */}
         <motion.div
           variants={wordmarkVariants}
-          className="pointer-events-none absolute top-[8%] sm:top-[12%] lg:top-[15%] left-0 right-0 flex w-full justify-center overflow-hidden z-0 px-6"
+          className="pointer-events-none absolute top-[5%] sm:top-[8%] lg:top-[10%] left-0 right-0 flex w-full justify-center overflow-hidden z-0 px-4"
           aria-hidden="true"
         >
           <svg
-            className="w-full max-w-5xl h-auto select-none opacity-25"
-            viewBox="0 0 900 180"
+            className="w-full max-w-6xl h-auto select-none"
+            viewBox="0 0 1000 200"
             preserveAspectRatio="xMidYMid meet"
             aria-label={brandName}
           >
             <defs>
               <linearGradient id="brandGrad16" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#71717a" stopOpacity="0.45" />
-                <stop offset="100%" stopColor="#18181b" stopOpacity="0.08" />
+                <stop offset="0%" stopColor="#f4f4f5" stopOpacity="0.85" />
+                <stop offset="45%" stopColor="#a1a1aa" stopOpacity="0.6" />
+                <stop offset="100%" stopColor="#3f3f46" stopOpacity="0.15" />
               </linearGradient>
             </defs>
             <text
@@ -193,8 +194,8 @@ export function Footer16({
               textAnchor="middle"
               className="font-sans font-black tracking-widest uppercase select-none"
               fill="url(#brandGrad16)"
-              fontSize="140"
-              style={{ letterSpacing: '0.2em' }}
+              fontSize="160"
+              style={{ letterSpacing: '0.14em' }}
             >
               {brandName}
             </text>
