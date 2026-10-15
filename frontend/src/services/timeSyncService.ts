@@ -263,17 +263,10 @@ export async function requestExamFullscreen(): Promise<boolean> {
       await docEl.msRequestFullscreen();
     }
 
-    // Force Windows DWM & Chromium GPU layer invalidation to avoid blank white screen bug
+    // Safe, non-destructive viewport layout recalculation without body transform mutation
     if (typeof window !== 'undefined') {
       window.requestAnimationFrame(() => {
         window.dispatchEvent(new Event('resize'));
-        if (document.body) {
-          document.body.style.transform = 'translateZ(0)';
-          setTimeout(() => {
-            if (document.body) document.body.style.transform = '';
-            window.dispatchEvent(new Event('resize'));
-          }, 60);
-        }
       });
     }
 
@@ -303,16 +296,10 @@ export async function exitExamFullscreen(): Promise<boolean> {
       await doc.msExitFullscreen();
     }
 
+    // Safe layout recalculation
     if (typeof window !== 'undefined') {
       window.requestAnimationFrame(() => {
         window.dispatchEvent(new Event('resize'));
-        if (document.body) {
-          document.body.style.transform = 'translateZ(0)';
-          setTimeout(() => {
-            if (document.body) document.body.style.transform = '';
-            window.dispatchEvent(new Event('resize'));
-          }, 60);
-        }
       });
     }
 

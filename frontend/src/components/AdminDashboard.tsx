@@ -26,7 +26,8 @@ import {
   subscribeToCctvBroadcast,
   syncCurrentLiveStation,
   clearSubmittedStations,
-  removeSingleStation
+  removeSingleStation,
+  sendProctorConcludeAndFreeCommand
 } from '../services/adminService';
 import { fetchStationsFromCloud, subscribeToCloudStations } from '../services/supabaseService';
 import { InstituteLabManagerModal } from './InstituteLabManagerModal';
@@ -52,6 +53,7 @@ import {
   AlertTriangle,
   Lock,
   Unlock,
+  LogOut,
   Radio,
   Building,
   GraduationCap,
@@ -1315,6 +1317,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <span>{isLocked ? 'Unlock' : 'Lock'}</span>
                       </button>
 
+                      {/* Conclude & Free Device for frozen/locked workstation */}
+                      {(isLocked || (station.metrics?.tabSwitchViolations || 0) >= 3) && !isSubmitted && (
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            sendProctorConcludeAndFreeCommand(station.id, station.labId);
+                            loadData();
+                            playSound('click');
+                          }}
+                          style={{
+                            padding: '0 6px',
+                            fontSize: '10.5px',
+                            height: '24px',
+                            color: 'var(--success)',
+                            borderColor: 'var(--success-border)',
+                            background: 'var(--success-bg)'
+                          }}
+                          title="Conclude exam, calculate marks, and release physical workstation"
+                        >
+                          <CheckCircle2 size={11} />
+                          <span>Conclude & Free</span>
+                        </button>
+                      )}
+
                       {/* Instant Warning */}
                       <button
                         className="btn btn-ghost btn-sm"
@@ -1473,6 +1499,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </button>
                           );
                         })()}
+                        {((station.status !== 'Submitted & Done' && isStationLocked(station.id, station.labId)) || (station.tabSwitchViolations || station.mcqProgress?.tabSwitches || 0) >= 3) && (
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => {
+                              sendProctorConcludeAndFreeCommand(station.id, station.labId);
+                              loadData();
+                              playSound('click');
+                            }}
+                            style={{
+                              height: '24px',
+                              padding: '0 6px',
+                              fontSize: '11px',
+                              color: 'var(--success)',
+                              borderColor: 'var(--success-border)',
+                              background: 'var(--success-bg)'
+                            }}
+                            title="Conclude exam and free device"
+                          >
+                            <LogOut size={11} />
+                            <span>Free</span>
+                          </button>
+                        )}
                         <button
                           className="btn btn-ghost btn-sm"
                           onClick={() => {
@@ -1680,6 +1728,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </button>
                   );
                 })()}
+
+                {/* Conclude & Free Device */}
+                {selectedStation.status !== 'Submitted & Done' && (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      sendProctorConcludeAndFreeCommand(selectedStation.id, selectedStation.labId);
+                      loadData();
+                      playSound('click');
+                      setSelectedStationId(null);
+                    }}
+                    style={{
+                      height: '28px',
+                      fontSize: '11px',
+                      padding: '0 10px',
+                      color: 'var(--success)',
+                      borderColor: 'var(--success-border)',
+                      background: 'var(--success-bg)'
+                    }}
+                    title="Conclude student examination and release device hardware"
+                  >
+                    <LogOut size={12} />
+                    <span>Conclude & Free</span>
+                  </button>
+                )}
 
                 {/* Send Warning */}
                 <button

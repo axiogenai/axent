@@ -137,10 +137,11 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
 
   return (
     <div
+      data-proctor-unlock-exempt="true"
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 10000,
+        zIndex: 2147483647,
         backgroundColor: 'rgba(0, 0, 0, 0.78)',
         backdropFilter: 'blur(5px)',
         WebkitBackdropFilter: 'blur(5px)',

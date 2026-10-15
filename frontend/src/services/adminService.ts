@@ -27,7 +27,7 @@ const CURRENT_LAB_KEY = 'codedna_active_lab_id';
 const BROADCAST_BUS_NAME = 'codedna_cctv_proctor_bus';
 
 export interface CctvBroadcastMessage {
-  type: 'STATION_UPDATE' | 'STATION_SUBMIT' | 'LOCK_COMMAND' | 'PROCTOR_MESSAGE' | 'HEARTBEAT' | 'RESET_ALL';
+  type: 'STATION_UPDATE' | 'STATION_SUBMIT' | 'LOCK_COMMAND' | 'PROCTOR_MESSAGE' | 'HEARTBEAT' | 'RESET_ALL' | 'CONCLUDE_AND_FREE';
   stationId?: string;
   labId?: string;
   station?: CandidateStation;
@@ -741,6 +741,41 @@ export function sendProctorLockCommand(stationId: string, isLocked: boolean, lab
   saveAllStations(updated);
   updateStationLockInCloud(stationId, isLocked, undefined, labId);
   broadcastCctvMessage({ type: 'LOCK_COMMAND', stationId, labId, isLocked });
+}
+
+/**
+ * Remotely concludes an ongoing candidate examination (MCQ or Coding) and completely frees their terminal.
+ * Finalizes evaluated score, unlocks hardware, exits fullscreen, and marks station as 'Submitted & Done'.
+ */
+export function sendProctorConcludeAndFreeCommand(stationId: string, labId?: string): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(`${STATION_LOCK_PREFIX}${stationId}`, 'false');
+  }
+
+  const stations = getLiveStations();
+  const updated = stations.map((s) => {
+    if (s.id === stationId) {
+      return {
+        ...s,
+        status: 'Submitted & Done' as const,
+        isLockedByProctor: false,
+        proctorWarningMessage: 'Examination concluded by central proctor. Terminal released.',
+        lastActive: 'Concluded & Freed Just Now',
+        lastUpdatedTimestamp: Date.now()
+      };
+    }
+    return s;
+  });
+  saveAllStations(updated);
+  updateStationLockInCloud(stationId, false, 'Examination concluded by central proctor. Terminal released.', labId);
+
+  broadcastCctvMessage({
+    type: 'CONCLUDE_AND_FREE',
+    stationId,
+    labId,
+    isLocked: false,
+    warningMessage: 'Examination concluded by central proctor. Workstation released.'
+  });
 }
 
 // ── REMOTE PROCTOR COMMAND: SEND INSTANT WARNING MESSAGE TO CANDIDATE SCREEN ──
