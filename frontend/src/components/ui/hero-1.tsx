@@ -344,30 +344,18 @@ export default function Hero1({
                         </p>
                     </div>
 
-                    <div className="flex flex-col md:flex-row md:items-end justify-between lg:justify-end gap-10 pb-1 w-full lg:w-auto">
-                        <div className="flex items-center gap-6 lg:gap-10 order-1 lg:order-2">
-                            {socialLinks.map((social) => (
-                                <a
-                                    key={social.label}
-                                    href={social.href}
-                                    target={social.href.startsWith("http") ? "_blank" : undefined}
-                                    rel={social.href.startsWith("http") ? "noopener noreferrer" : undefined}
-                                    className="text-white/70 text-sm lg:text-base hover:text-white transition-colors duration-250 tracking-wide font-mono"
-                                >
-                                    {social.label}
-                                </a>
-                            ))}
-                        </div>
-
-                        <div className="hidden md:flex items-center gap-3 text-white/60 text-xs lg:text-sm tracking-wide order-2 lg:order-1 lg:absolute lg:left-1/2 lg:-translate-x-1/2 lg:bottom-1">
-                            <span>Scroll to Explore Modules</span>
-                            <motion.span
-                                animate={{ y: [0, 4, 0] }}
-                                transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+                    <div className="flex items-center gap-6 lg:gap-10">
+                        {socialLinks.map((social) => (
+                            <a
+                                key={social.label}
+                                href={social.href}
+                                target={social.href.startsWith("http") ? "_blank" : undefined}
+                                rel={social.href.startsWith("http") ? "noopener noreferrer" : undefined}
+                                className="text-white/70 text-sm lg:text-base hover:text-white transition-colors duration-250 tracking-wide font-mono"
                             >
-                                <ArrowDown className="w-3.5 h-3.5 text-white/70" strokeWidth={1.5} />
-                            </motion.span>
-                        </div>
+                                {social.label}
+                            </a>
+                        ))}
                     </div>
                 </motion.div>
             </motion.div>
