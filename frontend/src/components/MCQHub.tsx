@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MCQExamSelector } from './MCQExamScreen';
+import { ErrorBoundary } from './ErrorBoundary';
 
 export const MCQHub: React.FC = () => {
   const navigate = useNavigate();
@@ -32,9 +33,12 @@ export const MCQHub: React.FC = () => {
 
   return (
     <div style={{ minHeight: 'calc(100vh - 52px)', background: 'var(--bg-main)', display: 'flex', flexDirection: 'column' }}>
-      <MCQExamSelector />
+      <ErrorBoundary fallbackTitle="Examination Portal Error Caught">
+        <MCQExamSelector />
+      </ErrorBoundary>
     </div>
   );
 };
 
 export default MCQHub;
+

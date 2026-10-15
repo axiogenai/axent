@@ -801,111 +801,140 @@ export function syncMcqLiveStation(
   isDone = false,
   extra?: { screenImageData?: string; hasLiveScreenStream?: boolean }
 ): CandidateStation {
-  const stations = getLiveStations();
-  const activeLab = studentInfo.labId || getActiveLabId() || 'LAB-01';
-  const stationLabel = studentInfo.stationNumber || 'Station #01';
-  const cleanStationNum = stationLabel.replace(/[^0-9]/g, '') || '01';
-  const currentStationId = `${activeLab}-WS-${cleanStationNum.padStart(2, '0')}`;
-  const labInfo = getLabInfoOrDefault(activeLab);
+  try {
+    const stations = getLiveStations();
+    const activeLab = studentInfo?.labId || getActiveLabId() || 'LAB-01';
+    const stationLabel = studentInfo?.stationNumber || 'Station #01';
+    const cleanStationNum = stationLabel.replace(/[^0-9]/g, '') || '01';
+    const currentStationId = `${activeLab}-WS-${cleanStationNum.padStart(2, '0')}`;
+    const labInfo = getLabInfoOrDefault(activeLab);
 
-  const answeredCount = Object.keys(attempt.answers).filter((k) => attempt.answers[k]).length;
-  const totalQuestions = attempt.assignedQuestions.length;
-  const tabSwitches = attempt.tabSwitchCount || 0;
-  const unfocusedSec = attempt.unfocusedSeconds || 0;
+    const safeAnswers = attempt?.answers || {};
+    const answeredCount = Object.keys(safeAnswers).filter((k) => safeAnswers[k]).length;
+    const totalQuestions = attempt?.assignedQuestions?.length || exam?.questionCount || 0;
+    const tabSwitches = attempt?.tabSwitchCount || 0;
+    const unfocusedSec = attempt?.unfocusedSeconds || 0;
+    const examTitle = exam?.title || attempt?.examTitle || 'MCQ Examination';
+    const examId = exam?.id || attempt?.examId || 'exam-unknown';
 
-  // Determine integrity & cheating risk
-  let integrityStatus: IntegrityStatus = 'Verified Original Work';
-  let cheatingRisk: CheatingRiskLevel = 'Low';
+    // Determine integrity & cheating risk
+    let integrityStatus: IntegrityStatus = 'Verified Original Work';
+    let cheatingRisk: CheatingRiskLevel = 'Low';
 
-  if (tabSwitches >= 3 || unfocusedSec > 60) {
-    integrityStatus = 'High Cheating Risk / Plagiarized';
-    cheatingRisk = 'Critical';
-  } else if (tabSwitches >= 1 || unfocusedSec > 15) {
-    integrityStatus = 'Suspicious Activity / Moderate AI';
-    cheatingRisk = 'Medium';
-  }
+    if (tabSwitches >= 3 || unfocusedSec > 60) {
+      integrityStatus = 'High Cheating Risk / Plagiarized';
+      cheatingRisk = 'Critical';
+    } else if (tabSwitches >= 1 || unfocusedSec > 15) {
+      integrityStatus = 'Suspicious Activity / Moderate AI';
+      cheatingRisk = 'Medium';
+    }
 
-  const existing = stations.find((s) => s.id === currentStationId);
-  const isLocked = isStationLocked(currentStationId, activeLab);
+    const existing = stations.find((s) => s.id === currentStationId);
+    const isLocked = isStationLocked(currentStationId, activeLab);
 
-  const updatedStation: CandidateStation = {
-    id: currentStationId,
-    labId: activeLab,
-    labName: labInfo.labName,
-    stationNumber: stationLabel,
-    ipAddress: existing?.ipAddress || `10.50.${parseInt(activeLab.replace('LAB-', ''), 10) || 1}.${parseInt(cleanStationNum, 10) + 10}`,
-    student: {
-      ...studentInfo,
+    const updatedStation: CandidateStation = {
+      id: currentStationId,
       labId: activeLab,
       labName: labInfo.labName,
       stationNumber: stationLabel,
-      examMode: 'MCQ',
-      assignmentTitle: exam.title
-    },
-    language: 'MCQ',
-    code: `// MCQ Exam: ${exam.title}\n// Answered: ${answeredCount}/${totalQuestions} questions\n// Score: ${attempt.score ?? 0}/${attempt.maxScore}\n// Tab Switches: ${tabSwitches}`,
-    metrics: {
-      typingSpeed: 0,
-      timeSpent: Math.round((Date.now() - attempt.startTime) / 1000),
-      pasteCount: 0,
-      deleteCount: 0,
-      editCount: answeredCount,
-      undoCount: 0,
-      pasteRatio: 0,
-      pastedLines: 0,
-      totalLines: totalQuestions,
-      keystrokes: answeredCount,
-      pauseDuration: Math.round(unfocusedSec),
+      ipAddress: existing?.ipAddress || `10.50.${parseInt(activeLab.replace('LAB-', ''), 10) || 1}.${parseInt(cleanStationNum, 10) + 10}`,
+      student: {
+        ...studentInfo,
+        labId: activeLab,
+        labName: labInfo.labName,
+        stationNumber: stationLabel,
+        examMode: 'MCQ',
+        assignmentTitle: examTitle
+      },
+      language: 'MCQ',
+      code: `// MCQ Exam: ${examTitle}\n// Answered: ${answeredCount}/${totalQuestions} questions\n// Score: ${attempt?.score ?? 0}/${attempt?.maxScore ?? 0}\n// Tab Switches: ${tabSwitches}`,
+      metrics: {
+        typingSpeed: 0,
+        timeSpent: Math.round((Date.now() - (attempt?.startTime || Date.now())) / 1000),
+        pasteCount: 0,
+        deleteCount: 0,
+        editCount: answeredCount,
+        undoCount: 0,
+        pasteRatio: 0,
+        pastedLines: 0,
+        totalLines: totalQuestions,
+        keystrokes: answeredCount,
+        pauseDuration: Math.round(unfocusedSec),
+        tabSwitchViolations: tabSwitches,
+        unfocusedTimeSeconds: Math.round(unfocusedSec)
+      },
       tabSwitchViolations: tabSwitches,
-      unfocusedTimeSeconds: Math.round(unfocusedSec)
-    },
-    tabSwitchViolations: tabSwitches,
-    unfocusedTimeSeconds: Math.round(unfocusedSec),
-    status: isDone ? 'Submitted & Done' : 'In Progress',
-    integrityStatus,
-    cheatingRisk,
-    marks: isDone && attempt.score !== undefined ? {
-      executionMarks: attempt.score,
-      logicMarks: 0,
-      vivaMarks: 0,
-      integrityMarks: tabSwitches > 2 ? 0 : 10,
-      totalMarks: attempt.score,
-      maxMarks: attempt.maxScore
-    } : undefined,
-    screenImageData: extra?.screenImageData !== undefined ? extra.screenImageData : existing?.screenImageData,
-    hasLiveScreenStream: extra?.hasLiveScreenStream !== undefined ? extra.hasLiveScreenStream : existing?.hasLiveScreenStream ?? false,
-    isLockedByProctor: isLocked,
-    proctorWarningMessage: existing?.proctorWarningMessage,
-    lastActive: isDone ? 'Submitted Just Now' : 'Just now',
-    lastUpdatedTimestamp: Date.now(),
-    examMode: 'MCQ',
-    mcqProgress: {
-      examId: exam.id,
-      examTitle: exam.title,
-      answeredCount,
-      totalQuestions,
-      currentQuestionIndex: currentIdx,
-      currentScore: attempt.score,
-      maxScore: attempt.maxScore,
-      tabSwitches
+      unfocusedTimeSeconds: Math.round(unfocusedSec),
+      status: isDone ? 'Submitted & Done' : 'In Progress',
+      integrityStatus,
+      cheatingRisk,
+      marks: isDone && attempt?.score !== undefined ? {
+        executionMarks: attempt.score,
+        logicMarks: 0,
+        vivaMarks: 0,
+        integrityMarks: tabSwitches > 2 ? 0 : 10,
+        totalMarks: attempt.score,
+        maxMarks: attempt.maxScore ?? 0
+      } : undefined,
+      screenImageData: extra?.screenImageData !== undefined ? extra.screenImageData : existing?.screenImageData,
+      hasLiveScreenStream: extra?.hasLiveScreenStream !== undefined ? extra.hasLiveScreenStream : existing?.hasLiveScreenStream ?? false,
+      isLockedByProctor: isLocked,
+      proctorWarningMessage: existing?.proctorWarningMessage,
+      lastActive: isDone ? 'Submitted Just Now' : 'Just now',
+      lastUpdatedTimestamp: Date.now(),
+      examMode: 'MCQ',
+      mcqProgress: {
+        examId,
+        examTitle,
+        answeredCount,
+        totalQuestions,
+        currentQuestionIndex: currentIdx,
+        currentScore: attempt?.score,
+        maxScore: attempt?.maxScore,
+        tabSwitches
+      }
+    };
+
+    const stationIndex = stations.findIndex((s) => s.id === currentStationId);
+    if (stationIndex >= 0) {
+      stations[stationIndex] = updatedStation;
+    } else {
+      stations.unshift(updatedStation);
     }
-  };
 
-  const stationIndex = stations.findIndex((s) => s.id === currentStationId);
-  if (stationIndex >= 0) {
-    stations[stationIndex] = updatedStation;
-  } else {
-    stations.unshift(updatedStation);
+    saveAllStations(stations);
+    saveStationToCloud(updatedStation);
+    broadcastCctvMessage({
+      type: isDone ? 'STATION_SUBMIT' : 'STATION_UPDATE',
+      station: updatedStation,
+      stationId: currentStationId,
+      labId: activeLab
+    });
+
+    return updatedStation;
+  } catch (err) {
+    console.warn('[syncMcqLiveStation] Telemetry synchronization encountered safe error:', err);
+    return {
+      id: `${studentInfo?.labId || 'LAB-01'}-WS-01`,
+      labId: studentInfo?.labId || 'LAB-01',
+      labName: 'Computer Lab',
+      stationNumber: studentInfo?.stationNumber || 'Station #01',
+      ipAddress: '10.50.1.10',
+      student: studentInfo || ({} as any),
+      language: 'MCQ',
+      code: '// MCQ Sync Inactive',
+      metrics: {
+        typingSpeed: 0, timeSpent: 0, pasteCount: 0, deleteCount: 0, editCount: 0,
+        undoCount: 0, pasteRatio: 0, pastedLines: 0, totalLines: 0, keystrokes: 0,
+        pauseDuration: 0, tabSwitchViolations: 0, unfocusedTimeSeconds: 0
+      },
+      status: isDone ? 'Submitted & Done' : 'In Progress',
+      integrityStatus: 'Verified Original Work',
+      cheatingRisk: 'Low',
+      lastActive: 'Just now',
+      lastUpdatedTimestamp: Date.now(),
+      examMode: 'MCQ'
+    };
   }
-
-  saveAllStations(stations);
-  saveStationToCloud(updatedStation);
-  broadcastCctvMessage({
-    type: isDone ? 'STATION_SUBMIT' : 'STATION_UPDATE',
-    station: updatedStation,
-    stationId: currentStationId,
-    labId: activeLab
-  });
-
-  return updatedStation;
 }
+

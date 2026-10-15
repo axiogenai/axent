@@ -27,6 +27,7 @@ import {
   triggerViewportReflow
 } from '../services/timeSyncService';
 import katex from 'katex';
+import { ErrorBoundary } from './ErrorBoundary';
 
 // ── Timer hook ────────────────────────────────────────────────────────────────
 function useCountdown(deadline: number, onExpire: () => void) {
@@ -107,10 +108,12 @@ interface FormattedQuestionContentProps {
 const FormattedQuestionContent: React.FC<FormattedQuestionContentProps> = ({ content, style }) => {
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
 
-  if (!content) return null;
+  if (content === null || content === undefined) return null;
+  const rawStr = typeof content === 'string' ? content : String(content);
+  if (!rawStr.trim()) return null;
 
   // Clean redundant leading option markers like "A) ", "(A) ", "A. ", "1. ", "Option A: "
-  const cleanedContent = content.replace(/^(?:\([A-Da-d0-9]\)|[A-Da-d0-9][\.\)\:\-]|Option\s*[A-D][:.-]?)\s*/i, '');
+  const cleanedContent = rawStr.replace(/^(?:\([A-Da-d0-9]\)|[A-Da-d0-9][\.\)\:\-]|Option\s*[A-D][:.-]?)\s*/i, '');
 
   const handleCopyCode = (code: string, idx: number) => {
     try {
@@ -266,117 +269,124 @@ function renderKatexHtml(latex: string, displayMode: boolean = false): string | 
  */
 function renderMathAndFractions(text: string, prefix: string): React.ReactNode[] {
   if (!text) return [];
-  const trimmed = text.trim();
+  const safeText = typeof text === 'string' ? text : String(text);
+  const trimmed = safeText.trim();
+  if (!trimmed) return [];
 
-  // 1. Direct standalone fraction: "1/52", "-3/4", "13 / 204"
-  const simpleFractionMatch = /^([+-]?\d+)\s*\/\s*(\d+)$/.exec(trimmed);
-  if (simpleFractionMatch) {
-    const html = renderKatexHtml(`\\frac{${simpleFractionMatch[1]}}{${simpleFractionMatch[2]}}`, false);
-    if (html) {
-      return [
-        <span
-          key={`${prefix}-single-frac`}
-          className="codedna-math-fraction"
-          style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }}
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
-      ];
-    }
-  }
-
-  // 2. Starts with a raw LaTeX command: e.g. "\frac{1}{52}" or "\sqrt{x}"
-  if (/^\\[a-zA-Z]/.test(trimmed)) {
-    const html = renderKatexHtml(trimmed, false);
-    if (html) {
-      return [
-        <span
-          key={`${prefix}-raw-latex`}
-          className="codedna-math-latex"
-          style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }}
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
-      ];
-    }
-  }
-
-  // 3. Tokenize by LaTeX delimiters ($$...$$, \[...\], $...$, \(...\)),
-  // raw \frac/\sqrt commands, exponents (x^2), or embedded fractions (1/52)
-  const tokenRegex = /(\$\$(?:[^\$]+)\$\$|\\\[(?:[\s\S]+?)\\\]|\$(?:[^\$]+)\$|\\\((?:[\s\S]+?)\\\)|\\frac\{[^{}]*\}\{[^{}]*\}|\\sqrt\{[^{}]*\}|(?<![\w\\])[a-zA-Z0-9]+\^[a-zA-Z0-9]+|(?<![\d\/])[+-]?\d+\s*\/\s*\d+(?![\d\/]))/g;
-
-  const nodes: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  let tokenIdx = 0;
-
-  while ((match = tokenRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      nodes.push(text.substring(lastIndex, match.index));
-    }
-    const token = match[0];
-    const key = `${prefix}-math-${tokenIdx++}`;
-
-    if (token.startsWith('$$') && token.endsWith('$$')) {
-      const html = renderKatexHtml(token.slice(2, -2), true);
-      nodes.push(
-        html ? (
-          <span key={key} className="codedna-math-display" style={{ display: 'block', margin: '6px 0' }} dangerouslySetInnerHTML={{ __html: html }} />
-        ) : token
-      );
-    } else if (token.startsWith('\\[') && token.endsWith('\\]')) {
-      const html = renderKatexHtml(token.slice(2, -2), true);
-      nodes.push(
-        html ? (
-          <span key={key} className="codedna-math-display" style={{ display: 'block', margin: '6px 0' }} dangerouslySetInnerHTML={{ __html: html }} />
-        ) : token
-      );
-    } else if (token.startsWith('$') && token.endsWith('$')) {
-      const html = renderKatexHtml(token.slice(1, -1), false);
-      nodes.push(
-        html ? (
-          <span key={key} className="codedna-math-inline" style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }} dangerouslySetInnerHTML={{ __html: html }} />
-        ) : token
-      );
-    } else if (token.startsWith('\\(') && token.endsWith('\\)')) {
-      const html = renderKatexHtml(token.slice(2, -2), false);
-      nodes.push(
-        html ? (
-          <span key={key} className="codedna-math-inline" style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }} dangerouslySetInnerHTML={{ __html: html }} />
-        ) : token
-      );
-    } else if (token.startsWith('\\frac') || token.startsWith('\\sqrt')) {
-      const html = renderKatexHtml(token, false);
-      nodes.push(
-        html ? (
-          <span key={key} className="codedna-math-inline" style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }} dangerouslySetInnerHTML={{ __html: html }} />
-        ) : token
-      );
-    } else if (/^[+-]?\d+\s*\/\s*\d+$/.test(token.trim())) {
-      const [n, d] = token.split('/').map((s) => s.trim());
-      const html = renderKatexHtml(`\\frac{${n}}{${d}}`, false);
-      nodes.push(
-        html ? (
-          <span key={key} className="codedna-math-fraction" style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }} dangerouslySetInnerHTML={{ __html: html }} />
-        ) : token
-      );
-    } else if (/^[a-zA-Z0-9]+\^[a-zA-Z0-9]+$/.test(token.trim())) {
-      const html = renderKatexHtml(token.trim(), false);
-      nodes.push(
-        html ? (
-          <span key={key} className="codedna-math-inline" style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }} dangerouslySetInnerHTML={{ __html: html }} />
-        ) : token
-      );
-    } else {
-      nodes.push(token);
+  try {
+    // 1. Direct standalone fraction: "1/52", "-3/4", "13 / 204"
+    const simpleFractionMatch = /^([+-]?\d+)\s*\/\s*(\d+)$/.exec(trimmed);
+    if (simpleFractionMatch) {
+      const html = renderKatexHtml(`\\frac{${simpleFractionMatch[1]}}{${simpleFractionMatch[2]}}`, false);
+      if (html) {
+        return [
+          <span
+            key={`${prefix}-single-frac`}
+            className="codedna-math-fraction"
+            style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        ];
+      }
     }
 
-    lastIndex = match.index + match[0].length;
-  }
+    // 2. Starts with a raw LaTeX command: e.g. "\frac{1}{52}" or "\sqrt{x}"
+    if (/^\\[a-zA-Z]/.test(trimmed)) {
+      const html = renderKatexHtml(trimmed, false);
+      if (html) {
+        return [
+          <span
+            key={`${prefix}-raw-latex`}
+            className="codedna-math-latex"
+            style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        ];
+      }
+    }
 
-  if (lastIndex < text.length) {
-    nodes.push(text.substring(lastIndex));
-  }
+    // 3. Tokenize by LaTeX delimiters ($$...$$, \[...\], $...$, \(...\)),
+    // raw \frac/\sqrt commands, exponents (x^2), or embedded fractions (1/52)
+    const tokenRegex = /(\$\$(?:[^\$]+)\$\$|\\\[(?:[\s\S]+?)\\\]|\$(?:[^\$]+)\$|\\\((?:[\s\S]+?)\\\)|\\frac\{[^{}]*\}\{[^{}]*\}|\\sqrt\{[^{}]*\}|(?<![\w\\])[a-zA-Z0-9]+\^[a-zA-Z0-9]+|(?<![\d\/])[+-]?\d+\s*\/\s*\d+(?![\d\/]))/g;
 
-  return nodes;
+    const nodes: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    let tokenIdx = 0;
+
+    while ((match = tokenRegex.exec(safeText)) !== null) {
+      if (match.index > lastIndex) {
+        nodes.push(safeText.substring(lastIndex, match.index));
+      }
+      const token = match[0];
+      const key = `${prefix}-math-${tokenIdx++}`;
+
+      if (token.startsWith('$$') && token.endsWith('$$')) {
+        const html = renderKatexHtml(token.slice(2, -2), true);
+        nodes.push(
+          html ? (
+            <span key={key} className="codedna-math-display" style={{ display: 'block', margin: '6px 0' }} dangerouslySetInnerHTML={{ __html: html }} />
+          ) : token
+        );
+      } else if (token.startsWith('\\[') && token.endsWith('\\]')) {
+        const html = renderKatexHtml(token.slice(2, -2), true);
+        nodes.push(
+          html ? (
+            <span key={key} className="codedna-math-display" style={{ display: 'block', margin: '6px 0' }} dangerouslySetInnerHTML={{ __html: html }} />
+          ) : token
+        );
+      } else if (token.startsWith('$') && token.endsWith('$')) {
+        const html = renderKatexHtml(token.slice(1, -1), false);
+        nodes.push(
+          html ? (
+            <span key={key} className="codedna-math-inline" style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }} dangerouslySetInnerHTML={{ __html: html }} />
+          ) : token
+        );
+      } else if (token.startsWith('\\(') && token.endsWith('\\)')) {
+        const html = renderKatexHtml(token.slice(2, -2), false);
+        nodes.push(
+          html ? (
+            <span key={key} className="codedna-math-inline" style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }} dangerouslySetInnerHTML={{ __html: html }} />
+          ) : token
+        );
+      } else if (token.startsWith('\\frac') || token.startsWith('\\sqrt')) {
+        const html = renderKatexHtml(token, false);
+        nodes.push(
+          html ? (
+            <span key={key} className="codedna-math-inline" style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }} dangerouslySetInnerHTML={{ __html: html }} />
+          ) : token
+        );
+      } else if (/^[+-]?\d+\s*\/\s*\d+$/.test(token.trim())) {
+        const [n, d] = token.split('/').map((s) => s.trim());
+        const html = renderKatexHtml(`\\frac{${n}}{${d}}`, false);
+        nodes.push(
+          html ? (
+            <span key={key} className="codedna-math-fraction" style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }} dangerouslySetInnerHTML={{ __html: html }} />
+          ) : token
+        );
+      } else if (/^[a-zA-Z0-9]+\^[a-zA-Z0-9]+$/.test(token.trim())) {
+        const html = renderKatexHtml(token.trim(), false);
+        nodes.push(
+          html ? (
+            <span key={key} className="codedna-math-inline" style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 2px' }} dangerouslySetInnerHTML={{ __html: html }} />
+          ) : token
+        );
+      } else {
+        nodes.push(token);
+      }
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < safeText.length) {
+      nodes.push(safeText.substring(lastIndex));
+    }
+
+    return nodes;
+  } catch (err) {
+    console.warn('[renderMathAndFractions] Math parsing fell back to plain text:', err);
+    return [safeText];
+  }
 }
 
 function renderInlineSpans(text: string, prefix: string): React.ReactNode {
@@ -932,12 +942,12 @@ const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attem
     triggerViewportReflow();
   }, []);
 
-  const totalQuestions = attempt.assignedQuestions?.length || exam.questionCount || 0;
-  const answeredCount = Object.keys(attempt.answers || {}).filter((k) => attempt.answers[k]).length;
+  const totalQuestions = attempt?.assignedQuestions?.length || exam?.questionCount || 0;
+  const answeredCount = Object.keys(attempt?.answers || {}).filter((k) => attempt?.answers?.[k]).length;
 
   // Deterministic submission verification token
   const verificationHash = useMemo(() => {
-    const raw = `${attempt.id}-${attempt.studentRoll}-${attempt.submitTime || Date.now()}`;
+    const raw = `${attempt?.id || 'att'}-${attempt?.studentRoll || 'roll'}-${attempt?.submitTime || Date.now()}`;
     let hash = 0;
     for (let i = 0; i < raw.length; i++) {
       hash = (hash << 5) - hash + raw.charCodeAt(i);
@@ -1246,12 +1256,14 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
   }, []);
 
   const [filterMode, setFilterMode] = useState<'all' | 'correct' | 'wrong' | 'unanswered'>('all');
-  
-  const pct = grade.percentageScore;
+
+  const pct = Number.isFinite(grade?.percentageScore) ? (grade.percentageScore ?? 0) : 0;
   const gradeLabel = pct >= 80 ? 'Distinction' : pct >= 60 ? 'First Class' : pct >= 40 ? 'Pass' : 'Unsatisfactory';
   const gradeColor = pct >= 80 ? 'var(--success)' : pct >= 60 ? 'var(--accent)' : pct >= 40 ? 'var(--warning)' : 'var(--danger)';
 
-  const filteredQuestions = grade.perQuestion.filter((pq) => {
+  const perQuestionList = Array.isArray(grade?.perQuestion) ? grade.perQuestion : [];
+
+  const filteredQuestions = perQuestionList.filter((pq) => {
     if (filterMode === 'correct') return pq.isCorrect;
     if (filterMode === 'wrong') return !pq.isCorrect && Boolean(pq.selectedOptionId);
     if (filterMode === 'unanswered') return !pq.selectedOptionId;
@@ -1519,17 +1531,17 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
                   Question-by-Question Review
                 </span>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  ({filteredQuestions.length} of {grade.perQuestion.length} displayed)
+                  ({filteredQuestions.length} of {perQuestionList.length} displayed)
                 </span>
               </div>
 
               {/* Filter Tabs */}
               <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-surface)', padding: '2px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
                 {[
-                  { id: 'all', label: `All (${grade.perQuestion.length})` },
-                  { id: 'correct', label: `Correct (${grade.correctCount})` },
-                  { id: 'wrong', label: `Wrong (${grade.wrongCount})` },
-                  { id: 'unanswered', label: `Skipped (${grade.unansweredCount})` },
+                  { id: 'all', label: `All (${perQuestionList.length})` },
+                  { id: 'correct', label: `Correct (${grade?.correctCount ?? 0})` },
+                  { id: 'wrong', label: `Wrong (${grade?.wrongCount ?? 0})` },
+                  { id: 'unanswered', label: `Skipped (${grade?.unansweredCount ?? 0})` },
                 ].map((f) => (
                   <button
                     key={f.id}
@@ -2941,8 +2953,33 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     (attempt && (attempt.status === 'SUBMITTED' || attempt.status === 'TIMED_OUT' || attempt.status === 'ABANDONED'))
   );
 
+  const fallbackExamConfig: MCQExamConfig = {
+    id: attempt?.examId || activeExamId || 'exam-unknown',
+    title: attempt?.examTitle || exam?.title || 'MCQ Examination',
+    description: exam?.description || 'Standard examination session.',
+    instructions: exam?.instructions || '',
+    createdBy: exam?.createdBy || 'system',
+    subject: exam?.subject || 'Examination',
+    topic: exam?.topic || 'Evaluation',
+    examCategory: exam?.examCategory || 'Aptitude',
+    durationMinutes: exam?.durationMinutes || 30,
+    totalMarks: attempt?.maxScore || exam?.totalMarks || 100,
+    questionCount: attempt?.assignedQuestions?.length || exam?.questionCount || 10,
+    questionIds: [],
+    status: 'PUBLISHED',
+    shuffleQuestions: true,
+    shuffleOptions: true,
+    negativeMarkingEnabled: exam?.negativeMarkingEnabled ?? false,
+    allowReview: true,
+    showExplanationsAfterSubmit: exam?.showExplanationsAfterSubmit ?? true,
+    maxAttempts: exam?.maxAttempts || 1,
+    resultDeclarationMode: exam?.resultDeclarationMode || 'WHATSAPP_GROUP',
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+
   const effectiveGradeResult = gradeResult || (isConcludedOrSubmitted && attempt ? gradeAttempt(attempt) : null);
-  const resolvedExam = exam || (attempt ? allExamsList.find((e) => e.id === attempt.examId) : null);
+  const resolvedExam = exam || (attempt ? allExamsList.find((e) => e.id === attempt.examId) : null) || fallbackExamConfig;
 
   if (isConcludedOrSubmitted) {
     if (effectiveGradeResult && resolvedExam && attempt) {
@@ -2993,12 +3030,13 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
   // ── Active exam ──
   // Guarantee 100% uniqueness: deduplicate assigned questions by questionId and normalized text
   const assignedQuestions = useMemo(() => {
-    const raw = attempt?.assignedQuestions || [];
+    const raw = Array.isArray(attempt?.assignedQuestions) ? attempt.assignedQuestions : [];
     const seenIds = new Set<string>();
     const seenTexts = new Set<string>();
     const deduped: typeof raw = [];
 
     for (const aq of raw) {
+      if (!aq || !aq.questionId) continue;
       if (seenIds.has(aq.questionId)) continue;
       const normText = (aq.snapshot?.text || '').toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
       if (normText && seenTexts.has(normText)) continue;
@@ -3504,75 +3542,94 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '28px' }}>
             {/* Question header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Question {currentIdx + 1} of {totalQ}
-              </span>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
-                  {currentAQ.snapshot.marks}pt
-                </span>
-                {currentAQ.snapshot.negativeMarks > 0 && (
-                  <span style={{ fontSize: '12px', color: 'var(--warning)', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
-                    -{currentAQ.snapshot.negativeMarks} penalty
-                  </span>
-                )}
-                <span style={{ fontSize: '11px', color: 'var(--text-dim)', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
-                  {currentAQ.snapshot.difficulty}
-                </span>
-              </div>
-            </div>
+            {(() => {
+              const safeAQSnapshot = currentAQ?.snapshot || {
+                text: '',
+                options: [],
+                marks: 1,
+                negativeMarks: 0,
+                difficulty: 'MEDIUM' as const
+              };
+              const safeAQOptions = Array.isArray(safeAQSnapshot.options) ? safeAQSnapshot.options : [];
+              const safeShuffledOptionIds = Array.isArray(currentAQ?.shuffledOptionIds) && currentAQ.shuffledOptionIds.length > 0
+                ? currentAQ.shuffledOptionIds
+                : safeAQOptions.map((o) => o?.id || '');
 
-            {/* Question text */}
-            <FormattedQuestionContent
-              content={currentAQ.snapshot.text}
-              style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 24px' }}
-            />
+              return (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Question {currentIdx + 1} of {totalQ}
+                    </span>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
+                        {safeAQSnapshot.marks ?? 1}pt
+                      </span>
+                      {(safeAQSnapshot.negativeMarks ?? 0) > 0 && (
+                        <span style={{ fontSize: '12px', color: 'var(--warning)', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
+                          -{safeAQSnapshot.negativeMarks} penalty
+                        </span>
+                      )}
+                      <span style={{ fontSize: '11px', color: 'var(--text-dim)', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
+                        {safeAQSnapshot.difficulty || 'Medium'}
+                      </span>
+                    </div>
+                  </div>
 
-            {/* Options */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {currentAQ.shuffledOptionIds.map((optId, optIdx) => {
-                const opt = currentAQ.snapshot.options.find((o) => o.id === optId);
-                if (!opt) return null;
-                const isSelected = answers[currentAQ.questionId] === optId;
-                return (
-                  <button
-                    key={optId}
-                    onClick={() => handleSelectOption(currentAQ.questionId, optId)}
-                    style={{
-                      display: 'flex', alignItems: 'flex-start', gap: '12px', width: '100%', textAlign: 'left',
-                      padding: '14px 16px', cursor: 'pointer',
-                      borderRadius: 'var(--radius-md)',
-                      border: `2px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
-                      background: isSelected ? 'var(--accent-subtle)' : 'var(--bg-surface)',
-                      transition: 'border-color 0.15s ease, background 0.15s ease',
-                    }}>
-                    {/* Option letter */}
-                    <div style={{
-                      width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', flexShrink: 0,
-                      border: `2px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
-                      background: isSelected ? 'var(--accent)' : 'var(--bg-elevated)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '12px', fontWeight: 800,
-                      color: isSelected ? 'var(--accent-contrast)' : 'var(--text-muted)',
-                    }}>
-                      {String.fromCharCode(65 + optIdx)}
-                    </div>
-                    <div style={{ fontSize: '14px', color: 'var(--text-primary)', lineHeight: 1.5, flex: 1 }}>
-                      <FormattedQuestionContent content={opt.text} />
-                    </div>
-                    {isSelected && <CheckCircle size={18} color="var(--accent)" style={{ flexShrink: 0, marginTop: '3px' }} />}
-                  </button>
-                );
-              })}
-            </div>
+                  {/* Question text */}
+                  <FormattedQuestionContent
+                    content={safeAQSnapshot.text}
+                    style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 24px' }}
+                  />
+
+                  {/* Options */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {safeShuffledOptionIds.map((optId, optIdx) => {
+                      const opt = safeAQOptions.find((o) => o?.id === optId);
+                      if (!opt) return null;
+                      const qId = currentAQ?.questionId || '';
+                      const isSelected = Boolean(answers && qId && answers[qId] === optId);
+                      return (
+                        <button
+                          key={optId || `opt-${optIdx}`}
+                          onClick={() => qId && handleSelectOption(qId, optId)}
+                          style={{
+                            display: 'flex', alignItems: 'flex-start', gap: '12px', width: '100%', textAlign: 'left',
+                            padding: '14px 16px', cursor: 'pointer',
+                            borderRadius: 'var(--radius-md)',
+                            border: `2px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
+                            background: isSelected ? 'var(--accent-subtle)' : 'var(--bg-surface)',
+                            transition: 'border-color 0.15s ease, background 0.15s ease',
+                          }}>
+                          {/* Option letter */}
+                          <div style={{
+                            width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', flexShrink: 0,
+                            border: `2px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
+                            background: isSelected ? 'var(--accent)' : 'var(--bg-elevated)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '12px', fontWeight: 800,
+                            color: isSelected ? 'var(--accent-contrast)' : 'var(--text-muted)',
+                          }}>
+                            {String.fromCharCode(65 + optIdx)}
+                          </div>
+                          <div style={{ fontSize: '14px', color: 'var(--text-primary)', lineHeight: 1.5, flex: 1 }}>
+                            <FormattedQuestionContent content={opt.text} />
+                          </div>
+                          {isSelected && <CheckCircle size={18} color="var(--accent)" style={{ flexShrink: 0, marginTop: '3px' }} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()}
           </div>
 
           {/* Navigation footer */}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
             <button
               onClick={() => setCurrentIdx((i) => Math.max(0, i - 1))}
-              disabled={!exam.allowReview && currentIdx === 0 || currentIdx === 0}
+              disabled={(!exam?.allowReview && currentIdx === 0) || currentIdx === 0}
               style={{
                 display: 'flex', alignItems: 'center', gap: '6px',
                 background: 'var(--bg-elevated)', border: '1px solid var(--border)',
@@ -3843,7 +3900,13 @@ export const MCQExamSelector: React.FC = () => {
 
   if (selectedExamId) {
     return (
-      <>
+      <ErrorBoundary
+        fallbackTitle="Examination Terminal Irregularity Prevented"
+        onReset={() => {
+          setSelectedExamId(null);
+          setSearchParams({}, { replace: true });
+        }}
+      >
         <MCQExamScreen
           examId={selectedExamId}
           onBack={handleBack}
@@ -3867,7 +3930,7 @@ export const MCQExamSelector: React.FC = () => {
             </div>
           }
         />
-      </>
+      </ErrorBoundary>
     );
   }
 

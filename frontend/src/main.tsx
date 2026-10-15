@@ -4,14 +4,18 @@ import { BrowserRouter } from 'react-router-dom';
 import './index.css';
 import 'katex/dist/katex.min.css';
 import App from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const rootElement = document.getElementById('root');
 if (rootElement) {
   createRoot(rootElement).render(
     <StrictMode>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <ErrorBoundary>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </ErrorBoundary>
     </StrictMode>
   );
 }
+

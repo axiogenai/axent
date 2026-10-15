@@ -114,7 +114,10 @@ if (typeof window !== 'undefined') {
 export function getAllQuestions(): MCQQuestion[] {
   const loaded = load<MCQQuestion[]>(MCQ_STORAGE_KEYS.QUESTIONS, []);
   // Return loaded real questions (clean, zero fake seed fallback)
-  return (loaded || []).filter((q) => !String(q.id || '').startsWith('seed-'));
+  return (loaded || []).filter((q): q is MCQQuestion => 
+    Boolean(q && typeof q === 'object' && q.id) && 
+    !String(q.id || '').startsWith('seed-')
+  );
 }
 
 export function getQuestionById(id: string): MCQQuestion | undefined {
@@ -252,7 +255,8 @@ export function getAllExams(): MCQExamConfig[] {
   const deletedIds = getDeletedExamIds();
   const loaded = load<MCQExamConfig[]>(MCQ_STORAGE_KEYS.EXAMS, []);
   // Return loaded real exams (clean, zero fake seed fallback, excluding deleted)
-  return (loaded || []).filter((e) => 
+  return (loaded || []).filter((e): e is MCQExamConfig => 
+    Boolean(e && typeof e === 'object' && e.id) &&
     !deletedIds.has(e.id) &&
     !String(e.id || '').startsWith('exam-aptitude-') && 
     !String(e.id || '').startsWith('exam-ise-') &&
@@ -352,7 +356,8 @@ export function validateExamForPublish(exam: MCQExamConfig): string[] {
 // ── ATTEMPTS ──────────────────────────────────────────────────────────────────
 
 export function getAllAttempts(): MCQAttempt[] {
-  return load<MCQAttempt[]>(MCQ_STORAGE_KEYS.ATTEMPTS, []);
+  const loaded = load<MCQAttempt[]>(MCQ_STORAGE_KEYS.ATTEMPTS, []);
+  return (loaded || []).filter((a): a is MCQAttempt => Boolean(a && typeof a === 'object' && a.id));
 }
 
 export function getAttemptById(id: string): MCQAttempt | undefined {
@@ -545,29 +550,32 @@ export function startAttempt(
 
   // Build assigned questions with sanitized snapshots (correct answers strictly withheld from client state during active test)
   const assignedQuestions: MCQAssignedQuestion[] = orderedQuestionIds.map((qid, order) => {
-    const q = questions.find((x) => x.id === qid)!;
+    const q = questions.find((x) => x.id === qid);
+    const qOptions = Array.isArray(q?.options) ? q.options : [];
     const snapshot: MCQQuestionSnapshot = {
-      questionId: q.id,
-      text: q.text,
-      options: q.options.map((o) => ({
-        id: o.id,
-        text: o.text.replace(/^(?:\([A-Da-d0-9]\)|[A-Da-d0-9][\.\)\:\-]|Option\s*[A-D][:.-]?)\s*/i, '').trim()
+      questionId: q?.id || qid,
+      text: typeof q?.text === 'string' ? q.text : String(q?.text ?? ''),
+      options: qOptions.map((o) => ({
+        id: o?.id || uuid(),
+        text: typeof o?.text === 'string'
+          ? o.text.replace(/^(?:\([A-Da-d0-9]\)|[A-Da-d0-9][\.\)\:\-]|Option\s*[A-D][:.-]?)\s*/i, '').trim()
+          : String(o?.text ?? '').trim()
       })),
       correctOptionId: '', // Sanitized: Authoritatively resolved on submit to prevent DevTools/storage inspection
-      marks: q.marks,
+      marks: Number.isFinite(q?.marks) ? (q?.marks as number) : 1,
       // Respect the exam-level policy; per-question penalties are ignored when
       // negative marking is disabled for this exam.
-      negativeMarks: exam.negativeMarkingEnabled ? q.negativeMarks : 0,
+      negativeMarks: exam.negativeMarkingEnabled && Number.isFinite(q?.negativeMarks) ? (q?.negativeMarks as number) : 0,
       explanation: '', // Sanitized: Never exposed during active test
-      subject: q.subject,
-      topic: q.topic,
-      difficulty: q.difficulty,
+      subject: q?.subject || '',
+      topic: q?.topic || '',
+      difficulty: q?.difficulty || 'MEDIUM',
     };
     return {
       questionId: qid,
       order,
       snapshot,
-      shuffledOptionIds: optionOrderMap[qid] ?? q.options.map((o) => o.id),
+      shuffledOptionIds: optionOrderMap[qid] ?? qOptions.map((o) => o.id),
     };
   });
 
@@ -652,7 +660,7 @@ export function updateUnfocusedTime(attemptId: string, totalSeconds: number): vo
 /**
  * Grade an attempt. Called ONLY at submission time.
  * Reads correct answers from the immutable snapshot stored at attempt-creation time.
- * Never trusts client-provided scores.
+ * Never trusts client-provided scores. Defensively handles any missing/null fields.
  */
 export function gradeAttempt(attempt: MCQAttempt): MCQGradeResult {
   let score = 0;
@@ -660,50 +668,74 @@ export function gradeAttempt(attempt: MCQAttempt): MCQGradeResult {
   let wrongCount = 0;
   let unansweredCount = 0;
 
-  const perQuestion = attempt.assignedQuestions.map((aq) => {
-    const { snapshot } = aq;
-    const selectedOptionId = attempt.answers[aq.questionId] ?? '';
+  const assignedQuestions = Array.isArray(attempt?.assignedQuestions) ? attempt.assignedQuestions : [];
+  const answers = attempt?.answers || {};
+
+  const perQuestion = assignedQuestions.map((aq, index) => {
+    const snapshot = aq?.snapshot || {
+      questionId: aq?.questionId || `q-${index}`,
+      text: 'Question content pending synchronization',
+      options: [],
+      correctOptionId: '',
+      marks: 1,
+      negativeMarks: 0,
+      explanation: '',
+      subject: '',
+      topic: '',
+      difficulty: 'MEDIUM' as const
+    };
+    const options = Array.isArray(snapshot.options) ? snapshot.options : [];
+    const qId = aq?.questionId || snapshot.questionId;
+    const selectedOptionId = (answers && qId ? answers[qId] : '') ?? '';
     const isUnanswered = !selectedOptionId;
 
     // Authoritative lookup: Resolve true correct answer directly from question bank
-    const bankQ = getQuestionById(aq.questionId);
-    const authoritativeCorrectId = bankQ?.options.find((o) => o.isCorrect)?.id || snapshot.correctOptionId;
+    const bankQ = qId ? getQuestionById(qId) : undefined;
+    const authoritativeCorrectId =
+      bankQ?.options?.find((o) => o?.isCorrect)?.id ||
+      options.find((o: any) => o?.isCorrect)?.id ||
+      snapshot.correctOptionId ||
+      '';
     const authoritativeExplanation = bankQ?.explanation || snapshot.explanation || '';
 
     const isCorrect = !isUnanswered && selectedOptionId === authoritativeCorrectId;
+
+    const qMarks = Number.isFinite(snapshot.marks) ? snapshot.marks : 1;
+    const qNeg = Number.isFinite(snapshot.negativeMarks) ? snapshot.negativeMarks : 0;
 
     let marksAwarded = 0;
     if (isUnanswered) {
       unansweredCount++;
     } else if (isCorrect) {
-      marksAwarded = snapshot.marks;
+      marksAwarded = qMarks;
       correctCount++;
     } else {
-      marksAwarded = -snapshot.negativeMarks;
+      marksAwarded = -qNeg;
       wrongCount++;
     }
 
     score += marksAwarded;
 
-    const selectedOption = snapshot.options.find((o) => o.id === selectedOptionId);
-    const correctOption = snapshot.options.find((o) => o.id === authoritativeCorrectId);
+    const selectedOption = options.find((o) => o?.id === selectedOptionId);
+    const correctOption = options.find((o) => o?.id === authoritativeCorrectId);
 
     return {
-      questionId: aq.questionId,
+      questionId: qId,
       selectedOptionId,
       correctOptionId: authoritativeCorrectId,
       isCorrect,
       marksAwarded,
-      question: snapshot.text,
-      selectedText: selectedOption?.text ?? '(unanswered)',
-      correctText: correctOption?.text ?? '',
-      explanation: authoritativeExplanation,
+      question: typeof snapshot.text === 'string' ? snapshot.text : String(snapshot.text ?? ''),
+      selectedText: selectedOption?.text ? String(selectedOption.text) : (isUnanswered ? '(unanswered)' : '(invalid selection)'),
+      correctText: correctOption?.text ? String(correctOption.text) : '',
+      explanation: typeof authoritativeExplanation === 'string' ? authoritativeExplanation : String(authoritativeExplanation ?? ''),
     };
   });
 
   // Clamp score to 0 minimum
   score = Math.max(0, score);
-  const maxScore = attempt.maxScore;
+  const calculatedMax = assignedQuestions.reduce((sum, aq) => sum + (Number.isFinite(aq?.snapshot?.marks) ? (aq.snapshot.marks || 1) : 1), 0);
+  const maxScore = Number.isFinite(attempt?.maxScore) && (attempt.maxScore ?? 0) > 0 ? (attempt.maxScore as number) : Math.max(1, calculatedMax);
   const percentageScore = maxScore > 0 ? Math.round((score / maxScore) * 100 * 10) / 10 : 0;
 
   return {
@@ -727,36 +759,31 @@ export function submitAttempt(
   const idx = all.findIndex((a) => a.id === attemptId);
   if (idx < 0) return null;
   const existing = all[idx];
+  if (!existing) return null;
 
   // Finalized attempts are immutable; duplicate submissions return the stored grade.
   if (existing.status !== 'IN_PROGRESS') {
-    return existing.score === undefined ? null : gradeAttempt(existing);
+    return gradeAttempt(existing);
   }
 
   const now = getSynchronizedNow();
   const finalStatus: MCQAttemptStatus =
-    now >= existing.deadline || requestedStatus === 'TIMED_OUT'
+    now >= (existing.deadline || 0) || requestedStatus === 'TIMED_OUT'
       ? 'TIMED_OUT'
       : requestedStatus === 'ABANDONED'
         ? 'ABANDONED'
         : 'SUBMITTED';
-  const assignedById = new Map(existing.assignedQuestions.map((q) => [q.questionId, q]));
 
-  for (const [questionId, optionId] of Object.entries(finalAnswers || {})) {
-    const assigned = assignedById.get(questionId);
-    if (!assigned) continue;
-    if (optionId && !assigned.snapshot.options.some((option) => option.id === optionId)) continue;
-  }
+  const assignedQuestions = Array.isArray(existing.assignedQuestions) ? existing.assignedQuestions : [];
+  const assignedById = new Map(assignedQuestions.map((q) => [q.questionId, q]));
 
   // Merge the final UI payload with persisted answers so partial payloads cannot
   // accidentally erase previously saved responses.
-  const sanitizedAnswers: Record<string, string> = {};
-  for (const assigned of existing.assignedQuestions) {
-    const questionId = assigned.questionId;
-    const selected = Object.prototype.hasOwnProperty.call(finalAnswers || {}, questionId)
-      ? finalAnswers[questionId]
-      : existing.answers[questionId];
-    if (selected) sanitizedAnswers[questionId] = selected;
+  const sanitizedAnswers: Record<string, string> = { ...(existing.answers || {}) };
+  for (const [questionId, optionId] of Object.entries(finalAnswers || {})) {
+    if (optionId) {
+      sanitizedAnswers[questionId] = optionId;
+    }
   }
 
   const attempt: MCQAttempt = { ...existing, answers: sanitizedAnswers, lastActivityAt: now };
@@ -774,14 +801,16 @@ export function submitAttempt(
   };
   all[idx] = finalAttempt;
   save(MCQ_STORAGE_KEYS.ATTEMPTS, all);
-  void saveAttemptToCloud(finalAttempt);
   try {
+    sessionStorage.setItem('codedna_mcq_last_finished_attempt', attemptId);
+    sessionStorage.removeItem('codedna_mcq_session_attempt');
     localStorage.removeItem(MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT);
     localStorage.removeItem('codedna_mcq_active_attempt_backup');
-    sessionStorage.removeItem('codedna_mcq_session_attempt');
   } catch {}
+  void saveAttemptToCloud(finalAttempt);
   return grade;
 }
+
 
 // ── MCQ option builder helper ─────────────────────────────────────────────────
 
