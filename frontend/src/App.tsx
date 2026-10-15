@@ -343,7 +343,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }} id="app-root">
       <ScrollToTop />
 
       {location.pathname !== '/' && (

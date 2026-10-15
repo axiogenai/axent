@@ -244,19 +244,81 @@ export function isCurrentlyFullscreen(): boolean {
 }
 
 /**
- * Dispatches multiple staggered layout recalculations and forces a synchronous reflow
- * to guarantee that Chromium on Windows DWM repaints the DirectComposition swapchain immediately.
+ * Apply inline styles that guarantee the entire height chain
+ * (html → body → #root) stretches to fill the fullscreen container.
+ * This is the belt-and-suspenders backup for the CSS rules.
+ */
+function applyFullscreenInlineStyles(): void {
+  try {
+    const html = document.documentElement;
+    const body = document.body;
+    const root = document.getElementById('root');
+
+    html.style.height = '100%';
+    html.style.overflow = 'auto';
+
+    body.style.height = '100%';
+    body.style.overflow = 'auto';
+    body.style.margin = '0';
+
+    if (root) {
+      root.style.minHeight = '100%';
+      root.style.height = '100%';
+      root.style.display = 'flex';
+      root.style.flexDirection = 'column';
+    }
+  } catch {}
+}
+
+/**
+ * Remove the inline styles applied by applyFullscreenInlineStyles,
+ * returning control to the CSS stylesheet rules.
+ */
+function removeFullscreenInlineStyles(): void {
+  try {
+    const html = document.documentElement;
+    const body = document.body;
+    const root = document.getElementById('root');
+
+    html.style.removeProperty('height');
+    html.style.removeProperty('overflow');
+
+    body.style.removeProperty('height');
+    body.style.removeProperty('overflow');
+    body.style.removeProperty('margin');
+
+    if (root) {
+      root.style.removeProperty('min-height');
+      root.style.removeProperty('height');
+      root.style.removeProperty('display');
+      root.style.removeProperty('flex-direction');
+    }
+  } catch {}
+}
+
+/**
+ * Forces synchronous reflow + staggered resize events to guarantee
+ * Chromium on Windows DWM repaints immediately after fullscreen transition.
  */
 export function triggerViewportReflow(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+  // If in fullscreen, re-apply inline styles every time to be safe
+  if (isCurrentlyFullscreen()) {
+    applyFullscreenInlineStyles();
+  }
+
   try {
     void document.body?.offsetHeight;
+    void document.getElementById('root')?.offsetHeight;
     window.dispatchEvent(new Event('resize'));
   } catch {}
-  [30, 80, 180, 320].forEach((delay) => {
+  [30, 80, 180, 350, 600].forEach((delay) => {
     setTimeout(() => {
       try {
+        if (isCurrentlyFullscreen()) applyFullscreenInlineStyles();
         void document.body?.offsetHeight;
+        void document.getElementById('root')?.offsetHeight;
         window.dispatchEvent(new Event('resize'));
       } catch {}
     }, delay);
@@ -266,33 +328,54 @@ export function triggerViewportReflow(): void {
 // Automatically catch native fullscreen events
 if (typeof document !== 'undefined') {
   ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach((evt) => {
-    document.addEventListener(evt, triggerViewportReflow);
+    document.addEventListener(evt, () => {
+      if (isCurrentlyFullscreen()) {
+        applyFullscreenInlineStyles();
+      } else {
+        removeFullscreenInlineStyles();
+      }
+      triggerViewportReflow();
+    });
   });
 }
 
 /**
- * Request cross-browser native fullscreen mode on the root document.
+ * Get the element to use as the fullscreen target.
+ * Uses #root to avoid Chromium's UA stylesheet applying position:fixed to <html>,
+ * which creates a new containing block and collapses the height chain.
+ * Falls back to documentElement if #root is not found.
+ */
+function getFullscreenTarget(): HTMLElement {
+  return document.getElementById('root') || document.documentElement;
+}
+
+/**
+ * Request cross-browser native fullscreen mode on #root.
+ * By targeting #root instead of <html>, we bypass Chromium's UA stylesheet
+ * interference (position:fixed + inset:0 on :fullscreen) that causes blank screens.
  * Must be triggered directly inside a user interaction (like button click) to satisfy browser security.
  */
 export async function requestExamFullscreen(): Promise<boolean> {
   if (typeof document === 'undefined') return false;
   if (isCurrentlyFullscreen()) {
+    applyFullscreenInlineStyles();
     triggerViewportReflow();
     return true;
   }
 
   try {
-    const docEl = (document.documentElement || document.body) as any;
-    if (docEl.requestFullscreen) {
-      await docEl.requestFullscreen();
-    } else if (docEl.webkitRequestFullscreen) {
-      await docEl.webkitRequestFullscreen();
-    } else if (docEl.mozRequestFullScreen) {
-      await docEl.mozRequestFullScreen();
-    } else if (docEl.msRequestFullscreen) {
-      await docEl.msRequestFullscreen();
+    const target = getFullscreenTarget() as any;
+    if (target.requestFullscreen) {
+      await target.requestFullscreen();
+    } else if (target.webkitRequestFullscreen) {
+      await target.webkitRequestFullscreen();
+    } else if (target.mozRequestFullScreen) {
+      await target.mozRequestFullScreen();
+    } else if (target.msRequestFullscreen) {
+      await target.msRequestFullscreen();
     }
 
+    applyFullscreenInlineStyles();
     triggerViewportReflow();
     return true;
   } catch (err) {
@@ -308,6 +391,7 @@ export async function requestExamFullscreen(): Promise<boolean> {
 export async function exitExamFullscreen(): Promise<boolean> {
   if (typeof document === 'undefined') return false;
   if (!isCurrentlyFullscreen()) {
+    removeFullscreenInlineStyles();
     triggerViewportReflow();
     return true;
   }
@@ -324,6 +408,7 @@ export async function exitExamFullscreen(): Promise<boolean> {
       await doc.msExitFullscreen();
     }
 
+    removeFullscreenInlineStyles();
     triggerViewportReflow();
     return true;
   } catch (err) {
