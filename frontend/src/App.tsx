@@ -23,6 +23,7 @@ import {
 import { runRealCode } from './services/compilerService';
 import { verifyStudentCode } from './services/groqService';
 import { playSound } from './utils/sounds';
+import { initBackendKeepAlive } from './services/keepAliveService';
 import { RefreshCw, FileCode, Play } from 'lucide-react';
 import { DEFAULT_LANGUAGE_TEMPLATES } from './components/CodeEditor';
 
@@ -77,6 +78,19 @@ export const App: React.FC = () => {
       }
     });
   }, [theme]);
+
+  // Keep Render free-tier backend awake in background
+  useEffect(() => {
+    initBackendKeepAlive();
+  }, []);
+
+  // Normalize malformed double-slash URLs (e.g. //invite -> /invite)
+  useEffect(() => {
+    if (location.pathname.includes('//')) {
+      const cleanPath = location.pathname.replace(/\/+/g, '/');
+      navigate(cleanPath + location.search + location.hash, { replace: true });
+    }
+  }, [location, navigate]);
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
@@ -457,6 +471,8 @@ export const App: React.FC = () => {
               </ProtectedRoute>
             }
           />
+          {/* Catch-all fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
 

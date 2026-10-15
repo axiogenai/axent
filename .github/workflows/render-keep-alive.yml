@@ -1,0 +1,26 @@
+name: Render Backend Keep-Alive Cron
+
+on:
+  schedule:
+    # Run every 10 minutes to prevent Render free-tier spin down (Render spins down after 15 minutes)
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions dashboard
+
+jobs:
+  heartbeat:
+    name: Ping Axent Render Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /api/health/ endpoint
+        run: |
+          echo "Sending keep-alive ping to https://axent-b0wl.onrender.com/api/health/..."
+          HTTP_STATUS=$(curl -s -o /tmp/health_response.json -w "%{http_code}" "https://axent-b0wl.onrender.com/api/health/")
+          echo "HTTP Response Status: $HTTP_STATUS"
+          cat /tmp/health_response.json || true
+          
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "Status was not 200 (might be cold waking up), waiting 10s and retrying..."
+            sleep 10
+            curl -s -f "https://axent-b0wl.onrender.com/api/health/" || true
+          fi
+          echo "Render keep-alive ping finished successfully."
