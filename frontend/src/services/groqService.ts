@@ -1404,7 +1404,7 @@ export interface AIPaperGenerationRequest {
   subject: string;
   topic: string;
   sections?: AIPaperSectionSpec[];
-  examCategory?: 'Aptitude' | 'ISE';
+  examCategory?: string;
   instructions?: string;
   durationMinutes: number;
   easyCount: number;

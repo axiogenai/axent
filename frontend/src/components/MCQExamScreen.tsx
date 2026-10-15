@@ -2372,20 +2372,32 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       const e = exams.find((x) => x.id === activeExamId);
       if (e) setExam(e);
 
-      // Restore active attempt if exists
+      // Restore active attempt if exists — but NEVER overwrite an already-finalized attempt
       const active = getActiveAttempt(activeExamId) || getActiveAttempt();
       if (active && active.examId === activeExamId && active.status === 'IN_PROGRESS') {
         if (getSynchronizedNow() >= active.deadline) {
           // Automatically finalize and display results if deadline elapsed!
           const result = submitAttempt(active.id, active.answers, 'TIMED_OUT') || gradeAttempt(active);
           const finished = { ...active, status: 'TIMED_OUT' as const, score: result.score, correctCount: result.correctCount, wrongCount: result.wrongCount };
-          setAttempt(finished);
+          setAttempt((prev) => {
+            // Don't overwrite an already-submitted attempt
+            if (prev && prev.status !== 'IN_PROGRESS') return prev;
+            return finished;
+          });
           setAnswers(active.answers);
-          setGradeResult(result);
+          setGradeResult((prev) => prev ?? result);
           setSubmitted(true);
         } else {
-          setAttempt(active);
-          setAnswers(active.answers);
+          // Only restore IN_PROGRESS state if we haven't already finalized
+          setAttempt((prev) => {
+            if (prev && prev.status !== 'IN_PROGRESS') return prev; // Keep finalized state
+            return active;
+          });
+          setAnswers((prev) => {
+            const prevCount = Object.keys(prev || {}).length;
+            const activeCount = Object.keys(active.answers || {}).length;
+            return activeCount > prevCount ? active.answers : (Object.keys(prev || {}).length > 0 ? prev : active.answers);
+          });
           let restoredIndex = 0;
           try {
             const savedIndex = Number(localStorage.getItem(`codedna_mcq_current_idx_${active.id}`));
@@ -2396,7 +2408,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
               if (firstUnanswered !== -1) restoredIndex = firstUnanswered;
             }
           } catch {}
-          setCurrentIdx(restoredIndex);
+          setCurrentIdx((prev) => prev > 0 ? prev : restoredIndex);
           if (active.tabSwitchCount >= 3) {
             setIsLockedByProctor(true);
             setProctorWarning(`ACADEMIC FREEZE: ${active.tabSwitchCount}/3 Infractions Exceeded! Workstation frozen.`);
@@ -2420,9 +2432,9 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         const recent = getRecentSessionAttempt(activeExamId);
         if (recent && (recent.status === 'TIMED_OUT' || recent.status === 'SUBMITTED')) {
           const grade = gradeAttempt(recent);
-          setAttempt(recent);
-          setAnswers(recent.answers || {});
-          setGradeResult(grade);
+          setAttempt((prev) => prev ?? recent);
+          setAnswers((prev) => Object.keys(prev || {}).length > 0 ? prev : (recent.answers || {}));
+          setGradeResult((prev) => prev ?? grade);
           setSubmitted(true);
         }
       }

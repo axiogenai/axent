@@ -355,6 +355,33 @@ export function validateExamForPublish(exam: MCQExamConfig): string[] {
 
 // ── ATTEMPTS ──────────────────────────────────────────────────────────────────
 
+// Permanent registry of finalized attempt IDs — survives page refresh, prevents
+// getActiveAttempt() from ever resurrecting a submitted/timed-out attempt.
+const CONCLUDED_KEY = 'codedna_mcq_concluded_ids';
+
+function getConcludedAttemptIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(CONCLUDED_KEY);
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function recordAttemptConcluded(attemptId: string): void {
+  try {
+    const set = getConcludedAttemptIds();
+    set.add(attemptId);
+    // Keep only the most recent 200 concluded IDs to prevent unbounded growth
+    const arr = Array.from(set).slice(-200);
+    localStorage.setItem(CONCLUDED_KEY, JSON.stringify(arr));
+  } catch {}
+}
+
+export function isAttemptConcluded(attemptId: string): boolean {
+  return getConcludedAttemptIds().has(attemptId);
+}
+
 export function getAllAttempts(): MCQAttempt[] {
   const loaded = load<MCQAttempt[]>(MCQ_STORAGE_KEYS.ATTEMPTS, []);
   return (loaded || []).filter((a): a is MCQAttempt => Boolean(a && typeof a === 'object' && a.id));
@@ -370,12 +397,20 @@ export function getAttemptsForExam(examId: string): MCQAttempt[] {
 
 export function getActiveAttempt(examId?: string): MCQAttempt | null {
   try {
+    // Pre-load concluded IDs once for all checks below
+    const concludedIds = getConcludedAttemptIds();
+
     // 1. Recovery from session storage
     const sessionAttemptId = sessionStorage.getItem('codedna_mcq_session_attempt');
     if (sessionAttemptId) {
-      const attempt = getAttemptById(sessionAttemptId);
-      if (attempt && attempt.status === 'IN_PROGRESS' && (!examId || attempt.examId === examId)) {
-        return attempt;
+      if (concludedIds.has(sessionAttemptId)) {
+        // This session ID maps to a concluded attempt — clear stale session key and skip
+        sessionStorage.removeItem('codedna_mcq_session_attempt');
+      } else {
+        const attempt = getAttemptById(sessionAttemptId);
+        if (attempt && attempt.status === 'IN_PROGRESS' && (!examId || attempt.examId === examId)) {
+          return attempt;
+        }
       }
     }
 
@@ -383,10 +418,14 @@ export function getActiveAttempt(examId?: string): MCQAttempt | null {
     if (examId) {
       const examSpecificId = localStorage.getItem(`codedna_mcq_active_attempt_${examId}`);
       if (examSpecificId) {
-        const attempt = getAttemptById(examSpecificId);
-        if (attempt && attempt.status === 'IN_PROGRESS') {
-          sessionStorage.setItem('codedna_mcq_session_attempt', attempt.id);
-          return attempt;
+        if (concludedIds.has(examSpecificId)) {
+          localStorage.removeItem(`codedna_mcq_active_attempt_${examId}`);
+        } else {
+          const attempt = getAttemptById(examSpecificId);
+          if (attempt && attempt.status === 'IN_PROGRESS') {
+            sessionStorage.setItem('codedna_mcq_session_attempt', attempt.id);
+            return attempt;
+          }
         }
       }
     }
@@ -394,10 +433,14 @@ export function getActiveAttempt(examId?: string): MCQAttempt | null {
     // 3. Recovery from global active attempt storage
     const generalId = localStorage.getItem(MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT);
     if (generalId) {
-      const attempt = getAttemptById(generalId);
-      if (attempt && attempt.status === 'IN_PROGRESS' && (!examId || attempt.examId === examId)) {
-        sessionStorage.setItem('codedna_mcq_session_attempt', attempt.id);
-        return attempt;
+      if (concludedIds.has(generalId)) {
+        localStorage.removeItem(MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT);
+      } else {
+        const attempt = getAttemptById(generalId);
+        if (attempt && attempt.status === 'IN_PROGRESS' && (!examId || attempt.examId === examId)) {
+          sessionStorage.setItem('codedna_mcq_session_attempt', attempt.id);
+          return attempt;
+        }
       }
     }
 
@@ -405,10 +448,15 @@ export function getActiveAttempt(examId?: string): MCQAttempt | null {
     const backupRaw = localStorage.getItem('codedna_mcq_active_attempt_backup');
     if (backupRaw) {
       const backupAttempt = JSON.parse(backupRaw) as MCQAttempt;
-      if (backupAttempt && backupAttempt.status === 'IN_PROGRESS' && (!examId || backupAttempt.examId === examId)) {
-        saveAttempt(backupAttempt);
-        sessionStorage.setItem('codedna_mcq_session_attempt', backupAttempt.id);
-        return backupAttempt;
+      if (backupAttempt) {
+        if (concludedIds.has(backupAttempt.id)) {
+          // Stale backup from a concluded attempt — purge it
+          localStorage.removeItem('codedna_mcq_active_attempt_backup');
+        } else if (backupAttempt.status === 'IN_PROGRESS' && (!examId || backupAttempt.examId === examId)) {
+          saveAttempt(backupAttempt);
+          sessionStorage.setItem('codedna_mcq_session_attempt', backupAttempt.id);
+          return backupAttempt;
+        }
       }
     }
 
@@ -423,6 +471,7 @@ export function getActiveAttempt(examId?: string): MCQAttempt | null {
       const all = getAllAttempts();
       const match = all.find((a) => {
         if (a.examId !== examId || a.status !== 'IN_PROGRESS') return false;
+        if (concludedIds.has(a.id)) return false;
         if (savedRoll && String(a.studentRoll || '').trim().toLowerCase() !== savedRoll) return false;
         return true;
       });
@@ -503,6 +552,8 @@ function saveAttempt(attempt: MCQAttempt): void {
       localStorage.setItem(`codedna_mcq_active_attempt_${attempt.examId}`, attempt.id);
       sessionStorage.setItem('codedna_mcq_session_attempt', attempt.id);
     } else {
+      // Record as permanently concluded so getActiveAttempt never resurrects it
+      recordAttemptConcluded(attempt.id);
       localStorage.removeItem('codedna_mcq_active_attempt_backup');
       localStorage.removeItem(MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT);
       localStorage.removeItem(`codedna_mcq_active_attempt_${attempt.examId}`);
@@ -906,6 +957,8 @@ export function submitAttempt(
   all[idx] = finalAttempt;
   save(MCQ_STORAGE_KEYS.ATTEMPTS, all);
   try {
+    // Permanently record as concluded so getActiveAttempt never restores this after page refresh
+    recordAttemptConcluded(attemptId);
     sessionStorage.setItem('codedna_mcq_last_finished_attempt', attemptId);
     sessionStorage.removeItem('codedna_mcq_session_attempt');
     localStorage.removeItem(MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT);
@@ -952,26 +1005,40 @@ function mergeUpdatedRecords<T extends { id: string; updatedAt?: number }>(local
 }
 
 function mergeAttempts(localAttempts: MCQAttempt[], cloudAttempts: MCQAttempt[]): MCQAttempt[] {
+  const concludedIds = getConcludedAttemptIds();
   const merged = new Map(localAttempts.map((attempt) => [attempt.id, attempt]));
   for (const cloudAttempt of cloudAttempts) {
     const localAttempt = merged.get(cloudAttempt.id);
     if (!localAttempt) {
+      // Only accept a cloud-only attempt if it's not in our concluded registry with IN_PROGRESS status
+      if (cloudAttempt.status === 'IN_PROGRESS' && concludedIds.has(cloudAttempt.id)) {
+        // We have locally concluded this attempt — don't restore it as IN_PROGRESS from cloud
+        continue;
+      }
       merged.set(cloudAttempt.id, cloudAttempt);
       continue;
     }
     const localFinal = localAttempt.status !== 'IN_PROGRESS';
     const cloudFinal = cloudAttempt.status !== 'IN_PROGRESS';
+
+    // CRITICAL: Never downgrade a locally-finalized attempt back to IN_PROGRESS
+    // This prevents race conditions where cloud sync hasn't propagated the submission yet
+    if (localFinal && !cloudFinal) {
+      // Local is finalized, cloud still shows IN_PROGRESS (sync lag) — keep local
+      continue;
+    }
     if (cloudFinal && !localFinal) {
       merged.set(cloudAttempt.id, cloudAttempt);
-    } else if (localFinal && !cloudFinal) {
-      continue;
-    } else if ((cloudAttempt.lastActivityAt ?? cloudAttempt.submitTime ?? 0) >
-               (localAttempt.lastActivityAt ?? localAttempt.submitTime ?? 0)) {
-      merged.set(cloudAttempt.id, cloudAttempt);
-    } else if (!localFinal && !cloudFinal &&
-               Object.keys(cloudAttempt.answers || {}).length > Object.keys(localAttempt.answers || {}).length) {
-      merged.set(cloudAttempt.id, cloudAttempt);
+    } else if (!localFinal && !cloudFinal) {
+      // Both IN_PROGRESS — take the more recent/complete version
+      if ((cloudAttempt.lastActivityAt ?? cloudAttempt.submitTime ?? 0) >
+          (localAttempt.lastActivityAt ?? localAttempt.submitTime ?? 0)) {
+        merged.set(cloudAttempt.id, cloudAttempt);
+      } else if (Object.keys(cloudAttempt.answers || {}).length > Object.keys(localAttempt.answers || {}).length) {
+        merged.set(cloudAttempt.id, cloudAttempt);
+      }
     }
+    // Both final: keep local (it was submitted first on this device)
   }
   return Array.from(merged.values());
 }

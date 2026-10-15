@@ -95,11 +95,12 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
 
   // Generator Form State
   const [title, setTitle] = useState('');
-  const [examCategory, setExamCategory] = useState<'Aptitude' | 'ISE'>('Aptitude');
+  const [examCategory, setExamCategory] = useState<string>('Aptitude');
   const [subject, setSubject] = useState('');
   const [topic, setTopic] = useState('');
   const [instructions, setInstructions] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(45);
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
   // Dynamic subjects and topics from database
   const allExistingQuestions = useMemo(() => getAllQuestions(), []);
@@ -801,44 +802,44 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
 
           {/* ── STEP 1: CONFIG FORM ── */}
           {step === 'config' && (
-            <form onSubmit={handleGenerate} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                    Exam Category *
-                  </label>
-                  <select
-                    value={examCategory}
-                    onChange={(e) => {
-                      setExamCategory(e.target.value as 'Aptitude' | 'ISE');
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '8px 10px',
-                      background: 'var(--bg-surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-sm)',
-                      color: 'var(--text-primary)',
-                      fontSize: '12px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <option value="Aptitude">Aptitude & Logical Reasoning (Non-Tech)</option>
-                    <option value="ISE">ISE / Computer Science (Technical)</option>
-                  </select>
-                </div>
+            <form id="ai-paper-config-form" onSubmit={handleGenerate} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Row 1: Official Examination Title */}
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                  Official Examination Title (Optional)
+                </label>
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Campus Placement Aptitude & Logical Reasoning Assessment"
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '8px 10px',
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text-primary)',
+                    fontSize: '12px',
+                    fontWeight: 600
+                  }}
+                />
+              </div>
 
+              {/* Row 2: Subject & Category */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                    Subject / Domain *
+                    Subject / Discipline *
                   </label>
                   <input
                     list="ai-available-subjects"
                     value={subject}
                     onChange={(e) => setSubject(e.target.value)}
-                    placeholder="e.g. General Aptitude & Reasoning, Computer Science..."
+                    placeholder="e.g. General Aptitude, Computer Science, Mathematics..."
                     style={{
                       width: '100%',
+                      boxSizing: 'border-box',
                       padding: '8px 10px',
                       background: 'var(--bg-surface)',
                       border: '1px solid var(--border)',
@@ -854,26 +855,35 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     ))}
                   </datalist>
                 </div>
-              </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                  Official Examination Title (Optional)
-                </label>
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Campus Placement Aptitude & Logical Reasoning Assessment"
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    background: 'var(--bg-surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-sm)',
-                    color: 'var(--text-primary)',
-                    fontSize: '12px'
-                  }}
-                />
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Examination Category
+                  </label>
+                  <select
+                    value={examCategory}
+                    onChange={(e) => setExamCategory(e.target.value)}
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      padding: '8px 10px',
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: 'var(--text-primary)',
+                      fontSize: '12px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="Aptitude">Aptitude & Campus Placement</option>
+                    <option value="Internal Assessment (CIE)">Internal Assessment (CIE / Midterm)</option>
+                    <option value="Semester End Exam (SEE)">Semester End Examination (SEE)</option>
+                    <option value="Technical Evaluation">Technical & Domain Assessment</option>
+                    <option value="Weekly Lab Practical">Weekly Lab / Practice Test</option>
+                    <option value="College Coding Competition">College Contest / Hackathon</option>
+                    <option value="Multiple Choice Question (MCQ) Examination">General Objective Paper</option>
+                  </select>
+                </div>
               </div>
 
               {/* Topic & Question Quota Configuration */}
