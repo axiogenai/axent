@@ -52,6 +52,7 @@ const RootNavigator: React.FC = () => {
 
 export const App: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Theme: Clean Light default, toggleable to Matte Black
   const [theme, setTheme] = useState<ThemeMode>(() => {
@@ -323,12 +324,14 @@ export const App: React.FC = () => {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <ScrollToTop />
 
-      <Navbar
-        theme={theme}
-        onToggleTheme={toggleTheme}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        isRunning={isExecuting}
-      />
+      {location.pathname !== '/' && (
+        <Navbar
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          isRunning={isExecuting}
+        />
+      )}
 
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <Routes>

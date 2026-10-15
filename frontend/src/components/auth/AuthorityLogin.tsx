@@ -297,28 +297,17 @@ export const AuthorityLogin: React.FC = () => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-            <div
+            <img
+              src="/axent-lightmode.png"
+              alt="Axent"
               style={{
-                width: '34px',
-                height: '34px',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                overflow: 'hidden'
+                height: '32px',
+                width: 'auto',
+                maxWidth: '150px',
+                display: 'block',
+                objectFit: 'contain'
               }}
-            >
-              <img
-                src="/logo.png"
-                alt="Axent"
-                style={{ width: '24px', height: '24px', objectFit: 'contain' }}
-                onError={(e) => {
-                  (e.currentTarget as HTMLElement).style.display = 'none';
-                }}
-              />
-            </div>
+            />
             <div>
               <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--accent)' }}>
                 Axent Assessment Authority

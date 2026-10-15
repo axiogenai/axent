@@ -20,6 +20,7 @@
     "clsx": "^2.1.1",
     "framer-motion": "^12.40.0",
     "lucide-react": "^1.54.0",
+    "motion": "^14.2.0",
     "postcss": "^8.5.29",
     "prismjs": "^1.30.0",
     "react": "^19.2.6",

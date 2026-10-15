@@ -148,60 +148,19 @@ export const Navbar: React.FC<NavbarProps> = ({
           if (isRunning) return;
           navigate('/');
         }}
+        title="Axent Platform Home"
       >
-        <div
+        <img
+          src={theme === 'dark' ? '/axent-logo.png' : '/axent-lightmode.png'}
+          alt="Axent"
           style={{
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            width: '30px',
-            height: '30px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: 'var(--shadow-sm)',
-            overflow: 'hidden'
+            height: '28px',
+            width: 'auto',
+            maxWidth: '130px',
+            display: 'block',
+            objectFit: 'contain'
           }}
-        >
-          <img
-            src="/logo.png"
-            alt="Axent"
-            style={{ width: '22px', height: '22px', objectFit: 'contain' }}
-            onError={(e) => {
-              (e.currentTarget as HTMLElement).style.display = 'none';
-            }}
-          />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-          <span style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-            Ax<span style={{ color: 'var(--accent)' }}>ent</span>
-          </span>
-          <span
-            style={{
-              fontSize: '10.5px',
-              color: 'var(--text-muted)',
-              fontWeight: 600,
-              padding: '2px 7px',
-              borderRadius: 'var(--radius-xs)',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border)',
-              letterSpacing: '0.02em',
-              textTransform: 'uppercase'
-            }}
-          >
-            {isLandingRoute
-              ? 'Assessment Core'
-              : isLoginRoute
-              ? 'Authority Gateway'
-              : isPaperSetterRoute
-              ? 'Paper Setter'
-              : isAdminRoute
-              ? 'Invigilator Console'
-              : (isMcqRoute || examMode === 'MCQ')
-              ? 'MCQ Examination'
-              : 'Coding Practical'}
-          </span>
-        </div>
+        />
       </div>
 
       {/* ── Navigation Tabs (Filtered strictly by Role and Registered Exam Type) ── */}
