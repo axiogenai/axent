@@ -4,7 +4,7 @@ import {
   Clock, ChevronLeft, ChevronRight, CheckCircle, CheckCircle2, Circle, AlertTriangle,
   Send, BookOpen, RotateCcw, Award, X, Eye, EyeOff, BarChart2, KeyRound,
   Copy, Check, Lock, Unlock, Code2, ArrowRight, ShieldAlert, Shield, Monitor, Download, CheckSquare, FileCheck, LogOut, MessageCircle, Calendar,
-  Maximize2, Minimize2, Video, VideoOff, Loader2, AlertCircle, UserPlus, Search, Wifi, RefreshCw, User, Terminal, Shuffle
+  Maximize2, Minimize2, Video, VideoOff, Loader2, AlertCircle, UserPlus, Search, Wifi, RefreshCw, User, Terminal, Shuffle, Ban, CopyX
 } from 'lucide-react';
 import { MCQAttempt, MCQExamConfig, MCQGradeResult, MCQ_STORAGE_KEYS } from '../types/mcq';
 import {
@@ -668,36 +668,41 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
                   </div>
                 )}
 
-                {/* Compact Institutional Rules Card */}
+                {/* Terminal Proctoring Rules */}
                 <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '5px', borderBottom: '1px solid var(--border)' }}>
                     <span style={{ fontSize: '10.5px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-primary)' }}>
-                      Quick Exam Rules
+                      Terminal Proctoring Rules
                     </span>
                     <span style={{ fontSize: '9.5px', fontWeight: 700, padding: '1px 6px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                      Terminal Proctored
+                      Strictly Enforced
                     </span>
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                      <Ban size={13} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
+                      <span><strong style={{ color: 'var(--text-primary)' }}>No Right-Click:</strong> Context menu and inspect actions are blocked.</span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                      <CopyX size={13} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
+                      <span><strong style={{ color: 'var(--text-primary)' }}>No Copy / Paste:</strong> Shortcuts (Ctrl+C, Ctrl+V, Ctrl+U) are disabled.</span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                      <Code2 size={13} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
+                      <span><strong style={{ color: 'var(--text-primary)' }}>No DevTools:</strong> F12 key and developer console are strictly prohibited.</span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
                       <ShieldAlert size={13} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
-                      <span><strong style={{ color: 'var(--text-primary)' }}>Tab Switching:</strong> Max 3 infractions allowed before terminal locks.</span>
+                      <span><strong style={{ color: 'var(--text-primary)' }}>No Tab Switching:</strong> Max 3 window focus losses before terminal locks.</span>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
-                      <Shuffle size={13} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
-                      <span><strong style={{ color: 'var(--text-primary)' }}>Anti-Copy:</strong> Questions & options are shuffled per student.</span>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
-                      <Award size={13} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
-                      <span><strong style={{ color: 'var(--text-primary)' }}>Marking:</strong> {exam.negativeMarkingEnabled ? 'Negative marking active for incorrect choices.' : 'No negative marks. Attempt all questions.'}</span>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
-                      <Wifi size={13} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
-                      <span><strong style={{ color: 'var(--text-primary)' }}>Auto-Save:</strong> Responses save locally; auto-submits on time expiry.</span>
+                      <Maximize2 size={13} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
+                      <span><strong style={{ color: 'var(--text-primary)' }}>Fullscreen Required:</strong> Must stay in fullscreen; exiting is logged.</span>
                     </div>
                   </div>
                 </div>
