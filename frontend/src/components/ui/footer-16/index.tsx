@@ -54,15 +54,6 @@ const defaultColumns: Footer16Column[] = [
       { label: 'Security Standard', href: '#' },
     ],
   },
-  {
-    title: 'Axiogen Ecosystem',
-    links: [
-      { label: 'team.axiogen.in', href: 'https://team.axiogen.in' },
-      { label: 'Axiogen Infrastructure', href: 'https://api.axiogen.in' },
-      { label: 'Axiogen Vault', href: 'https://api.axiogen.in/vault' },
-      { label: 'Institutional Support', href: '#' },
-    ],
-  },
 ];
 
 const defaultLegalLinks: Footer16Link[] = [
@@ -175,35 +166,35 @@ export function Footer16({
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, amount: 0.22 }}
-        className="relative mx-auto flex min-h-[620px] flex-col justify-end pt-16 sm:min-h-[680px] lg:min-h-[812px]"
+        className="relative mx-auto flex min-h-[580px] flex-col justify-end pt-16 sm:min-h-[640px] lg:min-h-[720px]"
       >
+        {/* Fully centered, responsive watermark visible on all screen sizes */}
         <motion.div
           variants={wordmarkVariants}
-          className="pointer-events-none absolute top-[43%] left-1/2 flex w-[118vw] -translate-x-1/2 justify-center overflow-hidden sm:top-[20%] lg:top-[12%]"
+          className="pointer-events-none absolute top-[8%] sm:top-[12%] lg:top-[15%] left-0 right-0 flex w-full justify-center overflow-hidden z-0 px-6"
           aria-hidden="true"
         >
           <svg
-            className="h-auto w-full select-none"
-            viewBox={`0 0 ${Math.max(brandName.length * 90, 400)} 160`}
+            className="w-full max-w-5xl h-auto select-none opacity-25"
+            viewBox="0 0 900 180"
             preserveAspectRatio="xMidYMid meet"
             aria-label={brandName}
           >
             <defs>
               <linearGradient id="brandGrad16" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#52525b" />
-                <stop offset="100%" stopColor="#18181b" />
+                <stop offset="0%" stopColor="#71717a" stopOpacity="0.45" />
+                <stop offset="100%" stopColor="#18181b" stopOpacity="0.08" />
               </linearGradient>
             </defs>
             <text
               x="50%"
-              y="50%"
-              dominantBaseline="alphabetic"
+              y="55%"
+              dominantBaseline="middle"
               textAnchor="middle"
-              textLength="80%"
-              lengthAdjust="spacing"
-              className="font-sans font-medium tracking-tight"
+              className="font-sans font-black tracking-widest uppercase select-none"
               fill="url(#brandGrad16)"
-              fontSize="100"
+              fontSize="140"
+              style={{ letterSpacing: '0.2em' }}
             >
               {brandName}
             </text>
@@ -211,7 +202,8 @@ export function Footer16({
         </motion.div>
 
         <div className="relative z-10 border-t border-white/10 bg-black/1 px-4 pt-9 pb-7 shadow-[0_-24px_80px_rgba(9,10,14,0.34)] backdrop-blur-xs sm:px-12 sm:pt-11 sm:pb-8 lg:pt-[46px]">
-          <div className="grid gap-10 lg:grid-cols-[minmax(220px,1fr)_minmax(520px,0.98fr)] lg:gap-x-20">
+          <div className="grid gap-10 lg:grid-cols-[minmax(240px,1.2fr)_minmax(400px,1fr)] lg:gap-x-20">
+            {/* Brand column */}
             <motion.div variants={riseVariants} className="max-w-2xl">
               <a
                 href="/"
@@ -232,24 +224,13 @@ export function Footer16({
               <p className="text-md max-w-lg leading-relaxed font-normal text-pretty whitespace-pre-line text-zinc-300/78 sm:text-sm mt-3">
                 {tagline}
               </p>
-              <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-zinc-800 bg-zinc-900/60 text-xs text-zinc-300">
-                <span className="w-2 h-2 rounded-full bg-zinc-500" />
-                <span>Synchronized with</span>
-                <a
-                  href="https://team.axiogen.in"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-semibold text-white underline hover:text-zinc-200"
-                >
-                  team.axiogen.in
-                </a>
-              </div>
             </motion.div>
 
+            {/* Links Columns (Clean, no Axiogen Ecosystem column) */}
             <motion.nav
               variants={sectionVariants}
               aria-label="Footer navigation"
-              className="grid grid-cols-1 gap-7 min-[520px]:grid-cols-3 min-[520px]:gap-x-10 lg:gap-x-[66px]"
+              className="grid grid-cols-1 gap-7 min-[480px]:grid-cols-2 min-[480px]:gap-x-12 lg:gap-x-16"
             >
               {columns.map((column) => (
                 <motion.div variants={riseVariants} key={column.title}>
@@ -280,7 +261,7 @@ export function Footer16({
 
           <motion.div
             variants={riseVariants}
-            className="mt-4 flex flex-col border-t border-white/11 pt-4 sm:mt-9 sm:flex-row sm:items-start gap-2 sm:justify-between"
+            className="mt-6 flex flex-col border-t border-white/11 pt-4 sm:mt-9 sm:flex-row sm:items-start gap-2 sm:justify-between"
           >
             <p className="text-sm font-normal text-zinc-400/76">
               {copyright}
