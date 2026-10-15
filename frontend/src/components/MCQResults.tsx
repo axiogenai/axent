@@ -493,38 +493,41 @@ export const MCQResults: React.FC = () => {
     ...exams.map((e) => ({ value: e.id, label: e.title }))
   ];
 
-  const deptOptions = [
-    { value: 'ALL', label: 'All Departments' },
-    { value: 'CSE', label: 'CSE' },
-    { value: 'AIML', label: 'AIML' },
-    { value: 'AIDS', label: 'AIDS' },
-    { value: 'ECE', label: 'ECE' },
-    { value: 'EEE', label: 'EEE' },
-    { value: 'MECH', label: 'MECH' },
-    { value: 'CIVIL', label: 'CIVIL' }
-  ];
+  const deptOptions = useMemo(() => {
+    const setDepts = new Set<string>();
+    allAttempts.forEach((a) => {
+      if (a.studentDept?.trim()) setDepts.add(a.studentDept.trim());
+    });
+    const sorted = Array.from(setDepts).sort();
+    return [
+      { value: 'ALL', label: 'All Departments' },
+      ...sorted.map((d) => ({ value: d, label: d }))
+    ];
+  }, [allAttempts]);
 
-  const semOptions = [
-    { value: 'ALL', label: 'All Semesters' },
-    { value: '1st Sem', label: '1st Sem' },
-    { value: '2nd Sem', label: '2nd Sem' },
-    { value: '3rd Sem', label: '3rd Sem' },
-    { value: '4th Sem', label: '4th Sem' },
-    { value: '5th Sem', label: '5th Sem' },
-    { value: '6th Sem', label: '6th Sem' },
-    { value: '7th Sem', label: '7th Sem' },
-    { value: '8th Sem', label: '8th Sem' }
-  ];
+  const semOptions = useMemo(() => {
+    const setSems = new Set<string>();
+    allAttempts.forEach((a) => {
+      if (a.studentSem?.trim()) setSems.add(a.studentSem.trim());
+    });
+    const sorted = Array.from(setSems).sort();
+    return [
+      { value: 'ALL', label: 'All Semesters' },
+      ...sorted.map((s) => ({ value: s, label: s }))
+    ];
+  }, [allAttempts]);
 
-  const divOptions = [
-    { value: 'ALL', label: 'All Divisions' },
-    { value: 'A', label: 'Div A' },
-    { value: 'B', label: 'Div B' },
-    { value: 'C', label: 'Div C' },
-    { value: 'D', label: 'Div D' },
-    { value: 'E', label: 'Div E' },
-    { value: 'F', label: 'Div F' }
-  ];
+  const divOptions = useMemo(() => {
+    const setDivs = new Set<string>();
+    allAttempts.forEach((a) => {
+      if (a.studentDiv?.trim()) setDivs.add(a.studentDiv.trim());
+    });
+    const sorted = Array.from(setDivs).sort();
+    return [
+      { value: 'ALL', label: 'All Divisions' },
+      ...sorted.map((div) => ({ value: div, label: `Div ${div}` }))
+    ];
+  }, [allAttempts]);
 
   return (
     <div>

@@ -8,12 +8,13 @@ import {
   MCQQuestion, MCQOption, MCQDifficulty, MCQQuestionStatus
 } from '../types/mcq';
 import {
-  getAllQuestions, saveQuestion, createQuestion, deleteQuestion,
+  getAllQuestions, saveQuestion, createQuestion, deleteQuestion, clearAllQuestions,
   duplicateQuestion, archiveQuestion, publishQuestion, validateQuestion, buildOption, onMcqDataChanged
 } from '../services/mcqService';
 import { generateMCQQuestionsWithAI, GeneratedMCQQuestion } from '../services/groqService';
 import { isSupabaseConnected } from '../services/supabaseService';
 import { playSound } from '../utils/sounds';
+import { ConfirmationModal } from './ConfirmationModal';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DIFFICULTY_COLORS: Record<MCQDifficulty, string> = {
@@ -709,6 +710,8 @@ export const MCQQuestionBank: React.FC = () => {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isClearBankModalOpen, setIsClearBankModalOpen] = useState(false);
+  const [publishErrorText, setPublishErrorText] = useState<string | null>(null);
 
   const reload = () => setQuestions(getAllQuestions());
 
@@ -774,7 +777,7 @@ export const MCQQuestionBank: React.FC = () => {
   const handlePublish = (id: string) => {
     const errors = publishQuestion(id);
     if (errors.length > 0) {
-      window.alert(`This question cannot be published:\n\n${errors.map((error) => `• ${error}`).join('\n')}`);
+      setPublishErrorText(errors.map((error) => `• ${error}`).join('\n'));
       return;
     }
     reload();
@@ -906,6 +909,30 @@ export const MCQQuestionBank: React.FC = () => {
             style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '12.5px', fontWeight: 500 }}>
             <Download size={13} />
             <span>Export</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsClearBankModalOpen(true)}
+            disabled={questions.length === 0}
+            title="Purge all questions from question bank"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--danger-border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '8px 12px',
+              cursor: questions.length === 0 ? 'not-allowed' : 'pointer',
+              color: 'var(--danger)',
+              fontSize: '12.5px',
+              fontWeight: 600,
+              opacity: questions.length === 0 ? 0.4 : 1
+            }}
+          >
+            <Trash2 size={13} />
+            <span>Clear Bank</span>
           </button>
 
           <button type="button" onClick={() => setEditing('new')}
@@ -1047,18 +1074,52 @@ export const MCQQuestionBank: React.FC = () => {
         />
       )}
 
-      {/* Confirm delete */}
-      {confirmDelete && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1010, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '24px', maxWidth: '380px', width: '90%' }}>
-            <h3 style={{ color: 'var(--text-primary)', fontSize: '16px', fontWeight: 700, marginBottom: '8px' }}>Delete Question?</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '20px' }}>This action cannot be undone. Active exam attempts using this question will not be affected (snapshots are immutable).</p>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              <button onClick={() => setConfirmDelete(null)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 16px', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '13px' }}>Cancel</button>
-              <button onClick={() => handleDelete(confirmDelete)} style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 'var(--radius-sm)', padding: '8px 16px', cursor: 'pointer', color: 'var(--danger)', fontSize: '13px', fontWeight: 600 }}>Delete</button>
-            </div>
-          </div>
-        </div>
+      {/* Confirm Clear Entire Question Bank */}
+      <ConfirmationModal
+        isOpen={isClearBankModalOpen}
+        title="Clear Entire Question Bank?"
+        message="This will permanently delete ALL questions in this institution repository, both from local storage and the central cloud database. This operation is immediate and irreversible."
+        confirmText="Yes, Purge Question Bank"
+        cancelText="Cancel"
+        tone="danger"
+        icon="danger"
+        onConfirm={() => {
+          clearAllQuestions();
+          reload();
+          setIsClearBankModalOpen(false);
+          playSound('trash');
+        }}
+        onCancel={() => setIsClearBankModalOpen(false)}
+      />
+
+      {/* Confirm delete single question */}
+      <ConfirmationModal
+        isOpen={confirmDelete !== null}
+        title="Delete Question?"
+        message="Are you sure you want to delete this question? This action will remove it from the central question bank. Active exam attempts will not be corrupted because question snapshots are immutable."
+        confirmText="Delete Question"
+        cancelText="Cancel"
+        tone="danger"
+        icon="danger"
+        onConfirm={() => {
+          if (confirmDelete) handleDelete(confirmDelete);
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
+
+      {/* Publish validation error modal */}
+      {publishErrorText && (
+        <ConfirmationModal
+          isOpen={Boolean(publishErrorText)}
+          title="Question Cannot Be Published"
+          message={`Please fix the following validation issues before publishing this question:\n\n${publishErrorText}`}
+          confirmText="Got It"
+          cancelText="Close"
+          tone="neutral"
+          icon="warning"
+          onConfirm={() => setPublishErrorText(null)}
+          onCancel={() => setPublishErrorText(null)}
+        />
       )}
     </div>
   );

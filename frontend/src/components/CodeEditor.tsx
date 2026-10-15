@@ -179,6 +179,28 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const isRegistrationRequiredRef = useRef<boolean>(Boolean(isRegistrationRequired));
   const isProgrammaticUpdateRef = useRef<boolean>(false);
 
+  const [pasteWarning, setPasteWarning] = useState<string | null>(null);
+  const pasteWarningTimerRef = useRef<any>(null);
+
+  const triggerPasteBlockedWarning = useCallback(() => {
+    playSound('warning');
+    setMetrics((m) => ({
+      ...m,
+      pasteLockViolations: (m.pasteLockViolations || 0) + 1
+    }));
+    setPasteWarning('Examination Lock Active: Pasting external code is prohibited by the invigilator.');
+    if (pasteWarningTimerRef.current) clearTimeout(pasteWarningTimerRef.current);
+    pasteWarningTimerRef.current = setTimeout(() => {
+      setPasteWarning(null);
+    }, 4000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (pasteWarningTimerRef.current) clearTimeout(pasteWarningTimerRef.current);
+    };
+  }, []);
+
   useEffect(() => {
     isExamSubmittedRef.current = isExamSubmitted;
     const shouldLock = Boolean(isExamSubmitted || isLockedByProctorRef.current || isRegistrationRequiredRef.current);
@@ -362,12 +384,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       if (isPasteBlockedRef.current) {
         e.preventDefault();
         e.stopPropagation();
-        playSound('warning');
-        setMetrics((m) => ({
-          ...m,
-          pasteLockViolations: (m.pasteLockViolations || 0) + 1
-        }));
-        alert('Examination Lock Active: Pasting external code is prohibited by the invigilator.');
+        triggerPasteBlockedWarning();
         return;
       }
 
@@ -406,7 +423,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     return () => {
       container.removeEventListener('paste', handleNativePaste, true);
     };
-  }, [recordUserActivity, calculateUncheatablePasteRatio]);
+  }, [recordUserActivity, calculateUncheatablePasteRatio, triggerPasteBlockedWarning]);
 
   // ── MONACO EDITOR MOUNT & FORENSIC EVENT BINDINGS ──
   const handleEditorDidMount: OnMount = (editor, monaco) => {
@@ -472,12 +489,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       if (isPasteBlockedRef.current && (e.ctrlKey || e.metaKey) && e.keyCode === monaco.KeyCode.KeyV) {
         e.preventDefault();
         e.stopPropagation();
-        playSound('warning');
-        setMetrics((m) => ({
-          ...m,
-          pasteLockViolations: (m.pasteLockViolations || 0) + 1
-        }));
-        alert('Examination Lock Active: Pasting external code is prohibited by the invigilator.');
+        triggerPasteBlockedWarning();
         return;
       }
 
@@ -1325,6 +1337,48 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
             )}
           </div>
         ) : null}
+
+        {pasteWarning && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '12px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 40,
+              background: '#18181b',
+              color: '#f4f4f5',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              border: '1px solid #ef4444',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '12px',
+              fontWeight: 600
+            }}
+          >
+            <ShieldAlert size={15} color="#ef4444" />
+            <span>{pasteWarning}</span>
+            <button
+              onClick={() => setPasteWarning(null)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#a1a1aa',
+                cursor: 'pointer',
+                padding: '2px',
+                display: 'flex',
+                alignItems: 'center',
+                marginLeft: '6px'
+              }}
+              title="Dismiss"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── VS CODE BOTTOM STATUS BAR ── */}

@@ -20,6 +20,7 @@ import {
 import { CollegeLabInfo } from '../types/dna';
 import { getAllCollegeLabs, saveCollegeLab, deleteCollegeLab, resetCollegeLabs } from '../services/adminService';
 import { playSound } from '../utils/sounds';
+import { ConfirmationModal } from './ConfirmationModal';
 
 interface InstituteLabManagerModalProps {
   isOpen: boolean;
@@ -106,22 +107,15 @@ export const InstituteLabManagerModal: React.FC<InstituteLabManagerModalProps> =
     setNewInvigilator('');
   };
 
+  const [labToDelete, setLabToDelete] = useState<string | null>(null);
+  const [showResetDefaultsConfirm, setShowResetDefaultsConfirm] = useState(false);
+
   const handleDeleteLab = (labId: string) => {
-    if (window.confirm(`Delete laboratory ${labId}?`)) {
-      const updated = deleteCollegeLab(labId);
-      setLabs(updated);
-      onLabsUpdated();
-      playSound('click');
-    }
+    setLabToDelete(labId);
   };
 
   const handleResetDefaults = () => {
-    if (window.confirm('Reset all custom laboratories and restore the 50 college template labs?')) {
-      const reset = resetCollegeLabs();
-      setLabs(reset);
-      onLabsUpdated();
-      playSound('warning');
-    }
+    setShowResetDefaultsConfirm(true);
   };
 
   // Generate Kiosk Script Text
@@ -900,6 +894,46 @@ exit
           </button>
         </div>
       </div>
+
+      {/* Delete Lab Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={labToDelete !== null}
+        title="Delete Laboratory?"
+        message={`Are you sure you want to delete laboratory ${labToDelete}? Active stations registered under this lab will need to be reallocated.`}
+        confirmText="Yes, Delete Lab"
+        cancelText="Cancel"
+        tone="danger"
+        icon="danger"
+        onConfirm={() => {
+          if (labToDelete) {
+            const updated = deleteCollegeLab(labToDelete);
+            setLabs(updated);
+            onLabsUpdated();
+            playSound('click');
+            setLabToDelete(null);
+          }
+        }}
+        onCancel={() => setLabToDelete(null)}
+      />
+
+      {/* Reset Defaults Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showResetDefaultsConfirm}
+        title="Restore Default Laboratories?"
+        message="Reset all custom laboratories and restore the official 50 college template labs? Any custom laboratories authored in this browser will be replaced."
+        confirmText="Restore Templates"
+        cancelText="Cancel"
+        tone="warning"
+        icon="warning"
+        onConfirm={() => {
+          const reset = resetCollegeLabs();
+          setLabs(reset);
+          onLabsUpdated();
+          playSound('warning');
+          setShowResetDefaultsConfirm(false);
+        }}
+        onCancel={() => setShowResetDefaultsConfirm(false)}
+      />
     </div>
   );
 };

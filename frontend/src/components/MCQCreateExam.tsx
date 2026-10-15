@@ -10,6 +10,8 @@ import {
   publishExam, validateExamForPublish, onMcqDataChanged
 } from '../services/mcqService';
 import { AIPaperGeneratorModal } from './AIPaperGeneratorModal';
+import { ConfirmationModal } from './ConfirmationModal';
+import { playSound } from '../utils/sounds';
 
 // ── Exam List View ────────────────────────────────────────────────────────────
 interface ExamListProps {
@@ -190,18 +192,24 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
         </div>
       )}
 
-      {confirmDelete && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1010, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '24px', maxWidth: '380px', width: '90%' }}>
-            <h3 style={{ color: 'var(--text-primary)', fontSize: '16px', fontWeight: 700, marginBottom: '8px' }}>Delete Exam?</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '20px' }}>This will permanently remove the exam configuration. Existing attempts are unaffected.</p>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              <button onClick={() => setConfirmDelete(null)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 16px', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '13px' }}>Cancel</button>
-              <button onClick={() => { deleteExam(confirmDelete); reload(); setConfirmDelete(null); }} style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 'var(--radius-sm)', padding: '8px 16px', cursor: 'pointer', color: 'var(--danger)', fontSize: '13px', fontWeight: 600 }}>Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmationModal
+        isOpen={confirmDelete !== null}
+        title="Delete Examination?"
+        message="This will permanently delete this examination paper and erase its entry from the central cloud database. All scheduled sittings will be purged immediately."
+        confirmText="Yes, Delete Examination"
+        cancelText="Cancel"
+        tone="danger"
+        icon="danger"
+        onConfirm={() => {
+          if (confirmDelete) {
+            deleteExam(confirmDelete);
+            reload();
+            setConfirmDelete(null);
+            playSound('trash');
+          }
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
 
       {/* AI Exam Paper Generator Modal */}
       {showAIModal && (
@@ -306,7 +314,7 @@ const DEFAULT_EXAM: Omit<MCQExamConfig, 'id' | 'createdAt' | 'updatedAt'> = {
   instructions: '',
   subject: '',
   topic: '',
-  examCategory: 'Aptitude',
+  examCategory: 'Internal Assessment (CIE)',
   durationMinutes: 30,
   startTime: undefined,
   endTime: undefined,
@@ -336,6 +344,14 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ initial, onSave, onBack }) => {
 
   // Auto-compute totalMarks from selected questions
   const allQuestions = useMemo(() => getAllQuestions(), []);
+  const availableSubjects = useMemo(
+    () => Array.from(new Set(allQuestions.map((q) => q.subject).filter(Boolean))).sort(),
+    [allQuestions]
+  );
+  const availableTopics = useMemo(
+    () => Array.from(new Set(allQuestions.map((q) => q.topic).filter(Boolean))).sort(),
+    [allQuestions]
+  );
   const selectedQuestions = useMemo(() =>
     form.questionIds.map((id) => allQuestions.find((q) => q.id === id)).filter(Boolean) as MCQQuestion[],
     [form.questionIds, allQuestions]);
@@ -417,23 +433,49 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ initial, onSave, onBack }) => {
             <div>
               <label style={labelStyle}>Category *</label>
               <select
-                value={form.examCategory || 'Aptitude'}
+                value={form.examCategory || 'Internal Assessment (CIE)'}
                 onChange={(e) => set('examCategory', e.target.value as any)}
                 style={{ ...inputStyle, cursor: 'pointer' }}
               >
-                <option value="Aptitude">Aptitude</option>
-                <option value="ISE">ISE</option>
+                <option value="Internal Assessment (CIE)">Internal Assessment (CIE)</option>
+                <option value="Semester End Exam (SEE)">Semester End Exam (SEE)</option>
+                <option value="Mid-Term Examination">Mid-Term Examination</option>
+                <option value="In-Semester Evaluation (ISE)">In-Semester Evaluation (ISE)</option>
+                <option value="Aptitude">Aptitude & Placement</option>
+                <option value="Weekly Lab Practical">Weekly Lab Practical</option>
+                <option value="College Coding Competition">College Coding Competition</option>
+                <option value="Multiple Choice Question (MCQ) Examination">General MCQ Exam</option>
               </select>
             </div>
             <div>
               <label style={labelStyle}>Subject</label>
-              <input value={form.subject} onChange={(e) => set('subject', e.target.value)} placeholder="e.g. Computer Science"
-                style={inputStyle} />
+              <input
+                list="mcq-available-subjects"
+                value={form.subject}
+                onChange={(e) => set('subject', e.target.value)}
+                placeholder="e.g. Computer Science, Mechanical..."
+                style={inputStyle}
+              />
+              <datalist id="mcq-available-subjects">
+                {availableSubjects.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
             </div>
             <div>
               <label style={labelStyle}>Topic</label>
-              <input value={form.topic} onChange={(e) => set('topic', e.target.value)} placeholder="e.g. Data Structures"
-                style={inputStyle} />
+              <input
+                list="mcq-available-topics"
+                value={form.topic}
+                onChange={(e) => set('topic', e.target.value)}
+                placeholder="e.g. Data Structures, Thermodynamics..."
+                style={inputStyle}
+              />
+              <datalist id="mcq-available-topics">
+                {availableTopics.map((t) => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '12px' }}>

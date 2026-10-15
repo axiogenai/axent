@@ -19,7 +19,7 @@ function getAudioContext(): AudioContext | null {
   }
 }
 
-export type SoundType = 'success' | 'warning' | 'error' | 'click' | 'keystroke';
+export type SoundType = 'success' | 'warning' | 'error' | 'click' | 'keystroke' | 'trash';
 
 export const playSound = (type: SoundType): void => {
   try {
@@ -106,6 +106,24 @@ export const playSound = (type: SoundType): void => {
 
         osc.start(now);
         osc.stop(now + 0.04);
+        break;
+      }
+      case 'trash': {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.setValueAtTime(110, now + 0.1);
+
+        gain.gain.setValueAtTime(0.04, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.2);
         break;
       }
       default:

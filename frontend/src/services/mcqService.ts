@@ -18,6 +18,7 @@ import { generateAttemptAssignment } from '../utils/mcqRandomizer';
 import {
   saveQuestionToCloud,
   deleteQuestionFromCloud,
+  clearAllQuestionsFromCloud,
   saveExamToCloud,
   deleteExamFromCloud,
   saveAttemptToCloud,
@@ -149,6 +150,15 @@ export function deleteQuestion(id: string): void {
   deleteQuestionFromCloud(id);
 }
 
+export function clearAllQuestions(): void {
+  save(MCQ_STORAGE_KEYS.QUESTIONS, []);
+  try {
+    sessionStorage.setItem('axent_question_bank_cleared', String(Date.now()));
+  } catch {}
+  void clearAllQuestionsFromCloud();
+  notifyMcqDataChanged();
+}
+
 export function duplicateQuestion(id: string): MCQQuestion | null {
   const q = getQuestionById(id);
   if (!q) return null;
@@ -211,10 +221,31 @@ export function validateQuestion(q: Partial<MCQQuestion>): string[] {
 
 // ── MCQ EXAMS (Authoritative Real Exams Only) ─────────────────────────────────
 
+const DELETED_EXAMS_KEY = 'axent_deleted_exam_ids';
+
+export function getDeletedExamIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_EXAMS_KEY);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function recordExamDeleted(id: string): void {
+  try {
+    const set = getDeletedExamIds();
+    set.add(id);
+    localStorage.setItem(DELETED_EXAMS_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
 export function getAllExams(): MCQExamConfig[] {
+  const deletedIds = getDeletedExamIds();
   const loaded = load<MCQExamConfig[]>(MCQ_STORAGE_KEYS.EXAMS, []);
-  // Return loaded real exams (clean, zero fake seed fallback)
+  // Return loaded real exams (clean, zero fake seed fallback, excluding deleted)
   return (loaded || []).filter((e) => 
+    !deletedIds.has(e.id) &&
     !String(e.id || '').startsWith('exam-aptitude-') && 
     !String(e.id || '').startsWith('exam-ise-') &&
     !String(e.id || '').startsWith('seed-')
@@ -254,9 +285,17 @@ export function saveExam(exam: MCQExamConfig): MCQExamConfig {
 }
 
 export function deleteExam(id: string): void {
+  recordExamDeleted(id);
   const all = getAllExams().filter((e) => e.id !== id);
   save(MCQ_STORAGE_KEYS.EXAMS, all);
-  deleteExamFromCloud(id);
+
+  // Cascade delete any attempts for this exam locally
+  const attempts = getAllAttempts().filter((a) => a.examId !== id);
+  save(MCQ_STORAGE_KEYS.ATTEMPTS, attempts);
+
+  void deleteExamFromCloud(id);
+  notifyExamsChanged();
+  notifyMcqDataChanged();
 }
 
 export function publishExam(id: string): string[] {
@@ -442,20 +481,19 @@ export function startAttempt(
     exam.shuffleOptions
   );
 
-  // Build assigned questions with immutable snapshots (correctOptionId STORED but never shown in UI)
+  // Build assigned questions with sanitized snapshots (correct answers strictly withheld from client state during active test)
   const assignedQuestions: MCQAssignedQuestion[] = orderedQuestionIds.map((qid, order) => {
     const q = questions.find((x) => x.id === qid)!;
-    const correctOption = q.options.find((o) => o.isCorrect);
     const snapshot: MCQQuestionSnapshot = {
       questionId: q.id,
       text: q.text,
       options: q.options.map((o) => ({ id: o.id, text: o.text })), // no isCorrect
-      correctOptionId: correctOption?.id ?? '',
+      correctOptionId: '', // Sanitized: Authoritatively resolved on submit to prevent DevTools/storage inspection
       marks: q.marks,
       // Respect the exam-level policy; per-question penalties are ignored when
       // negative marking is disabled for this exam.
       negativeMarks: exam.negativeMarkingEnabled ? q.negativeMarks : 0,
-      explanation: q.explanation,
+      explanation: '', // Sanitized: Never exposed during active test
       subject: q.subject,
       topic: q.topic,
       difficulty: q.difficulty,
@@ -561,7 +599,13 @@ export function gradeAttempt(attempt: MCQAttempt): MCQGradeResult {
     const { snapshot } = aq;
     const selectedOptionId = attempt.answers[aq.questionId] ?? '';
     const isUnanswered = !selectedOptionId;
-    const isCorrect = !isUnanswered && selectedOptionId === snapshot.correctOptionId;
+
+    // Authoritative lookup: Resolve true correct answer directly from question bank
+    const bankQ = getQuestionById(aq.questionId);
+    const authoritativeCorrectId = bankQ?.options.find((o) => o.isCorrect)?.id || snapshot.correctOptionId;
+    const authoritativeExplanation = bankQ?.explanation || snapshot.explanation || '';
+
+    const isCorrect = !isUnanswered && selectedOptionId === authoritativeCorrectId;
 
     let marksAwarded = 0;
     if (isUnanswered) {
@@ -577,18 +621,18 @@ export function gradeAttempt(attempt: MCQAttempt): MCQGradeResult {
     score += marksAwarded;
 
     const selectedOption = snapshot.options.find((o) => o.id === selectedOptionId);
-    const correctOption = snapshot.options.find((o) => o.id === snapshot.correctOptionId);
+    const correctOption = snapshot.options.find((o) => o.id === authoritativeCorrectId);
 
     return {
       questionId: aq.questionId,
       selectedOptionId,
-      correctOptionId: snapshot.correctOptionId,
+      correctOptionId: authoritativeCorrectId,
       isCorrect,
       marksAwarded,
       question: snapshot.text,
       selectedText: selectedOption?.text ?? '(unanswered)',
       correctText: correctOption?.text ?? '',
-      explanation: snapshot.explanation,
+      explanation: authoritativeExplanation,
     };
   });
 
@@ -763,26 +807,46 @@ export async function syncFromSupabase(): Promise<void> {
 
     // 1. Reconcile Questions: replace local storage with cloud data, syncing any local-only items up to cloud
     if (cloudQ !== null) {
-      const localQ = getAllQuestions();
-      const cloudIds = new Set(cloudQ.map((q) => q.id));
-      for (const q of localQ) {
-        if (!cloudIds.has(q.id)) {
-          void saveQuestionToCloud(q);
+      const clearedTime = Number(sessionStorage.getItem('axent_question_bank_cleared') || '0');
+      const isRecentlyCleared = clearedTime > 0 && Date.now() - clearedTime < 60000;
+      if (isRecentlyCleared && cloudQ.length === 0) {
+        save(MCQ_STORAGE_KEYS.QUESTIONS, []);
+      } else {
+        const localQ = getAllQuestions();
+        const cloudIds = new Set(cloudQ.map((q) => q.id));
+        if (!isRecentlyCleared) {
+          for (const q of localQ) {
+            if (!cloudIds.has(q.id)) {
+              void saveQuestionToCloud(q);
+            }
+          }
         }
+        save(MCQ_STORAGE_KEYS.QUESTIONS, cloudQ);
       }
-      save(MCQ_STORAGE_KEYS.QUESTIONS, cloudQ.length > 0 ? cloudQ : mergeUpdatedRecords(localQ, cloudQ));
+      notifyMcqDataChanged();
     }
 
     // 2. Reconcile Exams: replace local storage with cloud data, syncing any local-only items up to cloud
     if (cloudE !== null) {
-      const localE = getAllExams();
-      const cloudIds = new Set(cloudE.map((e) => e.id));
+      const deletedIds = getDeletedExamIds();
+      const filteredCloud = cloudE.filter((e) => !deletedIds.has(e.id));
+      const localE = getAllExams().filter((e) => !deletedIds.has(e.id));
+      const cloudIds = new Set(filteredCloud.map((e) => e.id));
+
       for (const ex of localE) {
-        if (!cloudIds.has(ex.id)) {
+        if (!cloudIds.has(ex.id) && !deletedIds.has(ex.id)) {
           void saveExamToCloud(ex);
         }
       }
-      const reconciled = cloudE.map((ce) => {
+
+      // Purge any cloud exams that were marked deleted locally
+      for (const ex of cloudE) {
+        if (deletedIds.has(ex.id)) {
+          void deleteExamFromCloud(ex.id);
+        }
+      }
+
+      const reconciled = filteredCloud.map((ce) => {
         const localMatch = localE.find((le) => le.id === ce.id);
         if (localMatch) {
           const resultDeclarationMode =
@@ -793,7 +857,7 @@ export async function syncFromSupabase(): Promise<void> {
         }
         return ce;
       });
-      save(MCQ_STORAGE_KEYS.EXAMS, reconciled.length > 0 ? reconciled : localE);
+      save(MCQ_STORAGE_KEYS.EXAMS, reconciled);
       notifyExamsChanged();
     }
 

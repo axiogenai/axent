@@ -9,6 +9,7 @@ import { MCQHub } from './components/MCQHub';
 import { PaperSetterPortal } from './components/PaperSetterPortal';
 import { AuthorityLogin } from './components/auth/AuthorityLogin';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { LandingPage } from './components/LandingPage';
 import {
   CodeSubmission,
   AnalysisReport,
@@ -331,7 +332,7 @@ export const App: React.FC = () => {
 
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <Routes>
-          <Route path="/" element={<RootNavigator />} />
+          <Route path="/" element={<LandingPage theme={theme} />} />
           <Route
             path="/workspace"
             element={

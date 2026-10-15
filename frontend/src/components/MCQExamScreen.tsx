@@ -16,6 +16,7 @@ import { syncMcqLiveStation, subscribeToCctvBroadcast, isStationLocked } from '.
 import { fetchSingleStationLockStatus, updateStationLockInCloud } from '../services/supabaseService';
 import { StudentInfo, ExamCategory } from '../types/dna';
 import { SimpleSelect } from './watermelon/Select';
+import { ConfirmationModal, ModalDetailItem } from './ConfirmationModal';
 
 // ── Timer hook ────────────────────────────────────────────────────────────────
 function useCountdown(deadline: number, onExpire: () => void) {
@@ -300,6 +301,11 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
     if (!sem.trim()) errs.push('Semester is required.');
     if (!division.trim()) errs.push('Class division is required.');
 
+    // Schedule timing guard: strictly prohibit early entry before exam.startTime
+    if (exam.startTime && Date.now() < exam.startTime) {
+      errs.push(`This examination is scheduled for ${new Date(exam.startTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}. Early entry is strictly prohibited.`);
+    }
+
     // Duplicate submission guard: check if candidate already submitted this exam
     const normalizedRoll = trimmedRoll.toLowerCase();
     const candidateAttempts = getAttemptsForExam(exam.id).filter(
@@ -392,8 +398,14 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
       localStorage.setItem('codedna_student_profile', JSON.stringify(student));
     } catch {}
 
+    const targetExam = d.mcqExamId ? allExams.find((e) => e.id === d.mcqExamId) || exam : exam;
+    if (targetExam.startTime && Date.now() < targetExam.startTime) {
+      playSound('warning');
+      setErrors([`This examination is scheduled for ${new Date(targetExam.startTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}. Early entry is strictly prohibited.`]);
+      return;
+    }
+
     if (d.mcqExamId && d.mcqExamId !== exam.id) {
-      const targetExam = allExams.find((e) => e.id === d.mcqExamId);
       if (targetExam) {
         onSelectExam(targetExam.id);
       }
@@ -1605,6 +1617,56 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
   const [unlockPasskey, setUnlockPasskey] = useState('');
   const [unlockError, setUnlockError] = useState<string | null>(null);
 
+  // Dedicated Confirmation & Alert Modal State
+  const [modalConfig, setModalConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    subtitle?: string;
+    message?: React.ReactNode;
+    confirmText?: string;
+    cancelText?: string;
+    variant?: 'danger' | 'warning' | 'info' | 'success';
+    details?: ModalDetailItem[];
+    badgeText?: string;
+    isDestructive?: boolean;
+    hideCancel?: boolean;
+    onConfirm?: () => void;
+  }>({
+    isOpen: false,
+    title: ''
+  });
+
+  const showConfirm = (cfg: {
+    title: string;
+    subtitle?: string;
+    message?: React.ReactNode;
+    confirmText?: string;
+    cancelText?: string;
+    variant?: 'danger' | 'warning' | 'info' | 'success';
+    details?: ModalDetailItem[];
+    badgeText?: string;
+    isDestructive?: boolean;
+    onConfirm: () => void;
+  }) => {
+    setModalConfig({
+      isOpen: true,
+      hideCancel: false,
+      ...cfg
+    });
+  };
+
+  const showAlert = (title: string, message: React.ReactNode, variant: 'danger' | 'warning' | 'info' | 'success' = 'info') => {
+    setModalConfig({
+      isOpen: true,
+      title,
+      message,
+      confirmText: 'Dismiss',
+      hideCancel: true,
+      variant,
+      onConfirm: () => setModalConfig((prev) => ({ ...prev, isOpen: false }))
+    });
+  };
+
   // Student Profile State
   const [student, setStudent] = useState<StudentInfo>(() => {
     if (activeAttempt && activeAttempt.status === 'IN_PROGRESS') {
@@ -2002,36 +2064,52 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     }
   };
 
-  const handleDisqualifyCandidate = async () => {
+  const handleDisqualifyCandidate = () => {
     if (!attempt || !exam) return;
-    const confirm = window.confirm(
-      `Disqualify and Terminate Examination?\n\n` +
-      `Candidate: ${attempt.studentName} (${attempt.studentRoll})\n` +
-      `Violations Logged: ${attempt.tabSwitchCount} infractions\n\n` +
-      `This will immediately submit the examination as DISQUALIFIED due to proctor violations.`
-    );
-    if (!confirm) return;
 
-    setSubmitted(true);
-    setIsLockedByProctor(false);
-    recordInfraction(attempt.id, 'DISQUALIFIED_BY_PROCTOR');
-    const result = submitAttempt(attempt.id, answers, 'ABANDONED');
-    if (result) {
-      setGradeResult(result);
-      playSound('warning');
-      const finished: MCQAttempt = {
-        ...attempt,
-        status: 'ABANDONED',
-        score: result.score,
-        correctCount: result.correctCount,
-        wrongCount: result.wrongCount
-      };
-      setAttempt(finished);
-      syncMcqLiveStation(finished, exam, student, currentIdx, true);
-      if (!(await persistAttemptToCloud(attempt.id))) {
-        window.alert('The attempt was finalized on this device, but cloud sync failed. Keep this device open and notify the invigilator.');
+    showConfirm({
+      title: 'Disqualify and Terminate Examination?',
+      subtitle: `Candidate: ${attempt.studentName} (${attempt.studentRoll}) · Violations Logged: ${attempt.tabSwitchCount} infractions`,
+      variant: 'danger',
+      badgeText: 'Institutional Proctor Enforcement',
+      details: [
+        { label: 'Candidate', value: `${attempt.studentName} (${attempt.studentRoll})` },
+        { label: 'Workstation', value: student.stationNumber || 'Station #01' },
+        { label: 'Violations Logged', value: `${attempt.tabSwitchCount} Infractions Recorded`, color: 'var(--danger)' },
+        { label: 'Action Assigned', value: 'Permanent DISQUALIFIED Submission', color: 'var(--danger)' }
+      ],
+      message: (
+        <div>
+          This will immediately submit the candidate&apos;s examination as <strong>DISQUALIFIED (ABANDONED)</strong> due to proctor violations. This action is permanently locked onto the institutional ledger and cannot be reversed.
+        </div>
+      ),
+      confirmText: 'Disqualify & Terminate',
+      cancelText: 'Keep Examination Locked',
+      isDestructive: true,
+      onConfirm: async () => {
+        setModalConfig((prev) => ({ ...prev, isOpen: false }));
+        setSubmitted(true);
+        setIsLockedByProctor(false);
+        recordInfraction(attempt.id, 'DISQUALIFIED_BY_PROCTOR');
+        const result = submitAttempt(attempt.id, answers, 'ABANDONED');
+        if (result) {
+          setGradeResult(result);
+          playSound('warning');
+          const finished: MCQAttempt = {
+            ...attempt,
+            status: 'ABANDONED',
+            score: result.score,
+            correctCount: result.correctCount,
+            wrongCount: result.wrongCount
+          };
+          setAttempt(finished);
+          syncMcqLiveStation(finished, exam, student, currentIdx, true);
+          if (!(await persistAttemptToCloud(attempt.id))) {
+            showAlert('Cloud Sync Incomplete', 'The attempt was finalized on this device, but cloud sync failed. Keep this device open and notify the invigilator.', 'warning');
+          }
+        }
       }
-    }
+    });
   };
 
   const handleTimerExpire = useCallback(async () => {
@@ -2048,11 +2126,11 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       } catch {}
       syncMcqLiveStation(finished, exam, student, currentIdx, true);
       if (!(await persistAttemptToCloud(attempt.id))) {
-        window.alert('Time expired and the result was saved locally, but cloud sync failed. Keep this device open and notify the invigilator.');
+        showAlert('Cloud Sync Notice', 'Time expired and the result was saved locally, but cloud sync failed. Keep this device open and notify the invigilator.', 'warning');
       }
     } else {
       setSubmitted(false);
-      window.alert('The attempt could not be finalized. Contact the invigilator immediately and keep this page open.');
+      showAlert('Finalization Failed', 'The attempt could not be finalized. Contact the invigilator immediately and keep this page open.', 'danger');
     }
   }, [attempt, answers, submitted, exam, student, currentIdx]);
 
@@ -2074,11 +2152,11 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       } catch {}
       syncMcqLiveStation(finished, exam, student, currentIdx, true);
       if (!(await persistAttemptToCloud(attempt.id))) {
-        window.alert('Your result was saved on this device, but cloud sync failed. Keep this device open and notify the invigilator before exiting.');
+        showAlert('Cloud Sync Notice', 'Your result was saved on this device, but cloud sync failed. Keep this device open and notify the invigilator before exiting.', 'warning');
       }
     } else {
       setSubmitted(false);
-      window.alert('Submission failed and is not confirmed. Contact the invigilator and keep this page open.');
+      showAlert('Submission Failed', 'Submission failed and is not confirmed. Contact the invigilator and keep this page open.', 'danger');
     }
   };
 
@@ -2130,43 +2208,104 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
   }
 
   if (exam.startTime && now < exam.startTime) {
-    const diffMs = exam.startTime - now;
-    const diffMins = Math.ceil(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const remMins = diffMins % 60;
-    const timeStr = diffHours > 0 ? `${diffHours}h ${remMins}m` : `${diffMins} min`;
-    const startStr = new Date(exam.startTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+    const diffMs = Math.max(0, exam.startTime - now);
+    const totalSecs = Math.floor(diffMs / 1000);
+    const diffHours = Math.floor(totalSecs / 3600);
+    const remMins = Math.floor((totalSecs % 3600) / 60);
+    const remSecs = totalSecs % 60;
+    const startStr = new Date(exam.startTime).toLocaleString([], {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
 
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)', padding: '24px' }}>
         <div style={{
-          maxWidth: '520px', width: '100%',
+          maxWidth: '540px', width: '100%',
           background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)', padding: '36px', textAlign: 'center'
+          borderRadius: 'var(--radius-lg)', padding: '36px', textAlign: 'center',
+          boxShadow: 'var(--shadow-md)'
         }}>
-          <Calendar size={40} color="var(--accent)" style={{ marginBottom: '16px' }} />
-          <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>
-            Examination Scheduled
-          </h2>
-          <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--accent)', margin: '0 0 16px' }}>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '56px',
+            height: '56px',
+            borderRadius: 'var(--radius-md)',
+            background: 'rgba(234, 179, 8, 0.08)',
+            border: '1px solid rgba(234, 179, 8, 0.25)',
+            marginBottom: '18px'
+          }}>
+            <Calendar size={28} color="#eab308" />
+          </div>
+
+          <div style={{ display: 'inline-block', marginBottom: '8px' }}>
+            <span style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              padding: '2px 10px',
+              borderRadius: 'var(--radius-pill)',
+              background: 'rgba(234, 179, 8, 0.1)',
+              border: '1px solid rgba(234, 179, 8, 0.25)',
+              color: '#eab308'
+            }}>
+              Scheduled Examination Waiting Room
+            </span>
+          </div>
+
+          <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px' }}>
             {exam.title}
+          </h2>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 20px' }}>
+            {exam.subject || 'Autonomous Examination'} {exam.topic ? `· ${exam.topic}` : ''}
           </p>
+
           <div style={{
             background: 'var(--bg-surface)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md)', padding: '16px', marginBottom: '20px'
+            borderRadius: 'var(--radius-md)', padding: '20px 16px', marginBottom: '22px'
           }}>
-            <p style={{ margin: '0 0 4px', fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Countdown to Unlock
+            <p style={{ margin: '0 0 12px', fontSize: '11.5px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
+              Live Countdown to Terminal Unlock
             </p>
-            <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
-              Opens in {timeStr}
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '14px' }}>
+              {diffHours > 0 && (
+                <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 14px', minWidth: '65px' }}>
+                  <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+                    {diffHours}
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Hours</div>
+                </div>
+              )}
+              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 14px', minWidth: '65px' }}>
+                <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+                  {remMins}
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Mins</div>
+              </div>
+              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 14px', minWidth: '65px' }}>
+                <div style={{ fontSize: '24px', fontWeight: 800, color: '#eab308', fontFamily: 'var(--font-mono)' }}>
+                  {String(remSecs).padStart(2, '0')}
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Secs</div>
+              </div>
             </div>
-            <p style={{ margin: '6px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
-              Scheduled Start: {startStr}
-            </p>
+
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+              <Clock size={13} color="var(--accent)" />
+              <span>Starts on <strong>{startStr}</strong></span>
+            </div>
           </div>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5, margin: '0 0 20px' }}>
-            This terminal will automatically unlock when the examination window commences. Please remain seated and do not close your browser.
+
+          <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: 1.5, margin: '0 0 22px' }}>
+            This terminal will automatically unlock when the examination window commences. Please remain seated and do not leave this page.
           </p>
           <button
             className="btn btn-secondary btn-sm"
@@ -2175,7 +2314,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
               else window.location.href = '/mcq';
             }}
           >
-            Back to Available Exams
+            Return to Available Exams
           </button>
         </div>
       </div>
@@ -2666,6 +2805,23 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           </div>
         </div>
       )}
+
+      {/* Institutional Confirmation & System Notice Modal */}
+      <ConfirmationModal
+        isOpen={modalConfig.isOpen}
+        onClose={() => setModalConfig((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={modalConfig.onConfirm}
+        title={modalConfig.title}
+        subtitle={modalConfig.subtitle}
+        message={modalConfig.message}
+        confirmText={modalConfig.confirmText}
+        cancelText={modalConfig.cancelText}
+        variant={modalConfig.variant}
+        details={modalConfig.details}
+        badgeText={modalConfig.badgeText}
+        isDestructive={modalConfig.isDestructive}
+        hideCancel={modalConfig.hideCancel}
+      />
     </div>
   );
 };
@@ -2767,13 +2923,9 @@ export const MCQExamSelector: React.FC = () => {
     setSearchParams({ examId: id });
   };
 
-  const handleBack = () => {
-    const active = getActiveAttempt();
-    if (active && active.status === 'IN_PROGRESS') {
-      if (!window.confirm('You have an active examination session in progress. Leaving this screen will not pause your examination timer. Do you want to return to the paper selection?')) {
-        return;
-      }
-    }
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+
+  const performExit = () => {
     try {
       sessionStorage.removeItem('codedna_mcq_session_attempt');
       localStorage.removeItem('codedna_mcq_active_attempt_backup');
@@ -2787,12 +2939,42 @@ export const MCQExamSelector: React.FC = () => {
     }
   };
 
+  const handleBack = () => {
+    const active = getActiveAttempt();
+    if (active && active.status === 'IN_PROGRESS') {
+      setShowExitConfirm(true);
+      return;
+    }
+    performExit();
+  };
+
   if (selectedExamId) {
     return (
-      <MCQExamScreen
-        examId={selectedExamId}
-        onBack={handleBack}
-      />
+      <>
+        <MCQExamScreen
+          examId={selectedExamId}
+          onBack={handleBack}
+        />
+        <ConfirmationModal
+          isOpen={showExitConfirm}
+          onClose={() => setShowExitConfirm(false)}
+          onConfirm={() => {
+            setShowExitConfirm(false);
+            performExit();
+          }}
+          variant="warning"
+          title="Active Examination in Progress"
+          subtitle="Your timer is running. Exiting will not pause your test."
+          badgeText="Active Exam Safeguard"
+          confirmText="Exit to Paper Catalog"
+          cancelText="Resume Examination"
+          message={
+            <div>
+              You currently have an ongoing test session in progress. Leaving this screen will <strong>not pause your timer</strong>, and the examination window will continue running. Are you sure you wish to return to the paper selector?
+            </div>
+          }
+        />
+      </>
     );
   }
 
@@ -2866,15 +3048,16 @@ export const MCQExamSelector: React.FC = () => {
 
             let countdownStr = '';
             if (isScheduledFuture && exam.startTime) {
-              const diffMs = exam.startTime - currentTime;
-              const diffMins = Math.ceil(diffMs / 60000);
-              const diffHours = Math.floor(diffMins / 60);
-              const remMins = diffMins % 60;
-              countdownStr = diffHours > 0 ? `${diffHours}h ${remMins}m` : `${diffMins} min`;
+              const diffMs = Math.max(0, exam.startTime - currentTime);
+              const totalSecs = Math.floor(diffMs / 1000);
+              const diffHours = Math.floor(totalSecs / 3600);
+              const remMins = Math.floor((totalSecs % 3600) / 60);
+              const remSecs = totalSecs % 60;
+              countdownStr = `${diffHours > 0 ? `${diffHours}h ` : ''}${remMins}m ${String(remSecs).padStart(2, '0')}s`;
             }
 
             const formatScheduleTime = (ts: number) =>
-              new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+              new Date(ts).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
             return (
               <div
@@ -3053,7 +3236,33 @@ export const MCQExamSelector: React.FC = () => {
                   </div>
 
                   {/* Schedule Details if available */}
-                  {(exam.startTime || exam.endTime) && (
+                  {isScheduledFuture && exam.startTime && (
+                    <div
+                      style={{
+                        background: 'rgba(234, 179, 8, 0.08)',
+                        border: '1px solid rgba(234, 179, 8, 0.25)',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '8px 12px',
+                        marginBottom: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '8px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Calendar size={13} color="#eab308" />
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#eab308' }}>
+                          Starts on {formatScheduleTime(exam.startTime)}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                        Opens in {countdownStr}
+                      </span>
+                    </div>
+                  )}
+
+                  {!isScheduledFuture && (exam.startTime || exam.endTime) && (
                     <div style={{ marginBottom: '10px', fontSize: '11px', color: 'var(--text-muted)', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                       {exam.startTime && <span>Opens: {formatScheduleTime(exam.startTime)}</span>}
                       {exam.endTime && <span>Closes: {formatScheduleTime(exam.endTime)}</span>}
@@ -3088,9 +3297,10 @@ export const MCQExamSelector: React.FC = () => {
                   {isScheduledFuture && (
                     <button
                       className="btn btn-secondary btn-sm"
-                      style={{ padding: '5px 12px', fontSize: '11.5px', gap: '4px', height: '28px' }}
+                      style={{ padding: '5px 12px', fontSize: '11.5px', gap: '5px', height: '28px' }}
                     >
-                      <span>Waiting Room</span>
+                      <Clock size={12} color="#eab308" />
+                      <span>Waiting Room · Starts {new Date(exam.startTime!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       <ChevronRight size={13} />
                     </button>
                   )}

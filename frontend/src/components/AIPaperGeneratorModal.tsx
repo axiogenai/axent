@@ -35,10 +35,12 @@ import {
   publishExam,
   saveQuestion,
   deleteQuestion,
-  deleteExam
+  deleteExam,
+  getAllQuestions
 } from '../services/mcqService';
 import { MCQExamConfig, MCQQuestion, MCQResultDeclarationMode } from '../types/mcq';
 import { playSound } from '../utils/sounds';
+import { ConfirmationModal } from './ConfirmationModal';
 
 interface AIPaperGeneratorModalProps {
   isOpen: boolean;
@@ -59,23 +61,31 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
   // Generator Form State
   const [title, setTitle] = useState('');
   const [examCategory, setExamCategory] = useState<'Aptitude' | 'ISE'>('Aptitude');
-  const [subject, setSubject] = useState('General Aptitude & Reasoning');
+  const [subject, setSubject] = useState('');
   const [topic, setTopic] = useState('');
   const [instructions, setInstructions] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(45);
 
-  // Difficulty & Question Counts
-  const [easyCount, setEasyCount] = useState(5);
-  const [easyMarks, setEasyMarks] = useState(1);
-  const [mediumCount, setMediumCount] = useState(10);
-  const [mediumMarks, setMediumMarks] = useState(2);
-  const [hardCount, setHardCount] = useState(5);
-  const [hardMarks, setHardMarks] = useState(3);
+  // Dynamic subjects and topics from database
+  const allExistingQuestions = useMemo(() => getAllQuestions(), []);
+  const availableSubjects = useMemo(
+    () => Array.from(new Set(allExistingQuestions.map((q) => q.subject).filter(Boolean))).sort(),
+    [allExistingQuestions]
+  );
+  const availableTopics = useMemo(
+    () => Array.from(new Set(allExistingQuestions.map((q) => q.topic).filter(Boolean))).sort(),
+    [allExistingQuestions]
+  );
+
+  // Difficulty & Question Configuration (Simplified per Paper Setter standard)
+  const [totalQuestions, setTotalQuestions] = useState(20);
+  const [totalMarks, setTotalMarks] = useState(40);
+  const [overallSeverity, setOverallSeverity] = useState<'EASY' | 'MEDIUM' | 'HARD'>('MEDIUM');
 
   // Negative Marking & Settings
   const [negativeMarkingEnabled, setNegativeMarkingEnabled] = useState(true);
   const [negativeMarkPenalty, setNegativeMarkPenalty] = useState(0.25);
-  const [resultDeclarationMode, setResultDeclarationMode] = useState<MCQResultDeclarationMode>('IMMEDIATE');
+  const [resultDeclarationMode, setResultDeclarationMode] = useState<MCQResultDeclarationMode>('WHATSAPP_GROUP');
 
   // Progress & Error
   const [progressMsg, setProgressMsg] = useState('');
@@ -89,12 +99,12 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   if (!isOpen) return null;
 
-  const totalQuestionsConfigured = easyCount + mediumCount + hardCount;
-  const totalMarksConfigured =
-    easyCount * easyMarks + mediumCount * mediumMarks + hardCount * hardMarks;
+  const totalQuestionsConfigured = totalQuestions;
+  const totalMarksConfigured = totalMarks;
 
   // ── 1. GENERATE DRAFT WITH AI ────────────────────────────────────────────────
   const handleGenerate = async (e: React.FormEvent) => {
@@ -116,6 +126,25 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
     playSound('click');
 
     try {
+      const computedEasyCount = overallSeverity === 'EASY'
+        ? Math.max(1, Math.round(totalQuestions * 0.7))
+        : overallSeverity === 'HARD'
+        ? Math.max(0, Math.round(totalQuestions * 0.15))
+        : Math.max(1, Math.round(totalQuestions * 0.25));
+
+      const computedMedCount = overallSeverity === 'EASY'
+        ? Math.round(totalQuestions * 0.2)
+        : overallSeverity === 'HARD'
+        ? Math.round(totalQuestions * 0.35)
+        : Math.max(1, Math.round(totalQuestions * 0.55));
+
+      let computedHardCount = Math.max(0, totalQuestions - computedEasyCount - computedMedCount);
+      if (computedEasyCount + computedMedCount + computedHardCount !== totalQuestions) {
+        computedHardCount = Math.max(0, totalQuestions - computedEasyCount - computedMedCount);
+      }
+
+      const basePerQ = Math.max(1, Math.round(totalMarks / totalQuestions));
+
       const payload: AIPaperGenerationRequest = {
         title: title.trim() || `${topic.trim()} Examination`,
         subject: subject.trim() || (examCategory === 'Aptitude' ? 'General Aptitude & Reasoning' : 'Computer Science'),
@@ -123,12 +152,12 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
         examCategory,
         instructions: instructions.trim(),
         durationMinutes,
-        easyCount,
-        mediumCount,
-        hardCount,
-        easyMarks,
-        mediumMarks,
-        hardMarks,
+        easyCount: computedEasyCount,
+        mediumCount: computedMedCount,
+        hardCount: computedHardCount,
+        easyMarks: basePerQ,
+        mediumMarks: basePerQ,
+        hardMarks: basePerQ,
         negativeMarkingEnabled,
         negativeMarkPenalty,
         autoPublish: false // Explicitly DRAFT: Faculty must review and confirm before publishing
@@ -407,14 +436,17 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
   };
 
   const handleDiscardDraft = () => {
-    if (window.confirm('Discard this draft exam paper? Unsaved questions and changes will be permanently removed.')) {
-      if (reviewedExam) {
-        deleteExam(reviewedExam.id);
-        reviewedQuestions.forEach((q) => deleteQuestion(q.id));
-      }
-      playSound('click');
-      onClose();
+    setShowDiscardConfirm(true);
+  };
+
+  const confirmDiscardDraft = () => {
+    if (reviewedExam) {
+      deleteExam(reviewedExam.id);
+      reviewedQuestions.forEach((q) => deleteQuestion(q.id));
     }
+    playSound('click');
+    setShowDiscardConfirm(false);
+    onClose();
   };
 
   const handleCopyStudentLink = () => {
@@ -586,21 +618,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                   <select
                     value={examCategory}
                     onChange={(e) => {
-                      const newCat = e.target.value as 'Aptitude' | 'ISE';
-                      setExamCategory(newCat);
-                      if (newCat === 'Aptitude') {
-                        setSubject('General Aptitude & Reasoning');
-                        if (!topic.trim() || topic.includes('Data Structures')) {
-                          setTopic('Logical Reasoning, Quantitative, Verbal Aptitude');
-                          setTitle('General Aptitude & Reasoning Assessment');
-                        }
-                      } else {
-                        setSubject('Computer Science');
-                        if (!topic.trim() || topic.includes('Aptitude')) {
-                          setTopic('Data Structures & Algorithms');
-                          setTitle('Data Structures & Algorithms Examination');
-                        }
-                      }
+                      setExamCategory(e.target.value as 'Aptitude' | 'ISE');
                     }}
                     style={{
                       width: '100%',
@@ -623,9 +641,10 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     Subject / Domain *
                   </label>
                   <input
+                    list="ai-available-subjects"
                     value={subject}
                     onChange={(e) => setSubject(e.target.value)}
-                    placeholder={examCategory === 'Aptitude' ? 'General Aptitude & Reasoning' : 'Computer Science (CS201)'}
+                    placeholder="e.g. Computer Science, Mechanical..."
                     style={{
                       width: '100%',
                       padding: '8px 10px',
@@ -637,6 +656,11 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     }}
                     required
                   />
+                  <datalist id="ai-available-subjects">
+                    {availableSubjects.map((s) => (
+                      <option key={s} value={s} />
+                    ))}
+                  </datalist>
                 </div>
 
                 <div>
@@ -644,16 +668,13 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     Syllabus Topic or Theme *
                   </label>
                   <input
+                    list="ai-available-topics"
                     value={topic}
                     onChange={(e) => {
                       setTopic(e.target.value);
                       if (!title) setTitle(`${e.target.value} Examination`);
                     }}
-                    placeholder={
-                      examCategory === 'Aptitude'
-                        ? 'e.g. Logical Reasoning, Quantitative, Verbal Aptitude'
-                        : 'e.g. Data Structures, Arrays, Stacks, Trees'
-                    }
+                    placeholder="e.g. Data Structures, Arrays, Stacks, Trees..."
                     style={{
                       width: '100%',
                       padding: '8px 10px',
@@ -665,46 +686,12 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     }}
                     required
                   />
+                  <datalist id="ai-available-topics">
+                    {availableTopics.map((t) => (
+                      <option key={t} value={t} />
+                    ))}
+                  </datalist>
                 </div>
-              </div>
-
-              {/* Quick Topic Presets */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '-6px' }}>
-                <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>Quick Presets:</span>
-                {(examCategory === 'Aptitude'
-                  ? [
-                      'Logical Reasoning, Quantitative, Verbal Aptitude',
-                      'Quantitative: Percentages, Profit & Loss, Speed & Time',
-                      'Logical Reasoning: Syllogisms, Blood Relations, Series',
-                      'Verbal: Reading Comprehension & Vocabulary'
-                    ]
-                  : [
-                      'Data Structures & Algorithms',
-                      'Operating Systems & Concurrency',
-                      'DBMS & SQL Queries',
-                      'Computer Networks & Protocols'
-                    ]
-                ).map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => {
-                      setTopic(preset);
-                      setTitle(`${preset} Assessment`);
-                    }}
-                    style={{
-                      background: topic === preset ? 'var(--bg-elevated)' : 'var(--bg-surface)',
-                      border: `1px solid ${topic === preset ? 'var(--accent)' : 'var(--border)'}`,
-                      borderRadius: 'var(--radius-pill)',
-                      padding: '2px 8px',
-                      fontSize: '10px',
-                      color: topic === preset ? 'var(--text-primary)' : 'var(--text-secondary)',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {preset}
-                  </button>
-                ))}
               </div>
 
               <div>
@@ -741,110 +728,98 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     fontSize: '12px',
                     fontWeight: 700,
                     color: 'var(--text-primary)',
-                    marginBottom: '10px',
+                    marginBottom: '12px',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px'
                   }}
                 >
                   <Sliders size={13} />
-                  <span>Question Difficulty Breakdown & Mark Allocation</span>
+                  <span>Question & Marks Specification</span>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '12px' }}>
-                  {/* Easy */}
-                  <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--success)' }}>EASY</span>
-                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Definitions & syntax</span>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                      <div>
-                        <label style={{ fontSize: '9px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Count</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="20"
-                          value={easyCount}
-                          onChange={(e) => setEasyCount(parseInt(e.target.value, 10) || 0)}
-                          style={{ width: '100%', padding: '5px', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '12px' }}
-                        />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '9px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Marks/Q</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="10"
-                          value={easyMarks}
-                          onChange={(e) => setEasyMarks(parseInt(e.target.value, 10) || 1)}
-                          style={{ width: '100%', padding: '5px', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '12px' }}
-                        />
-                      </div>
-                    </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '12px' }}>
+                  {/* Total Questions */}
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      Total Questions
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={totalQuestions}
+                      onChange={(e) => setTotalQuestions(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '8px 10px',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-primary)',
+                        fontSize: '13px',
+                        fontWeight: 600
+                      }}
+                    />
                   </div>
 
-                  {/* Medium */}
-                  <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--warning)' }}>MEDIUM</span>
-                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Algorithms & tracing</span>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                      <div>
-                        <label style={{ fontSize: '9px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Count</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="20"
-                          value={mediumCount}
-                          onChange={(e) => setMediumCount(parseInt(e.target.value, 10) || 0)}
-                          style={{ width: '100%', padding: '5px', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '12px' }}
-                        />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '9px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Marks/Q</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="10"
-                          value={mediumMarks}
-                          onChange={(e) => setMediumMarks(parseInt(e.target.value, 10) || 2)}
-                          style={{ width: '100%', padding: '5px', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '12px' }}
-                        />
-                      </div>
-                    </div>
+                  {/* Total Marks */}
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      Total Marks
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="500"
+                      value={totalMarks}
+                      onChange={(e) => setTotalMarks(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '8px 10px',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-primary)',
+                        fontSize: '13px',
+                        fontWeight: 600
+                      }}
+                    />
                   </div>
 
-                  {/* Hard */}
-                  <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--danger)' }}>HARD</span>
-                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Edge cases & complexities</span>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                      <div>
-                        <label style={{ fontSize: '9px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Count</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="20"
-                          value={hardCount}
-                          onChange={(e) => setHardCount(parseInt(e.target.value, 10) || 0)}
-                          style={{ width: '100%', padding: '5px', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '12px' }}
-                        />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '9px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Marks/Q</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="10"
-                          value={hardMarks}
-                          onChange={(e) => setHardMarks(parseInt(e.target.value, 10) || 3)}
-                          style={{ width: '100%', padding: '5px', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '12px' }}
-                        />
-                      </div>
+                  {/* Overall Severity */}
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      Overall Severity
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
+                      {(['EASY', 'MEDIUM', 'HARD'] as const).map((sev) => {
+                        const isSelected = overallSeverity === sev;
+                        const color = sev === 'EASY' ? 'var(--success)' : sev === 'MEDIUM' ? 'var(--warning)' : 'var(--danger)';
+                        return (
+                          <button
+                            key={sev}
+                            type="button"
+                            onClick={() => setOverallSeverity(sev)}
+                            style={{
+                              padding: '8px 4px',
+                              borderRadius: 'var(--radius-sm)',
+                              border: isSelected ? `1.5px solid ${color}` : '1px solid var(--border)',
+                              background: isSelected ? 'var(--bg-surface)' : 'var(--bg-elevated)',
+                              color: isSelected ? color : 'var(--text-secondary)',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              textAlign: 'center',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            {sev}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -854,6 +829,8 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '8px',
                     background: 'var(--bg-elevated)',
                     border: '1px solid var(--border)',
                     borderRadius: 'var(--radius-sm)',
@@ -861,16 +838,19 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     fontSize: '11px'
                   }}
                 >
-                  <div style={{ display: 'flex', gap: '16px' }}>
+                  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
                     <span style={{ color: 'var(--text-secondary)' }}>
-                      Total Questions: <strong style={{ color: 'var(--text-primary)' }}>{totalQuestionsConfigured}</strong>
+                      Total Questions: <strong style={{ color: 'var(--text-primary)' }}>{totalQuestions}</strong>
                     </span>
                     <span style={{ color: 'var(--text-secondary)' }}>
-                      Total Marks: <strong style={{ color: 'var(--accent)' }}>{totalMarksConfigured} pts</strong>
+                      Total Marks: <strong style={{ color: 'var(--accent)' }}>{totalMarks} pts</strong>
+                    </span>
+                    <span style={{ color: 'var(--text-secondary)' }}>
+                      Avg Mark: <strong style={{ color: 'var(--text-primary)' }}>{(totalMarks / Math.max(1, totalQuestions)).toFixed(1)} pts/Q</strong>
                     </span>
                   </div>
                   <div style={{ color: 'var(--text-muted)' }}>
-                    {easyCount} Easy · {mediumCount} Med · {hardCount} Hard
+                    Severity Profile: <span style={{ fontWeight: 700, color: overallSeverity === 'EASY' ? 'var(--success)' : overallSeverity === 'MEDIUM' ? 'var(--warning)' : 'var(--danger)' }}>{overallSeverity}</span>
                   </div>
                 </div>
               </div>
@@ -1972,6 +1952,19 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
           </span>
         </div>
       </div>
+
+      <ConfirmationModal
+        isOpen={showDiscardConfirm}
+        onClose={() => setShowDiscardConfirm(false)}
+        onConfirm={confirmDiscardDraft}
+        variant="danger"
+        title="Discard Draft Exam Paper?"
+        subtitle="Unsaved questions and modifications will be permanently removed."
+        badgeText="Draft Examination Action"
+        confirmText="Discard Draft"
+        cancelText="Continue Reviewing"
+        message="This action will delete the generated questions and clear this unconfirmed draft from the local registry. This cannot be undone."
+      />
     </div>
   );
 };

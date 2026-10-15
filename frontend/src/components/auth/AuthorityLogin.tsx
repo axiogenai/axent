@@ -307,10 +307,17 @@ export const AuthorityLogin: React.FC = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: 'var(--accent)'
+                overflow: 'hidden'
               }}
             >
-              <Hexagon size={18} />
+              <img
+                src="/logo.png"
+                alt="Axent"
+                style={{ width: '24px', height: '24px', objectFit: 'contain' }}
+                onError={(e) => {
+                  (e.currentTarget as HTMLElement).style.display = 'none';
+                }}
+              />
             </div>
             <div>
               <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--accent)' }}>

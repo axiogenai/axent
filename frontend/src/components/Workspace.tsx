@@ -52,6 +52,7 @@ import {
   CheckCheck
 } from 'lucide-react';
 import { playSound } from '../utils/sounds';
+import { ConfirmationModal } from './ConfirmationModal';
 import {
   parseExamToken,
   generateExamToken,
@@ -156,6 +157,9 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const [unfocusedSeconds, setUnfocusedSeconds] = useState<number>(0);
   const [infractionNotice, setInfractionNotice] = useState<{ strike: number; message: string; duration: number } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [showResetCandidateConfirm, setShowResetCandidateConfirm] = useState<boolean>(false);
+  const [showFinalSubmitConfirm, setShowFinalSubmitConfirm] = useState<boolean>(false);
+  const [workspaceNoticeMessage, setWorkspaceNoticeMessage] = useState<string | null>(null);
   // Right Diagnostics/Terminal pane is STRICTLY HIDDEN until code is executed or user toggles it open
   const [isRightPaneOpen, setIsRightPaneOpen] = useState<boolean>(() => {
     return Boolean(compilerResult || isExecuting);
@@ -728,7 +732,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const startScreenProctoring = async () => {
     try {
       if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getDisplayMedia) {
-        alert('Screen Capture API is not supported on this browser.');
+        setWorkspaceNoticeMessage('Screen Capture API is not supported on this browser.');
         return;
       }
       const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -871,14 +875,10 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   }, [student.labId, student.stationNumber]);
 
   const handleStartNewCandidate = useCallback(() => {
-    const confirmReset = window.confirm(
-      'Register Next Candidate?\n\n' +
-      '• Conclude current examination session\n' +
-      '• Reset countdown timer for the new student\n' +
-      '• Clear terminal console and open Candidate Registration'
-    );
-    if (!confirmReset) return;
+    setShowResetCandidateConfirm(true);
+  }, []);
 
+  const executeStartNewCandidate = useCallback(() => {
     const cleanStation = (student.stationNumber || 'Station #01').replace(/[^a-zA-Z0-9]/g, '_');
     try {
       localStorage.removeItem(`codedna_session_start_${cleanStation}`);
@@ -956,12 +956,12 @@ export const Workspace: React.FC<WorkspaceProps> = ({
     }
     if (isLockedByProctor) {
       playSound('warning');
-      alert('Access Denied: Terminal is locked by the invigilator. Click "Pardon & Unlock" in the banner above to resume.');
+      setWorkspaceNoticeMessage('Access Denied: Terminal is locked by the invigilator. Click "Pardon & Unlock" in the banner above to resume.');
       return;
     }
     if (!editorData.code.trim()) {
       playSound('warning');
-      alert('Please enter or write your program code in the editor before running.');
+      setWorkspaceNoticeMessage('Please enter or write your program code in the editor before running.');
       return;
     }
     if (isExecuting) return;
@@ -995,35 +995,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
     }
   }, [analysisResults]);
 
-  const handleSubmitExam = useCallback(async (isAutoSubmit: boolean = false) => {
-    const auto = isAutoSubmit === true;
-    if (!isCandidateRegistered) {
-      playSound('warning');
-      setRegValidationError('Candidate registration is mandatory before submitting your practical examination.');
-      setIsProfileModalOpen(true);
-      return;
-    }
-    if (isLockedByProctor) {
-      playSound('warning');
-      alert('Access Denied: Examination submissions are locked by the invigilator. Click "Pardon & Unlock" in the banner above to resume.');
-      return;
-    }
-    if (!editorData.code.trim()) {
-      alert('Please write or enter your program code before submitting.');
-      return;
-    }
-
-    if (!auto) {
-      const confirmSubmit = window.confirm(
-        'Are you sure you want to finalize and submit your practical exam?\n\n' +
-        '• Your code will be locked and saved to the Admin CCTV Room.\n' +
-        '• Keystroke forensics and plagiarism metrics will be finalized.\n' +
-        '• You will be redirected to the official marks report.'
-      );
-
-      if (!confirmSubmit) return;
-    }
-
+  const performFinalSubmit = useCallback(async () => {
     playSound('success');
     setIsExamSubmitted(true);
 
@@ -1050,7 +1022,33 @@ export const Workspace: React.FC<WorkspaceProps> = ({
     submitAndMarkDone(editorData, finalCompiler || undefined, finalReport || undefined);
 
     onViewReport();
-  }, [isCandidateRegistered, isLockedByProctor, editorData, compilerResult, analysisResults, onRunCode, student, stdinInput, onViewReport]);
+  }, [analysisResults, compilerResult, editorData, onRunCode, student, stdinInput, onViewReport]);
+
+  const handleSubmitExam = useCallback(async (isAutoSubmit: boolean = false) => {
+    const auto = isAutoSubmit === true;
+    if (!isCandidateRegistered) {
+      playSound('warning');
+      setRegValidationError('Candidate registration is mandatory before submitting your practical examination.');
+      setIsProfileModalOpen(true);
+      return;
+    }
+    if (isLockedByProctor) {
+      playSound('warning');
+      setWorkspaceNoticeMessage('Access Denied: Examination submissions are locked by the invigilator. Click "Pardon & Unlock" in the banner above to resume.');
+      return;
+    }
+    if (!editorData.code.trim()) {
+      setWorkspaceNoticeMessage('Please write or enter your program code before submitting.');
+      return;
+    }
+
+    if (!auto) {
+      setShowFinalSubmitConfirm(true);
+      return;
+    }
+
+    await performFinalSubmit();
+  }, [isCandidateRegistered, isLockedByProctor, editorData.code, performFinalSubmit]);
 
   // ── LIVE EXAM SESSION TIMER TICK & EXPIRATION WATCHDOG ──
   useEffect(() => {
@@ -1068,11 +1066,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
         if (remaining <= 0 && !hasTimeExpiredAlerted && !isExamSubmitted) {
           setHasTimeExpiredAlerted(true);
           playSound('warning');
-          alert(
-            'EXAMINATION SESSION TIME LIMIT EXPIRED!\n\n' +
-            'Your allocated practical examination session time has concluded. The system will now automatically finalize and submit your program solution to the Invigilator Control Room.'
-          );
-          handleSubmitExam(true);
+          void handleSubmitExam(true);
         }
       }
     }, 1000);
@@ -2678,6 +2672,50 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {/* Reset Candidate Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showResetCandidateConfirm}
+        title="Register Next Candidate?"
+        message="Are you sure you want to conclude the current examination session? This will reset the countdown timer, wipe candidate drafts, and open the registration window for the next student."
+        confirmText="Yes, Next Candidate"
+        cancelText="Cancel"
+        tone="warning"
+        icon="warning"
+        onConfirm={executeStartNewCandidate}
+        onCancel={() => setShowResetCandidateConfirm(false)}
+      />
+
+      {/* Final Submit Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showFinalSubmitConfirm}
+        title="Finalize & Submit Practical Exam?"
+        message="Are you sure you want to finalize and submit your practical exam? Your code will be permanently locked and archived to the invigilator control room, and keystroke forensics will be finalized."
+        confirmText="Confirm & Submit Exam"
+        cancelText="Review Code"
+        tone="danger"
+        icon="danger"
+        onConfirm={() => {
+          setShowFinalSubmitConfirm(false);
+          void performFinalSubmit();
+        }}
+        onCancel={() => setShowFinalSubmitConfirm(false)}
+      />
+
+      {/* Workspace Notice Alert Modal */}
+      {workspaceNoticeMessage && (
+        <ConfirmationModal
+          isOpen={Boolean(workspaceNoticeMessage)}
+          title="Attention Required"
+          message={workspaceNoticeMessage}
+          confirmText="Acknowledge"
+          cancelText="Close"
+          tone="neutral"
+          icon="warning"
+          onConfirm={() => setWorkspaceNoticeMessage(null)}
+          onCancel={() => setWorkspaceNoticeMessage(null)}
+        />
       )}
     </div>
   );

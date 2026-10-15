@@ -29,6 +29,7 @@ import {
 import { fetchStationsFromCloud, subscribeToCloudStations } from '../services/supabaseService';
 import { InstituteLabManagerModal } from './InstituteLabManagerModal';
 import { SupabaseMigrationModal } from './SupabaseMigrationModal';
+import { ConfirmationModal } from './ConfirmationModal';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -107,6 +108,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Modals for Lab Setup and Supabase Cloud DB
   const [showLabManager, setShowLabManager] = useState(false);
   const [showSupabaseModal, setShowSupabaseModal] = useState(false);
+  const [showResetRoomConfirm, setShowResetRoomConfirm] = useState(false);
+  const [noticeModalMessage, setNoticeModalMessage] = useState<string | null>(null);
 
   const loadData = async () => {
     purgeDemoStations();
@@ -466,11 +469,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <button
             className="btn btn-ghost btn-sm"
             onClick={() => {
-              if (window.confirm('Reset all candidate workstations and clear proctoring control room?')) {
-                clearAllStations();
-                loadData();
-                playSound('click');
-              }
+              setShowResetRoomConfirm(true);
             }}
             style={{ fontSize: '11px', gap: '5px', color: 'var(--danger)' }}
             title="Wipe stored workstations and reset to live listening mode"
@@ -1183,7 +1182,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           );
                           if (msg) {
                             sendProctorWarningMessage(station.id, msg);
-                            window.alert(`Proctor notice broadcast to ${station.stationNumber}`);
+                            setNoticeModalMessage(`Proctor notice broadcast to ${station.stationNumber}`);
                           }
                         }}
                         style={{ padding: '0 6px', fontSize: '10.5px', height: '24px' }}
@@ -1549,7 +1548,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     );
                     if (msg) {
                       sendProctorWarningMessage(selectedStation.id, msg);
-                      window.alert(`Notice sent to ${selectedStation.stationNumber}`);
+                      setNoticeModalMessage(`Notice sent to ${selectedStation.stationNumber}`);
                     }
                   }}
                   style={{ height: '28px', fontSize: '11px', padding: '0 10px' }}
@@ -1693,7 +1692,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="btn btn-ghost btn-sm"
                     onClick={() => {
                       navigator.clipboard.writeText(selectedStation.code);
-                      alert('Code copied to clipboard.');
+                      setNoticeModalMessage('Code successfully copied to clipboard.');
                     }}
                     style={{ height: '24px', fontSize: '11px', padding: '0 8px' }}
                   >
@@ -1942,6 +1941,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <SupabaseMigrationModal
           isOpen={showSupabaseModal}
           onClose={() => setShowSupabaseModal(false)}
+        />
+      )}
+
+      {/* Reset Room Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showResetRoomConfirm}
+        title="Reset Proctoring Room?"
+        message="This will clear all candidate workstations and reset the live invigilation control room. Active streaming stations will be re-detected on their next telemetry ping."
+        confirmText="Yes, Reset Room"
+        cancelText="Cancel"
+        tone="danger"
+        icon="danger"
+        onConfirm={() => {
+          clearAllStations();
+          loadData();
+          playSound('click');
+          setShowResetRoomConfirm(false);
+        }}
+        onCancel={() => setShowResetRoomConfirm(false)}
+      />
+
+      {/* Proctor Notice Confirmation/Alert Modal */}
+      {noticeModalMessage && (
+        <ConfirmationModal
+          isOpen={Boolean(noticeModalMessage)}
+          title="Notice Dispatched"
+          message={noticeModalMessage}
+          confirmText="Acknowledge"
+          cancelText="Dismiss"
+          tone="neutral"
+          icon="success"
+          onConfirm={() => setNoticeModalMessage(null)}
+          onCancel={() => setNoticeModalMessage(null)}
         />
       )}
     </div>

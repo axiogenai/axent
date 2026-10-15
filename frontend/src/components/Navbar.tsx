@@ -74,6 +74,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => window.removeEventListener('storage', checkMode);
   }, [location.pathname]);
 
+  const isLandingRoute = location.pathname === '/';
   const isLoginRoute = location.pathname.startsWith('/login');
   const isAdminRoute = location.pathname.startsWith('/admin');
   const isPaperSetterRoute = location.pathname.startsWith('/paper-setter');
@@ -82,7 +83,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   // Determine which navigation tabs to display based on Role and Registered Exam Type
   let activeNavItems: NavItem[] = [];
 
-  if (isLoginRoute) {
+  if (isLandingRoute) {
+    activeNavItems = [
+      { path: '/mcq', label: 'Exam Hall', icon: ListChecks },
+      { path: '/paper-setter', label: 'Paper Setter', icon: Layers },
+      { path: '/workspace', label: 'Code Lab', icon: Code2 },
+      { path: '/admin', label: 'CCTV Proctoring', icon: ShieldAlert }
+    ];
+  } else if (isLoginRoute) {
     // Authority Gateway / Login — No student tabs!
     activeNavItems = [];
   } else if (isPaperSetterRoute) {
@@ -137,11 +145,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           cursor: 'pointer'
         }}
         onClick={() => {
-          if (isLoginRoute) navigate('/login');
-          else if (isPaperSetterRoute) navigate('/paper-setter');
-          else if (isAdminRoute) navigate('/admin');
-          else if (isMcqRoute || examMode === 'MCQ') navigate('/mcq');
-          else navigate('/workspace');
+          if (isRunning) return;
+          navigate('/');
         }}
       >
         <div
@@ -154,10 +159,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: 'var(--shadow-sm)'
+            boxShadow: 'var(--shadow-sm)',
+            overflow: 'hidden'
           }}
         >
-          <Hexagon size={16} color="var(--accent)" />
+          <img
+            src="/logo.png"
+            alt="Axent"
+            style={{ width: '22px', height: '22px', objectFit: 'contain' }}
+            onError={(e) => {
+              (e.currentTarget as HTMLElement).style.display = 'none';
+            }}
+          />
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
           <span style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
@@ -176,7 +189,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               textTransform: 'uppercase'
             }}
           >
-            {isLoginRoute
+            {isLandingRoute
+              ? 'Assessment Core'
+              : isLoginRoute
               ? 'Authority Gateway'
               : isPaperSetterRoute
               ? 'Paper Setter'

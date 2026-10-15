@@ -108,6 +108,20 @@ async function writeDeleteQuestionFromCloud(id: string): Promise<boolean> {
   }
 }
 
+export async function clearAllQuestionsFromCloud(): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('mcq_questions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if (error) {
+      console.warn('[Supabase] Failed to clear questions from cloud:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('[Supabase] Error clearing questions from cloud:', err);
+    return false;
+  }
+}
+
 // ── MCQ EXAMS SYNC ────────────────────────────────────────────────────────────
 
 export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
@@ -236,9 +250,17 @@ async function writeExamToCloud(e: MCQExamConfig): Promise<boolean> {
 
 async function writeDeleteExamFromCloud(id: string): Promise<boolean> {
   try {
+    try {
+      await supabase.from('mcq_attempts').delete().eq('exam_id', id);
+    } catch {}
     const { error } = await supabase.from('mcq_exams').delete().eq('id', id);
-    return !error;
-  } catch {
+    if (error) {
+      console.warn('[Supabase] Delete exam from cloud warning:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('[Supabase] Failed to delete exam from cloud:', err);
     return false;
   }
 }
