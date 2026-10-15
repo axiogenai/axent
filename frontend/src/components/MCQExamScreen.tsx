@@ -638,9 +638,6 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
                 <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>{exam.subject || 'General Assessment'}{exam.topic ? ` · ${exam.topic}` : ''}</p>
               </div>
             </div>
-            <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 8px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
-              MCQ ENGINE
-            </span>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
@@ -649,12 +646,12 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
               <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Questions</div>
             </div>
             <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', textAlign: 'center' }}>
-              <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>{exam.durationMinutes} min</div>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Duration</div>
-            </div>
-            <div style={{ gridColumn: 'span 2', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', textAlign: 'center' }}>
               <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>{exam.totalMarks}</div>
               <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Marks</div>
+            </div>
+            <div style={{ gridColumn: 'span 2', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', textAlign: 'center' }}>
+              <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>{exam.durationMinutes} min</div>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Duration</div>
             </div>
           </div>
 
