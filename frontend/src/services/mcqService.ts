@@ -475,18 +475,12 @@ export function getRecentSessionAttempt(examId?: string): MCQAttempt | null {
     } catch {}
 
     const all = getAllAttempts();
-    if (examId) {
-      if (savedRoll) {
-        const studentAttempts = all.filter(
-          (a) => a.examId === examId && String(a.studentRoll || '').trim().toLowerCase() === savedRoll
-        );
-        if (studentAttempts.length > 0) {
-          return studentAttempts[studentAttempts.length - 1];
-        }
-      }
-      const examAttempts = all.filter((a) => a.examId === examId);
-      if (examAttempts.length > 0) {
-        return examAttempts[examAttempts.length - 1];
+    if (examId && savedRoll) {
+      const studentAttempts = all.filter(
+        (a) => a.examId === examId && String(a.studentRoll || '').trim().toLowerCase() === savedRoll
+      );
+      if (studentAttempts.length > 0) {
+        return studentAttempts[studentAttempts.length - 1];
       }
     }
   } catch {}

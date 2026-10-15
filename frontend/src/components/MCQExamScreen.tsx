@@ -4,7 +4,7 @@ import {
   Clock, ChevronLeft, ChevronRight, CheckCircle, CheckCircle2, Circle, AlertTriangle,
   Send, BookOpen, RotateCcw, Award, X, Eye, EyeOff, BarChart2, KeyRound,
   Copy, Check, Lock, Unlock, Code2, ArrowRight, ShieldAlert, Shield, Monitor, Download, CheckSquare, FileCheck, LogOut, MessageCircle, Calendar,
-  Maximize2, Minimize2, Video, VideoOff, Loader2, AlertCircle
+  Maximize2, Minimize2, Video, VideoOff, Loader2, AlertCircle, UserPlus
 } from 'lucide-react';
 import { MCQAttempt, MCQExamConfig, MCQGradeResult, MCQ_STORAGE_KEYS } from '../types/mcq';
 import {
@@ -933,9 +933,10 @@ interface WhatsAppHoldResultsViewProps {
   attempt: MCQAttempt;
   exam: MCQExamConfig;
   onExit: () => void;
+  onNewCandidate?: () => void;
 }
 
-const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attempt, exam, onExit }) => {
+const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attempt, exam, onExit, onNewCandidate }) => {
   const [copiedHash, setCopiedHash] = useState(false);
 
   useEffect(() => {
@@ -1207,20 +1208,42 @@ const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attem
             <span>Print Receipt</span>
           </button>
 
-          <button
-            type="button"
-            onClick={onExit}
-            className="btn btn-primary btn-sm"
-            style={{
-              height: '36px',
-              padding: '0 20px',
-              fontSize: '13px',
-              fontWeight: 600
-            }}
-          >
-            <span>Exit to Exam Portal</span>
-            <ChevronRight size={14} style={{ marginLeft: '4px' }} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {onNewCandidate && (
+              <button
+                type="button"
+                onClick={onNewCandidate}
+                className="btn btn-secondary btn-sm"
+                style={{
+                  height: '36px',
+                  padding: '0 14px',
+                  fontSize: '12.5px',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <UserPlus size={13} />
+                <span>Next Candidate Login</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={onExit}
+              className="btn btn-primary btn-sm"
+              style={{
+                height: '36px',
+                padding: '0 20px',
+                fontSize: '13px',
+                fontWeight: 600
+              }}
+            >
+              <span>Exit to Exam Portal</span>
+              <ChevronRight size={14} style={{ marginLeft: '4px' }} />
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1235,9 +1258,10 @@ interface ResultsViewProps {
   showExplanations: boolean;
   onRestart?: () => void;
   onExit?: () => void;
+  onNewCandidate?: () => void;
 }
 
-const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExplanations, onRestart, onExit }) => {
+const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExplanations, onRestart, onExit, onNewCandidate }) => {
   // STRICT INSTITUTIONAL GUARD:
   // If exam is configured for WhatsApp Group Release, hold results unless exam timed out or instant release is allowed
   const isWhatsAppRelease =
@@ -1773,6 +1797,31 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
                 <p style={{ margin: '0 0 14px', fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
                   Your official responses and marks have been recorded on the Axent institutional ledger. You may exit the testing environment now.
                 </p>
+                {onNewCandidate && (
+                  <button
+                    type="button"
+                    onClick={onNewCandidate}
+                    style={{
+                      width: '100%',
+                      height: '38px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      fontSize: '12.5px',
+                      fontWeight: 600,
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'var(--bg-elevated)',
+                      color: 'var(--text-secondary)',
+                      border: '1px solid var(--border)',
+                      cursor: 'pointer',
+                      marginBottom: '8px'
+                    }}
+                  >
+                    <UserPlus size={14} />
+                    <span>Next Student Attempt</span>
+                  </button>
+                )}
                 <button
                   onClick={onExit}
                   style={{
@@ -2772,6 +2821,12 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       localStorage.removeItem('codedna_mcq_active_attempt_backup');
       localStorage.removeItem('codedna_mcq_active_attempt');
       localStorage.removeItem('codedna_active_exam_mode');
+      localStorage.removeItem('codedna_student_profile');
+      if (attempt?.examId) {
+        localStorage.removeItem(`codedna_mcq_finished_${attempt.examId}`);
+        localStorage.removeItem(`codedna_mcq_active_attempt_${attempt.examId}`);
+        localStorage.removeItem(`codedna_mcq_current_idx_${attempt.id}`);
+      }
       if (typeof window !== 'undefined') {
         window.history.replaceState({}, '', '/mcq');
       }
@@ -2782,6 +2837,27 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       navigate('/mcq', { replace: true });
     }
   };
+
+  const handleNewCandidate = useCallback(() => {
+    try {
+      sessionStorage.removeItem('codedna_mcq_session_attempt');
+      sessionStorage.removeItem('codedna_mcq_last_finished_attempt');
+      localStorage.removeItem('codedna_mcq_active_attempt_backup');
+      localStorage.removeItem('codedna_mcq_active_attempt');
+      localStorage.removeItem('codedna_active_exam_mode');
+      localStorage.removeItem('codedna_student_profile');
+      if (attempt?.examId) {
+        localStorage.removeItem(`codedna_mcq_finished_${attempt.examId}`);
+        localStorage.removeItem(`codedna_mcq_active_attempt_${attempt.examId}`);
+        localStorage.removeItem(`codedna_mcq_current_idx_${attempt.id}`);
+      }
+    } catch {}
+    setAttempt(null);
+    setAnswers({});
+    setGradeResult(null);
+    setSubmitted(false);
+    playSound('click');
+  }, [attempt]);
 
   // ── Results screen (Priority 1: Always render scorecard/receipt if submitted or concluded) ──
   const isConcludedOrSubmitted = Boolean(
@@ -2835,6 +2911,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
             attempt={attempt}
             exam={resolvedExam}
             onExit={handleExitToCatalog}
+            onNewCandidate={handleNewCandidate}
           />
         );
       }
@@ -2847,6 +2924,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           showExplanations={resolvedExam.showExplanationsAfterSubmit}
           onRestart={resolvedExam.maxAttempts > 1 ? () => { setAttempt(null); setGradeResult(null); setSubmitted(false); } : undefined}
           onExit={handleExitToCatalog}
+          onNewCandidate={handleNewCandidate}
         />
       );
     }
