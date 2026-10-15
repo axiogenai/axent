@@ -475,6 +475,71 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
                 <ArrowRight size={14} />
               </button>
             </div>
+
+            {/* 3. Magic Link Invitation Dispatcher Portal */}
+            <div
+              style={{
+                gridColumn: '1 / -1',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--bg-main)',
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '16px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: 'var(--radius-xs)',
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--accent)'
+                  }}
+                >
+                  <Send size={15} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    Staff Onboarding & Magic Link Dispatcher
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                    Dedicated invitation portal to dispatch passwordless onboarding tokens to faculty and examiners.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  playSound('click');
+                  navigate('/invite');
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 14px',
+                  borderRadius: 'var(--radius-xs)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-elevated)',
+                  color: 'var(--text-primary)',
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  flexShrink: 0
+                }}
+              >
+                <span>Open Invite Portal</span>
+                <ArrowRight size={12} />
+              </button>
+            </div>
           </div>
 
           {/* Footer student link */}
@@ -823,10 +888,13 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
                   </label>
                   <button
                     type="button"
-                    onClick={() => { setActiveTab('magic_link'); setErrorMessage(null); }}
+                    onClick={() => {
+                      playSound('click');
+                      navigate('/invite');
+                    }}
                     style={{ background: 'none', border: 'none', padding: 0, fontSize: '11.5px', color: 'var(--accent)', cursor: 'pointer', fontWeight: 600 }}
                   >
-                    Send Magic Link?
+                    Need an Invite Link?
                   </button>
                 </div>
                 <div style={{ position: 'relative' }}>
@@ -1013,70 +1081,6 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
             </form>
           )}
 
-          {/* ── TAB 3: Magic Link ── */}
-          {activeTab === 'magic_link' && (
-            <form onSubmit={handleMagicLinkSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', marginBottom: '5px' }}>
-                  Institutional Email
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <Mail size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
-                  <input
-                    type="email"
-                    required
-                    placeholder="dean@institution.edu"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    style={{
-                      width: '100%',
-                      height: '38px',
-                      padding: '0 12px 0 34px',
-                      fontSize: '13px',
-                      borderRadius: 'var(--radius-sm)',
-                      background: 'var(--bg-surface)',
-                      border: '1px solid var(--border)',
-                      color: 'var(--text-primary)',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-                <p style={{ margin: '6px 0 0', fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                  Invited authorities receive a secure one-click link. Upon opening, you can access the console immediately.
-                </p>
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('signin')}
-                  className="btn btn-secondary btn-sm"
-                  style={{ height: '38px', padding: '0 14px', fontSize: '12px' }}
-                >
-                  Back to Sign In
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="btn btn-primary"
-                  style={{
-                    flex: 1,
-                    height: '38px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    fontSize: '12.5px',
-                    fontWeight: 700
-                  }}
-                >
-                  {isLoading ? <RefreshCw size={14} className="spinner-icon" /> : <Send size={13} />}
-                  <span>Send Magic Link</span>
-                </button>
-              </div>
-            </form>
-          )}
-
           {/* ── TAB 4: Set New Password ── */}
           {activeTab === 'set_password' && (
             <form onSubmit={handleSetPasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -1244,6 +1248,13 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
               </Link>
             </div>
           )}
+
+          <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '11px', color: 'var(--text-dim)' }}>
+            Need an invitation link dispatched?{' '}
+            <Link to="/invite" style={{ color: 'var(--text-secondary)', fontWeight: 600, textDecoration: 'none' }}>
+              Open Authority Invite Portal →
+            </Link>
+          </div>
         </div>
 
         {/* ── Card Footer: Return to Candidate Terminal ── */}

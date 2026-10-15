@@ -224,8 +224,9 @@ export async function signUpWithPassword(
 
 export async function sendMagicLink(
   email: string,
-  targetPortal: string = '/paper-setter'
-): Promise<{ success: boolean; error: string | null }> {
+  targetPortal: string = '/paper-setter',
+  role: AuthorityRole = 'paper_setter'
+): Promise<{ success: boolean; error: string | null; directLink?: string }> {
   const trimmedEmail = email.trim().toLowerCase();
 
   if (!trimmedEmail) {
@@ -239,13 +240,18 @@ export async function sendMagicLink(
 
   try {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const redirectUrl = `${origin}/login?type=invite&redirect=${encodeURIComponent(targetPortal)}`;
+    const loginPath = role === 'admin' ? '/login/admin' : '/login/paper-setter';
+    const redirectUrl = `${origin}${loginPath}?type=invite&role=${role}&redirect=${encodeURIComponent(targetPortal)}`;
 
     const { error } = await supabase.auth.signInWithOtp({
       email: trimmedEmail,
       options: {
         emailRedirectTo: redirectUrl,
-        shouldCreateUser: true
+        shouldCreateUser: true,
+        data: {
+          role,
+          portal: role === 'admin' ? 'admin' : 'paper_setter'
+        }
       }
     });
 
@@ -253,7 +259,7 @@ export async function sendMagicLink(
       return { success: false, error: error.message };
     }
 
-    return { success: true, error: null };
+    return { success: true, error: null, directLink: redirectUrl };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Failed to dispatch magic link.' };
   }

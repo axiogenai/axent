@@ -8,6 +8,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { MCQHub } from './components/MCQHub';
 import { PaperSetterPortal } from './components/PaperSetterPortal';
 import { AuthorityLogin, PaperSetterLogin, AdminLogin } from './components/auth/AuthorityLogin';
+import { AuthorityInvitePortal } from './components/auth/AuthorityInvitePortal';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { LandingPage } from './components/LandingPage';
 import {
@@ -399,6 +400,18 @@ export const App: React.FC = () => {
           <Route
             path="/admin-login"
             element={<AdminLogin />}
+          />
+          <Route
+            path="/invite"
+            element={<AuthorityInvitePortal />}
+          />
+          <Route
+            path="/login/invite"
+            element={<AuthorityInvitePortal />}
+          />
+          <Route
+            path="/authority-invite"
+            element={<AuthorityInvitePortal />}
           />
           <Route
             path="/mcq"
