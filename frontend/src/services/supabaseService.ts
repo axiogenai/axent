@@ -600,6 +600,47 @@ export function subscribeToCloudStations(onStationChange: (payload: any) => void
   }
 }
 
+export async function deleteStationFromCloud(stationId: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('candidate_stations').delete().eq('id', stationId);
+    return !error;
+  } catch (err) {
+    console.warn('[Supabase] Failed to delete station from cloud:', err);
+    return false;
+  }
+}
+
+export async function clearSubmittedStationsFromCloud(labId?: string): Promise<boolean> {
+  try {
+    let query = supabase.from('candidate_stations').delete().eq('status', 'Submitted & Done');
+    if (labId && labId !== 'all') {
+      query = query.eq('lab_id', labId);
+    }
+    const { error } = await query;
+    return !error;
+  } catch (err) {
+    console.warn('[Supabase] Failed to clear submitted stations from cloud:', err);
+    return false;
+  }
+}
+
+export async function clearAllStationsFromCloud(labId?: string): Promise<boolean> {
+  try {
+    let query = supabase.from('candidate_stations').delete();
+    if (labId && labId !== 'all') {
+      query = query.eq('lab_id', labId);
+    } else {
+      query = query.neq('id', '');
+    }
+    const { error } = await query;
+    return !error;
+  } catch (err) {
+    console.warn('[Supabase] Failed to clear all stations from cloud:', err);
+    return false;
+  }
+}
+
+
 export function subscribeToCloudExams(onExamChange: (payload: any) => void): () => void {
   try {
     const channel = supabase

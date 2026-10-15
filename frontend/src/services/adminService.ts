@@ -15,7 +15,10 @@ import {
   deleteCollegeLabFromCloud,
   updateStationLockInCloud,
   updateStationWarningInCloud,
-  fetchCollegeLabsFromCloud
+  fetchCollegeLabsFromCloud,
+  deleteStationFromCloud,
+  clearSubmittedStationsFromCloud,
+  clearAllStationsFromCloud
 } from './supabaseService';
 
 
@@ -408,9 +411,47 @@ export function clearAllStations(): void {
       }
     }
     keysToRemove.forEach((k) => localStorage.removeItem(k));
+    clearAllStationsFromCloud().catch(() => {});
     broadcastCctvMessage({ type: 'RESET_ALL' });
   } catch (err) {
     console.error('Failed to clear stations:', err);
+  }
+}
+
+/**
+ * Removes submitted/completed candidate workstations from the live proctoring registry.
+ * Active in-progress candidates are preserved untouched.
+ */
+export function clearSubmittedStations(labId?: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const all = getLiveStations();
+    const remaining = all.filter((s) => {
+      if (labId && labId !== 'all' && s.labId !== labId) return true; // keep other labs
+      return s.status !== 'Submitted & Done';
+    });
+    saveAllStations(remaining);
+    clearSubmittedStationsFromCloud(labId).catch(() => {});
+    broadcastCctvMessage({ type: 'STATION_UPDATE' });
+  } catch (err) {
+    console.error('Failed to clear submitted stations:', err);
+  }
+}
+
+/**
+ * Removes a single workstation from the live monitoring grid (e.g. dismissed by invigilator).
+ */
+export function removeSingleStation(stationId: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const all = getLiveStations();
+    const remaining = all.filter((s) => s.id !== stationId);
+    saveAllStations(remaining);
+    localStorage.removeItem(`${STATION_LOCK_PREFIX}${stationId}`);
+    deleteStationFromCloud(stationId).catch(() => {});
+    broadcastCctvMessage({ type: 'STATION_UPDATE', stationId });
+  } catch (err) {
+    console.error('Failed to remove single station:', err);
   }
 }
 

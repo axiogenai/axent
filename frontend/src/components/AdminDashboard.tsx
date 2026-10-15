@@ -24,7 +24,9 @@ import {
   sendProctorLockCommand,
   sendProctorWarningMessage,
   subscribeToCctvBroadcast,
-  syncCurrentLiveStation
+  syncCurrentLiveStation,
+  clearSubmittedStations,
+  removeSingleStation
 } from '../services/adminService';
 import { fetchStationsFromCloud, subscribeToCloudStations } from '../services/supabaseService';
 import { InstituteLabManagerModal } from './InstituteLabManagerModal';
@@ -109,6 +111,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [showLabManager, setShowLabManager] = useState(false);
   const [showSupabaseModal, setShowSupabaseModal] = useState(false);
   const [showResetRoomConfirm, setShowResetRoomConfirm] = useState(false);
+  const [showClearSubmittedConfirm, setShowClearSubmittedConfirm] = useState(false);
   const [noticeModalMessage, setNoticeModalMessage] = useState<string | null>(null);
 
   const loadData = async () => {
@@ -358,9 +361,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return true;
   });
 
+  const submittedCount = stations.filter((s) => s.status === 'Submitted & Done').length;
+  const activeCount = stations.filter((s) => s.status !== 'Submitted & Done').length;
   const cheatingCount = stations.filter(
     (s) => s.cheatingRisk === 'High' || s.cheatingRisk === 'Critical' || s.metrics.pasteRatio >= 50
   ).length;
+
+  const handleClearSubmitted = () => {
+    clearSubmittedStations(selectedLabId);
+    loadData();
+    playSound('click');
+    setShowClearSubmittedConfirm(false);
+  };
+
+  const handleRemoveSingleStation = (stationId: string) => {
+    removeSingleStation(stationId);
+    setStations((prev) => prev.filter((s) => s.id !== stationId));
+    playSound('click');
+  };
 
   return (
     <div
@@ -687,44 +705,74 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           gap: '12px'
         }}
       >
-        <ContinuousTabs
-          layoutId="admin-filter-tabs"
-          size="sm"
-          activeId={filter}
-          onChange={(id: string) => {
-            playSound('click');
-            setFilter(id as 'all' | 'cheating' | 'submitted' | 'active');
-          }}
-          tabs={[
-            {
-              id: 'all',
-              label: 'All Stations',
-              badge: stations.length,
-              badgeTone: 'neutral'
-            },
-            {
-              id: 'cheating',
-              label: 'Cheating Alerts',
-              icon: <ShieldAlert size={12} />,
-              badge: cheatingCount,
-              badgeTone: cheatingCount > 0 ? 'danger' : 'neutral'
-            },
-            {
-              id: 'submitted',
-              label: 'Submitted',
-              icon: <CheckCircle2 size={12} />,
-              badge: stations.filter((s) => s.status === 'Submitted & Done').length,
-              badgeTone: 'success'
-            },
-            {
-              id: 'active',
-              label: 'In-Progress',
-              icon: <Clock size={12} />,
-              badge: stations.filter((s) => s.status !== 'Submitted & Done').length,
-              badgeTone: 'warning'
-            }
-          ]}
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <ContinuousTabs
+            layoutId="admin-filter-tabs"
+            size="sm"
+            activeId={filter}
+            onChange={(id: string) => {
+              playSound('click');
+              setFilter(id as 'all' | 'cheating' | 'submitted' | 'active');
+            }}
+            tabs={[
+              {
+                id: 'all',
+                label: 'All Stations',
+                badge: stations.length,
+                badgeTone: 'neutral'
+              },
+              {
+                id: 'active',
+                label: 'In-Progress',
+                icon: <Clock size={12} />,
+                badge: activeCount,
+                badgeTone: 'warning'
+              },
+              {
+                id: 'submitted',
+                label: 'Submitted',
+                icon: <CheckCircle2 size={12} />,
+                badge: submittedCount,
+                badgeTone: 'success'
+              },
+              {
+                id: 'cheating',
+                label: 'Cheating Alerts',
+                icon: <ShieldAlert size={12} />,
+                badge: cheatingCount,
+                badgeTone: cheatingCount > 0 ? 'danger' : 'neutral'
+              }
+            ]}
+          />
+
+          {submittedCount > 0 && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                playSound('click');
+                setShowClearSubmittedConfirm(true);
+              }}
+              style={{
+                height: '30px',
+                fontSize: '11px',
+                padding: '0 10px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--text-secondary)',
+                background: 'var(--bg-elevated)',
+                cursor: 'pointer'
+              }}
+              title="Remove finished / submitted candidates from live proctoring grid"
+            >
+              <Trash2 size={11} />
+              <span>Clear Submitted ({submittedCount})</span>
+            </button>
+          )}
+        </div>
 
         {/* View Mode & Count */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -755,6 +803,77 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* ── Examination Concluded Notification Banner ── */}
+      {activeCount === 0 && submittedCount > 0 && viewMode === 'cctv' && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+            padding: '14px 18px',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                background: 'rgba(34, 197, 94, 0.12)',
+                border: '1px solid rgba(34, 197, 94, 0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--success)'
+              }}
+            >
+              <CheckCircle2 size={16} />
+            </div>
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                Examination Concluded · All {submittedCount} Candidates Submitted
+              </div>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                All candidate submissions, AI proctoring telemetry, and test scores have been securely registered.
+                Switch to the Audit Ledger to inspect evaluations or clear the completed grid for the next batch.
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                playSound('click');
+                setViewMode('ledger');
+              }}
+              style={{ height: '30px', fontSize: '11px', padding: '0 12px', gap: '6px' }}
+            >
+              <Table size={12} />
+              <span>Open Audit Ledger</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                playSound('click');
+                setShowClearSubmittedConfirm(true);
+              }}
+              style={{ height: '30px', fontSize: '11px', padding: '0 12px', gap: '6px' }}
+            >
+              <Trash2 size={12} />
+              <span>Clear Completed Grid ({submittedCount})</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── VIEW MODE 1: CCTV LIVE SECURITY CAMERA GRID ── */}
       {viewMode === 'cctv' ? (
@@ -935,6 +1054,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <EyeOff size={10} />
                           <span>{station.metrics?.tabSwitchViolations}/3 Strikes</span>
                         </span>
+                      )}
+                      {isSubmitted && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveSingleStation(station.id);
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            padding: '2px 4px',
+                            borderRadius: '3px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginLeft: '2px'
+                          }}
+                          title="Dismiss submitted workstation from live CCTV grid"
+                        >
+                          <X size={12} />
+                        </button>
                       )}
                     </div>
                   </div>
@@ -1960,6 +2103,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           setShowResetRoomConfirm(false);
         }}
         onCancel={() => setShowResetRoomConfirm(false)}
+      />
+
+      {/* Clear Submitted Workstations Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showClearSubmittedConfirm}
+        title="Clear Submitted Workstations?"
+        message={`This will clear ${submittedCount} finished / submitted candidate${submittedCount === 1 ? '' : 's'} from the live proctoring grid and refresh the lab for the next batch. All evaluated scores, audit logs, and reports remain safely archived in the university records.`}
+        confirmText={`Clear ${submittedCount} Station${submittedCount === 1 ? '' : 's'}`}
+        cancelText="Cancel"
+        tone="warning"
+        icon="warning"
+        onConfirm={handleClearSubmitted}
+        onCancel={() => setShowClearSubmittedConfirm(false)}
       />
 
       {/* Proctor Notice Confirmation/Alert Modal */}
