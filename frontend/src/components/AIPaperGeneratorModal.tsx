@@ -643,7 +643,9 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
   };
 
   const handleCopyStudentLink = () => {
-    const studentUrl = `${window.location.origin}/mcq`;
+    const studentUrl = reviewedExam?.id
+      ? `${window.location.origin}/mcq?examId=${encodeURIComponent(reviewedExam.id)}`
+      : `${window.location.origin}/mcq`;
     navigator.clipboard.writeText(studentUrl);
     setCopiedLink(true);
     playSound('click');
@@ -1500,258 +1502,306 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                 </div>
               </div>
 
-              {/* Focus Instructions */}
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                  Specific Focus Instructions (Optional)
-                </label>
-                <textarea
-                  rows={2}
-                  value={instructions}
-                  onChange={(e) => setInstructions(e.target.value)}
-                  placeholder="e.g. Focus on recursive tree traversals and worst-case complexity edge cases."
+              {/* Collapsible Advanced Examination Settings */}
+              <div style={{ marginTop: '2px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedOptions((prev) => !prev)}
                   style={{
-                    width: '100%',
-                    padding: '8px 10px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: 'none',
+                    border: 'none',
+                    padding: '6px 0',
+                    color: 'var(--text-secondary)',
+                    fontSize: '11.5px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <ChevronDown
+                    size={14}
+                    style={{
+                      transform: showAdvancedOptions ? 'rotate(180deg)' : 'none',
+                      transition: 'transform 0.15s ease'
+                    }}
+                  />
+                  <span>
+                    {showAdvancedOptions
+                      ? 'Hide Advanced Paper Parameters (Instructions, WhatsApp Mode, Scheduling)'
+                      : 'Show Advanced Paper Parameters (Instructions, WhatsApp Mode, Scheduling)'}
+                  </span>
+                </button>
+              </div>
+
+              {showAdvancedOptions && (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    padding: '12px 14px',
                     background: 'var(--bg-surface)',
                     border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-sm)',
-                    color: 'var(--text-primary)',
-                    fontSize: '11px'
+                    borderRadius: 'var(--radius-sm)'
                   }}
-                />
-              </div>
-
-              {/* Result Declaration Option */}
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>
-                  Result Declaration & Score Release
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setResultDeclarationMode('IMMEDIATE')}
-                    style={{
-                      padding: '8px 12px',
-                      borderRadius: 'var(--radius-sm)',
-                      border: `1.5px solid ${resultDeclarationMode === 'IMMEDIATE' ? 'var(--accent)' : 'var(--border)'}`,
-                      background: resultDeclarationMode === 'IMMEDIATE' ? 'var(--bg-elevated)' : 'var(--bg-surface)',
-                      color: resultDeclarationMode === 'IMMEDIATE' ? 'var(--text-primary)' : 'var(--text-muted)',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      fontSize: '11.5px',
-                      fontWeight: 600,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between'
-                    }}
-                  >
-                    <span>Declare Results After Over</span>
-                    {resultDeclarationMode === 'IMMEDIATE' && <Check size={12} color="var(--accent)" />}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setResultDeclarationMode('WHATSAPP_GROUP')}
-                    style={{
-                      padding: '8px 12px',
-                      borderRadius: 'var(--radius-sm)',
-                      border: `1.5px solid ${resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--accent)' : 'var(--border)'}`,
-                      background: resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--bg-elevated)' : 'var(--bg-surface)',
-                      color: resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--text-primary)' : 'var(--text-muted)',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      fontSize: '11.5px',
-                      fontWeight: 600,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between'
-                    }}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <MessageCircle size={12} color={resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--accent)' : 'inherit'} />
-                      Send on WhatsApp Group
-                    </span>
-                    {resultDeclarationMode === 'WHATSAPP_GROUP' && <Check size={12} color="var(--accent)" />}
-                  </button>
-                </div>
-                <p style={{ margin: '4px 0 0', fontSize: '10.5px', color: 'var(--text-dim)' }}>
-                  {resultDeclarationMode === 'WHATSAPP_GROUP'
-                    ? 'Students will see "Hold tight, results will be deployed soon" on submit. Paper setters export results and share on the class WhatsApp group.'
-                    : 'Students will see their score, marks, and detailed question explanations immediately upon submit.'}
-                </p>
-                {resultDeclarationMode === 'WHATSAPP_GROUP' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginTop: '10px', padding: '10px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                        WhatsApp Group Name (Optional)
-                      </label>
-                      <input
-                        value={whatsappGroupName}
-                        onChange={(e) => setWhatsappGroupName(e.target.value)}
-                        placeholder="e.g. TE Computer Div A - 2026 Batch"
-                        style={{
-                          width: '100%',
-                          boxSizing: 'border-box',
-                          padding: '6px 10px',
-                          background: 'var(--bg-elevated)',
-                          border: '1px solid var(--border)',
-                          borderRadius: 'var(--radius-sm)',
-                          color: 'var(--text-primary)',
-                          fontSize: '11.5px'
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                        WhatsApp Group Invite Link (Optional)
-                      </label>
-                      <input
-                        value={whatsappGroupLink}
-                        onChange={(e) => setWhatsappGroupLink(e.target.value)}
-                        placeholder="https://chat.whatsapp.com/..."
-                        style={{
-                          width: '100%',
-                          boxSizing: 'border-box',
-                          padding: '6px 10px',
-                          background: 'var(--bg-elevated)',
-                          border: '1px solid var(--border)',
-                          borderRadius: 'var(--radius-sm)',
-                          color: 'var(--text-primary)',
-                          fontSize: '11.5px'
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Scheduled Examination Window (Optional) */}
-              <div
-                style={{
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '12px 14px'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    <Calendar size={13} color="var(--accent)" />
-                    <span>Scheduled Examination Window (Optional)</span>
-                  </div>
-                  {startTime && (
-                    <span style={{ fontSize: '10.5px', color: 'var(--warning)', fontWeight: 600 }}>
-                      Waiting Room Active
-                    </span>
-                  )}
-                </div>
-                <p style={{ margin: '0 0 10px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                  Leave empty to unlock immediately upon publish. If scheduled, candidates will wait in the Proctored Waiting Room until the start window.
-                </p>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '8px' }}>
+                >
+                  {/* Focus Instructions */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                      Scheduled Start Time (Auto-unlocks exam)
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                      Specific Focus Instructions (Optional)
                     </label>
-                    <input
-                      type="datetime-local"
-                      value={toLocalDatetimeString(startTime)}
-                      onChange={(e) => setStartTime(parseLocalDatetimeString(e.target.value))}
+                    <textarea
+                      rows={2}
+                      value={instructions}
+                      onChange={(e) => setInstructions(e.target.value)}
+                      placeholder="e.g. Focus on recursive tree traversals and worst-case complexity edge cases."
                       style={{
                         width: '100%',
                         boxSizing: 'border-box',
-                        padding: '6px 10px',
+                        padding: '8px 10px',
                         background: 'var(--bg-elevated)',
                         border: '1px solid var(--border)',
                         borderRadius: 'var(--radius-sm)',
                         color: 'var(--text-primary)',
-                        fontSize: '11.5px'
+                        fontSize: '11px'
                       }}
                     />
                   </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                      Scheduled End Time (Auto-closes exam)
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={toLocalDatetimeString(endTime)}
-                      onChange={(e) => setEndTime(parseLocalDatetimeString(e.target.value))}
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        padding: '6px 10px',
-                        background: 'var(--bg-elevated)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius-sm)',
-                        color: 'var(--text-primary)',
-                        fontSize: '11.5px'
-                      }}
-                    />
-                  </div>
-                </div>
 
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStartTime(undefined);
-                      setEndTime(undefined);
-                    }}
+                  {/* Result Declaration Option */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                      Result Declaration & Score Release
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setResultDeclarationMode('IMMEDIATE')}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: 'var(--radius-sm)',
+                          border: `1.5px solid ${resultDeclarationMode === 'IMMEDIATE' ? 'var(--accent)' : 'var(--border)'}`,
+                          background: resultDeclarationMode === 'IMMEDIATE' ? 'var(--bg-elevated)' : 'var(--bg-surface)',
+                          color: resultDeclarationMode === 'IMMEDIATE' ? 'var(--text-primary)' : 'var(--text-muted)',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          fontSize: '11.5px',
+                          fontWeight: 600,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between'
+                        }}
+                      >
+                        <span>Declare Results After Over</span>
+                        {resultDeclarationMode === 'IMMEDIATE' && <Check size={12} color="var(--accent)" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setResultDeclarationMode('WHATSAPP_GROUP')}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: 'var(--radius-sm)',
+                          border: `1.5px solid ${resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--accent)' : 'var(--border)'}`,
+                          background: resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--bg-elevated)' : 'var(--bg-surface)',
+                          color: resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--text-primary)' : 'var(--text-muted)',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          fontSize: '11.5px',
+                          fontWeight: 600,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between'
+                        }}
+                      >
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <MessageCircle size={12} color={resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--accent)' : 'inherit'} />
+                          Send on WhatsApp Group
+                        </span>
+                        {resultDeclarationMode === 'WHATSAPP_GROUP' && <Check size={12} color="var(--accent)" />}
+                      </button>
+                    </div>
+                    <p style={{ margin: '4px 0 0', fontSize: '10.5px', color: 'var(--text-dim)' }}>
+                      {resultDeclarationMode === 'WHATSAPP_GROUP'
+                        ? 'Students will see "Hold tight, results will be deployed soon" on submit. Paper setters export results and share on the class WhatsApp group.'
+                        : 'Students will see their score, marks, and detailed question explanations immediately upon submit.'}
+                    </p>
+                    {resultDeclarationMode === 'WHATSAPP_GROUP' && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginTop: '10px', padding: '10px 12px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                            WhatsApp Group Name (Optional)
+                          </label>
+                          <input
+                            value={whatsappGroupName}
+                            onChange={(e) => setWhatsappGroupName(e.target.value)}
+                            placeholder="e.g. TE Computer Div A - 2026 Batch"
+                            style={{
+                              width: '100%',
+                              boxSizing: 'border-box',
+                              padding: '6px 10px',
+                              background: 'var(--bg-surface)',
+                              border: '1px solid var(--border)',
+                              borderRadius: 'var(--radius-sm)',
+                              color: 'var(--text-primary)',
+                              fontSize: '11.5px'
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                            WhatsApp Group Invite Link (Optional)
+                          </label>
+                          <input
+                            value={whatsappGroupLink}
+                            onChange={(e) => setWhatsappGroupLink(e.target.value)}
+                            placeholder="https://chat.whatsapp.com/..."
+                            style={{
+                              width: '100%',
+                              boxSizing: 'border-box',
+                              padding: '6px 10px',
+                              background: 'var(--bg-surface)',
+                              border: '1px solid var(--border)',
+                              borderRadius: 'var(--radius-sm)',
+                              color: 'var(--text-primary)',
+                              fontSize: '11.5px'
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Scheduled Examination Window (Optional) */}
+                  <div
                     style={{
-                      padding: '3px 8px',
-                      fontSize: '10.5px',
-                      borderRadius: 'var(--radius-xs)',
                       background: 'var(--bg-elevated)',
                       border: '1px solid var(--border)',
-                      color: 'var(--text-secondary)',
-                      cursor: 'pointer'
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '12px 14px'
                     }}
                   >
-                    Live Immediately
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const now = Date.now();
-                      setStartTime(now + 5 * 60000);
-                      setEndTime(now + (durationMinutes + 15) * 60000);
-                    }}
-                    style={{
-                      padding: '3px 8px',
-                      fontSize: '10.5px',
-                      borderRadius: 'var(--radius-xs)',
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border)',
-                      color: 'var(--text-secondary)',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    +1 Hr Window (Starts in 5m)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const now = Date.now();
-                      setStartTime(now + 60 * 60000);
-                      setEndTime(now + (durationMinutes + 75) * 60000);
-                    }}
-                    style={{
-                      padding: '3px 8px',
-                      fontSize: '10.5px',
-                      borderRadius: 'var(--radius-xs)',
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border)',
-                      color: 'var(--text-secondary)',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    +2 Hr Window
-                  </button>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        <Calendar size={13} color="var(--accent)" />
+                        <span>Scheduled Examination Window (Optional)</span>
+                      </div>
+                      {startTime && (
+                        <span style={{ fontSize: '10.5px', color: 'var(--warning)', fontWeight: 600 }}>
+                          Waiting Room Active
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ margin: '0 0 10px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                      Leave empty to unlock immediately upon publish. If scheduled, candidates will wait in the Proctored Waiting Room until the start window.
+                    </p>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '8px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                          Scheduled Start Time (Auto-unlocks exam)
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={toLocalDatetimeString(startTime)}
+                          onChange={(e) => setStartTime(parseLocalDatetimeString(e.target.value))}
+                          style={{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            padding: '6px 10px',
+                            background: 'var(--bg-surface)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 'var(--radius-sm)',
+                            color: 'var(--text-primary)',
+                            fontSize: '11.5px'
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                          Scheduled End Time (Auto-closes exam)
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={toLocalDatetimeString(endTime)}
+                          onChange={(e) => setEndTime(parseLocalDatetimeString(e.target.value))}
+                          style={{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            padding: '6px 10px',
+                            background: 'var(--bg-surface)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 'var(--radius-sm)',
+                            color: 'var(--text-primary)',
+                            fontSize: '11.5px'
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStartTime(undefined);
+                          setEndTime(undefined);
+                        }}
+                        style={{
+                          padding: '3px 8px',
+                          fontSize: '10.5px',
+                          borderRadius: 'var(--radius-xs)',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Live Immediately
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const now = Date.now();
+                          setStartTime(now + 5 * 60000);
+                          setEndTime(now + (durationMinutes + 15) * 60000);
+                        }}
+                        style={{
+                          padding: '3px 8px',
+                          fontSize: '10.5px',
+                          borderRadius: 'var(--radius-xs)',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        +1 Hr Window (Starts in 5m)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const now = Date.now();
+                          setStartTime(now + 60 * 60000);
+                          setEndTime(now + (durationMinutes + 75) * 60000);
+                        }}
+                        style={{
+                          padding: '3px 8px',
+                          fontSize: '10.5px',
+                          borderRadius: 'var(--radius-xs)',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        +2 Hr Window
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Autonomous Answer Cross-Validator Certified Badge */}
               <div
@@ -1759,117 +1809,50 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                   background: 'var(--bg-surface)',
                   border: '1px solid var(--border)',
                   borderRadius: 'var(--radius-sm)',
-                  padding: '12px 14px',
+                  padding: '10px 14px',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '12px'
+                  gap: '10px'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div
-                    style={{
-                      width: '28px',
-                      height: '28px',
-                      borderRadius: 'var(--radius-xs)',
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
-                  >
-                    <CheckCircle2 size={16} color="var(--success)" />
-                  </div>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        Autonomous Answer Cross-Validator Active
-                      </span>
-                      <span
-                        style={{
-                          fontSize: '9.5px',
-                          fontWeight: 700,
-                          padding: '1px 6px',
-                          borderRadius: 'var(--radius-pill)',
-                          background: 'var(--success-bg)',
-                          border: '1px solid var(--success-border)',
-                          color: 'var(--success)',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.04em'
-                        }}
-                      >
-                        Double-Check Enabled
-                      </span>
-                    </div>
-                    <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'var(--text-muted)' }}>
-                      Every synthesized question is audited against distractors with independent mathematical proof derivations before draft presentation.
-                    </p>
-                  </div>
+                <div
+                  style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: 'var(--radius-xs)',
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <CheckCircle2 size={14} color="var(--success)" />
                 </div>
-              </div>
-
-              {/* Actions */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '16px',
-                  paddingTop: '12px',
-                  marginTop: '8px',
-                  borderTop: '1px solid var(--border)'
-                }}
-              >
-                <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.4, flex: 1, minWidth: 0 }}>
-                  Questions will be generated as <strong>Draft</strong> for mandatory faculty review before publishing.
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    style={{
-                      height: '36px',
-                      padding: '0 16px',
-                      background: 'transparent',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-sm)',
-                      color: 'var(--text-secondary)',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    Cancel
-                  </button>
-
-                  <button
-                    type="submit"
-                    style={{
-                      height: '36px',
-                      padding: '0 18px',
-                      background: 'var(--accent)',
-                      border: 'none',
-                      borderRadius: 'var(--radius-sm)',
-                      color: 'var(--accent-contrast)',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '7px',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    <GraduationCap size={15} style={{ flexShrink: 0 }} />
-                    <span>Generate Questions for Review ({effectiveTotalQuestions})</span>
-                  </button>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Autonomous Answer Cross-Validator Active
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        padding: '1px 5px',
+                        borderRadius: 'var(--radius-pill)',
+                        background: 'var(--success-bg)',
+                        border: '1px solid var(--success-border)',
+                        color: 'var(--success)',
+                        textTransform: 'uppercase'
+                      }}
+                    >
+                      Double-Check Enabled
+                    </span>
+                  </div>
+                  <p style={{ margin: '1px 0 0', fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                    Every synthesized question is verified against distractors before draft presentation.
+                  </p>
                 </div>
               </div>
             </form>
@@ -3232,7 +3215,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
 
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <a
-                    href="/mcq"
+                    href={reviewedExam?.id ? `/mcq?examId=${encodeURIComponent(reviewedExam.id)}` : '/mcq'}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
@@ -3292,25 +3275,88 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
           )}
         </div>
 
-        {/* MODAL FOOTER */}
+        {/* MODAL FOOTER (PINNED) */}
         <div
           style={{
-            padding: '10px 20px',
+            padding: '12px 20px',
             borderTop: '1px solid var(--border)',
             background: 'var(--bg-surface)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            gap: '12px',
             fontSize: '11px',
-            color: 'var(--text-muted)'
+            color: 'var(--text-muted)',
+            flexShrink: 0
           }}
         >
-          <span>Powered by Axent Autonomous Reasoning Engine</span>
-          <span>
-            {step === 'review'
-              ? 'Draft state · All edits autosaved locally and sync to Question Bank'
-              : 'University Academic Integrity & Proctored Examination Standards'}
-          </span>
+          {step === 'config' ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '11.5px' }}>
+                  Total: {effectiveTotalQuestions} Questions
+                </span>
+                <span style={{ color: 'var(--border)' }}>•</span>
+                <span style={{ fontWeight: 600, color: 'var(--accent)', fontSize: '11.5px' }}>
+                  {effectiveTotalMarks} Marks
+                </span>
+                <span style={{ color: 'var(--border)' }}>•</span>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '11.5px' }}>
+                  {durationMinutes} Mins Duration
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  style={{
+                    height: '34px',
+                    padding: '0 14px',
+                    background: 'transparent',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text-secondary)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  form="ai-paper-config-form"
+                  style={{
+                    height: '34px',
+                    padding: '0 18px',
+                    background: 'var(--accent)',
+                    border: 'none',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--accent-contrast)',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <GraduationCap size={14} />
+                  <span>Generate Questions for Review ({effectiveTotalQuestions})</span>
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <span>Powered by Axent Autonomous Reasoning Engine</span>
+              <span>
+                {step === 'review'
+                  ? 'Draft state · All edits autosaved locally and sync to Question Bank'
+                  : 'University Academic Integrity & Proctored Examination Standards'}
+              </span>
+            </>
+          )}
         </div>
       </div>
 
