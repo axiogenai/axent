@@ -2461,9 +2461,26 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
   }
 
   // ── Active exam ──
-  const { assignedQuestions } = attempt;
+  // Guarantee 100% uniqueness: deduplicate assigned questions by questionId and normalized text
+  const assignedQuestions = useMemo(() => {
+    const raw = attempt.assignedQuestions || [];
+    const seenIds = new Set<string>();
+    const seenTexts = new Set<string>();
+    const deduped: typeof raw = [];
+
+    for (const aq of raw) {
+      if (seenIds.has(aq.questionId)) continue;
+      const normText = (aq.snapshot?.text || '').toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+      if (normText && seenTexts.has(normText)) continue;
+      seenIds.add(aq.questionId);
+      if (normText) seenTexts.add(normText);
+      deduped.push(aq);
+    }
+    return deduped;
+  }, [attempt.assignedQuestions]);
+
   const totalQ = assignedQuestions.length;
-  const currentAQ = assignedQuestions[currentIdx];
+  const currentAQ = assignedQuestions[Math.min(currentIdx, Math.max(0, totalQ - 1))];
   if (!currentAQ) return null;
 
   const answeredCount = Object.keys(answers).filter((k) => answers[k]).length;

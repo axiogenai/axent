@@ -1053,6 +1053,46 @@ Ensure questions strictly evaluate "${prompt.topic}".`;
   }
 }
 
+// ── AUTONOMOUS QUESTION DEDUPLICATION & UNIQUENESS HELPERS ───────────────────
+
+export function normalizeQuestionText(text: string): string {
+  return (text || '')
+    .toLowerCase()
+    .replace(/^\s*(?:q\d*[:.]|\d+[:.)]|-|\*)\s*/i, '') // strip leading "Q1.", "1.", "1)", etc.
+    .replace(/[^\w\s]/g, '') // strip punctuation
+    .replace(/\s+/g, ' ') // collapse whitespace
+    .trim();
+}
+
+export function calculateQuestionSimilarity(textA: string, textB: string): number {
+  const normA = normalizeQuestionText(textA);
+  const normB = normalizeQuestionText(textB);
+  if (normA === normB && normA.length > 0) return 1.0;
+
+  const wordsA = new Set(normA.split(' ').filter((w) => w.length > 2));
+  const wordsB = new Set(normB.split(' ').filter((w) => w.length > 2));
+  if (wordsA.size === 0 || wordsB.size === 0) return 0;
+
+  let common = 0;
+  for (const w of wordsA) {
+    if (wordsB.has(w)) common++;
+  }
+  const union = new Set([...wordsA, ...wordsB]).size;
+  return union === 0 ? 0 : common / union;
+}
+
+export function isDuplicateQuestion(candidateText: string, existingQuestions: { text: string }[]): boolean {
+  const normCandidate = normalizeQuestionText(candidateText);
+  if (!normCandidate) return false;
+
+  for (const existing of existingQuestions) {
+    const sim = calculateQuestionSimilarity(candidateText, existing.text);
+    // 65% word overlap or identical normalized text indicates semantic/scenario duplicate
+    if (sim >= 0.65) return true;
+  }
+  return false;
+}
+
 // ── FULL AI EXAM PAPER GENERATOR (TOPIC + EASY/MED/HARD + AUTO-PUBLISH) ──
 
 export interface AIPaperGenerationRequest {
@@ -1148,22 +1188,51 @@ export async function generateFullExamPaperWithAI(
     generateBatch('HARD', hardCount, req.hardMarks ?? defaultPerQMarks)
   ]);
 
-  let allGenerated = [...easyList, ...medList, ...hardList];
+  // Collect and strictly deduplicate all questions across batches
+  const rawCollected = [...easyList, ...medList, ...hardList];
+  const uniqueGenerated: (GeneratedMCQQuestion & { marks: number; negativeMarks: number })[] = [];
 
-  // Guaranteed Backfill Retry Loop: strictly reach exact totalCount requested
+  for (const q of rawCollected) {
+    if (!isDuplicateQuestion(q.text, uniqueGenerated)) {
+      uniqueGenerated.push(q);
+    }
+  }
+
+  // Guaranteed Backfill Retry Loop: strictly reach exact totalCount with 100% UNIQUE questions
   let backfillAttempts = 0;
-  while (allGenerated.length < totalCount && backfillAttempts < 3) {
+  while (uniqueGenerated.length < totalCount && backfillAttempts < 5) {
     backfillAttempts++;
-    const missing = totalCount - allGenerated.length;
-    onProgress?.(`Calibrating exact paper size: synthesizing ${missing} additional question(s) to guarantee ${totalCount} questions...`);
-    const extraBatch = await generateBatch('MEDIUM', missing, defaultPerQMarks);
-    allGenerated.push(...extraBatch);
+    const missing = totalCount - uniqueGenerated.length;
+    onProgress?.(`Synthesizing ${missing} unique question(s) to guarantee ${totalCount} non-duplicate questions...`);
+
+    // Pass latest generated question snippets so the AI strictly avoids repeating any of them
+    const avoidSnippets = uniqueGenerated.map((q) => q.text.substring(0, 50)).slice(-10);
+    const antiDuplicationDirective = avoidSnippets.length > 0
+      ? `\nSTRICT ANTI-DUPLICATION RULE: The following questions have ALREADY been generated. You MUST NOT repeat, paraphrase, or generate questions similar to these:\n- ${avoidSnippets.join('\n- ')}\nGenerate completely distinct, novel questions with different variables, numbers, scenarios, and themes.`
+      : '';
+
+    const extraBatch = await generateMCQQuestionsWithAI({
+      subject: req.subject,
+      topic: req.topic,
+      examCategory: req.examCategory,
+      instructions: (req.instructions || '') + antiDuplicationDirective,
+      difficulty: 'MEDIUM',
+      count: Math.min(missing + 2, 8)
+    });
+
+    for (const q of extraBatch.questions) {
+      if (uniqueGenerated.length < totalCount && !isDuplicateQuestion(q.text, uniqueGenerated)) {
+        uniqueGenerated.push({
+          ...q,
+          marks: defaultPerQMarks,
+          negativeMarks: req.negativeMarkingEnabled ? (req.negativeMarkPenalty ?? 0.25) : 0
+        });
+      }
+    }
   }
 
-  // If slightly more were returned, trim to exact totalCount
-  if (allGenerated.length > totalCount) {
-    allGenerated = allGenerated.slice(0, totalCount);
-  }
+  // Trim to exact totalCount if slightly more were accumulated
+  let allGenerated = uniqueGenerated.slice(0, totalCount);
 
   // Strictly enforce uniform marks if specified (e.g. 1 mark per question)
   if (req.easyMarks && req.easyMarks === req.mediumMarks && req.mediumMarks === req.hardMarks) {
@@ -1172,7 +1241,7 @@ export async function generateFullExamPaperWithAI(
     });
   }
 
-  onProgress?.(`Formatting ${allGenerated.length} questions and saving to Question Bank...`);
+  onProgress?.(`Formatting ${allGenerated.length} unique questions and saving to Question Bank...`);
 
   const savedQuestions: MCQQuestion[] = [];
   const now = Date.now();

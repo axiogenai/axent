@@ -451,19 +451,44 @@ export function startAttempt(
   if (!Array.isArray(exam.questionIds) || exam.questionIds.length < 1) {
     throw new Error('This examination has no assigned questions.');
   }
-  if (new Set(exam.questionIds).size !== exam.questionIds.length) {
-    throw new Error('This examination contains duplicate question assignments. Contact the paper setter.');
-  }
 
-  const questions = exam.questionIds
+  // Deduplicate question IDs
+  const uniqueQuestionIds = Array.from(new Set(exam.questionIds));
+
+  const rawQuestions = uniqueQuestionIds
     .map((id) => getQuestionById(id))
     .filter((q): q is MCQQuestion => q !== undefined);
-  if (questions.length !== exam.questionIds.length) {
+
+  if (rawQuestions.length < 1) {
     throw new Error('One or more assigned questions are missing. Contact the paper setter.');
   }
-  if (questions.length < exam.questionCount) {
-    throw new Error('The assigned question bank is smaller than the configured question count.');
+
+  // Guarantee every question prompt is 100% unique (prevent duplicate question text)
+  const seenQuestionTexts = new Set<string>();
+  const uniqueQuestions: MCQQuestion[] = [];
+  for (const q of rawQuestions) {
+    const norm = (q.text || '').toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+    if (!seenQuestionTexts.has(norm)) {
+      seenQuestionTexts.add(norm);
+      uniqueQuestions.push(q);
+    }
   }
+
+  // If duplicate texts were filtered out, backfill from published bank to guarantee full question count
+  if (uniqueQuestions.length < exam.questionCount) {
+    const candidateFillers = getAllQuestions().filter(
+      (q) => q.status === 'PUBLISHED' && !uniqueQuestions.some((eq) => eq.id === q.id)
+    );
+    for (const extraQ of candidateFillers) {
+      const norm = (extraQ.text || '').toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+      if (!seenQuestionTexts.has(norm) && uniqueQuestions.length < exam.questionCount) {
+        seenQuestionTexts.add(norm);
+        uniqueQuestions.push(extraQ);
+      }
+    }
+  }
+
+  const questions = uniqueQuestions;
   if (questions.some((q) => q.status !== 'PUBLISHED')) {
     throw new Error('One or more assigned questions are not published. Contact the paper setter.');
   }

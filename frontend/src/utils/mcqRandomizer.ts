@@ -61,9 +61,11 @@ export function generateAttemptAssignment(
   shuffleQuestions: boolean,
   shuffleOptions: boolean
 ): ShuffleResult {
+  // Guarantee each question ID is strictly unique in the assignment
+  const uniqueQIds = Array.from(new Set(questionIds));
   const orderedQuestionIds = shuffleQuestions
-    ? fisherYatesShuffle(questionIds)
-    : [...questionIds];
+    ? fisherYatesShuffle(uniqueQIds)
+    : [...uniqueQIds];
 
   const optionOrderMap: Record<string, string[]> = {};
   for (const qid of orderedQuestionIds) {
