@@ -244,9 +244,41 @@ export function isCurrentlyFullscreen(): boolean {
 }
 
 /**
+ * Force the Chromium GPU compositor to push a new frame to the Windows DWM swapchain.
+ * Fixes the classic Chromium hardware acceleration bug where the display compositor
+ * fails to swap frames during window state / fullscreen transitions until minimized/resized.
+ */
+function kickChromiumCompositor(): void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+  const target = (document.getElementById('root') || document.body) as HTMLElement | null;
+  if (!target) return;
+
+  // Frame 1: promote layer and micro-shift opacity to invalidate render pass
+  requestAnimationFrame(() => {
+    try {
+      target.style.opacity = '0.999';
+      target.style.transform = 'translateZ(0)';
+      void target.offsetHeight;
+      void document.body?.offsetHeight;
+    } catch {}
+
+    // Frame 2: restore clean values on next VSync, guaranteeing compositor commits swapchain
+    requestAnimationFrame(() => {
+      try {
+        target.style.removeProperty('opacity');
+        target.style.removeProperty('transform');
+        void target.offsetHeight;
+        void document.body?.offsetHeight;
+        window.dispatchEvent(new Event('resize'));
+      } catch {}
+    });
+  });
+}
+
+/**
  * Apply inline styles that guarantee the entire height chain
  * (html → body → #root) stretches to fill the fullscreen container.
- * This is the belt-and-suspenders backup for the CSS rules.
  */
 function applyFullscreenInlineStyles(): void {
   try {
@@ -297,30 +329,26 @@ function removeFullscreenInlineStyles(): void {
 }
 
 /**
- * Forces synchronous reflow + staggered resize events to guarantee
- * Chromium on Windows DWM repaints immediately after fullscreen transition.
+ * Forces synchronous reflow + staggered compositor kicks to guarantee
+ * Chromium on Windows DWM repaints immediately after fullscreen transition or exam submission.
  */
 export function triggerViewportReflow(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
-  // If in fullscreen, re-apply inline styles every time to be safe
   if (isCurrentlyFullscreen()) {
     applyFullscreenInlineStyles();
+  } else {
+    removeFullscreenInlineStyles();
   }
 
-  try {
-    void document.body?.offsetHeight;
-    void document.getElementById('root')?.offsetHeight;
-    window.dispatchEvent(new Event('resize'));
-  } catch {}
-  [30, 80, 180, 350, 600].forEach((delay) => {
+  kickChromiumCompositor();
+
+  [20, 60, 140, 280, 500, 900].forEach((delay) => {
     setTimeout(() => {
-      try {
-        if (isCurrentlyFullscreen()) applyFullscreenInlineStyles();
-        void document.body?.offsetHeight;
-        void document.getElementById('root')?.offsetHeight;
-        window.dispatchEvent(new Event('resize'));
-      } catch {}
+      if (isCurrentlyFullscreen()) {
+        applyFullscreenInlineStyles();
+      }
+      kickChromiumCompositor();
     }, delay);
   });
 }
@@ -340,19 +368,14 @@ if (typeof document !== 'undefined') {
 }
 
 /**
- * Get the element to use as the fullscreen target.
- * Uses #root to avoid Chromium's UA stylesheet applying position:fixed to <html>,
- * which creates a new containing block and collapses the height chain.
- * Falls back to documentElement if #root is not found.
+ * Get the target element for fullscreen mode.
  */
 function getFullscreenTarget(): HTMLElement {
-  return document.getElementById('root') || document.documentElement;
+  return document.documentElement || document.getElementById('root') || document.body;
 }
 
 /**
- * Request cross-browser native fullscreen mode on #root.
- * By targeting #root instead of <html>, we bypass Chromium's UA stylesheet
- * interference (position:fixed + inset:0 on :fullscreen) that causes blank screens.
+ * Request cross-browser native fullscreen mode.
  * Must be triggered directly inside a user interaction (like button click) to satisfy browser security.
  */
 export async function requestExamFullscreen(): Promise<boolean> {
@@ -386,7 +409,7 @@ export async function requestExamFullscreen(): Promise<boolean> {
 }
 
 /**
- * Exit native fullscreen mode.
+ * Exit native fullscreen mode cleanly.
  */
 export async function exitExamFullscreen(): Promise<boolean> {
   if (typeof document === 'undefined') return false;
@@ -407,13 +430,11 @@ export async function exitExamFullscreen(): Promise<boolean> {
     } else if (doc.msExitFullscreen) {
       await doc.msExitFullscreen();
     }
-
-    removeFullscreenInlineStyles();
-    triggerViewportReflow();
-    return true;
   } catch (err) {
     console.warn('[FullScreen] Exit fullscreen failed:', err);
+  } finally {
+    removeFullscreenInlineStyles();
     triggerViewportReflow();
-    return false;
   }
+  return true;
 }

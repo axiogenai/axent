@@ -511,11 +511,9 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
     } catch {}
 
     onStart(student);
-    setTimeout(() => {
-      void requestExamFullscreen().then(() => {
-        triggerViewportReflow();
-      });
-    }, 60);
+    void requestExamFullscreen().then(() => {
+      triggerViewportReflow();
+    });
   };
 
   const handleApplyToken = () => {
@@ -577,11 +575,9 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
     }
 
     onStart(student);
-    setTimeout(() => {
-      void requestExamFullscreen().then(() => {
-        triggerViewportReflow();
-      });
-    }, 60);
+    void requestExamFullscreen().then(() => {
+      triggerViewportReflow();
+    });
   };
 
   return (
@@ -931,6 +927,11 @@ interface WhatsAppHoldResultsViewProps {
 
 const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attempt, exam, onExit }) => {
   const [copiedHash, setCopiedHash] = useState(false);
+
+  useEffect(() => {
+    triggerViewportReflow();
+  }, []);
+
   const totalQuestions = attempt.assignedQuestions?.length || exam.questionCount || 0;
   const answeredCount = Object.keys(attempt.answers || {}).filter((k) => attempt.answers[k]).length;
 
@@ -1239,6 +1240,10 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
       />
     );
   }
+
+  useEffect(() => {
+    triggerViewportReflow();
+  }, []);
 
   const [filterMode, setFilterMode] = useState<'all' | 'correct' | 'wrong' | 'unanswered'>('all');
   
@@ -2081,14 +2086,12 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
     // 3. Hardware liberation: release pointer lock, exit fullscreen, terminate screen share
     stopScreenProctoring();
-    setTimeout(() => {
-      try {
-        if (document.exitPointerLock) document.exitPointerLock();
-      } catch {}
-      void exitExamFullscreen().then(() => {
-        triggerViewportReflow();
-      });
-    }, 60);
+    try {
+      if (document.exitPointerLock) document.exitPointerLock();
+    } catch {}
+    void exitExamFullscreen().then(() => {
+      triggerViewportReflow();
+    });
 
     // 4. Update cloud & proctor monitoring ledger
     const activeConfig = exam || allExamsList.find((e) => e.id === attempt.examId);
@@ -2633,14 +2636,10 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     setSubmitted(true);
     setShowSubmitConfirm(false);
     stopScreenProctoring();
-    setTimeout(() => {
-      try {
-        if (document.exitPointerLock) document.exitPointerLock();
-      } catch {}
-      void exitExamFullscreen().then(() => {
-        triggerViewportReflow();
-      });
-    }, 60);
+    try {
+      if (document.exitPointerLock) document.exitPointerLock();
+    } catch {}
+    void exitExamFullscreen();
 
     const result = submitAttempt(attempt.id, answers, 'SUBMITTED');
     if (result) {
