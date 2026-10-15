@@ -903,7 +903,7 @@ export interface GeneratedMCQQuestion {
 export async function generateMCQQuestionsWithAI(
   prompt: GeneratedMCQPrompt
 ): Promise<{ questions: GeneratedMCQQuestion[]; modelUsed: string }> {
-  const count = Math.min(Math.max(prompt.count || 5, 1), 15);
+  const count = Math.max(1, prompt.count || 5);
   // Detect whether topic/subject/category is Aptitude, Quantitative, Logical Reasoning, Verbal, or Technical
   const combinedText = `${prompt.topic} ${prompt.subject || ''} ${prompt.examCategory || ''}`.toLowerCase();
   const isAptitude =
@@ -1102,30 +1102,76 @@ export async function generateFullExamPaperWithAI(
     marks: number
   ) => {
     if (count <= 0) return [];
-    onProgress?.(`Generating ${count} ${difficulty.toLowerCase()} questions on ${req.topic}...`);
-    const res = await generateMCQQuestionsWithAI({
-      subject: req.subject,
-      topic: req.topic,
-      examCategory: req.examCategory,
-      instructions: req.instructions,
-      difficulty,
-      count
-    });
-    return res.questions.map((q) => ({
+    
+    // Chunk into requests of max 8 questions so LLMs never truncate response
+    const chunks: number[] = [];
+    let remaining = count;
+    while (remaining > 0) {
+      const take = Math.min(remaining, 8);
+      chunks.push(take);
+      remaining -= take;
+    }
+
+    onProgress?.(`Generating ${count} ${difficulty.toLowerCase()} question(s) on ${req.topic}...`);
+    
+    const chunkResults = await Promise.all(
+      chunks.map(chunkCount =>
+        generateMCQQuestionsWithAI({
+          subject: req.subject,
+          topic: req.topic,
+          examCategory: req.examCategory,
+          instructions: req.instructions,
+          difficulty,
+          count: chunkCount
+        })
+      )
+    );
+
+    const combined: GeneratedMCQQuestion[] = [];
+    for (const r of chunkResults) {
+      combined.push(...r.questions);
+    }
+
+    return combined.map((q) => ({
       ...q,
       marks,
       negativeMarks: req.negativeMarkingEnabled ? (req.negativeMarkPenalty ?? 0.25) : 0
     }));
   };
 
+  const defaultPerQMarks = req.easyMarks ?? 1;
+
   // Generate difficulty batches in parallel for high speed
   const [easyList, medList, hardList] = await Promise.all([
-    generateBatch('EASY', easyCount, req.easyMarks ?? 1),
-    generateBatch('MEDIUM', mediumCount, req.mediumMarks ?? 2),
-    generateBatch('HARD', hardCount, req.hardMarks ?? 3)
+    generateBatch('EASY', easyCount, req.easyMarks ?? defaultPerQMarks),
+    generateBatch('MEDIUM', mediumCount, req.mediumMarks ?? defaultPerQMarks),
+    generateBatch('HARD', hardCount, req.hardMarks ?? defaultPerQMarks)
   ]);
 
-  const allGenerated = [...easyList, ...medList, ...hardList];
+  let allGenerated = [...easyList, ...medList, ...hardList];
+
+  // Guaranteed Backfill Retry Loop: strictly reach exact totalCount requested
+  let backfillAttempts = 0;
+  while (allGenerated.length < totalCount && backfillAttempts < 3) {
+    backfillAttempts++;
+    const missing = totalCount - allGenerated.length;
+    onProgress?.(`Calibrating exact paper size: synthesizing ${missing} additional question(s) to guarantee ${totalCount} questions...`);
+    const extraBatch = await generateBatch('MEDIUM', missing, defaultPerQMarks);
+    allGenerated.push(...extraBatch);
+  }
+
+  // If slightly more were returned, trim to exact totalCount
+  if (allGenerated.length > totalCount) {
+    allGenerated = allGenerated.slice(0, totalCount);
+  }
+
+  // Strictly enforce uniform marks if specified (e.g. 1 mark per question)
+  if (req.easyMarks && req.easyMarks === req.mediumMarks && req.mediumMarks === req.hardMarks) {
+    allGenerated.forEach(q => {
+      q.marks = req.easyMarks!;
+    });
+  }
+
   onProgress?.(`Formatting ${allGenerated.length} questions and saving to Question Bank...`);
 
   const savedQuestions: MCQQuestion[] = [];

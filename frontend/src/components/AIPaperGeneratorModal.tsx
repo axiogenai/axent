@@ -111,8 +111,9 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
   );
 
   // Difficulty & Question Configuration (Simplified per Paper Setter standard)
-  const [totalQuestions, setTotalQuestions] = useState(20);
-  const [totalMarks, setTotalMarks] = useState(40);
+  const [totalQuestions, setTotalQuestions] = useState(30);
+  const [marksPerQuestion, setMarksPerQuestion] = useState(1);
+  const [totalMarks, setTotalMarks] = useState(30);
   const [overallSeverity, setOverallSeverity] = useState<'EASY' | 'MEDIUM' | 'HARD'>('MEDIUM');
 
   // Negative Marking & Settings
@@ -185,7 +186,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
         computedHardCount = Math.max(0, totalQuestions - computedEasyCount - computedMedCount);
       }
 
-      const basePerQ = Math.max(1, Math.round(totalMarks / totalQuestions));
+      const basePerQ = marksPerQuestion || Math.max(1, Math.round(totalMarks / totalQuestions));
 
       const payload: AIPaperGenerationRequest = {
         title: title.trim() || `${topic.trim()} Examination`,
@@ -376,8 +377,8 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
       subject: reviewedExam.subject,
       topic: reviewedExam.topic,
       difficulty: 'MEDIUM',
-      marks: 2,
-      negativeMarks: reviewedExam.negativeMarkingEnabled ? 0.25 : 0,
+      marks: marksPerQuestion || (reviewedQuestions.length > 0 ? (Number(reviewedQuestions[0].marks) || 1) : 1),
+      negativeMarks: reviewedExam.negativeMarkingEnabled ? negativeMarkPenalty : 0,
       explanation: '',
       status: 'PUBLISHED',
       tags: [reviewedExam.topic],
@@ -799,7 +800,11 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                       min="1"
                       max="100"
                       value={totalQuestions}
-                      onChange={(e) => setTotalQuestions(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      onChange={(e) => {
+                        const count = Math.max(1, parseInt(e.target.value, 10) || 1);
+                        setTotalQuestions(count);
+                        setTotalMarks(count * marksPerQuestion);
+                      }}
                       style={{
                         width: '100%',
                         boxSizing: 'border-box',
@@ -814,6 +819,43 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     />
                   </div>
 
+                  {/* Marks per Question */}
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      Marks / Question
+                    </label>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      {[1, 2, 4].map((m) => {
+                        const isSelected = marksPerQuestion === m;
+                        return (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => {
+                              setMarksPerQuestion(m);
+                              setTotalMarks(totalQuestions * m);
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: '8px 2px',
+                              borderRadius: 'var(--radius-sm)',
+                              border: isSelected ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+                              background: isSelected ? 'var(--bg-surface)' : 'var(--bg-elevated)',
+                              color: isSelected ? 'var(--accent)' : 'var(--text-secondary)',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              textAlign: 'center',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            {m} pt{m > 1 ? 's' : ''}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   {/* Total Marks */}
                   <div>
                     <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
@@ -824,7 +866,11 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                       min="1"
                       max="500"
                       value={totalMarks}
-                      onChange={(e) => setTotalMarks(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      onChange={(e) => {
+                        const marks = Math.max(1, parseInt(e.target.value, 10) || 1);
+                        setTotalMarks(marks);
+                        setMarksPerQuestion(Math.max(1, Math.round(marks / totalQuestions)));
+                      }}
                       style={{
                         width: '100%',
                         boxSizing: 'border-box',
@@ -893,10 +939,10 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                       Total Questions: <strong style={{ color: 'var(--text-primary)' }}>{totalQuestions}</strong>
                     </span>
                     <span style={{ color: 'var(--text-secondary)' }}>
-                      Total Marks: <strong style={{ color: 'var(--accent)' }}>{totalMarks} pts</strong>
+                      Marks / Question: <strong style={{ color: 'var(--text-primary)' }}>{marksPerQuestion} pt{marksPerQuestion > 1 ? 's' : ''}</strong>
                     </span>
                     <span style={{ color: 'var(--text-secondary)' }}>
-                      Avg Mark: <strong style={{ color: 'var(--text-primary)' }}>{(totalMarks / Math.max(1, totalQuestions)).toFixed(1)} pts/Q</strong>
+                      Total Marks: <strong style={{ color: 'var(--accent)' }}>{totalMarks} pts</strong>
                     </span>
                   </div>
                   <div style={{ color: 'var(--text-muted)' }}>
