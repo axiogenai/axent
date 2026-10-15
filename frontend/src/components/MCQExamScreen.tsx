@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Clock, ChevronLeft, ChevronRight, CheckCircle, CheckCircle2, Circle, AlertTriangle,
   Send, BookOpen, RotateCcw, Award, X, Eye, EyeOff, BarChart2, KeyRound,
-  Copy, Check, Lock, Unlock, Code2, ArrowRight, ShieldAlert, Monitor, Download, CheckSquare, FileCheck, LogOut, MessageCircle, Calendar
+  Copy, Check, Lock, Unlock, Code2, ArrowRight, ShieldAlert, Shield, Monitor, Download, CheckSquare, FileCheck, LogOut, MessageCircle, Calendar
 } from 'lucide-react';
 import { MCQAttempt, MCQExamConfig, MCQGradeResult, MCQ_STORAGE_KEYS } from '../types/mcq';
 import {
@@ -2225,96 +2225,100 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)', padding: '24px' }}>
         <div style={{
-          maxWidth: '540px', width: '100%',
+          maxWidth: '560px', width: '100%',
           background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)', padding: '36px', textAlign: 'center',
+          borderRadius: 'var(--radius-lg)', padding: '32px 28px', textAlign: 'center',
           boxShadow: 'var(--shadow-md)'
         }}>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '56px',
-            height: '56px',
-            borderRadius: 'var(--radius-md)',
-            background: 'rgba(234, 179, 8, 0.08)',
-            border: '1px solid rgba(234, 179, 8, 0.25)',
-            marginBottom: '18px'
-          }}>
-            <Calendar size={28} color="#eab308" />
+          {/* Institutional Header Badge */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: 'var(--radius-pill)', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', color: 'var(--warning)', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '16px' }}>
+            <Calendar size={13} />
+            <span>Synchronized Waiting Room</span>
           </div>
 
-          <div style={{ display: 'inline-block', marginBottom: '8px' }}>
-            <span style={{
-              fontSize: '11px',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              padding: '2px 10px',
-              borderRadius: 'var(--radius-pill)',
-              background: 'rgba(234, 179, 8, 0.1)',
-              border: '1px solid rgba(234, 179, 8, 0.25)',
-              color: '#eab308'
-            }}>
-              Scheduled Examination Waiting Room
-            </span>
-          </div>
-
-          <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px' }}>
+          {/* Exam Title */}
+          <h2 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px', letterSpacing: '-0.02em', lineHeight: 1.3 }}>
             {exam.title}
           </h2>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 20px' }}>
-            {exam.subject || 'Autonomous Examination'} {exam.topic ? `· ${exam.topic}` : ''}
-          </p>
 
+          {/* Metadata Subtitle */}
+          <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '22px' }}>
+            <span>{exam.subject || 'Autonomous Examination'}</span>
+            {exam.topic && <span>· {exam.topic}</span>}
+            <span>· {exam.durationMinutes} Mins</span>
+            <span>· {exam.totalMarks} Marks</span>
+          </div>
+
+          {/* Live Countdown Module */}
           <div style={{
             background: 'var(--bg-surface)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md)', padding: '20px 16px', marginBottom: '22px'
+            borderRadius: 'var(--radius-md)', padding: '18px 16px', marginBottom: '20px'
           }}>
-            <p style={{ margin: '0 0 12px', fontSize: '11.5px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
-              Live Countdown to Terminal Unlock
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', borderBottom: '1px solid var(--border)', paddingBottom: '8px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+                Live Terminal Unlock Countdown
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--warning)', fontWeight: 600 }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--warning)' }} />
+                Synchronized
+              </span>
+            </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '14px' }}>
               {diffHours > 0 && (
-                <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 14px', minWidth: '65px' }}>
-                  <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                    {diffHours}
+                <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', minWidth: '72px' }}>
+                  <div style={{ fontSize: '26px', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', lineHeight: 1 }}>
+                    {String(diffHours).padStart(2, '0')}
                   </div>
-                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Hours</div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '4px' }}>Hours</div>
                 </div>
               )}
-              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 14px', minWidth: '65px' }}>
-                <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                  {remMins}
+              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', minWidth: '72px' }}>
+                <div style={{ fontSize: '26px', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', lineHeight: 1 }}>
+                  {String(remMins).padStart(2, '0')}
                 </div>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Mins</div>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '4px' }}>Mins</div>
               </div>
-              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 14px', minWidth: '65px' }}>
-                <div style={{ fontSize: '24px', fontWeight: 800, color: '#eab308', fontFamily: 'var(--font-mono)' }}>
+              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', minWidth: '72px' }}>
+                <div style={{ fontSize: '26px', fontWeight: 800, color: 'var(--warning)', fontFamily: 'var(--font-mono)', lineHeight: 1 }}>
                   {String(remSecs).padStart(2, '0')}
                 </div>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Secs</div>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '4px' }}>Secs</div>
               </div>
             </div>
 
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', paddingTop: '8px', borderTop: '1px solid var(--border)' }}>
               <Clock size={13} color="var(--accent)" />
-              <span>Starts on <strong>{startStr}</strong></span>
+              <span>Commences on <strong>{startStr}</strong></span>
             </div>
           </div>
 
-          <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: 1.5, margin: '0 0 22px' }}>
-            This terminal will automatically unlock when the examination window commences. Please remain seated and do not leave this page.
-          </p>
+          {/* Proctored Candidate Advisory */}
+          <div style={{
+            background: 'var(--bg-surface)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)', padding: '12px 14px', marginBottom: '22px',
+            textAlign: 'left', fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.5
+          }}>
+            <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <Shield size={12} color="var(--accent)" />
+              <span>Proctored Terminal Readiness</span>
+            </div>
+            <ul style={{ margin: 0, paddingLeft: '16px' }}>
+              <li>Terminal unlocks automatically when countdown reaches zero.</li>
+              <li>Remain on this page. Full-screen integrity checks will activate upon start.</li>
+              <li>Ensure steady network connectivity throughout the examination.</li>
+            </ul>
+          </div>
+
           <button
             className="btn btn-secondary btn-sm"
             onClick={() => {
               if (onBack) onBack();
               else window.location.href = '/mcq';
             }}
+            style={{ width: '100%', justifyContent: 'center', height: '36px' }}
           >
-            Return to Available Exams
+            Return to Available Examinations
           </button>
         </div>
       </div>
@@ -3124,19 +3128,19 @@ export const MCQExamSelector: React.FC = () => {
                           fontSize: '10.5px',
                           fontWeight: 700,
                           textTransform: 'uppercase',
-                          letterSpacing: '0.04em',
-                          padding: '2px 8px',
+                          letterSpacing: '0.05em',
+                          padding: '2.5px 9px',
                           borderRadius: 'var(--radius-pill)',
-                          background: 'rgba(34, 197, 94, 0.1)',
-                          color: '#22c55e',
-                          border: '1px solid rgba(34, 197, 94, 0.25)',
+                          background: 'var(--success-bg)',
+                          color: 'var(--success)',
+                          border: '1px solid var(--success-border)',
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '5px'
                         }}
                       >
-                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#22c55e' }} />
-                        Live Now
+                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--success)' }} />
+                        Live Examination
                       </span>
                     )}
 
@@ -3146,12 +3150,12 @@ export const MCQExamSelector: React.FC = () => {
                           fontSize: '10.5px',
                           fontWeight: 700,
                           textTransform: 'uppercase',
-                          letterSpacing: '0.04em',
-                          padding: '2px 8px',
+                          letterSpacing: '0.05em',
+                          padding: '2.5px 9px',
                           borderRadius: 'var(--radius-pill)',
-                          background: 'rgba(234, 179, 8, 0.1)',
-                          color: '#eab308',
-                          border: '1px solid rgba(234, 179, 8, 0.25)',
+                          background: 'var(--warning-bg)',
+                          color: 'var(--warning)',
+                          border: '1px solid var(--warning-border)',
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '4px'
@@ -3256,8 +3260,8 @@ export const MCQExamSelector: React.FC = () => {
                   {isScheduledFuture && exam.startTime && (
                     <div
                       style={{
-                        background: 'rgba(234, 179, 8, 0.08)',
-                        border: '1px solid rgba(234, 179, 8, 0.25)',
+                        background: 'var(--warning-bg)',
+                        border: '1px solid var(--warning-border)',
                         borderRadius: 'var(--radius-sm)',
                         padding: '8px 12px',
                         marginBottom: '12px',
@@ -3268,8 +3272,8 @@ export const MCQExamSelector: React.FC = () => {
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Calendar size={13} color="#eab308" />
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#eab308' }}>
+                        <Calendar size={13} color="var(--warning)" />
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--warning)' }}>
                           Starts on {formatScheduleTime(exam.startTime)}
                         </span>
                       </div>
@@ -3316,7 +3320,7 @@ export const MCQExamSelector: React.FC = () => {
                       className="btn btn-secondary btn-sm"
                       style={{ padding: '5px 12px', fontSize: '11.5px', gap: '5px', height: '28px' }}
                     >
-                      <Clock size={12} color="#eab308" />
+                      <Clock size={12} color="var(--warning)" />
                       <span>Waiting Room · Starts {new Date(exam.startTime!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       <ChevronRight size={13} />
                     </button>

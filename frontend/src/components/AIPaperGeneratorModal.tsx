@@ -23,7 +23,12 @@ import {
   Save,
   Send,
   HelpCircle,
-  MessageCircle
+  MessageCircle,
+  Calendar,
+  Clock,
+  Shield,
+  Shuffle,
+  Settings
 } from 'lucide-react';
 import {
   generateFullExamPaperWithAI,
@@ -41,6 +46,34 @@ import {
 import { MCQExamConfig, MCQQuestion, MCQResultDeclarationMode } from '../types/mcq';
 import { playSound } from '../utils/sounds';
 import { ConfirmationModal } from './ConfirmationModal';
+
+function toLocalDatetimeString(timestamp?: number): string {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const YYYY = date.getFullYear();
+  const MM = pad(date.getMonth() + 1);
+  const DD = pad(date.getDate());
+  const hh = pad(date.getHours());
+  const mm = pad(date.getMinutes());
+  return `${YYYY}-${MM}-${DD}T${hh}:${mm}`;
+}
+
+function parseLocalDatetimeString(str: string): number | undefined {
+  if (!str) return undefined;
+  const parsed = new Date(str).getTime();
+  return isNaN(parsed) ? undefined : parsed;
+}
+
+function formatSchedulePreview(timestamp?: number): string {
+  if (!timestamp) return '';
+  return new Date(timestamp).toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
 
 interface AIPaperGeneratorModalProps {
   isOpen: boolean;
@@ -86,6 +119,15 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
   const [negativeMarkingEnabled, setNegativeMarkingEnabled] = useState(true);
   const [negativeMarkPenalty, setNegativeMarkPenalty] = useState(0.25);
   const [resultDeclarationMode, setResultDeclarationMode] = useState<MCQResultDeclarationMode>('WHATSAPP_GROUP');
+
+  // Scheduling & Delivery settings in Generator
+  const [startTime, setStartTime] = useState<number | undefined>(undefined);
+  const [endTime, setEndTime] = useState<number | undefined>(undefined);
+  const [whatsappGroupName, setWhatsappGroupName] = useState('');
+  const [whatsappGroupLink, setWhatsappGroupLink] = useState('');
+
+  // Settings drawer state in Review screen
+  const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
 
   // Progress & Error
   const [progressMsg, setProgressMsg] = useState('');
@@ -167,7 +209,15 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
         setProgressMsg(status);
       });
 
-      setReviewedExam({ ...res.exam, resultDeclarationMode });
+      setReviewedExam({
+        ...res.exam,
+        resultDeclarationMode,
+        startTime,
+        endTime,
+        whatsappGroupName: whatsappGroupName.trim() || undefined,
+        whatsappGroupLink: whatsappGroupLink.trim() || undefined,
+        instructions: instructions.trim() || res.exam.instructions,
+      });
       setReviewedQuestions(res.questions);
       // Expand all questions by default for quick review
       setExpandedQIds(new Set(res.questions.map((q) => q.id)));
@@ -992,6 +1042,177 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     ? 'Students will see "Hold tight, results will be deployed soon" on submit. Paper setters export results and share on the class WhatsApp group.'
                     : 'Students will see their score, marks, and detailed question explanations immediately upon submit.'}
                 </p>
+                {resultDeclarationMode === 'WHATSAPP_GROUP' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginTop: '10px', padding: '10px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                        WhatsApp Group Name (Optional)
+                      </label>
+                      <input
+                        value={whatsappGroupName}
+                        onChange={(e) => setWhatsappGroupName(e.target.value)}
+                        placeholder="e.g. TE Computer Div A - 2026 Batch"
+                        style={{
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          padding: '6px 10px',
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-sm)',
+                          color: 'var(--text-primary)',
+                          fontSize: '11.5px'
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                        WhatsApp Group Invite Link (Optional)
+                      </label>
+                      <input
+                        value={whatsappGroupLink}
+                        onChange={(e) => setWhatsappGroupLink(e.target.value)}
+                        placeholder="https://chat.whatsapp.com/..."
+                        style={{
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          padding: '6px 10px',
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-sm)',
+                          color: 'var(--text-primary)',
+                          fontSize: '11.5px'
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Scheduled Examination Window (Optional) */}
+              <div
+                style={{
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '12px 14px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    <Calendar size={13} color="var(--accent)" />
+                    <span>Scheduled Examination Window (Optional)</span>
+                  </div>
+                  {startTime && (
+                    <span style={{ fontSize: '10.5px', color: 'var(--warning)', fontWeight: 600 }}>
+                      Waiting Room Active
+                    </span>
+                  )}
+                </div>
+                <p style={{ margin: '0 0 10px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                  Leave empty to unlock immediately upon publish. If scheduled, candidates will wait in the Proctored Waiting Room until the start window.
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '8px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                      Scheduled Start Time (Auto-unlocks exam)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={toLocalDatetimeString(startTime)}
+                      onChange={(e) => setStartTime(parseLocalDatetimeString(e.target.value))}
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '6px 10px',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-primary)',
+                        fontSize: '11.5px'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                      Scheduled End Time (Auto-closes exam)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={toLocalDatetimeString(endTime)}
+                      onChange={(e) => setEndTime(parseLocalDatetimeString(e.target.value))}
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '6px 10px',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-primary)',
+                        fontSize: '11.5px'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStartTime(undefined);
+                      setEndTime(undefined);
+                    }}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: '10.5px',
+                      borderRadius: 'var(--radius-xs)',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Live Immediately
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const now = Date.now();
+                      setStartTime(now + 5 * 60000);
+                      setEndTime(now + (durationMinutes + 15) * 60000);
+                    }}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: '10.5px',
+                      borderRadius: 'var(--radius-xs)',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    +1 Hr Window (Starts in 5m)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const now = Date.now();
+                      setStartTime(now + 60 * 60000);
+                      setEndTime(now + (durationMinutes + 75) * 60000);
+                    }}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: '10.5px',
+                      borderRadius: 'var(--radius-xs)',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    +2 Hr Window
+                  </button>
+                </div>
               </div>
 
               {/* Actions */}
@@ -1110,8 +1331,8 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                   gap: '10px'
                 }}
               >
-                <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.1fr 100px 125px 145px', gap: '10px', alignItems: 'end' }}>
-                  <div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', alignItems: 'end' }}>
+                  <div style={{ minWidth: '160px' }}>
                     <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Exam Paper Title
                     </label>
@@ -1134,7 +1355,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     />
                   </div>
 
-                  <div>
+                  <div style={{ minWidth: '140px' }}>
                     <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Topic & Subject
                     </label>
@@ -1165,7 +1386,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     </div>
                   </div>
 
-                  <div>
+                  <div style={{ minWidth: '85px' }}>
                     <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Duration (Min)
                     </label>
@@ -1198,7 +1419,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     />
                   </div>
 
-                  <div>
+                  <div style={{ minWidth: '110px' }}>
                     <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Negative Marking
                     </label>
@@ -1225,7 +1446,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     </div>
                   </div>
 
-                  <div>
+                  <div style={{ minWidth: '125px' }}>
                     <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Result Release
                     </label>
@@ -1257,7 +1478,44 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                       }}
                     >
                       <MessageCircle size={12} color={reviewedExam.resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--accent)' : 'var(--text-muted)'} />
-                      {reviewedExam.resultDeclarationMode === 'WHATSAPP_GROUP' ? 'WhatsApp Group' : 'Immediate'}
+                      {reviewedExam.resultDeclarationMode === 'WHATSAPP_GROUP' ? 'WhatsApp' : 'Immediate'}
+                    </button>
+                  </div>
+
+                  <div style={{ minWidth: '140px' }}>
+                    <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Exam Settings
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSettingsDrawer(!showSettingsDrawer);
+                        playSound('click');
+                      }}
+                      style={{
+                        width: '100%',
+                        height: '36px',
+                        boxSizing: 'border-box',
+                        padding: '0 8px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        background: showSettingsDrawer ? 'var(--bg-hover)' : 'var(--bg-elevated)',
+                        border: `1px solid ${showSettingsDrawer ? 'var(--accent)' : (reviewedExam.startTime ? 'var(--warning-border)' : 'var(--border)')}`,
+                        borderRadius: 'var(--radius-sm)',
+                        color: showSettingsDrawer ? 'var(--text-primary)' : (reviewedExam.startTime ? 'var(--warning)' : 'var(--text-secondary)'),
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '5px',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      <Settings size={12} color={reviewedExam.startTime ? 'var(--warning)' : 'var(--text-muted)'} />
+                      <span>{showSettingsDrawer ? 'Hide Settings' : 'Schedule & Settings'}</span>
+                      {reviewedExam.startTime && (
+                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--warning)' }} />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -1293,6 +1551,448 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                   ))}
                 </div>
               </div>
+
+              {/* Comprehensive Exam Settings & Schedule Panel */}
+              {showSettingsDrawer && (
+                <div
+                  style={{
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div
+                        style={{
+                          width: '26px',
+                          height: '26px',
+                          borderRadius: 'var(--radius-sm)',
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Settings size={13} color="var(--accent)" />
+                      </div>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          Exam Delivery, Scheduling & Anti-Cheat Controls
+                        </h4>
+                        <p style={{ margin: '1px 0 0', fontSize: '11px', color: 'var(--text-muted)' }}>
+                          Configure student unlock window, option scrambling, attempts, and WhatsApp score release.
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowSettingsDrawer(false)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        padding: '4px'
+                      }}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+
+                  {/* 1. SCHEDULE & ACCESS WINDOW */}
+                  <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Calendar size={13} color="var(--accent)" />
+                        <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          Synchronized Examination Window
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '11px' }}>
+                        {reviewedExam.startTime ? (
+                          <span style={{ color: 'var(--warning)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--warning)' }} />
+                            Waiting Room Commences {formatSchedulePreview(reviewedExam.startTime)}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--success)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--success)' }} />
+                            Immediate Access on Publish
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', marginBottom: '8px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
+                          Scheduled Start Time (Auto-Unlocks Terminal)
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={toLocalDatetimeString(reviewedExam.startTime)}
+                          onChange={(e) =>
+                            setReviewedExam({
+                              ...reviewedExam,
+                              startTime: parseLocalDatetimeString(e.target.value)
+                            })
+                          }
+                          style={{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            padding: '6px 10px',
+                            background: 'var(--bg-surface)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 'var(--radius-sm)',
+                            color: 'var(--text-primary)',
+                            fontSize: '11.5px',
+                            outline: 'none'
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
+                          Scheduled End Time (Auto-Closes Terminal)
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={toLocalDatetimeString(reviewedExam.endTime)}
+                          onChange={(e) =>
+                            setReviewedExam({
+                              ...reviewedExam,
+                              endTime: parseLocalDatetimeString(e.target.value)
+                            })
+                          }
+                          style={{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            padding: '6px 10px',
+                            background: 'var(--bg-surface)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 'var(--radius-sm)',
+                            color: 'var(--text-primary)',
+                            fontSize: '11.5px',
+                            outline: 'none'
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReviewedExam({
+                            ...reviewedExam,
+                            startTime: undefined,
+                            endTime: undefined
+                          });
+                          playSound('click');
+                        }}
+                        style={{
+                          padding: '3px 8px',
+                          fontSize: '10.5px',
+                          borderRadius: 'var(--radius-xs)',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Live Immediately
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const now = Date.now();
+                          setReviewedExam({
+                            ...reviewedExam,
+                            startTime: now + 5 * 60000,
+                            endTime: now + (reviewedExam.durationMinutes + 15) * 60000
+                          });
+                          playSound('click');
+                        }}
+                        style={{
+                          padding: '3px 8px',
+                          fontSize: '10.5px',
+                          borderRadius: 'var(--radius-xs)',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Start in 5 mins
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const now = Date.now();
+                          setReviewedExam({
+                            ...reviewedExam,
+                            startTime: now + 60 * 60000,
+                            endTime: now + (reviewedExam.durationMinutes + 75) * 60000
+                          });
+                          playSound('click');
+                        }}
+                        style={{
+                          padding: '3px 8px',
+                          fontSize: '10.5px',
+                          borderRadius: 'var(--radius-xs)',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Start in 1 hour
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const tomorrow = new Date();
+                          tomorrow.setDate(tomorrow.getDate() + 1);
+                          tomorrow.setHours(10, 0, 0, 0);
+                          const start = tomorrow.getTime();
+                          setReviewedExam({
+                            ...reviewedExam,
+                            startTime: start,
+                            endTime: start + (reviewedExam.durationMinutes + 30) * 60000
+                          });
+                          playSound('click');
+                        }}
+                        style={{
+                          padding: '3px 8px',
+                          fontSize: '10.5px',
+                          borderRadius: 'var(--radius-xs)',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Tomorrow 10:00 AM
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 2. ANTI-CHEAT & INTEGRITY CONTROLS */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+                    {[
+                      {
+                        key: 'shuffleQuestions',
+                        label: 'Shuffle Question Order',
+                        desc: 'Every candidate receives questions in a distinct randomized order.',
+                        value: reviewedExam.shuffleQuestions ?? true,
+                        toggle: () => setReviewedExam({ ...reviewedExam, shuffleQuestions: !(reviewedExam.shuffleQuestions ?? true) })
+                      },
+                      {
+                        key: 'shuffleOptions',
+                        label: 'Shuffle Answer Options',
+                        desc: 'Option positions (A, B, C, D) are randomly scrambled per candidate.',
+                        value: reviewedExam.shuffleOptions ?? true,
+                        toggle: () => setReviewedExam({ ...reviewedExam, shuffleOptions: !(reviewedExam.shuffleOptions ?? true) })
+                      },
+                      {
+                        key: 'allowReview',
+                        label: 'Allow Question Revisit',
+                        desc: 'Candidates can navigate freely between previous questions.',
+                        value: reviewedExam.allowReview ?? true,
+                        toggle: () => setReviewedExam({ ...reviewedExam, allowReview: !(reviewedExam.allowReview ?? true) })
+                      },
+                      {
+                        key: 'showExplanationsAfterSubmit',
+                        label: 'Show Post-Submit Explanations',
+                        desc: 'Display AI step-by-step rationales when results are declared.',
+                        value: reviewedExam.showExplanationsAfterSubmit ?? true,
+                        toggle: () => setReviewedExam({ ...reviewedExam, showExplanationsAfterSubmit: !(reviewedExam.showExplanationsAfterSubmit ?? true) })
+                      }
+                    ].map((item) => (
+                      <div
+                        key={item.key}
+                        style={{
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-sm)',
+                          padding: '10px 12px',
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '10px'
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            item.toggle();
+                            playSound('click');
+                          }}
+                          style={{
+                            width: '34px',
+                            height: '18px',
+                            borderRadius: 'var(--radius-pill)',
+                            flexShrink: 0,
+                            marginTop: '2px',
+                            background: item.value ? 'var(--accent)' : 'var(--bg-hover)',
+                            border: 'none',
+                            cursor: 'pointer',
+                            position: 'relative',
+                            transition: 'background 0.2s'
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: '14px',
+                              height: '14px',
+                              borderRadius: '50%',
+                              background: 'var(--bg-elevated)',
+                              position: 'absolute',
+                              top: '2px',
+                              left: item.value ? '18px' : '2px',
+                              transition: 'left 0.2s'
+                            }}
+                          />
+                        </button>
+                        <div>
+                          <div style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {item.label}
+                          </div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', lineHeight: 1.3, marginTop: '2px' }}>
+                            {item.desc}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 3. ATTEMPTS & WHATSAPP DETAILS */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
+                        Max Attempts per Student
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={reviewedExam.maxAttempts || 1}
+                        onChange={(e) =>
+                          setReviewedExam({
+                            ...reviewedExam,
+                            maxAttempts: Math.max(1, parseInt(e.target.value, 10) || 1)
+                          })
+                        }
+                        style={{
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          padding: '6px 10px',
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-sm)',
+                          color: 'var(--text-primary)',
+                          fontSize: '11.5px',
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+
+                    {reviewedExam.resultDeclarationMode === 'WHATSAPP_GROUP' && (
+                      <>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
+                            WhatsApp Group Name
+                          </label>
+                          <input
+                            value={reviewedExam.whatsappGroupName || ''}
+                            onChange={(e) =>
+                              setReviewedExam({
+                                ...reviewedExam,
+                                whatsappGroupName: e.target.value
+                              })
+                            }
+                            placeholder="e.g. TE Computer Div A - 2026 Batch"
+                            style={{
+                              width: '100%',
+                              boxSizing: 'border-box',
+                              padding: '6px 10px',
+                              background: 'var(--bg-elevated)',
+                              border: '1px solid var(--border)',
+                              borderRadius: 'var(--radius-sm)',
+                              color: 'var(--text-primary)',
+                              fontSize: '11.5px',
+                              outline: 'none'
+                            }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
+                            WhatsApp Group Invite Link
+                          </label>
+                          <input
+                            value={reviewedExam.whatsappGroupLink || ''}
+                            onChange={(e) =>
+                              setReviewedExam({
+                                ...reviewedExam,
+                                whatsappGroupLink: e.target.value
+                              })
+                            }
+                            placeholder="https://chat.whatsapp.com/..."
+                            style={{
+                              width: '100%',
+                              boxSizing: 'border-box',
+                              padding: '6px 10px',
+                              background: 'var(--bg-elevated)',
+                              border: '1px solid var(--border)',
+                              borderRadius: 'var(--radius-sm)',
+                              color: 'var(--text-primary)',
+                              fontSize: '11.5px',
+                              outline: 'none'
+                            }}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* 4. PRE-EXAM INSTRUCTIONS */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
+                      Candidate Instructions (Displayed on Entrance Screen)
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={reviewedExam.instructions || ''}
+                      onChange={(e) =>
+                        setReviewedExam({
+                          ...reviewedExam,
+                          instructions: e.target.value
+                        })
+                      }
+                      placeholder="e.g. All questions are mandatory. Negative marking is active. Do not switch tabs or exit fullscreen during the examination."
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '6px 10px',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-primary)',
+                        fontSize: '11px',
+                        outline: 'none',
+                        resize: 'vertical'
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Validation Warnings Callout */}
               {validationIssues.length > 0 && (
