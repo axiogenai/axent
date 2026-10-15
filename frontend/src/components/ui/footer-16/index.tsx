@@ -39,27 +39,27 @@ const defaultColumns: Footer16Column[] = [
     title: 'Examination',
     links: [
       { label: 'Student Exam Hall', href: '/mcq' },
-      { label: 'Candidate Guidelines', href: '#' },
-      { label: 'Anti-Cheat Architecture', href: '#' },
-      { label: 'System Telemetry', href: '#' },
+      { label: 'Candidate Guidelines', href: '/mcq' },
+      { label: 'Anti-Cheat Architecture', href: '#features' },
+      { label: 'System Diagnostics', href: 'https://axent-b0wl.onrender.com/api/health/' },
     ],
   },
   {
-    title: 'Platform',
+    title: 'Authority Access',
     links: [
-      { label: 'Dual Stream Proctoring', href: '#' },
-      { label: 'Keystroke Forensics', href: '#' },
-      { label: 'Cryptographic Ledger', href: '#' },
-      { label: 'Security Standard', href: '#' },
+      { label: 'Paper Setter Gateway', href: '/login/paper-setter' },
+      { label: 'Chief Proctor & Admin Portal', href: '/login/admin' },
+      { label: 'Staff Onboarding Invite Portal', href: '/invite' },
+      { label: 'Unified Authority Login', href: '/login' },
     ],
   },
   {
-    title: 'Integrity',
+    title: 'Security & Integrity',
     links: [
-      { label: 'Real-Time Facial Telemetry', href: '#' },
-      { label: 'AI Gaze Vectoring', href: '#' },
-      { label: 'Hardware Attestation', href: '#' },
-      { label: 'Tamper-Proof Audit', href: '#' },
+      { label: 'Dual Stream Proctoring', href: '#features' },
+      { label: 'Keystroke Forensics', href: '#features' },
+      { label: 'Cryptographic Ledger', href: '#security' },
+      { label: 'Hardware Attestation', href: '#security' },
     ],
   },
 ];
@@ -167,12 +167,12 @@ export function Footer16({
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, amount: 0.22 }}
-        className="relative w-full mx-auto flex min-h-[580px] flex-col justify-end pt-16 sm:min-h-[640px] lg:min-h-[720px]"
+        className="relative w-full mx-auto flex min-h-[460px] sm:min-h-[640px] lg:min-h-[720px] flex-col justify-end pt-10 sm:pt-16"
       >
-        {/* Sleek, tall, atmospheric watermark perfectly centered and proportioned across the dunes */}
+        {/* Sleek, tall, atmospheric watermark hidden on mobile to prevent logo collision, visible on desktop/tablet */}
         <motion.div
           variants={wordmarkVariants}
-          className="pointer-events-none absolute inset-x-0 top-[3%] sm:top-[5%] lg:top-[6%] flex w-full justify-center overflow-hidden z-0 px-4"
+          className="pointer-events-none absolute inset-x-0 top-[2%] sm:top-[5%] lg:top-[6%] hidden sm:flex w-full justify-center overflow-hidden z-0 px-4"
           aria-hidden="true"
         >
           <div className="w-full max-w-[1380px] flex justify-center">
@@ -207,13 +207,13 @@ export function Footer16({
           </div>
         </motion.div>
 
-        <div className="relative z-10 border-t border-white/10 bg-black/1 px-4 pt-9 pb-7 shadow-[0_-24px_80px_rgba(9,10,14,0.34)] backdrop-blur-xs sm:px-12 sm:pt-11 sm:pb-8 lg:pt-[46px]">
-          <div className="grid gap-10 lg:grid-cols-[minmax(240px,1fr)_minmax(500px,1.2fr)] lg:gap-x-16">
+        <div className="relative z-10 border-t border-white/10 bg-black/40 px-5 pt-8 pb-7 backdrop-blur-md sm:px-12 sm:pt-11 sm:pb-8 lg:pt-[46px]">
+          <div className="grid gap-8 sm:gap-10 lg:grid-cols-[minmax(240px,1fr)_minmax(500px,1.2fr)] lg:gap-x-16">
             {/* Brand column */}
             <motion.div variants={riseVariants} className="max-w-xl">
               <a
                 href="/"
-                className="group inline-flex min-h-10 items-start gap-2 text-zinc-50 transition-[opacity,transform] duration-200 ease-out hover:opacity-85 active:scale-[0.96]"
+                className="group inline-flex items-center gap-2 text-zinc-50 transition-[opacity,transform] duration-200 ease-out hover:opacity-85 active:scale-[0.96]"
                 aria-label={`${brandName} home`}
               >
                 {brandLogo ? (
@@ -227,25 +227,29 @@ export function Footer16({
                   </>
                 )}
               </a>
-              <p className="text-md max-w-lg leading-relaxed font-normal text-pretty whitespace-pre-line text-zinc-300/78 sm:text-sm mt-3">
+              <p className="text-xs leading-relaxed font-normal text-zinc-400 whitespace-pre-line sm:text-sm mt-3 max-w-md">
                 {tagline}
               </p>
             </motion.div>
 
-            {/* Links Columns (3 balanced columns matching reference) */}
+            {/* Links Columns (2 columns on mobile, 3 on tablet/desktop) */}
             <motion.nav
               variants={sectionVariants}
               aria-label="Footer navigation"
-              className="grid grid-cols-1 gap-7 min-[480px]:grid-cols-3 min-[480px]:gap-x-8 lg:gap-x-12"
+              className="grid grid-cols-2 gap-x-6 gap-y-7 sm:grid-cols-3 sm:gap-x-8 lg:gap-x-12"
             >
-              {columns.map((column) => (
-                <motion.div variants={riseVariants} key={column.title}>
-                  <h3 className="text-md leading-none font-light tracking-wide text-zinc-50 uppercase">
+              {columns.map((column, idx) => (
+                <motion.div
+                  variants={riseVariants}
+                  key={column.title}
+                  className={idx === 2 ? 'col-span-2 sm:col-span-1' : ''}
+                >
+                  <h3 className="text-[11px] leading-tight font-semibold tracking-wider text-zinc-300 uppercase">
                     {column.title}
                   </h3>
                   <motion.ul
                     variants={listVariants}
-                    className="mt-4 space-y-[8px]"
+                    className="mt-3 space-y-2.5"
                   >
                     {column.links.map((link) => (
                       <motion.li variants={linkVariants} key={link.label}>
@@ -253,7 +257,7 @@ export function Footer16({
                           href={link.href}
                           target={link.href.startsWith('http') ? '_blank' : undefined}
                           rel={link.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-                          className="inline-flex min-h-5 items-center text-sm leading-tight font-light text-zinc-300/70 transition-colors duration-200 ease-out hover:text-zinc-50"
+                          className="inline-flex text-xs leading-normal font-normal text-zinc-400 transition-colors duration-200 ease-out hover:text-zinc-100"
                         >
                           {link.label}
                         </a>
@@ -267,15 +271,15 @@ export function Footer16({
 
           <motion.div
             variants={riseVariants}
-            className="mt-6 flex flex-col border-t border-white/10 pt-4 sm:mt-9 sm:flex-row sm:items-center sm:justify-between"
+            className="mt-8 flex flex-col gap-4 border-t border-white/10 pt-5 sm:mt-9 sm:flex-row sm:items-center sm:justify-between"
           >
-            <p className="text-sm font-normal text-zinc-400/76">
+            <p className="text-xs font-normal text-zinc-500">
               {copyright}
             </p>
 
             <motion.ul
               variants={listVariants}
-              className="flex items-center gap-1 sm:justify-end mt-3 sm:mt-0"
+              className="flex items-center gap-1 sm:justify-end"
               aria-label="Social links"
             >
               {socials.map((social) => {
