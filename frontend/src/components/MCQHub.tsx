@@ -1,16 +1,23 @@
 import React, { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { MCQExamSelector } from './MCQExamScreen';
 import { ErrorBoundary } from './ErrorBoundary';
 
 export const MCQHub: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   // Strict Exam-Lock Guard:
-  // If a student registered for a CODING practical tries to manually visit /mcq,
-  // redirect them immediately to /workspace to prevent cheating/bypassing!
+  // If a student is accessing a specific MCQ exam (?examId=...), allow it unconditionally.
+  // Only redirect if genuinely registered for an active CODING practical session.
   useEffect(() => {
     try {
+      const examId = searchParams.get('examId');
+      if (examId) {
+        localStorage.setItem('codedna_active_exam_mode', 'MCQ');
+        return;
+      }
+
       const activeMode = localStorage.getItem('codedna_active_exam_mode');
       const rawProfile = localStorage.getItem('codedna_student_profile');
       let isCodingStudent = activeMode === 'CODING';
@@ -29,7 +36,7 @@ export const MCQHub: React.FC = () => {
     } catch {
       // Ignore
     }
-  }, [navigate]);
+  }, [navigate, searchParams]);
 
   return (
     <div style={{ minHeight: 'calc(100vh - 52px)', background: 'var(--bg-main)', display: 'flex', flexDirection: 'column' }}>

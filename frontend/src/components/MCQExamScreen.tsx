@@ -436,9 +436,10 @@ interface RegistrationFormProps {
   onStart: (student: StudentInfo) => void;
   startError?: string | null;
   onBack?: () => void;
+  onViewSubmittedResult?: (attempt: MCQAttempt) => void;
 }
 
-const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onSelectExam, onStart, startError, onBack }) => {
+const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onSelectExam, onStart, startError, onBack, onViewSubmittedResult }) => {
   const navigate = useNavigate();
   const [mode, setMode] = useState<'manual' | 'token'>('manual');
   
@@ -485,6 +486,11 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
       (item) => item.status === 'SUBMITTED' || item.status === 'TIMED_OUT'
     );
     if (existingSubmitted && Math.max(1, exam.maxAttempts || 1) <= 1) {
+      if (onViewSubmittedResult) {
+        playSound('success');
+        onViewSubmittedResult(existingSubmitted);
+        return;
+      }
       errs.push(`Candidate with Roll Number / USN "${trimmedRoll}" has already submitted this examination. Re-attempting is strictly prohibited under institutional proctoring rules.`);
     }
 
@@ -521,9 +527,6 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
     } catch {}
 
     onStart(student);
-    void requestExamFullscreen().then(() => {
-      triggerViewportReflow();
-    });
   };
 
   const handleApplyToken = () => {
@@ -585,9 +588,6 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
     }
 
     onStart(student);
-    void requestExamFullscreen().then(() => {
-      triggerViewportReflow();
-    });
   };
 
   return (
@@ -964,15 +964,23 @@ const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attem
     setTimeout(() => setCopiedHash(false), 2500);
   };
 
-  const submitDateStr = attempt.submitTime
-    ? new Date(attempt.submitTime).toLocaleString([], {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      })
-    : new Date().toLocaleString([], {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      });
+  const submitDateStr = useMemo(() => {
+    try {
+      if (attempt?.submitTime) {
+        const d = new Date(attempt.submitTime);
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleString([], {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          });
+        }
+      }
+    } catch {}
+    return new Date().toLocaleString([], {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  }, [attempt?.submitTime]);
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
@@ -1388,14 +1396,22 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
               <span>Dept: <strong>{attempt.studentDept || 'CSE'}</strong></span>
               <span>•</span>
               <span>Sem: <strong>{attempt.studentSem || '4th Sem'}</strong> ({attempt.studentDiv || 'A'})</span>
-              {attempt.submitTime && (
-                <>
-                  <span>•</span>
-                  <span style={{ color: 'var(--text-muted)' }}>
-                    Submitted {new Date(attempt.submitTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </>
-              )}
+              {attempt?.submitTime && (() => {
+                try {
+                  const d = new Date(attempt.submitTime);
+                  if (!isNaN(d.getTime())) {
+                    return (
+                      <>
+                        <span>•</span>
+                        <span style={{ color: 'var(--text-muted)' }}>
+                          Submitted {d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </>
+                    );
+                  }
+                } catch {}
+                return null;
+              })()}
             </div>
           </div>
 
@@ -1795,15 +1811,26 @@ interface MCQExamScreenProps {
 
 export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [allExamsList, setAllExamsList] = useState<MCQExamConfig[]>(() => getAllExams());
 
-  // Check if there is an active in-progress attempt globally
-  const activeAttempt = getActiveAttempt();
+  // Check if there is an active in-progress attempt for this exam or globally
+  const activeAttempt = getActiveAttempt(examId) || getActiveAttempt();
   const initialExamId = (activeAttempt && activeAttempt.status === 'IN_PROGRESS')
     ? activeAttempt.examId
     : examId;
 
   const [activeExamId, setActiveExamId] = useState<string>(initialExamId);
+
+  // Anti-tamper: enforce URL synchronization with active session exam
+  useEffect(() => {
+    if (activeAttempt && activeAttempt.status === 'IN_PROGRESS') {
+      const urlExamId = searchParams.get('examId');
+      if (urlExamId !== activeAttempt.examId) {
+        setSearchParams({ examId: activeAttempt.examId }, { replace: true });
+      }
+    }
+  }, [activeAttempt, searchParams, setSearchParams]);
 
   const [exam, setExam] = useState<MCQExamConfig | null>(() => {
     return getAllExams().find((e) => e.id === initialExamId) ?? null;
@@ -2059,6 +2086,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
   const [proctorWarning, setProctorWarning] = useState<string | null>(null);
   const [now, setNow] = useState<number>(() => getSynchronizedNow());
   const [isFullscreen, setIsFullscreen] = useState<boolean>(() => isCurrentlyFullscreen());
+  const [isSyncingBlueprint, setIsSyncingBlueprint] = useState<boolean>(true);
 
   // ── LIBERATE HARDWARE & CONCLUDE ASSESSMENT ──
   const handleConcludeAndReleaseDevice = useCallback(async () => {
@@ -2265,57 +2293,94 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     };
   }, [student.labId, student.stationNumber, attempt]);
 
-  // Load exam config
+  // Load exam config & subscribe to cloud sync
   useEffect(() => {
-    const exams = getAllExams();
-    setAllExamsList(exams);
-    const e = exams.find((x) => x.id === activeExamId);
-    setExam(e ?? null);
+    let isMounted = true;
 
-    // Restore active attempt if exists
-    const active = getActiveAttempt();
-    if (active && active.examId === activeExamId && active.status === 'IN_PROGRESS') {
-      if (getSynchronizedNow() >= active.deadline) {
-        // Automatically finalize and display results if deadline elapsed!
-        const result = submitAttempt(active.id, active.answers, 'TIMED_OUT') || gradeAttempt(active);
-        const finished = { ...active, status: 'TIMED_OUT' as const, score: result.score, correctCount: result.correctCount, wrongCount: result.wrongCount };
-        setAttempt(finished);
-        setAnswers(active.answers);
-        setGradeResult(result);
-        setSubmitted(true);
+    const refreshData = () => {
+      if (!isMounted) return;
+      const exams = getAllExams();
+      setAllExamsList(exams);
+      const e = exams.find((x) => x.id === activeExamId);
+      if (e) setExam(e);
+
+      // Restore active attempt if exists
+      const active = getActiveAttempt(activeExamId) || getActiveAttempt();
+      if (active && active.examId === activeExamId && active.status === 'IN_PROGRESS') {
+        if (getSynchronizedNow() >= active.deadline) {
+          // Automatically finalize and display results if deadline elapsed!
+          const result = submitAttempt(active.id, active.answers, 'TIMED_OUT') || gradeAttempt(active);
+          const finished = { ...active, status: 'TIMED_OUT' as const, score: result.score, correctCount: result.correctCount, wrongCount: result.wrongCount };
+          setAttempt(finished);
+          setAnswers(active.answers);
+          setGradeResult(result);
+          setSubmitted(true);
+        } else {
+          setAttempt(active);
+          setAnswers(active.answers);
+          let restoredIndex = 0;
+          try {
+            const savedIndex = Number(localStorage.getItem(`codedna_mcq_current_idx_${active.id}`));
+            if (Number.isInteger(savedIndex) && savedIndex >= 0 && savedIndex < active.assignedQuestions.length) {
+              restoredIndex = savedIndex;
+            } else {
+              const firstUnanswered = active.assignedQuestions.findIndex((q) => !active.answers[q.questionId]);
+              if (firstUnanswered !== -1) restoredIndex = firstUnanswered;
+            }
+          } catch {}
+          setCurrentIdx(restoredIndex);
+          if (active.tabSwitchCount >= 3) {
+            setIsLockedByProctor(true);
+            setProctorWarning(`ACADEMIC FREEZE: ${active.tabSwitchCount}/3 Infractions Exceeded! Workstation frozen.`);
+          }
+          if (active.studentName) {
+            const rollDigits = (active.studentRoll || '').replace(/[^0-9]/g, '');
+            const derivedStation = rollDigits.length > 0 ? `Station #${String(parseInt(rollDigits.slice(-2), 10) || 1).padStart(2, '0')}` : 'Station #01';
+            setStudent((prev) => ({
+              ...prev,
+              name: active.studentName,
+              rollNumber: active.studentRoll,
+              department: active.studentDept,
+              semester: active.studentSem,
+              division: active.studentDiv || 'A',
+              stationNumber: prev.stationNumber && prev.stationNumber !== 'Station #01' ? prev.stationNumber : derivedStation
+            }));
+          }
+        }
       } else {
-        setAttempt(active);
-        setAnswers(active.answers);
-        setCurrentIdx(0);
-        if (active.tabSwitchCount >= 3) {
-          setIsLockedByProctor(true);
-          setProctorWarning(`ACADEMIC FREEZE: ${active.tabSwitchCount}/3 Infractions Exceeded! Workstation frozen.`);
-        }
-        if (active.studentName) {
-          const rollDigits = (active.studentRoll || '').replace(/[^0-9]/g, '');
-          const derivedStation = rollDigits.length > 0 ? `Station #${String(parseInt(rollDigits.slice(-2), 10) || 1).padStart(2, '0')}` : 'Station #01';
-          setStudent((prev) => ({
-            ...prev,
-            name: active.studentName,
-            rollNumber: active.studentRoll,
-            department: active.studentDept,
-            semester: active.studentSem,
-            division: active.studentDiv || 'A',
-            stationNumber: prev.stationNumber && prev.stationNumber !== 'Station #01' ? prev.stationNumber : derivedStation
-          }));
+        // Check for finished or timed-out attempt for this exam session to display scorecard immediately
+        const recent = getRecentSessionAttempt(activeExamId);
+        if (recent && (recent.status === 'TIMED_OUT' || recent.status === 'SUBMITTED')) {
+          const grade = gradeAttempt(recent);
+          setAttempt(recent);
+          setAnswers(recent.answers || {});
+          setGradeResult(grade);
+          setSubmitted(true);
         }
       }
-    } else {
-      // Check for finished or timed-out attempt for this exam session to display scorecard immediately
-      const recent = getRecentSessionAttempt(activeExamId);
-      if (recent && (recent.status === 'TIMED_OUT' || recent.status === 'SUBMITTED')) {
-        const grade = gradeAttempt(recent);
-        setAttempt(recent);
-        setAnswers(recent.answers || {});
-        setGradeResult(grade);
-        setSubmitted(true);
+    };
+
+    // Initial local read
+    refreshData();
+
+    // Trigger cloud synchronization and subscribe to changes
+    const unsubExams = onExamsChanged(refreshData);
+    const unsubData = onMcqDataChanged(refreshData);
+    window.addEventListener('storage', refreshData);
+
+    void syncFromSupabase().finally(() => {
+      if (isMounted) {
+        refreshData();
+        setIsSyncingBlueprint(false);
       }
-    }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubExams();
+      unsubData();
+      window.removeEventListener('storage', refreshData);
+    };
   }, [activeExamId]);
 
   // Anti-cheat: tab switch detection & live telemetry
@@ -2475,6 +2540,9 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     syncMcqLiveStation(a, exam, studentData, 0, false, {
       screenImageData: lastScreenFrameRef.current,
       hasLiveScreenStream: isScreenSharing
+    });
+    void requestExamFullscreen().then(() => {
+      triggerViewportReflow();
     });
   };
 
@@ -2678,8 +2746,144 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     }
   };
 
+  const handleExitToCatalog = () => {
+    try {
+      sessionStorage.removeItem('codedna_mcq_session_attempt');
+      sessionStorage.removeItem('codedna_mcq_last_finished_attempt');
+      localStorage.removeItem('codedna_mcq_active_attempt_backup');
+      localStorage.removeItem('codedna_mcq_active_attempt');
+      localStorage.removeItem('codedna_active_exam_mode');
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, '', '/mcq');
+      }
+    } catch {}
+    if (onBack) {
+      onBack();
+    } else {
+      navigate('/mcq', { replace: true });
+    }
+  };
+
+  // ── Results screen (Priority 1: Always render scorecard/receipt if submitted or concluded) ──
+  const isConcludedOrSubmitted = Boolean(
+    submitted ||
+    (attempt && (attempt.status === 'SUBMITTED' || attempt.status === 'TIMED_OUT' || attempt.status === 'ABANDONED'))
+  );
+
+  const fallbackExamConfig: MCQExamConfig = {
+    id: attempt?.examId || activeExamId || 'exam-unknown',
+    title: attempt?.examTitle || exam?.title || 'MCQ Examination',
+    description: exam?.description || 'Standard examination session.',
+    instructions: exam?.instructions || '',
+    createdBy: exam?.createdBy || 'system',
+    subject: exam?.subject || 'Examination',
+    topic: exam?.topic || 'Evaluation',
+    examCategory: exam?.examCategory || 'Aptitude',
+    durationMinutes: exam?.durationMinutes || 30,
+    totalMarks: attempt?.maxScore || exam?.totalMarks || 100,
+    questionCount: attempt?.assignedQuestions?.length || exam?.questionCount || 10,
+    questionIds: [],
+    status: 'PUBLISHED',
+    shuffleQuestions: true,
+    shuffleOptions: true,
+    negativeMarkingEnabled: exam?.negativeMarkingEnabled ?? false,
+    allowReview: true,
+    showExplanationsAfterSubmit: exam?.showExplanationsAfterSubmit ?? true,
+    maxAttempts: exam?.maxAttempts || 1,
+    resultDeclarationMode: exam?.resultDeclarationMode || 'WHATSAPP_GROUP',
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+
+  const effectiveGradeResult = gradeResult || (isConcludedOrSubmitted && attempt ? gradeAttempt(attempt) : null);
+  const resolvedExam = exam || (attempt ? allExamsList.find((e) => e.id === attempt.examId) : null) || fallbackExamConfig;
+
+  if (isConcludedOrSubmitted) {
+    if (effectiveGradeResult && resolvedExam && attempt) {
+      const isHoldResults =
+        attempt.status !== 'TIMED_OUT' && (
+          resolvedExam.resultDeclarationMode === 'WHATSAPP_GROUP' ||
+          (typeof resolvedExam.instructions === 'string' && (
+            resolvedExam.instructions.includes('WHATSAPP_GROUP') ||
+            resolvedExam.instructions.toLowerCase().includes('whatsapp') ||
+            resolvedExam.instructions.toLowerCase().includes('manual')
+          ))
+        );
+
+      if (isHoldResults) {
+        return (
+          <WhatsAppHoldResultsView
+            attempt={attempt}
+            exam={resolvedExam}
+            onExit={handleExitToCatalog}
+          />
+        );
+      }
+
+      return (
+        <ResultsView
+          attempt={attempt}
+          exam={resolvedExam}
+          grade={effectiveGradeResult}
+          showExplanations={resolvedExam.showExplanationsAfterSubmit}
+          onRestart={resolvedExam.maxAttempts > 1 ? () => { setAttempt(null); setGradeResult(null); setSubmitted(false); } : undefined}
+          onExit={handleExitToCatalog}
+        />
+      );
+    }
+
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)', padding: '24px' }}>
+        <div style={{ maxWidth: '440px', width: '100%', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '32px 24px', textAlign: 'center' }}>
+          <CheckCircle2 size={40} style={{ color: 'var(--success)', margin: '0 auto 12px' }} />
+          <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px' }}>Examination Concluded & Submitted</h2>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 20px', lineHeight: 1.5 }}>Your responses have been securely recorded. Workstation lock has been liberated.</p>
+          <button className="btn btn-primary btn-sm" onClick={handleExitToCatalog}>Return to Exam Portal</button>
+        </div>
+      </div>
+    );
+  }
+
   // ── Loading / not found ──
   if (!exam) {
+    if (isSyncingBlueprint) {
+      return (
+        <div style={{
+          minHeight: '100vh',
+          background: 'var(--bg-main)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px',
+          color: 'var(--text-primary)'
+        }}>
+          <div style={{
+            maxWidth: '460px',
+            width: '100%',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '32px',
+            textAlign: 'center'
+          }}>
+            <Loader2 className="animate-spin" size={32} style={{ margin: '0 auto 16px', color: 'var(--accent)' }} />
+            <h3 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 8px' }}>Loading Examination Blueprint</h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 20px', lineHeight: 1.5 }}>
+              Fetching verified paper metadata from institutional database...
+            </p>
+            <button
+              onClick={handleExitToCatalog}
+              className="btn btn-secondary btn-sm"
+              style={{ padding: '8px 18px', fontSize: '12px' }}
+            >
+              Return to Catalog
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)', padding: '24px' }}>
         <div style={{ textAlign: 'center', maxWidth: '440px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '32px 24px' }}>
@@ -2688,12 +2892,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 20px' }}>The requested examination session does not exist or has been removed from the registry.</p>
           <button
             className="btn btn-primary btn-sm"
-            onClick={() => {
-              if (onBack) onBack();
-              else {
-                window.location.href = '/mcq';
-              }
-            }}
+            onClick={handleExitToCatalog}
           >
             Return to Available Exams
           </button>
@@ -2879,62 +3078,8 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     );
   }
 
-  const handleExitToCatalog = () => {
-    try {
-      sessionStorage.removeItem('codedna_mcq_session_attempt');
-      localStorage.removeItem('codedna_mcq_active_attempt_backup');
-      localStorage.removeItem('codedna_mcq_active_attempt');
-      localStorage.removeItem('codedna_active_exam_mode');
-      if (typeof window !== 'undefined') {
-        window.history.replaceState({}, '', '/mcq');
-      }
-    } catch {}
-    if (onBack) {
-      onBack();
-    } else {
-      navigate('/mcq', { replace: true });
-    }
-  };
-
   // ── Not yet registered ──
   if (!attempt) {
-    if (!exam) {
-      return (
-        <div style={{
-          minHeight: '100vh',
-          background: 'var(--bg-main)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '24px',
-          color: 'var(--text-primary)'
-        }}>
-          <div style={{
-            maxWidth: '460px',
-            width: '100%',
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '32px',
-            textAlign: 'center'
-          }}>
-            <Loader2 className="animate-spin" size={32} style={{ margin: '0 auto 16px', color: 'var(--accent)' }} />
-            <h3 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 8px' }}>Loading Examination Blueprint</h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 20px', lineHeight: 1.5 }}>
-              Fetching verified paper metadata from institutional database...
-            </p>
-            <button
-              onClick={handleExitToCatalog}
-              className="btn btn-secondary btn-sm"
-              style={{ padding: '8px 18px', fontSize: '12px' }}
-            >
-              Return to Catalog
-            </button>
-          </div>
-        </div>
-      );
-    }
     return (
       <RegistrationForm
         exam={exam}
@@ -2943,87 +3088,12 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         onStart={handleStart}
         startError={attemptStartError}
         onBack={onBack}
+        onViewSubmittedResult={(submittedAttempt) => {
+          setAttempt(submittedAttempt);
+          setSubmitted(true);
+          setGradeResult(gradeAttempt(submittedAttempt));
+        }}
       />
-    );
-  }
-
-  // ── Results screen ──
-  const isConcludedOrSubmitted = Boolean(
-    submitted ||
-    (attempt && (attempt.status === 'SUBMITTED' || attempt.status === 'TIMED_OUT' || attempt.status === 'ABANDONED'))
-  );
-
-  const fallbackExamConfig: MCQExamConfig = {
-    id: attempt?.examId || activeExamId || 'exam-unknown',
-    title: attempt?.examTitle || exam?.title || 'MCQ Examination',
-    description: exam?.description || 'Standard examination session.',
-    instructions: exam?.instructions || '',
-    createdBy: exam?.createdBy || 'system',
-    subject: exam?.subject || 'Examination',
-    topic: exam?.topic || 'Evaluation',
-    examCategory: exam?.examCategory || 'Aptitude',
-    durationMinutes: exam?.durationMinutes || 30,
-    totalMarks: attempt?.maxScore || exam?.totalMarks || 100,
-    questionCount: attempt?.assignedQuestions?.length || exam?.questionCount || 10,
-    questionIds: [],
-    status: 'PUBLISHED',
-    shuffleQuestions: true,
-    shuffleOptions: true,
-    negativeMarkingEnabled: exam?.negativeMarkingEnabled ?? false,
-    allowReview: true,
-    showExplanationsAfterSubmit: exam?.showExplanationsAfterSubmit ?? true,
-    maxAttempts: exam?.maxAttempts || 1,
-    resultDeclarationMode: exam?.resultDeclarationMode || 'WHATSAPP_GROUP',
-    createdAt: Date.now(),
-    updatedAt: Date.now()
-  };
-
-  const effectiveGradeResult = gradeResult || (isConcludedOrSubmitted && attempt ? gradeAttempt(attempt) : null);
-  const resolvedExam = exam || (attempt ? allExamsList.find((e) => e.id === attempt.examId) : null) || fallbackExamConfig;
-
-  if (isConcludedOrSubmitted) {
-    if (effectiveGradeResult && resolvedExam && attempt) {
-      const isHoldResults =
-        attempt.status !== 'TIMED_OUT' && (
-          resolvedExam.resultDeclarationMode === 'WHATSAPP_GROUP' ||
-          (typeof resolvedExam.instructions === 'string' && (
-            resolvedExam.instructions.includes('WHATSAPP_GROUP') ||
-            resolvedExam.instructions.toLowerCase().includes('whatsapp') ||
-            resolvedExam.instructions.toLowerCase().includes('manual')
-          ))
-        );
-
-      if (isHoldResults) {
-        return (
-          <WhatsAppHoldResultsView
-            attempt={attempt}
-            exam={resolvedExam}
-            onExit={handleExitToCatalog}
-          />
-        );
-      }
-
-      return (
-        <ResultsView
-          attempt={attempt}
-          exam={resolvedExam}
-          grade={effectiveGradeResult}
-          showExplanations={resolvedExam.showExplanationsAfterSubmit}
-          onRestart={resolvedExam.maxAttempts > 1 ? () => { setAttempt(null); setGradeResult(null); setSubmitted(false); } : undefined}
-          onExit={handleExitToCatalog}
-        />
-      );
-    }
-
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)', padding: '24px' }}>
-        <div style={{ maxWidth: '440px', width: '100%', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '32px 24px', textAlign: 'center' }}>
-          <CheckCircle2 size={40} style={{ color: 'var(--success)', margin: '0 auto 12px' }} />
-          <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px' }}>Examination Concluded & Submitted</h2>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 20px', lineHeight: 1.5 }}>Your responses have been securely recorded. Workstation lock has been liberated.</p>
-          <button className="btn btn-primary btn-sm" onClick={handleExitToCatalog}>Return to Exam Portal</button>
-        </div>
-      </div>
     );
   }
 
@@ -3489,7 +3559,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                 return (
                   <button
                     key={aq.questionId}
-                    onClick={() => setCurrentIdx(idx)}
+                    onClick={() => handleNavigateQuestion(idx)}
                     style={{
                       width: '34px', height: '34px', borderRadius: 'var(--radius-sm)',
                       border: `2px solid ${isCurrent ? 'var(--accent)' : answered ? 'var(--success-border)' : 'var(--border)'}`,
@@ -3628,7 +3698,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           {/* Navigation footer */}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
             <button
-              onClick={() => setCurrentIdx((i) => Math.max(0, i - 1))}
+              onClick={() => handleNavigateQuestion(Math.max(0, currentIdx - 1))}
               disabled={(!exam?.allowReview && currentIdx === 0) || currentIdx === 0}
               style={{
                 display: 'flex', alignItems: 'center', gap: '6px',
@@ -3657,7 +3727,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
               {currentIdx < totalQ - 1 ? (
                 <button
-                  onClick={() => setCurrentIdx((i) => Math.min(totalQ - 1, i + 1))}
+                  onClick={() => handleNavigateQuestion(Math.min(totalQ - 1, currentIdx + 1))}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '6px',
                     background: 'var(--accent)', border: 'none',
@@ -3811,19 +3881,15 @@ export const MCQExamSelector: React.FC = () => {
   }, []);
 
   // If candidate has an active attempt in progress, ALWAYS restore that exam immediately!
-  const activeAttempt = getActiveAttempt();
+  const activeAttempt = getActiveAttempt(queryExamId || undefined) || getActiveAttempt();
   const activeExamId = (activeAttempt && activeAttempt.status === 'IN_PROGRESS')
     ? activeAttempt.examId
     : null;
 
-  const isQueryValid = queryExamId ? exams.some((e) => e.id === queryExamId) : false;
-  const [urlTamperNotice, setUrlTamperNotice] = useState<string | null>(null);
-
   const [selectedExamId, setSelectedExamId] = useState<string | null>(() => {
-    if (activeExamId) return activeExamId;
-    if (queryExamId && isQueryValid) return queryExamId;
-    return null;
+    return activeExamId || queryExamId || null;
   });
+  const [urlTamperNotice, setUrlTamperNotice] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState<number>(() => getSynchronizedNow());
 
   useEffect(() => {
@@ -3836,41 +3902,38 @@ export const MCQExamSelector: React.FC = () => {
     };
   }, []);
 
-  // Strict link manipulation and session integrity enforcement
+  // Enforce URL security and anti-tamper controls
   useEffect(() => {
-    // Rule 1: If an exam attempt is currently IN_PROGRESS, strictly lock candidate to activeExamId
+    // 1. Active session in progress: strictly enforce URL parameter lock to candidate's ongoing test
     if (activeExamId) {
+      if (queryExamId !== activeExamId) {
+        setSearchParams({ examId: activeExamId }, { replace: true });
+        setUrlTamperNotice('Anti-Tamper Protocol: URL parameter change prevented. You have an active examination session in progress.');
+      }
       if (selectedExamId !== activeExamId) {
         setSelectedExamId(activeExamId);
-      }
-      if (searchParams.get('examId') !== activeExamId) {
-        setSearchParams({ examId: activeExamId }, { replace: true });
-        setUrlTamperNotice('Active examination in progress. Session locked to your ongoing paper.');
       }
       return;
     }
 
-    // Rule 2: If no active attempt, validate query parameter against published exams
-    const currentQueryId = searchParams.get('examId');
-    if (!currentQueryId) {
-      if (selectedExamId) setSelectedExamId(null);
-    } else {
-      const valid = exams.some((e) => e.id === currentQueryId);
-      if (!valid) {
-        // Scrub forged / invalid URL parameter immediately
+    // 2. Candidate entered a query parameter: validate against published exams
+    if (queryExamId && exams.length > 0) {
+      const exists = exams.some((e) => e.id === queryExamId);
+      if (!exists) {
         setSearchParams({}, { replace: true });
         setSelectedExamId(null);
-        setUrlTamperNotice(`The examination ID "${currentQueryId}" does not exist or has closed. Redirected to verified catalog.`);
-        playSound('warning');
-      } else if (selectedExamId !== currentQueryId) {
-        setSelectedExamId(currentQueryId);
+        setUrlTamperNotice(`Link Integrity Guard: The requested examination link "${queryExamId}" does not exist in the institutional registry.`);
+      } else if (selectedExamId !== queryExamId) {
+        setSelectedExamId(queryExamId);
       }
     }
-  }, [searchParams, activeExamId, selectedExamId, exams, setSearchParams]);
+  }, [activeExamId, queryExamId, exams, selectedExamId, setSearchParams]);
+
+  const effectiveExamId = activeExamId || queryExamId || selectedExamId;
 
   const handleSelectExam = (id: string) => {
     setSelectedExamId(id);
-    setSearchParams({ examId: id });
+    setSearchParams({ examId: id }, { replace: true });
   };
 
   const [showExitConfirm, setShowExitConfirm] = useState(false);
@@ -3878,6 +3941,7 @@ export const MCQExamSelector: React.FC = () => {
   const performExit = () => {
     try {
       sessionStorage.removeItem('codedna_mcq_session_attempt');
+      sessionStorage.removeItem('codedna_mcq_last_finished_attempt');
       localStorage.removeItem('codedna_mcq_active_attempt_backup');
       localStorage.removeItem('codedna_mcq_active_attempt');
       localStorage.removeItem('codedna_active_exam_mode');
@@ -3898,17 +3962,16 @@ export const MCQExamSelector: React.FC = () => {
     performExit();
   };
 
-  if (selectedExamId) {
+  if (effectiveExamId) {
     return (
       <ErrorBoundary
         fallbackTitle="Examination Terminal Irregularity Prevented"
         onReset={() => {
-          setSelectedExamId(null);
-          setSearchParams({}, { replace: true });
+          performExit();
         }}
       >
         <MCQExamScreen
-          examId={selectedExamId}
+          examId={effectiveExamId}
           onBack={handleBack}
         />
         <ConfirmationModal

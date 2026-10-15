@@ -58,6 +58,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         brandName="AXENT"
         tagline={'Autonomous Academic Examination & Proctoring Platform.\nEngineered for uncompromised institutional integrity, real-time forensics,\nand cryptographic audit ledgers.'}
         copyright="© 2026 Axent · Engineered by team.axiogen.in. All institutional rights reserved."
+        columns={[]}
       />
     </div>
   );

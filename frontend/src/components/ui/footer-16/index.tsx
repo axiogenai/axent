@@ -34,35 +34,7 @@ export interface Footer16Props {
   backgroundImage?: string;
 }
 
-const defaultColumns: Footer16Column[] = [
-  {
-    title: 'Examination',
-    links: [
-      { label: 'Student Exam Hall', href: '/mcq' },
-      { label: 'Candidate Guidelines', href: '/mcq' },
-      { label: 'Anti-Cheat Architecture', href: '#features' },
-      { label: 'System Diagnostics', href: 'https://axent-b0wl.onrender.com/api/health/' },
-    ],
-  },
-  {
-    title: 'Authority Access',
-    links: [
-      { label: 'Paper Setter Gateway', href: '/login/paper-setter' },
-      { label: 'Chief Proctor & Admin Portal', href: '/login/admin' },
-      { label: 'Staff Onboarding Invite Portal', href: '/invite' },
-      { label: 'Unified Authority Login', href: '/login' },
-    ],
-  },
-  {
-    title: 'Security & Integrity',
-    links: [
-      { label: 'Dual Stream Proctoring', href: '#features' },
-      { label: 'Keystroke Forensics', href: '#features' },
-      { label: 'Cryptographic Ledger', href: '#security' },
-      { label: 'Hardware Attestation', href: '#security' },
-    ],
-  },
-];
+const defaultColumns: Footer16Column[] = [];
 
 const defaultSocials: Footer16Social[] = [
   { label: 'Facebook', href: 'https://team.axiogen.in', icon: 'facebook' },
@@ -208,7 +180,7 @@ export function Footer16({
         </motion.div>
 
         <div className="relative z-10 border-t border-white/10 bg-black/40 px-5 pt-8 pb-7 backdrop-blur-md sm:px-12 sm:pt-11 sm:pb-8 lg:pt-[46px]">
-          <div className="grid gap-8 sm:gap-10 lg:grid-cols-[minmax(240px,1fr)_minmax(500px,1.2fr)] lg:gap-x-16">
+          <div className={columns && columns.length > 0 ? "grid gap-8 sm:gap-10 lg:grid-cols-[minmax(240px,1fr)_minmax(500px,1.2fr)] lg:gap-x-16" : "flex flex-col max-w-xl"}>
             {/* Brand column */}
             <motion.div variants={riseVariants} className="max-w-xl">
               <a
@@ -232,41 +204,43 @@ export function Footer16({
               </p>
             </motion.div>
 
-            {/* Links Columns (2 columns on mobile, 3 on tablet/desktop) */}
-            <motion.nav
-              variants={sectionVariants}
-              aria-label="Footer navigation"
-              className="grid grid-cols-2 gap-x-6 gap-y-7 sm:grid-cols-3 sm:gap-x-8 lg:gap-x-12"
-            >
-              {columns.map((column, idx) => (
-                <motion.div
-                  variants={riseVariants}
-                  key={column.title}
-                  className={idx === 2 ? 'col-span-2 sm:col-span-1' : ''}
-                >
-                  <h3 className="text-[11px] leading-tight font-semibold tracking-wider text-zinc-300 uppercase">
-                    {column.title}
-                  </h3>
-                  <motion.ul
-                    variants={listVariants}
-                    className="mt-3 space-y-2.5"
+            {/* Links Columns (rendered only if columns array is non-empty) */}
+            {columns && columns.length > 0 && (
+              <motion.nav
+                variants={sectionVariants}
+                aria-label="Footer navigation"
+                className="grid grid-cols-2 gap-x-6 gap-y-7 sm:grid-cols-3 sm:gap-x-8 lg:gap-x-12"
+              >
+                {columns.map((column, idx) => (
+                  <motion.div
+                    variants={riseVariants}
+                    key={column.title}
+                    className={idx === 2 ? 'col-span-2 sm:col-span-1' : ''}
                   >
-                    {column.links.map((link) => (
-                      <motion.li variants={linkVariants} key={link.label}>
-                        <a
-                          href={link.href}
-                          target={link.href.startsWith('http') ? '_blank' : undefined}
-                          rel={link.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-                          className="inline-flex text-xs leading-normal font-normal text-zinc-400 transition-colors duration-200 ease-out hover:text-zinc-100"
-                        >
-                          {link.label}
-                        </a>
-                      </motion.li>
-                    ))}
-                  </motion.ul>
-                </motion.div>
-              ))}
-            </motion.nav>
+                    <h3 className="text-[11px] leading-tight font-semibold tracking-wider text-zinc-300 uppercase">
+                      {column.title}
+                    </h3>
+                    <motion.ul
+                      variants={listVariants}
+                      className="mt-3 space-y-2.5"
+                    >
+                      {column.links.map((link) => (
+                        <motion.li variants={linkVariants} key={link.label}>
+                          <a
+                            href={link.href}
+                            target={link.href.startsWith('http') ? '_blank' : undefined}
+                            rel={link.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+                            className="inline-flex text-xs leading-normal font-normal text-zinc-400 transition-colors duration-200 ease-out hover:text-zinc-100"
+                          >
+                            {link.label}
+                          </a>
+                        </motion.li>
+                      ))}
+                    </motion.ul>
+                  </motion.div>
+                ))}
+              </motion.nav>
+            )}
           </div>
 
           <motion.div

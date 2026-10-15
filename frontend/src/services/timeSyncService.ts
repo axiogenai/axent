@@ -243,36 +243,12 @@ export function isCurrentlyFullscreen(): boolean {
   );
 }
 
-/**
- * Force the Chromium GPU compositor to push a new frame to the Windows DWM swapchain.
- * Fixes the classic Chromium hardware acceleration bug where the display compositor
- * fails to swap frames during window state / fullscreen transitions until minimized/resized.
- */
 function kickChromiumCompositor(): void {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return;
-
-  const target = (document.getElementById('root') || document.body) as HTMLElement | null;
-  if (!target) return;
-
-  // Frame 1: promote layer and micro-shift opacity to invalidate render pass
+  if (typeof window === 'undefined') return;
   requestAnimationFrame(() => {
     try {
-      target.style.opacity = '0.999';
-      target.style.transform = 'translateZ(0)';
-      void target.offsetHeight;
-      void document.body?.offsetHeight;
+      window.dispatchEvent(new Event('resize'));
     } catch {}
-
-    // Frame 2: restore clean values on next VSync, guaranteeing compositor commits swapchain
-    requestAnimationFrame(() => {
-      try {
-        target.style.removeProperty('opacity');
-        target.style.removeProperty('transform');
-        void target.offsetHeight;
-        void document.body?.offsetHeight;
-        window.dispatchEvent(new Event('resize'));
-      } catch {}
-    });
   });
 }
 
@@ -284,7 +260,6 @@ function applyFullscreenInlineStyles(): void {
   try {
     const html = document.documentElement;
     const body = document.body;
-    const root = document.getElementById('root');
 
     html.style.height = '100%';
     html.style.overflow = 'auto';
@@ -292,13 +267,6 @@ function applyFullscreenInlineStyles(): void {
     body.style.height = '100%';
     body.style.overflow = 'auto';
     body.style.margin = '0';
-
-    if (root) {
-      root.style.minHeight = '100%';
-      root.style.height = '100%';
-      root.style.display = 'flex';
-      root.style.flexDirection = 'column';
-    }
   } catch {}
 }
 
@@ -310,7 +278,6 @@ function removeFullscreenInlineStyles(): void {
   try {
     const html = document.documentElement;
     const body = document.body;
-    const root = document.getElementById('root');
 
     html.style.removeProperty('height');
     html.style.removeProperty('overflow');
@@ -318,19 +285,12 @@ function removeFullscreenInlineStyles(): void {
     body.style.removeProperty('height');
     body.style.removeProperty('overflow');
     body.style.removeProperty('margin');
-
-    if (root) {
-      root.style.removeProperty('min-height');
-      root.style.removeProperty('height');
-      root.style.removeProperty('display');
-      root.style.removeProperty('flex-direction');
-    }
   } catch {}
 }
 
 /**
- * Forces synchronous reflow + staggered compositor kicks to guarantee
- * Chromium on Windows DWM repaints immediately after fullscreen transition or exam submission.
+ * Forces synchronous reflow to guarantee Chromium on Windows DWM
+ * repaints immediately after fullscreen transition or exam submission.
  */
 export function triggerViewportReflow(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
@@ -342,15 +302,6 @@ export function triggerViewportReflow(): void {
   }
 
   kickChromiumCompositor();
-
-  [20, 60, 140, 280, 500, 900].forEach((delay) => {
-    setTimeout(() => {
-      if (isCurrentlyFullscreen()) {
-        applyFullscreenInlineStyles();
-      }
-      kickChromiumCompositor();
-    }, delay);
-  });
 }
 
 // Automatically catch native fullscreen events
