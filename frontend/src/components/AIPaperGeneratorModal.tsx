@@ -28,7 +28,9 @@ import {
   Clock,
   Shield,
   Shuffle,
-  Settings
+  Settings,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import {
   generateFullExamPaperWithAI,
@@ -92,6 +94,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
 }) => {
   // Step state
   const [step, setStep] = useState<ModalStep>('config');
+  const [configPage, setConfigPage] = useState<1 | 2>(1);
 
   // Generator Form State
   const [title, setTitle] = useState('');
@@ -238,9 +241,27 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
 
   if (!isOpen) return null;
 
+  // ── ADVANCE FROM PAGE 1 (BLUEPRINT) TO PAGE 2 (RULES & TIMING) ──────────────
+  const handleNextPage = () => {
+    setError(null);
+    if (!subject.trim()) {
+      if (examCategory === 'Aptitude') {
+        setSubject('General Aptitude & Reasoning');
+      } else {
+        setSubject(sections[0]?.topic ? `${sections[0].topic} Assessment` : 'General Assessment');
+      }
+    }
+    setConfigPage(2);
+    playSound('click');
+  };
+
   // ── 1. GENERATE DRAFT WITH AI ────────────────────────────────────────────────
-  const handleGenerate = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGenerate = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e && 'preventDefault' in e) e.preventDefault();
+    if (configPage !== 2) {
+      handleNextPage();
+      return;
+    }
     setError(null);
 
     if (topicMode === 'sections') {
@@ -665,7 +686,6 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
         justifyContent: 'center',
         padding: '16px'
       }}
-      onClick={(e) => e.target === e.currentTarget && step !== 'loading' && onClose()}
     >
       <div
         style={{
@@ -802,9 +822,105 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
             </div>
           )}
 
-          {/* ── STEP 1: CONFIG FORM ── */}
+          {/* ── STEP 1: CONFIG FORM (2-PAGE SYSTEM) ── */}
           {step === 'config' && (
-            <form id="ai-paper-config-form" onSubmit={handleGenerate} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* 2-Page Step Selector Tabs */}
+              <div
+                style={{
+                  display: 'flex',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '3px'
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    setConfigPage(1);
+                    playSound('click');
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '8px 14px',
+                    border: 'none',
+                    borderRadius: 'var(--radius-xs)',
+                    background: configPage === 1 ? 'var(--bg-elevated)' : 'transparent',
+                    color: configPage === 1 ? 'var(--text-primary)' : 'var(--text-muted)',
+                    fontWeight: configPage === 1 ? 700 : 500,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <span
+                    style={{
+                      width: '18px',
+                      height: '18px',
+                      borderRadius: '50%',
+                      background: configPage === 1 ? 'var(--accent)' : 'var(--bg-surface)',
+                      color: configPage === 1 ? 'var(--accent-contrast)' : 'var(--text-muted)',
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    1
+                  </span>
+                  <span>1. Paper Blueprint & Topics</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleNextPage()}
+                  style={{
+                    flex: 1,
+                    padding: '8px 14px',
+                    border: 'none',
+                    borderRadius: 'var(--radius-xs)',
+                    background: configPage === 2 ? 'var(--bg-elevated)' : 'transparent',
+                    color: configPage === 2 ? 'var(--text-primary)' : 'var(--text-muted)',
+                    fontWeight: configPage === 2 ? 700 : 500,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <span
+                    style={{
+                      width: '18px',
+                      height: '18px',
+                      borderRadius: '50%',
+                      background: configPage === 2 ? 'var(--accent)' : 'var(--bg-surface)',
+                      color: configPage === 2 ? 'var(--accent-contrast)' : 'var(--text-muted)',
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    2
+                  </span>
+                  <span>2. Rules, Timing & Delivery</span>
+                </button>
+              </div>
+
+              <div id="ai-paper-config-fields" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {configPage === 1 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {/* Row 1: Official Examination Title */}
               <div>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
@@ -925,7 +1041,6 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     >
                       <Layers size={11} color={topicMode === 'sections' ? 'var(--accent)' : 'inherit'} />
                       <span>Multi-Topic Breakdown</span>
-                      <span style={{ fontSize: '9px', padding: '1px 5px', borderRadius: 'var(--radius-pill)', background: 'var(--accent)', color: '#000', fontWeight: 800 }}>PRO</span>
                     </button>
                     <button
                       type="button"
@@ -1436,13 +1551,21 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                   <option key={t} value={t} />
                 ))}
               </datalist>
+            </div>
+          )}
 
+          {/* ── PAGE 2: RULES, TIMING & DELIVERY ── */}
+          {configPage === 2 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {/* Duration & Negative Penalty */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                    Exam Duration (Minutes)
-                  </label>
+                <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                    <Clock size={13} color="var(--accent)" />
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Exam Duration (Minutes) *
+                    </label>
+                  </div>
                   <input
                     type="number"
                     min="5"
@@ -1456,23 +1579,31 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     onBlur={() => {
                       if (!durationMinutes || durationMinutes < 5) setDurationMinutes(30);
                     }}
-                    placeholder="e.g. 30"
+                    placeholder="e.g. 45"
                     style={{
                       width: '100%',
+                      boxSizing: 'border-box',
                       padding: '8px 10px',
-                      background: 'var(--bg-surface)',
+                      background: 'var(--bg-elevated)',
                       border: '1px solid var(--border)',
                       borderRadius: 'var(--radius-sm)',
                       color: 'var(--text-primary)',
-                      fontSize: '12px'
+                      fontSize: '12px',
+                      fontWeight: 600
                     }}
                   />
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
+                    Standard recommendation: 30 to 60 minutes
+                  </span>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                    Negative Marking Penalty
-                  </label>
+                <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                    <Shield size={13} color="var(--accent)" />
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Negative Marking Scheme
+                    </label>
+                  </div>
                   <select
                     value={negativeMarkingEnabled ? String(negativeMarkPenalty) : '0'}
                     onChange={(e) => {
@@ -1486,324 +1617,279 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     }}
                     style={{
                       width: '100%',
+                      boxSizing: 'border-box',
                       padding: '8px 10px',
-                      background: 'var(--bg-surface)',
+                      background: 'var(--bg-elevated)',
                       border: '1px solid var(--border)',
                       borderRadius: 'var(--radius-sm)',
                       color: 'var(--text-primary)',
-                      fontSize: '12px'
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
                     }}
                   >
-                    <option value="0">Disabled (0 Penalty)</option>
+                    <option value="0">Disabled (0 Penalty · Standard Attempt)</option>
                     <option value="0.25">-0.25 Mark per wrong answer</option>
                     <option value="0.5">-0.50 Mark per wrong answer</option>
                     <option value="1.0">-1.00 Mark per wrong answer</option>
                   </select>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
+                    Deducts marks only for incorrect responses
+                  </span>
                 </div>
               </div>
 
-              {/* Collapsible Advanced Examination Settings */}
-              <div style={{ marginTop: '2px' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowAdvancedOptions((prev) => !prev)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    background: 'none',
-                    border: 'none',
-                    padding: '6px 0',
-                    color: 'var(--text-secondary)',
-                    fontSize: '11.5px',
-                    fontWeight: 600,
-                    cursor: 'pointer'
-                  }}
-                >
-                  <ChevronDown
-                    size={14}
+              {/* Result Declaration Option */}
+              <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '12px 14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <CheckSquare size={13} color="var(--accent)" />
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    Result Declaration & Score Release
+                  </label>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setResultDeclarationMode('IMMEDIATE')}
                     style={{
-                      transform: showAdvancedOptions ? 'rotate(180deg)' : 'none',
-                      transition: 'transform 0.15s ease'
+                      padding: '8px 12px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: `1.5px solid ${resultDeclarationMode === 'IMMEDIATE' ? 'var(--accent)' : 'var(--border)'}`,
+                      background: resultDeclarationMode === 'IMMEDIATE' ? 'var(--bg-elevated)' : 'var(--bg-surface)',
+                      color: resultDeclarationMode === 'IMMEDIATE' ? 'var(--text-primary)' : 'var(--text-muted)',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
                     }}
-                  />
-                  <span>
-                    {showAdvancedOptions
-                      ? 'Hide Advanced Paper Parameters (Instructions, WhatsApp Mode, Scheduling)'
-                      : 'Show Advanced Paper Parameters (Instructions, WhatsApp Mode, Scheduling)'}
-                  </span>
-                </button>
+                  >
+                    <span>Declare Results Immediately Post-Exam</span>
+                    {resultDeclarationMode === 'IMMEDIATE' && <Check size={12} color="var(--accent)" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setResultDeclarationMode('WHATSAPP_GROUP')}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: `1.5px solid ${resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--accent)' : 'var(--border)'}`,
+                      background: resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--bg-elevated)' : 'var(--bg-surface)',
+                      color: resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--text-primary)' : 'var(--text-muted)',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <MessageCircle size={12} color={resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--accent)' : 'inherit'} />
+                      <span>Dispatch on WhatsApp Group</span>
+                    </span>
+                    {resultDeclarationMode === 'WHATSAPP_GROUP' && <Check size={12} color="var(--accent)" />}
+                  </button>
+                </div>
+                {resultDeclarationMode === 'WHATSAPP_GROUP' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginTop: '10px', padding: '10px 12px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                        WhatsApp Group Name (Optional)
+                      </label>
+                      <input
+                        value={whatsappGroupName}
+                        onChange={(e) => setWhatsappGroupName(e.target.value)}
+                        placeholder="e.g. TE Computer Div A - 2026 Batch"
+                        style={{
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          padding: '6px 10px',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-sm)',
+                          color: 'var(--text-primary)',
+                          fontSize: '11.5px'
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                        WhatsApp Group Invite Link (Optional)
+                      </label>
+                      <input
+                        value={whatsappGroupLink}
+                        onChange={(e) => setWhatsappGroupLink(e.target.value)}
+                        placeholder="https://chat.whatsapp.com/..."
+                        style={{
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          padding: '6px 10px',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-sm)',
+                          color: 'var(--text-primary)',
+                          fontSize: '11.5px'
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {showAdvancedOptions && (
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '12px',
-                    padding: '12px 14px',
-                    background: 'var(--bg-surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-sm)'
-                  }}
-                >
-                  {/* Focus Instructions */}
+              {/* Scheduled Examination Window (Optional) */}
+              <div
+                style={{
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '12px 14px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    <Calendar size={13} color="var(--accent)" />
+                    <span>Scheduled Examination Window (Optional)</span>
+                  </div>
+                  {startTime && (
+                    <span style={{ fontSize: '10px', color: 'var(--warning)', fontWeight: 700, padding: '1px 6px', borderRadius: 'var(--radius-pill)', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)' }}>
+                      Waiting Room Active
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '8px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                      Specific Focus Instructions (Optional)
+                    <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                      Scheduled Start Time (Auto-unlocks exam)
                     </label>
-                    <textarea
-                      rows={2}
-                      value={instructions}
-                      onChange={(e) => setInstructions(e.target.value)}
-                      placeholder="e.g. Focus on recursive tree traversals and worst-case complexity edge cases."
+                    <input
+                      type="datetime-local"
+                      value={toLocalDatetimeString(startTime)}
+                      onChange={(e) => setStartTime(parseLocalDatetimeString(e.target.value))}
                       style={{
                         width: '100%',
                         boxSizing: 'border-box',
-                        padding: '8px 10px',
+                        padding: '6px 10px',
                         background: 'var(--bg-elevated)',
                         border: '1px solid var(--border)',
                         borderRadius: 'var(--radius-sm)',
                         color: 'var(--text-primary)',
-                        fontSize: '11px'
+                        fontSize: '11.5px'
                       }}
                     />
                   </div>
-
-                  {/* Result Declaration Option */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>
-                      Result Declaration & Score Release
+                    <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                      Scheduled End Time (Auto-closes exam)
                     </label>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                      <button
-                        type="button"
-                        onClick={() => setResultDeclarationMode('IMMEDIATE')}
-                        style={{
-                          padding: '8px 12px',
-                          borderRadius: 'var(--radius-sm)',
-                          border: `1.5px solid ${resultDeclarationMode === 'IMMEDIATE' ? 'var(--accent)' : 'var(--border)'}`,
-                          background: resultDeclarationMode === 'IMMEDIATE' ? 'var(--bg-elevated)' : 'var(--bg-surface)',
-                          color: resultDeclarationMode === 'IMMEDIATE' ? 'var(--text-primary)' : 'var(--text-muted)',
-                          textAlign: 'left',
-                          cursor: 'pointer',
-                          fontSize: '11.5px',
-                          fontWeight: 600,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between'
-                        }}
-                      >
-                        <span>Declare Results After Over</span>
-                        {resultDeclarationMode === 'IMMEDIATE' && <Check size={12} color="var(--accent)" />}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setResultDeclarationMode('WHATSAPP_GROUP')}
-                        style={{
-                          padding: '8px 12px',
-                          borderRadius: 'var(--radius-sm)',
-                          border: `1.5px solid ${resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--accent)' : 'var(--border)'}`,
-                          background: resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--bg-elevated)' : 'var(--bg-surface)',
-                          color: resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--text-primary)' : 'var(--text-muted)',
-                          textAlign: 'left',
-                          cursor: 'pointer',
-                          fontSize: '11.5px',
-                          fontWeight: 600,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between'
-                        }}
-                      >
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                          <MessageCircle size={12} color={resultDeclarationMode === 'WHATSAPP_GROUP' ? 'var(--accent)' : 'inherit'} />
-                          Send on WhatsApp Group
-                        </span>
-                        {resultDeclarationMode === 'WHATSAPP_GROUP' && <Check size={12} color="var(--accent)" />}
-                      </button>
-                    </div>
-                    <p style={{ margin: '4px 0 0', fontSize: '10.5px', color: 'var(--text-dim)' }}>
-                      {resultDeclarationMode === 'WHATSAPP_GROUP'
-                        ? 'Students will see "Hold tight, results will be deployed soon" on submit. Paper setters export results and share on the class WhatsApp group.'
-                        : 'Students will see their score, marks, and detailed question explanations immediately upon submit.'}
-                    </p>
-                    {resultDeclarationMode === 'WHATSAPP_GROUP' && (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginTop: '10px', padding: '10px 12px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                            WhatsApp Group Name (Optional)
-                          </label>
-                          <input
-                            value={whatsappGroupName}
-                            onChange={(e) => setWhatsappGroupName(e.target.value)}
-                            placeholder="e.g. TE Computer Div A - 2026 Batch"
-                            style={{
-                              width: '100%',
-                              boxSizing: 'border-box',
-                              padding: '6px 10px',
-                              background: 'var(--bg-surface)',
-                              border: '1px solid var(--border)',
-                              borderRadius: 'var(--radius-sm)',
-                              color: 'var(--text-primary)',
-                              fontSize: '11.5px'
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                            WhatsApp Group Invite Link (Optional)
-                          </label>
-                          <input
-                            value={whatsappGroupLink}
-                            onChange={(e) => setWhatsappGroupLink(e.target.value)}
-                            placeholder="https://chat.whatsapp.com/..."
-                            style={{
-                              width: '100%',
-                              boxSizing: 'border-box',
-                              padding: '6px 10px',
-                              background: 'var(--bg-surface)',
-                              border: '1px solid var(--border)',
-                              borderRadius: 'var(--radius-sm)',
-                              color: 'var(--text-primary)',
-                              fontSize: '11.5px'
-                            }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Scheduled Examination Window (Optional) */}
-                  <div
-                    style={{
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-sm)',
-                      padding: '12px 14px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        <Calendar size={13} color="var(--accent)" />
-                        <span>Scheduled Examination Window (Optional)</span>
-                      </div>
-                      {startTime && (
-                        <span style={{ fontSize: '10.5px', color: 'var(--warning)', fontWeight: 600 }}>
-                          Waiting Room Active
-                        </span>
-                      )}
-                    </div>
-                    <p style={{ margin: '0 0 10px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                      Leave empty to unlock immediately upon publish. If scheduled, candidates will wait in the Proctored Waiting Room until the start window.
-                    </p>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '8px' }}>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                          Scheduled Start Time (Auto-unlocks exam)
-                        </label>
-                        <input
-                          type="datetime-local"
-                          value={toLocalDatetimeString(startTime)}
-                          onChange={(e) => setStartTime(parseLocalDatetimeString(e.target.value))}
-                          style={{
-                            width: '100%',
-                            boxSizing: 'border-box',
-                            padding: '6px 10px',
-                            background: 'var(--bg-surface)',
-                            border: '1px solid var(--border)',
-                            borderRadius: 'var(--radius-sm)',
-                            color: 'var(--text-primary)',
-                            fontSize: '11.5px'
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                          Scheduled End Time (Auto-closes exam)
-                        </label>
-                        <input
-                          type="datetime-local"
-                          value={toLocalDatetimeString(endTime)}
-                          onChange={(e) => setEndTime(parseLocalDatetimeString(e.target.value))}
-                          style={{
-                            width: '100%',
-                            boxSizing: 'border-box',
-                            padding: '6px 10px',
-                            background: 'var(--bg-surface)',
-                            border: '1px solid var(--border)',
-                            borderRadius: 'var(--radius-sm)',
-                            color: 'var(--text-primary)',
-                            fontSize: '11.5px'
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setStartTime(undefined);
-                          setEndTime(undefined);
-                        }}
-                        style={{
-                          padding: '3px 8px',
-                          fontSize: '10.5px',
-                          borderRadius: 'var(--radius-xs)',
-                          background: 'var(--bg-surface)',
-                          border: '1px solid var(--border)',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Live Immediately
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const now = Date.now();
-                          setStartTime(now + 5 * 60000);
-                          setEndTime(now + (durationMinutes + 15) * 60000);
-                        }}
-                        style={{
-                          padding: '3px 8px',
-                          fontSize: '10.5px',
-                          borderRadius: 'var(--radius-xs)',
-                          background: 'var(--bg-surface)',
-                          border: '1px solid var(--border)',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        +1 Hr Window (Starts in 5m)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const now = Date.now();
-                          setStartTime(now + 60 * 60000);
-                          setEndTime(now + (durationMinutes + 75) * 60000);
-                        }}
-                        style={{
-                          padding: '3px 8px',
-                          fontSize: '10.5px',
-                          borderRadius: 'var(--radius-xs)',
-                          background: 'var(--bg-surface)',
-                          border: '1px solid var(--border)',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        +2 Hr Window
-                      </button>
-                    </div>
+                    <input
+                      type="datetime-local"
+                      value={toLocalDatetimeString(endTime)}
+                      onChange={(e) => setEndTime(parseLocalDatetimeString(e.target.value))}
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '6px 10px',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-primary)',
+                        fontSize: '11.5px'
+                      }}
+                    />
                   </div>
                 </div>
-              )}
 
-              {/* Autonomous Answer Cross-Validator Certified Badge */}
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStartTime(undefined);
+                      setEndTime(undefined);
+                    }}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: '10.5px',
+                      borderRadius: 'var(--radius-xs)',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Live Immediately
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const now = Date.now();
+                      setStartTime(now + 5 * 60000);
+                      setEndTime(now + (durationMinutes + 15) * 60000);
+                    }}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: '10.5px',
+                      borderRadius: 'var(--radius-xs)',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    +1 Hr Window (Starts in 5m)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const now = Date.now();
+                      setStartTime(now + 60 * 60000);
+                      setEndTime(now + (durationMinutes + 75) * 60000);
+                    }}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: '10.5px',
+                      borderRadius: 'var(--radius-xs)',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    +2 Hr Window
+                  </button>
+                </div>
+              </div>
+
+              {/* Focus Instructions */}
+              <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 14px' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                  Specific Focus Instructions for AI (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={instructions}
+                  onChange={(e) => setInstructions(e.target.value)}
+                  placeholder="e.g. Focus on recursive tree traversals and worst-case complexity edge cases."
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '7px 10px',
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text-primary)',
+                    fontSize: '11.5px',
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              {/* Autonomous Answer Cross-Validator Badge */}
               <div
                 style={{
                   background: 'var(--bg-surface)',
@@ -1855,8 +1941,11 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                   </p>
                 </div>
               </div>
-            </form>
+            </div>
           )}
+        </div>
+      </div>
+    )}
 
           {/* ── STEP 2: LOADING PROGRESS ── */}
           {step === 'loading' && (
@@ -3300,51 +3389,112 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                 <span style={{ fontWeight: 600, color: 'var(--accent)', fontSize: '11.5px' }}>
                   {effectiveTotalMarks} Marks
                 </span>
+                {configPage === 2 && (
+                  <>
+                    <span style={{ color: 'var(--border)' }}>•</span>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '11.5px' }}>
+                      {durationMinutes} Mins Duration
+                    </span>
+                  </>
+                )}
                 <span style={{ color: 'var(--border)' }}>•</span>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '11.5px' }}>
-                  {durationMinutes} Mins Duration
+                <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                  Page {configPage} of 2
                 </span>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  style={{
-                    height: '34px',
-                    padding: '0 14px',
-                    background: 'transparent',
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-sm)',
-                    color: 'var(--text-secondary)',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    cursor: 'pointer'
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  form="ai-paper-config-form"
-                  style={{
-                    height: '34px',
-                    padding: '0 18px',
-                    background: 'var(--accent)',
-                    border: 'none',
-                    borderRadius: 'var(--radius-sm)',
-                    color: 'var(--accent-contrast)',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <GraduationCap size={14} />
-                  <span>Generate Questions for Review ({effectiveTotalQuestions})</span>
-                </button>
+                {configPage === 1 ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      style={{
+                        height: '34px',
+                        padding: '0 14px',
+                        background: 'transparent',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-secondary)',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleNextPage}
+                      style={{
+                        height: '34px',
+                        padding: '0 16px',
+                        background: 'var(--accent)',
+                        border: 'none',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--accent-contrast)',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <span>Next: Rules & Timing</span>
+                      <ChevronRight size={14} />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setError(null);
+                        setConfigPage(1);
+                        playSound('click');
+                      }}
+                      style={{
+                        height: '34px',
+                        padding: '0 14px',
+                        background: 'transparent',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-secondary)',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <ChevronLeft size={14} />
+                      <span>Back to Blueprint</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleGenerate()}
+                      style={{
+                        height: '34px',
+                        padding: '0 18px',
+                        background: 'var(--accent)',
+                        border: 'none',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--accent-contrast)',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <GraduationCap size={14} />
+                      <span>Generate Questions for Review ({effectiveTotalQuestions})</span>
+                    </button>
+                  </>
+                )}
               </div>
             </>
           ) : (

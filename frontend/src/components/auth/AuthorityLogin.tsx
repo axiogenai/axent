@@ -795,19 +795,22 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
 
           {/* ── TAB 1: Sign In ── */}
           {activeTab === 'signin' && (
-            <form onSubmit={handlePasswordLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <form onSubmit={handlePasswordLogin} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', marginBottom: '5px' }}>
-                  Institutional Email
+                  Institutional Email or Authority ID
                 </label>
                 <div style={{ position: 'relative' }}>
                   <Mail size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
                   <input
-                    type="email"
+                    type="text"
                     required
-                    placeholder="professor@institution.edu"
+                    placeholder="teamaxiogen or professor@institution.edu"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     style={{
                       width: '100%',
                       height: '38px',

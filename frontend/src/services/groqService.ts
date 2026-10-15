@@ -16,30 +16,67 @@ import {
 import { MCQQuestion, MCQExamConfig } from '../types/mcq';
 import { saveQuestion, saveExam } from './mcqService';
 
-const DEFAULT_API_KEY = '';
+const DEFAULT_KEY_POOL: string[] = [];
 const PRIMARY_MODEL = 'openai/gpt-oss-120b';
 const FALLBACK_MODELS = ['openai/gpt-oss-20b', 'qwen/qwen3.8-27b'];
 
-export function getStoredApiKey(): string {
+let keyRoundRobinCounter = 0;
+
+export function getAllApiKeyPool(): string[] {
+  const keys = new Set<string>();
+
+  // 1. Check custom localStorage key
   if (typeof window !== 'undefined') {
     const customKey = localStorage.getItem('axent_ai_api_key') || localStorage.getItem('codedna_groq_api_key');
     if (customKey && customKey.trim()) {
-      return customKey.trim();
+      customKey.split(',').forEach((k) => {
+        const trimmed = k.trim();
+        if (trimmed && trimmed.startsWith('gsk_')) keys.add(trimmed);
+      });
     }
   }
-  const envKey = import.meta.env.VITE_AI_API_KEY || import.meta.env.VITE_GROQ_API_KEY;
-  if (envKey && typeof envKey === 'string' && envKey.trim()) {
-    return envKey.trim();
+
+  // 2. Check multiple env vars (Key 1, Key 2, Multi-key list)
+  const envKeysRaw = [
+    import.meta.env.VITE_AI_API_KEY,
+    import.meta.env.VITE_GROQ_API_KEY,
+    import.meta.env.VITE_AI_API_KEY_2,
+    import.meta.env.VITE_GROQ_API_KEY_2,
+    ...(import.meta.env.VITE_GROQ_API_KEYS ? String(import.meta.env.VITE_GROQ_API_KEYS).split(',') : [])
+  ];
+
+  for (const envK of envKeysRaw) {
+    if (envK && typeof envK === 'string') {
+      const trimmed = envK.trim();
+      if (trimmed && trimmed.startsWith('gsk_')) {
+        keys.add(trimmed);
+      }
+    }
   }
-  return DEFAULT_API_KEY;
+
+  // 3. Fallback to production default dual-key pool
+  for (const defK of DEFAULT_KEY_POOL) {
+    keys.add(defK);
+  }
+
+  return Array.from(keys);
+}
+
+export function getStoredApiKey(): string {
+  const pool = getAllApiKeyPool();
+  if (pool.length === 0) return '';
+  keyRoundRobinCounter = (keyRoundRobinCounter + 1) % pool.length;
+  return pool[keyRoundRobinCounter];
 }
 
 export function setStoredApiKey(key: string): void {
   if (typeof window !== 'undefined') {
     if (!key || key.trim() === '') {
       localStorage.removeItem('codedna_groq_api_key');
+      localStorage.removeItem('axent_ai_api_key');
     } else {
       localStorage.setItem('codedna_groq_api_key', key.trim());
+      localStorage.setItem('axent_ai_api_key', key.trim());
     }
   }
 }
@@ -88,18 +125,21 @@ async function callGroqChat(
   temperature = 0.1,
   jsonMode = false
 ): Promise<{ content: string; modelUsed: string }> {
-  const apiKey = getStoredApiKey();
+  const keyPool = getAllApiKeyPool();
   const preferredModel = getStoredModel();
   const modelsToTry = [preferredModel, ...FALLBACK_MODELS.filter((m) => m !== preferredModel)];
 
   let lastError: Error | null = null;
+  // Round-robin index across calls for even load balancing
+  const startIndex = keyRoundRobinCounter++ % (keyPool.length || 1);
 
   for (const model of modelsToTry) {
-    let attempts = 0;
-    const maxAttempts = 3;
+    let keyAttempts = 0;
+    // Iterate through all keys in pool for instant failover if one hits rate-limit (429)
+    for (let k = 0; k < keyPool.length; k++) {
+      const activeKey = keyPool[(startIndex + k) % keyPool.length];
+      keyAttempts++;
 
-    while (attempts < maxAttempts) {
-      attempts++;
       try {
         const payload: Record<string, unknown> = {
           model,
@@ -114,7 +154,7 @@ async function callGroqChat(
         const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${apiKey}`,
+            Authorization: `Bearer ${activeKey}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify(payload)
@@ -123,9 +163,14 @@ async function callGroqChat(
         if (!res.ok) {
           const errorBody = await res.text();
           if (res.status === 429) {
-            const waitMs = parseGroqWaitTime(errorBody, res.headers.get('retry-after'));
-            console.warn(`[Groq Rate Limit] Model ${model} rate-limited. Auto-cooling ${waitMs}ms before retry ${attempts}/${maxAttempts}...`);
-            if (attempts < maxAttempts) {
+            // Instant failover: If there is another key in the pool, try it immediately without delay!
+            if (k < keyPool.length - 1) {
+              console.warn(`[Dual-Key AI Engine] Key ...${activeKey.slice(-6)} rate-limited (429). Instantly switching to secondary key in pool...`);
+              continue;
+            } else {
+              // All keys in pool exhausted their limits; cool down minimally
+              const waitMs = parseGroqWaitTime(errorBody, res.headers.get('retry-after'));
+              console.warn(`[Dual-Key AI Engine] All ${keyPool.length} keys rate-limited. Cooling ${waitMs}ms before next model...`);
               await sleep(waitMs);
               continue;
             }
@@ -138,13 +183,13 @@ async function callGroqChat(
         return { content: rawContent.trim(), modelUsed: model };
       } catch (err: unknown) {
         lastError = err instanceof Error ? err : new Error(String(err));
-        console.warn(`Reasoning model ${model} attempt ${attempts} failed:`, lastError.message);
-        break; // try next fallback model
+        console.warn(`[Dual-Key AI Engine] Key ...${activeKey.slice(-6)} on ${model} attempt failed:`, lastError.message);
+        // Continue to try next key in pool
       }
     }
   }
 
-  throw lastError || new Error('Connection to Autonomous AI Reasoning Engine failed.');
+  throw lastError || new Error('Connection to Autonomous AI Reasoning Engine failed across all keys and models.');
 }
 
 function cleanJsonString(raw: string): string {
@@ -1466,7 +1511,7 @@ export async function crossValidateGeneratedQuestions(
 
   for (let c = 0; c < questions.length; c += CHUNK_SIZE) {
     if (c > 0) {
-      await sleep(1400); // Pacing delay to guarantee token budget stays well below 8k TPM
+      await sleep(300); // Optimized pacing delay balanced across dual-key Groq pool
     }
     const chunk = questions.slice(c, c + CHUNK_SIZE);
     const chunkStartIdx = c;
@@ -1647,7 +1692,7 @@ export async function generateFullExamPaperWithAI(
       if (secCount <= 0 || !secTopic) continue;
 
       if (sIdx > 0) {
-        await sleep(1400); // Pacing delay to keep within Groq TPM limits
+        await sleep(300); // Optimized pacing delay balanced across dual-key Groq pool
       }
 
       onProgress?.(`Topic ${sIdx + 1}/${sections.length}: Generating ${secCount} ${secDiff.toLowerCase()} question(s) for "${secTopic}"...`);
@@ -1664,7 +1709,7 @@ export async function generateFullExamPaperWithAI(
 
       for (let i = 0; i < chunks.length; i++) {
         if (i > 0) {
-          await sleep(1400);
+          await sleep(300);
         }
         onProgress?.(`[${secTopic}] Generating questions (${i + 1}/${chunks.length})...`);
         const r = await generateMCQQuestionsWithAI({
@@ -1700,7 +1745,7 @@ export async function generateFullExamPaperWithAI(
       let backfillAttempts = 0;
       while (secGenerated.length < secCount && backfillAttempts < 5) {
         backfillAttempts++;
-        if (backfillAttempts > 1) await sleep(1400);
+        if (backfillAttempts > 1) await sleep(400);
         const missing = secCount - secGenerated.length;
         onProgress?.(`[${secTopic}] Synthesizing ${missing} unique question(s) to reach exact ${secCount} for "${secTopic}"...`);
 
@@ -1762,7 +1807,7 @@ export async function generateFullExamPaperWithAI(
       const combined: GeneratedMCQQuestion[] = [];
       for (let i = 0; i < chunks.length; i++) {
         if (i > 0) {
-          await sleep(1400); // Pacing delay to maintain token velocity under 8k TPM
+          await sleep(300); // Optimized pacing delay balanced across dual-key Groq pool
         }
         onProgress?.(`Generating ${difficulty.toLowerCase()} questions (${i + 1}/${chunks.length})...`);
         const r = await generateMCQQuestionsWithAI({
@@ -1785,9 +1830,9 @@ export async function generateFullExamPaperWithAI(
 
     // Generate difficulty batches sequentially with pacing delays to strictly prevent Groq 429 TPM exhaustion
     const easyList = await generateBatch('EASY', easyCount, req.easyMarks ?? defaultPerQMarks);
-    if (easyCount > 0 && mediumCount > 0) await sleep(1400);
+    if (easyCount > 0 && mediumCount > 0) await sleep(300);
     const medList = await generateBatch('MEDIUM', mediumCount, req.mediumMarks ?? defaultPerQMarks);
-    if ((easyCount > 0 || mediumCount > 0) && hardCount > 0) await sleep(1400);
+    if ((easyCount > 0 || mediumCount > 0) && hardCount > 0) await sleep(300);
     const hardList = await generateBatch('HARD', hardCount, req.hardMarks ?? defaultPerQMarks);
 
     // Collect and strictly deduplicate all questions across batches
@@ -1808,7 +1853,7 @@ export async function generateFullExamPaperWithAI(
     let backfillAttempts = 0;
     while (uniqueGenerated.length < totalCount && backfillAttempts < 5) {
       backfillAttempts++;
-      if (backfillAttempts > 1) await sleep(1400);
+      if (backfillAttempts > 1) await sleep(400);
       const missing = totalCount - uniqueGenerated.length;
       onProgress?.(`Synthesizing ${missing} unique question(s) to guarantee ${totalCount} non-duplicate questions...`);
 
