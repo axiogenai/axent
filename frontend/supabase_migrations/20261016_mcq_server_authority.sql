@@ -5,6 +5,7 @@
 -- permissive policies until candidate + authority clients have moved to these RPCs.
 -- Until then this is a foundation, not a completed live security cutover.
 
+CREATE SCHEMA IF NOT EXISTS extensions;
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 CREATE TABLE IF NOT EXISTS public.mcq_candidate_tickets (
@@ -87,7 +88,7 @@ BEGIN
   SELECT * INTO a FROM public.mcq_attempts WHERE exam_id=t.exam_id AND student_roll=t.student_roll AND candidate_ticket_id=t.id AND status='IN_PROGRESS'
     ORDER BY start_time DESC LIMIT 1 FOR UPDATE;
   IF FOUND THEN
-    RETURN jsonb_build_object('attemptId',a.id,'deadline',a.deadline,'status',a.status,'answers',a.answers,
+    RETURN jsonb_build_object('examId',e.id,'examTitle',e.title,'instructions',e.instructions,'allowReview',e.allow_review,'durationMinutes',e.duration_minutes,\n      'candidate',jsonb_build_object('name',a.student_name,'rollNumber',a.student_roll,'department',a.student_dept,'semester',a.student_sem,'division',a.student_div),\n      'attemptId',a.id,'deadline',a.deadline,'status',a.status,'answers',a.answers,
       'assignedQuestions',(SELECT COALESCE(jsonb_agg(jsonb_build_object('questionId',x->>'questionId','order',x->'order',
         'snapshot',(x->'snapshot')-'correctOptionId'-'explanation','shuffledOptionIds',x->'shuffledOptionIds')
         ORDER BY (x->>'order')::int),'[]'::jsonb) FROM jsonb_array_elements(a.assigned_questions) x));
@@ -199,6 +200,32 @@ REVOKE ALL ON FUNCTION public.save_mcq_answer(text,text,text,text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.save_mcq_answer(text,text,text,text) TO anon,authenticated;
 REVOKE ALL ON FUNCTION public.submit_mcq_attempt(text,text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.submit_mcq_attempt(text,text) TO anon,authenticated;
+
+
+-- Close direct anonymous access to MCQ source, exam configuration, and attempts.
+-- Coding exam tables/policies (candidate_stations, code_submissions, college_labs)
+-- are intentionally unchanged. Candidate access to MCQ attempts is through the RPCs above.
+DROP POLICY IF EXISTS "Allow public read-write for mcq_questions" ON public.mcq_questions;
+DROP POLICY IF EXISTS "Allow public read-write for mcq_exams" ON public.mcq_exams;
+DROP POLICY IF EXISTS "Allow public read-write for mcq_attempts" ON public.mcq_attempts;
+REVOKE ALL ON public.mcq_questions, public.mcq_exams, public.mcq_attempts FROM anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.mcq_questions, public.mcq_exams, public.mcq_attempts TO authenticated;
+
+CREATE POLICY "Trusted authorities manage MCQ questions"
+  ON public.mcq_questions FOR ALL TO authenticated
+  USING ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'))
+  WITH CHECK ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'));
+CREATE POLICY "Trusted authorities manage MCQ exams"
+  ON public.mcq_exams FOR ALL TO authenticated
+  USING ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'))
+  WITH CHECK ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'));
+CREATE POLICY "Trusted admin manages MCQ attempts"
+  ON public.mcq_attempts FOR ALL TO authenticated
+  USING (auth.jwt()->'app_metadata'->>'role' = 'admin')
+  WITH CHECK (auth.jwt()->'app_metadata'->>'role' = 'admin');
+CREATE POLICY "Trusted authorities read MCQ attempts"
+  ON public.mcq_attempts FOR SELECT TO authenticated
+  USING ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'));
 
 -- Rollout checklist before production:
 -- 1) Apply/test this SQL in staging; verify actual options JSON uses isCorrect.
