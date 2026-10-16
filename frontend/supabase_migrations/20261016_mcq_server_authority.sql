@@ -125,6 +125,8 @@ BEGIN
       'whatsappGroupLink',e.whatsapp_group_link,'showExplanationsAfterSubmit',COALESCE(e.show_explanations_after_submit,false),
       'candidate',jsonb_build_object('name',a.student_name,'rollNumber',a.student_roll,'department',a.student_dept,'semester',a.student_sem,'division',a.student_div),
       'attemptId',a.id,'deadline',a.deadline,'serverTime',now_ms,'status',a.status,'answers',a.answers,
+    'tabSwitchCount',COALESCE(a.tab_switch_count,0),'unfocusedSeconds',COALESCE(a.unfocused_seconds,0),
+    'proctorLocked',COALESCE(a.tab_switch_count,0)>=3 AND NOT COALESCE(a.proctor_lock_override,false),
       'tabSwitchCount',COALESCE(a.tab_switch_count,0),'unfocusedSeconds',COALESCE(a.unfocused_seconds,0),
       'proctorLocked',COALESCE(a.tab_switch_count,0)>=3 AND NOT COALESCE(a.proctor_lock_override,false),
       'assignedQuestions',(SELECT COALESCE(jsonb_agg(jsonb_build_object('questionId',x->>'questionId','order',x->'order',
