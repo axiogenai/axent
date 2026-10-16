@@ -5,6 +5,7 @@ import { Workspace } from './components/Workspace';
 import { FinalReport } from './components/FinalReport';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MCQHub } from './components/MCQHub';
+import { AdminMCQTicketIssuer } from './components/AdminMCQTicketIssuer';
 import { PaperSetterPortal } from './components/PaperSetterPortal';
 import { AuthorityLogin, PaperSetterLogin, AdminLogin } from './components/auth/AuthorityLogin';
 import { AuthorityInvitePortal } from './components/auth/AuthorityInvitePortal';
@@ -442,6 +443,14 @@ export const App: React.FC = () => {
             element={
               <ProtectedRoute requiredRole="admin">
                 <AuthorityInvitePortal />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/mcq-tickets"
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <AdminMCQTicketIssuer />
               </ProtectedRoute>
             }
           />
