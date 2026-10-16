@@ -288,6 +288,9 @@ DROP POLICY IF EXISTS "Trusted authorities manage MCQ questions" ON public.mcq_q
 DROP POLICY IF EXISTS "Trusted authorities manage MCQ exams" ON public.mcq_exams;
 DROP POLICY IF EXISTS "Trusted admin manages MCQ attempts" ON public.mcq_attempts;
 DROP POLICY IF EXISTS "Trusted authorities read MCQ attempts" ON public.mcq_attempts;
+ALTER TABLE public.mcq_questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mcq_exams ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mcq_attempts ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.mcq_questions, public.mcq_exams, public.mcq_attempts FROM anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.mcq_questions, public.mcq_exams, public.mcq_attempts TO authenticated;
 
