@@ -119,11 +119,14 @@ BEGIN
     SELECT q.id, chosen.ord, q.text, q.marks,
       CASE WHEN e.negative_marking_enabled THEN q.negative_marks ELSE 0 END AS penalty,
       COALESCE(q.explanation,'') AS explanation, q.subject, q.topic, q.difficulty,
-      (SELECT COALESCE(jsonb_agg(jsonb_build_object('id',o->>'id','text',o->>'text') ORDER BY random()),'[]'::jsonb)
-        FROM jsonb_array_elements(q.options) o) AS safe_options,
+      (SELECT COALESCE(jsonb_agg(jsonb_build_object('id',o->>'id','text',o->>'text')
+          ORDER BY CASE WHEN e.shuffle_options THEN random() ELSE ordinality END),'[]'::jsonb)
+        FROM jsonb_array_elements(q.options) WITH ORDINALITY AS option_row(o,ordinality)) AS safe_options,
       (SELECT o->>'id' FROM jsonb_array_elements(q.options) o WHERE COALESCE((o->>'isCorrect')::boolean,false) LIMIT 1) AS correct_id,
-      (SELECT COALESCE(jsonb_agg(o->>'id' ORDER BY random()),'[]'::jsonb) FROM jsonb_array_elements(q.options) o) AS shuffled_ids
-    FROM (SELECT question_id, row_number() OVER(ORDER BY random()) ord FROM unnest(e.question_ids) question_id) chosen
+      (SELECT COALESCE(jsonb_agg(o->>'id' ORDER BY CASE WHEN e.shuffle_options THEN random() ELSE ordinality END),'[]'::jsonb)
+        FROM jsonb_array_elements(q.options) WITH ORDINALITY AS option_row(o,ordinality)) AS shuffled_ids
+    FROM (SELECT question_id, row_number() OVER(ORDER BY CASE WHEN e.shuffle_questions THEN random() ELSE ordinality END) ord
+      FROM unnest(e.question_ids) WITH ORDINALITY AS selected(question_id, ordinality)) chosen
     JOIN public.mcq_questions q ON q.id=chosen.question_id AND q.status='PUBLISHED'
     WHERE (SELECT count(*) FROM jsonb_array_elements(q.options) o WHERE COALESCE((o->>'isCorrect')::boolean,false)=true)=1
     ORDER BY chosen.ord
