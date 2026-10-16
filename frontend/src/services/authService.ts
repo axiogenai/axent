@@ -94,7 +94,12 @@ export async function signUpWithPassword(
   role: AuthorityRole = 'paper_setter'
 ): Promise<{ user: User | null; session: Session | null; error: string | null; needsEmailConfirmation?: boolean }> {
   const trimmedEmail = email.trim().toLowerCase();
-  
+
+  // Administrator privileges must be provisioned by a trusted Supabase admin and
+  // stored in app_metadata. Public self-registration must never grant admin access.
+  if (role === 'admin') {
+    return { user: null, session: null, error: 'Administrator accounts must be provisioned by the platform administrator.' };
+  }
   if (!trimmedEmail) {
     return { user: null, session: null, error: 'Institutional email address is required.' };
   }
@@ -114,8 +119,8 @@ export async function signUpWithPassword(
       options: {
         emailRedirectTo: redirectUrl,
         data: {
-          role,
-          portal: role === 'admin' ? 'admin' : 'paper_setter'
+          role: 'paper_setter',
+          portal: 'paper_setter'
         }
       }
     });
