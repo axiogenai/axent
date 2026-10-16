@@ -24,6 +24,10 @@ type ActiveAttempt = {
   instructions?: string;
   allowReview?: boolean;
   durationMinutes?: number;
+  resultDeclarationMode?: 'IMMEDIATE' | 'WHATSAPP_GROUP';
+  whatsappGroupName?: string;
+  whatsappGroupLink?: string;
+  showExplanationsAfterSubmit?: boolean;
   deadline: number;
   status: string;
   candidate?: { name: string; rollNumber: string; department?: string; semester?: string; division?: string };
@@ -32,12 +36,14 @@ type ActiveAttempt = {
 };
 type Result = {
   status: string;
-  score: number;
-  maxScore: number;
-  correctCount: number;
-  wrongCount: number;
-  unansweredCount: number;
-  percentageScore: number;
+  resultsReleased?: boolean;
+  score?: number;
+  maxScore?: number;
+  correctCount?: number;
+  wrongCount?: number;
+  unansweredCount?: number;
+  percentageScore?: number;
+  explanations?: Array<{ questionId: string; correctOptionId?: string; selectedOptionId?: string; explanation?: string }>;
 };
 
 function getTicket(): string {
@@ -162,13 +168,30 @@ export const SecureMCQExam: React.FC = () => {
       <h1>Submission confirmed</h1>
       <p>{attempt.examTitle}</p>
       <p>Candidate: {attempt.candidate?.name || 'Candidate'} · {attempt.candidate?.rollNumber || ''}</p>
-      <div style={scoreGrid}>
-        <div><strong>{result.score ?? 0} / {result.maxScore ?? 0}</strong><span>Score</span></div>
-        <div><strong>{result.percentageScore ?? 0}%</strong><span>Percentage</span></div>
-        <div><strong>{result.correctCount ?? 0}</strong><span>Correct</span></div>
-        <div><strong>{result.wrongCount ?? 0}</strong><span>Wrong</span></div>
-      </div>
-      <p>Your result was calculated by the examination server. Answer keys are not exposed on this page.</p>
+      {result.resultsReleased !== false ? <>
+        <div style={scoreGrid}>
+          <div><strong>{result.score ?? 0} / {result.maxScore ?? 0}</strong><span>Score</span></div>
+          <div><strong>{result.percentageScore ?? 0}%</strong><span>Percentage</span></div>
+          <div><strong>{result.correctCount ?? 0}</strong><span>Correct</span></div>
+          <div><strong>{result.wrongCount ?? 0}</strong><span>Wrong</span></div>
+        </div>
+        <p>Your result was calculated by the examination server.</p>
+        {attempt.showExplanationsAfterSubmit && result.explanations?.length ? <section style={{ marginTop: 24 }}>
+          <h2>Answer review</h2>
+          {result.explanations.map((item) => {
+            const reviewedQuestion = attempt.assignedQuestions.find((q) => q.questionId === item.questionId);
+            return <article key={item.questionId} style={{ borderTop: '1px solid var(--border)', padding: '14px 0' }}>
+              <strong>{reviewedQuestion?.snapshot.text || 'Question'}</strong>
+              <p>Correct option: {reviewedQuestion?.snapshot.options.find((o) => o.id === item.correctOptionId)?.text || '—'}</p>
+              {item.explanation && <p>{item.explanation}</p>}
+            </article>;
+          })}
+        </section> : null}
+      </> : <>
+        <p>Your submission has been recorded. The result is not released immediately for this examination.</p>
+        {attempt.whatsappGroupName && <p>Result announcements: <strong>{attempt.whatsappGroupName}</strong></p>}
+        {attempt.whatsappGroupLink && <p><a href={attempt.whatsappGroupLink} target="_blank" rel="noopener noreferrer">Open result announcement group</a></p>}
+      </>}
     </section></main>
   );
 
