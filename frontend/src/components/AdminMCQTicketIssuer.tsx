@@ -106,7 +106,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
     <h1 style={{ marginBottom: 8 }}>Issue a secure MCQ ticket</h1>
     <p style={{ color: '#64748b', lineHeight: 1.6 }}>Candidate access is issued per exam. The database stores only a hash of the random ticket; the full link is shown once here.</p>
     {loading ? <p>Loading published exams…</p> : exams.length === 0 ? <p role="alert">No published exams are available. Publish an exam before issuing candidate tickets.</p> : (
-      <form onSubmit={(event) => void issueTicket()} style={{ display: 'grid', gap: 14, marginTop: 22 }}>
+      <form onSubmit={(event) => void issueTicket(event)} style={{ display: 'grid', gap: 14, marginTop: 22 }}>
         <label style={label}>Published examination
           <select required value={examId} onChange={(e) => setExamId(e.target.value)} style={input}>
             {exams.map((exam) => <option key={exam.id} value={exam.id}>{exam.title}</option>)}
