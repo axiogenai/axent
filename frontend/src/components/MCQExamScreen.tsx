@@ -499,6 +499,9 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
     const stationDigits = rollDigits.length > 0 ? String(parseInt(rollDigits.slice(-2), 10) || 1).padStart(2, '0') : '01';
     const stationNumber = `Station #${stationDigits}`;
 
+    const dedicatedLabId = exam.assignedLabId || 'LAB-01';
+    const dedicatedLabName = exam.assignedLabName || `Exam: ${exam.title}`;
+
     const student: StudentInfo = {
       name: trimmedName,
       rollNumber: trimmedRoll,
@@ -508,7 +511,8 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
       course: exam.subject || 'MCQ Course',
       examType: (exam.examCategory as ExamCategory) || 'Aptitude',
       assignmentTitle: exam.title,
-      labId: 'LAB-01',
+      labId: dedicatedLabId,
+      labName: dedicatedLabName,
       stationNumber,
       examDurationMinutes: exam.durationMinutes,
       examMode: 'MCQ',
@@ -2136,7 +2140,8 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         division: activeAttempt.studentDiv || 'A',
         examType: 'Multiple Choice Question (MCQ) Examination',
         assignmentTitle: activeAttempt.examTitle || 'MCQ Exam',
-        labId: 'LAB-01',
+        labId: exam?.assignedLabId || 'LAB-01',
+        labName: exam?.assignedLabName || `Exam: ${activeAttempt.examTitle || 'MCQ Exam'}`,
         stationNumber: derivedStation,
         examDurationMinutes: 30,
         examMode: 'MCQ',
@@ -2447,6 +2452,8 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
               department: active.studentDept,
               semester: active.studentSem,
               division: active.studentDiv || 'A',
+              labId: prev.labId && prev.labId !== 'LAB-01' ? prev.labId : (exam?.assignedLabId || prev.labId || 'LAB-01'),
+              labName: prev.labName || exam?.assignedLabName,
               stationNumber: prev.stationNumber && prev.stationNumber !== 'Station #01' ? prev.stationNumber : derivedStation
             }));
           }

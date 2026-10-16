@@ -31,6 +31,7 @@ import {
   fetchAttemptsFromCloud
 } from './supabaseService';
 import { getSynchronizedNow } from './timeSyncService';
+import { ensureLabForExam } from './adminService';
 
 // ── Persistence helpers ───────────────────────────────────────────────────────
 
@@ -280,13 +281,24 @@ export function getAllExams(): MCQExamConfig[] {
   const deletedIds = getDeletedExamIds();
   const loaded = load<MCQExamConfig[]>(MCQ_STORAGE_KEYS.EXAMS, []);
   // Return loaded real exams (clean, zero fake seed fallback, excluding deleted)
-  return (loaded || []).filter((e): e is MCQExamConfig => 
-    Boolean(e && typeof e === 'object' && e.id) &&
-    !deletedIds.has(e.id) &&
-    !String(e.id || '').startsWith('exam-aptitude-') && 
-    !String(e.id || '').startsWith('exam-ise-') &&
-    !String(e.id || '').startsWith('seed-')
-  );
+  return (loaded || [])
+    .filter((e): e is MCQExamConfig => 
+      Boolean(e && typeof e === 'object' && e.id) &&
+      !deletedIds.has(e.id) &&
+      !String(e.id || '').startsWith('exam-aptitude-') && 
+      !String(e.id || '').startsWith('exam-ise-') &&
+      !String(e.id || '').startsWith('seed-')
+    )
+    .map((e) => {
+      if (!e.assignedLabId && e.id && e.title) {
+        try {
+          const lab = ensureLabForExam(e);
+          e.assignedLabId = lab.labId;
+          e.assignedLabName = lab.labName;
+        } catch {}
+      }
+      return e;
+    });
 }
 
 export function getExamById(id: string): MCQExamConfig | undefined {
@@ -294,8 +306,24 @@ export function getExamById(id: string): MCQExamConfig | undefined {
 }
 
 export function createExam(partial: Omit<MCQExamConfig, 'id' | 'createdAt' | 'updatedAt'>): MCQExamConfig {
+  let assignedLabId = partial.assignedLabId;
+  let assignedLabName = partial.assignedLabName;
+  try {
+    const lab = ensureLabForExam({
+      id: 'temp',
+      title: partial.title,
+      subject: partial.subject,
+      assignedLabId: partial.assignedLabId,
+      assignedLabName: partial.assignedLabName
+    });
+    assignedLabId = lab.labId;
+    assignedLabName = lab.labName;
+  } catch {}
+
   const exam: MCQExamConfig = {
     ...partial,
+    assignedLabId,
+    assignedLabName,
     id: uuid(),
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -308,9 +336,28 @@ export function createExam(partial: Omit<MCQExamConfig, 'id' | 'createdAt' | 'up
 }
 
 export function saveExam(exam: MCQExamConfig): MCQExamConfig {
+  let assignedLabId = exam.assignedLabId;
+  let assignedLabName = exam.assignedLabName;
+  try {
+    const lab = ensureLabForExam({
+      id: exam.id,
+      title: exam.title,
+      subject: exam.subject,
+      assignedLabId: exam.assignedLabId,
+      assignedLabName: exam.assignedLabName
+    });
+    assignedLabId = lab.labId;
+    assignedLabName = lab.labName;
+  } catch {}
+
   const all = getAllExams();
   const idx = all.findIndex((e) => e.id === exam.id);
-  const updated = { ...exam, updatedAt: Date.now() };
+  const updated: MCQExamConfig = {
+    ...exam,
+    assignedLabId,
+    assignedLabName,
+    updatedAt: Date.now()
+  };
   if (idx >= 0) {
     all[idx] = updated;
   } else {

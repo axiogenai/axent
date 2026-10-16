@@ -87,6 +87,8 @@ export interface MCQExamConfig {
   updatedAt: number;
   createdBy: string;
   publishedAt?: number;
+  assignedLabId?: string;     // Dedicated Lab ID auto-created for this paper (e.g. "LAB-01", "LAB-02")
+  assignedLabName?: string;   // Dedicated Lab Name (e.g. "Exam: Operating Systems Mid-Term")
 }
 
 export type MCQResultDeclarationMode = 'IMMEDIATE' | 'WHATSAPP_GROUP';

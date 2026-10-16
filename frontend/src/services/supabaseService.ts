@@ -138,6 +138,8 @@ export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
       let resultDeclMode: MCQResultDeclarationMode = 'IMMEDIATE';
       let waGroupName = '';
       let waGroupLink = '';
+      let assignedLabId = '';
+      let assignedLabName = '';
       let cleanInstr = row.instructions || '';
 
       // Extract AXENT_META payload from instructions if present
@@ -150,6 +152,8 @@ export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
           }
           if (parsed.whatsappGroupName) waGroupName = parsed.whatsappGroupName;
           if (parsed.whatsappGroupLink) waGroupLink = parsed.whatsappGroupLink;
+          if (parsed.assignedLabId) assignedLabId = parsed.assignedLabId;
+          if (parsed.assignedLabName) assignedLabName = parsed.assignedLabName;
         } catch {}
         cleanInstr = cleanInstr.replace(/<!--AXENT_META:[\s\S]*?-->/g, '').trim();
       }
@@ -188,6 +192,8 @@ export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
         resultDeclarationMode: resultDeclMode,
         whatsappGroupName: waGroupName,
         whatsappGroupLink: waGroupLink,
+        assignedLabId: assignedLabId || undefined,
+        assignedLabName: assignedLabName || undefined,
         maxAttempts: Number(row.max_attempts) || 1,
         status: row.status,
         createdAt: Number(row.created_at),
@@ -207,7 +213,9 @@ async function writeExamToCloud(e: MCQExamConfig): Promise<boolean> {
     const metaTag = `<!--AXENT_META:${JSON.stringify({
       resultDeclarationMode: e.resultDeclarationMode || 'IMMEDIATE',
       whatsappGroupName: e.whatsappGroupName || '',
-      whatsappGroupLink: e.whatsappGroupLink || ''
+      whatsappGroupLink: e.whatsappGroupLink || '',
+      assignedLabId: e.assignedLabId || '',
+      assignedLabName: e.assignedLabName || ''
     })}-->`;
 
     const cleanInstructions = (e.instructions || '').replace(/<!--AXENT_META:[\s\S]*?-->/g, '').trim();

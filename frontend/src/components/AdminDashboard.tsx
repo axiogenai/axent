@@ -28,8 +28,10 @@ import {
   syncCurrentLiveStation,
   clearSubmittedStations,
   removeSingleStation,
-  sendProctorConcludeAndFreeCommand
+  sendProctorConcludeAndFreeCommand,
+  ensureLabForExam
 } from '../services/adminService';
+import { getAllExams } from '../services/mcqService';
 import { fetchStationsFromCloud, subscribeToCloudStations } from '../services/supabaseService';
 import { InstituteLabManagerModal } from './InstituteLabManagerModal';
 import { SupabaseMigrationModal } from './SupabaseMigrationModal';
@@ -188,6 +190,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Synchronize and subscribe to college lab inventory from Supabase Cloud
   useEffect(() => {
+    // Auto-provision labs for any registered exams so CCTV lab filters are immediately populated
+    try {
+      const exams = getAllExams();
+      exams.forEach((ex) => {
+        if (ex.id && ex.title) {
+          ensureLabForExam(ex);
+        }
+      });
+    } catch {}
+
     void syncCollegeLabsFromCloud().then((labs) => {
       if (labs && labs.length > 0) setAllLabs(labs);
     });

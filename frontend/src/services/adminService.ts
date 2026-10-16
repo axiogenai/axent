@@ -253,6 +253,65 @@ export async function syncCollegeLabsFromCloud(): Promise<CollegeLabInfo[]> {
   return getAllCollegeLabs();
 }
 
+/**
+ * Automatically creates and provisions a dedicated examination laboratory for a paper.
+ * Synchronizes to local storage and Supabase cloud college_labs table so proctors can
+ * filter out candidates by exam/lab cleanly when multiple tests are running simultaneously.
+ */
+export function ensureLabForExam(exam: {
+  id: string;
+  title: string;
+  subject?: string;
+  department?: string;
+  assignedLabId?: string;
+  assignedLabName?: string;
+}): CollegeLabInfo {
+  const existingLabs = getAllCollegeLabs();
+
+  // 1. If exam already has an assignedLabId, check if it exists in labs
+  if (exam.assignedLabId) {
+    const matched = existingLabs.find((l) => l.labId.toUpperCase() === exam.assignedLabId?.toUpperCase());
+    if (matched) {
+      const expectedName = `Exam: ${exam.title || 'Examination'}`;
+      if (matched.labName !== expectedName) {
+        const updatedLab: CollegeLabInfo = { ...matched, labName: expectedName };
+        saveCollegeLab(updatedLab);
+        return updatedLab;
+      }
+      return matched;
+    }
+  }
+
+  // 2. Determine next available sequential lab ID (e.g. LAB-01, LAB-02, ...)
+  const usedNumbers = new Set<number>();
+  existingLabs.forEach((l) => {
+    const num = parseInt(l.labId.replace(/[^0-9]/g, ''), 10);
+    if (!isNaN(num) && num > 0) usedNumbers.add(num);
+  });
+
+  let nextNum = 1;
+  while (usedNumbers.has(nextNum)) {
+    nextNum++;
+  }
+
+  const assignedLabId = `LAB-${String(nextNum).padStart(2, '0')}`;
+  const assignedLabName = `Exam: ${exam.title || `Paper #${nextNum}`}`;
+  const subjectDept = exam.subject || exam.department || 'Computer Science & Engineering';
+
+  const newLab: CollegeLabInfo = {
+    labId: assignedLabId,
+    labCode: (exam.subject || 'EXAM').slice(0, 8).toUpperCase(),
+    labName: assignedLabName,
+    department: subjectDept,
+    block: 'Cloud Examination Cluster',
+    totalStations: 50,
+    invigilatorName: 'Central Autonomous Proctor'
+  };
+
+  saveCollegeLab(newLab);
+  return newLab;
+}
+
 export function saveCollegeLab(lab: CollegeLabInfo): CollegeLabInfo[] {
   const current = getAllCollegeLabs();
   const idx = current.findIndex((l) => l.labId.toUpperCase() === lab.labId.toUpperCase());
