@@ -607,7 +607,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
             type="button"
             onClick={() => {
               if (onBack) onBack();
-              else navigate('/mcq', { replace: true });
+              else window.location.href = '/mcq';
             }}
             className="btn btn-secondary btn-sm"
             style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 14px', fontSize: '12.5px', fontWeight: 600 }}
@@ -2859,8 +2859,11 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
   const handleExitToCatalog = () => {
     try {
+      void exitExamFullscreen();
+      if (document.exitPointerLock) document.exitPointerLock();
       sessionStorage.removeItem('codedna_mcq_session_attempt');
       sessionStorage.removeItem('codedna_mcq_last_finished_attempt');
+      sessionStorage.removeItem('codedna_mcq_active_attempt_backup');
       localStorage.removeItem('codedna_mcq_active_attempt_backup');
       localStorage.removeItem('codedna_mcq_active_attempt');
       localStorage.removeItem('codedna_active_exam_mode');
@@ -2870,21 +2873,18 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         localStorage.removeItem(`codedna_mcq_active_attempt_${attempt.examId}`);
         localStorage.removeItem(`codedna_mcq_current_idx_${attempt.id}`);
       }
-      if (typeof window !== 'undefined') {
-        window.history.replaceState({}, '', '/mcq');
-      }
     } catch {}
-    if (onBack) {
-      onBack();
-    } else {
-      navigate('/mcq', { replace: true });
-    }
+    // Perform full fresh browser navigation to /mcq, purging all cached in-memory state
+    window.location.href = '/mcq';
   };
 
   const handleNewCandidate = useCallback(() => {
     try {
+      void exitExamFullscreen();
+      if (document.exitPointerLock) document.exitPointerLock();
       sessionStorage.removeItem('codedna_mcq_session_attempt');
       sessionStorage.removeItem('codedna_mcq_last_finished_attempt');
+      sessionStorage.removeItem('codedna_mcq_active_attempt_backup');
       localStorage.removeItem('codedna_mcq_active_attempt_backup');
       localStorage.removeItem('codedna_mcq_active_attempt');
       localStorage.removeItem('codedna_active_exam_mode');
@@ -2895,11 +2895,8 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         localStorage.removeItem(`codedna_mcq_current_idx_${attempt.id}`);
       }
     } catch {}
-    setAttempt(null);
-    setAnswers({});
-    setGradeResult(null);
-    setSubmitted(false);
-    playSound('click');
+    // Clean, full fresh browser reload for the next candidate check-in
+    window.location.href = window.location.pathname + window.location.search;
   }, [attempt]);
 
   // ── Results screen (Priority 1: Always render scorecard/receipt if submitted or concluded) ──
@@ -4056,17 +4053,18 @@ export const MCQExamSelector: React.FC = () => {
 
   const performExit = () => {
     try {
+      void exitExamFullscreen();
+      if (document.exitPointerLock) document.exitPointerLock();
       sessionStorage.removeItem('codedna_mcq_session_attempt');
       sessionStorage.removeItem('codedna_mcq_last_finished_attempt');
+      sessionStorage.removeItem('codedna_mcq_active_attempt_backup');
       localStorage.removeItem('codedna_mcq_active_attempt_backup');
       localStorage.removeItem('codedna_mcq_active_attempt');
       localStorage.removeItem('codedna_active_exam_mode');
+      localStorage.removeItem('codedna_student_profile');
     } catch {}
-    setSelectedExamId(null);
-    setSearchParams({}, { replace: true });
-    if (typeof window !== 'undefined') {
-      window.history.replaceState({}, '', '/mcq');
-    }
+    // Complete fresh browser reload navigation to /mcq
+    window.location.href = '/mcq';
   };
 
   const handleBack = () => {
