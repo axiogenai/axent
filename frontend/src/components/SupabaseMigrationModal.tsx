@@ -10,7 +10,8 @@ import {
   UploadCloud,
   X,
   Layers,
-  Terminal
+  Terminal,
+  ShieldCheck
 } from 'lucide-react';
 import {
   checkSupabaseHealth,
