@@ -26,7 +26,9 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
       // app_metadata is managed by trusted Supabase administrators; user_metadata
       // and localStorage are user-editable and must not grant privileged roles.
       const trustedRole = session.user.app_metadata?.role;
-      const roleAllowed = requiredRole !== 'admin' || trustedRole === 'admin';
+      const roleAllowed = requiredRole === 'admin'
+        ? trustedRole === 'admin'
+        : trustedRole === 'paper_setter' || trustedRole === 'admin';
       setIsAuthenticated(roleAllowed);
     });
 
@@ -34,7 +36,9 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
     const unsubscribe = onAuthStateChange((_event, session) => {
       if (!mounted) return;
       const trustedRole = session?.user?.app_metadata?.role;
-      const roleAllowed = Boolean(session) && (requiredRole !== 'admin' || trustedRole === 'admin');
+      const roleAllowed = Boolean(session) && (requiredRole === 'admin'
+        ? trustedRole === 'admin'
+        : trustedRole === 'paper_setter' || trustedRole === 'admin');
       setIsAuthenticated(roleAllowed);
     });
 

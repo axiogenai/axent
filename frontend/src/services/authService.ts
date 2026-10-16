@@ -78,7 +78,21 @@ export async function signInWithPassword(
     if (error || !data.session || !data.user) {
       return { user: null, session: null, error: error?.message || 'Authentication failed.' };
     }
-    // This only remembers the selected UI portal; it does not grant a role.
+
+    const trustedRole = data.user.app_metadata?.role;
+    const roleAllowed = role === 'admin'
+      ? trustedRole === 'admin'
+      : trustedRole === 'paper_setter' || trustedRole === 'admin';
+    if (!roleAllowed) {
+      await supabase.auth.signOut();
+      return {
+        user: null,
+        session: null,
+        error: 'This account is not provisioned for an authority portal yet. Contact the platform administrator.'
+      };
+    }
+
+    // This only remembers the selected UI portal; trusted app_metadata above grants access.
     localStorage.setItem(LOCAL_ROLE_KEY, role);
     return { user: data.user, session: data.session, error: null };
   } catch (err: any) {
@@ -130,9 +144,10 @@ export async function signUpWithPassword(
     }
 
     if (data.session) {
-      localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(data.session));
-      localStorage.setItem(LOCAL_ROLE_KEY, role);
-      return { user: data.user, session: data.session, error: null };
+      // A new self-registered account has no trusted app_metadata role. Sign it out
+      // until a platform administrator explicitly provisions its access.
+      await supabase.auth.signOut();
+      return { user: data.user, session: null, error: null, needsEmailConfirmation: false };
     }
 
     return {

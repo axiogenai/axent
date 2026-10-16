@@ -423,15 +423,27 @@ export const App: React.FC = () => {
           />
           <Route
             path="/invite"
-            element={<AuthorityInvitePortal />}
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <AuthorityInvitePortal />
+              </ProtectedRoute>
+            }
           />
           <Route
             path="/login/invite"
-            element={<AuthorityInvitePortal />}
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <AuthorityInvitePortal />
+              </ProtectedRoute>
+            }
           />
           <Route
             path="/authority-invite"
-            element={<AuthorityInvitePortal />}
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <AuthorityInvitePortal />
+              </ProtectedRoute>
+            }
           />
           <Route
             path="/mcq"
