@@ -17,23 +17,32 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
 
     // Check initial session
     getAuthSession().then((session) => {
-      if (mounted) {
-        setIsAuthenticated(Boolean(session));
+      if (!mounted) return;
+      if (!session) {
+        setIsAuthenticated(false);
+        return;
       }
+
+      // app_metadata is managed by trusted Supabase administrators; user_metadata
+      // and localStorage are user-editable and must not grant privileged roles.
+      const trustedRole = session.user.app_metadata?.role;
+      const roleAllowed = requiredRole !== 'admin' || trustedRole === 'admin';
+      setIsAuthenticated(roleAllowed);
     });
 
     // Listen to live auth changes (e.g. sign in / sign out)
     const unsubscribe = onAuthStateChange((_event, session) => {
-      if (mounted) {
-        setIsAuthenticated(Boolean(session));
-      }
+      if (!mounted) return;
+      const trustedRole = session?.user?.app_metadata?.role;
+      const roleAllowed = Boolean(session) && (requiredRole !== 'admin' || trustedRole === 'admin');
+      setIsAuthenticated(roleAllowed);
     });
 
     return () => {
       mounted = false;
       unsubscribe();
     };
-  }, []);
+  }, [requiredRole]);
 
   // Loading state while verifying credentials
   if (isAuthenticated === null) {
