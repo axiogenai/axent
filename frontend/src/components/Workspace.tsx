@@ -1389,6 +1389,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
       {/* ── SPLIT VIEW CONTAINER (Editor on Left, Diagnostics/Terminal on Right) ── */}
       <div
+        className="workspace-split-container"
         style={{
           display: 'flex',
           flex: 1,
@@ -1398,6 +1399,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
       >
         {/* ── LEFT PANE: CODE EDITOR ── */}
         <div
+          className="workspace-editor-pane"
           style={{
             flex: isRightPaneOpen ? 1.25 : 1,
             display: 'flex',
@@ -1648,6 +1650,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
         {/* ── RIGHT PANE: CONSOLE OUTPUT, WRITING ACTIVITY, VIVA ── */}
       {isRightPaneOpen && (
         <div
+          className="workspace-right-pane"
           style={{
             flex: 1,
             display: 'flex',

@@ -829,7 +829,7 @@ img, video, canvas, svg { max-width: 100%; }
 input, select, textarea, button { max-width: 100%; }
 input, select, textarea { min-width: 0; }
 pre, code { overflow-wrap: anywhere; }
-.ledger-table-container { max-width: 100%; -webkit-overflow-scrolling: touch; }
+.ledger-table-container { max-width: 100%; width: 100%; overflow-x: auto; box-sizing: border-box; -webkit-overflow-scrolling: touch; }
 @media (max-width: 768px) {
   html, body { min-width: 320px; }
   #root, main { min-width: 0; width: 100%; }
@@ -1209,5 +1209,65 @@ input[type=number].no-spin {
   }
 }
 
+/* Examination Ledger Table and Attempt Grid */
+.mcq-ledger-header {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.4fr) minmax(180px, 1.2fr) minmax(160px, 1.1fr) minmax(130px, 0.9fr) minmax(150px, 1fr) 90px;
+  padding: 6px 16px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  gap: 14px;
+  box-sizing: border-box;
+}
 
+.mcq-attempt-grid {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.4fr) minmax(180px, 1.2fr) minmax(160px, 1.1fr) minmax(130px, 0.9fr) minmax(150px, 1fr) 90px;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  box-sizing: border-box;
+}
 
+@media (max-width: 900px) {
+  .mcq-ledger-header {
+    display: none !important;
+  }
+  .mcq-attempt-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 14px;
+  }
+  .mcq-attempt-grid > div:last-child {
+    text-align: left !important;
+  }
+}
+
+/* Workspace Responsive Split Panes */
+.workspace-split-container {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  flex-direction: row;
+}
+
+@media (max-width: 768px) {
+  .workspace-split-container {
+    flex-direction: column !important;
+  }
+  .workspace-editor-pane {
+    flex: 1 1 55% !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border) !important;
+    min-height: 250px;
+  }
+  .workspace-right-pane {
+    flex: 1 1 45% !important;
+    border-top: 1px solid var(--border);
+    min-height: 200px;
+  }
+}

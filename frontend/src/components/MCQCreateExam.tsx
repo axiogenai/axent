@@ -125,9 +125,9 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {exams.map((exam) => (
             <div key={exam.id} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '14px 16px' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 'min(100%, 280px)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{exam.title}</span>
                     <span style={{ fontSize: '11px', fontWeight: 700, color: STATUS_COLOR[exam.status], textTransform: 'uppercase', letterSpacing: '0.05em' }}>{exam.status}</span>
                   </div>
@@ -169,7 +169,7 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
                   )}
                 </div>
 
-                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
                   {exam.status === 'DRAFT' && (
                     <button onClick={() => handlePublish(exam.id)} title="Publish exam" style={{
                       display: 'flex', alignItems: 'center', gap: '4px',

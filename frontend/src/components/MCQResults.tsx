@@ -45,15 +45,7 @@ const AttemptRow: React.FC<{ attempt: MCQAttempt }> = ({ attempt }) => {
   return (
     <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', transition: 'border-color 0.15s ease' }}>
       {/* Primary Row Grid */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(200px, 1.4fr) minmax(180px, 1.2fr) minmax(160px, 1.1fr) minmax(130px, 0.9fr) minmax(150px, 1fr) 90px',
-          alignItems: 'center',
-          gap: '14px',
-          padding: '12px 16px'
-        }}
-      >
+      <div className="mcq-attempt-grid">
         {/* 1. Candidate Identity */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
           <div
@@ -729,19 +721,7 @@ export const MCQResults: React.FC = () => {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {/* Table Header Row */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(200px, 1.4fr) minmax(180px, 1.2fr) minmax(160px, 1.1fr) minmax(130px, 0.9fr) minmax(150px, 1fr) 90px',
-              padding: '6px 16px',
-              fontSize: '10.5px',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              color: 'var(--text-muted)',
-              gap: '14px'
-            }}
-          >
+          <div className="mcq-ledger-header">
             <span>Candidate & USN</span>
             <span>Exam Session</span>
             <span>Timing & Duration</span>

@@ -274,7 +274,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
           {/* Header */}
           <div
             style={{
-              padding: '28px 32px 20px',
+              padding: 'clamp(20px, 4vw, 28px) clamp(16px, 4vw, 32px) 20px',
               borderBottom: '1px solid var(--border)',
               background: 'var(--bg-surface)'
             }}
@@ -305,7 +305,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
           </div>
 
           {/* Separate Gateway Portals Grid */}
-          <div style={{ padding: '28px 32px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px' }}>
+          <div style={{ padding: 'clamp(16px, 4vw, 28px) clamp(16px, 4vw, 32px)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '20px' }}>
             {/* 1. Paper Setter Gateway Card */}
             <div
               style={{
@@ -515,7 +515,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
           {/* Footer student link */}
           <div
             style={{
-              padding: '14px 32px',
+              padding: '14px clamp(16px, 4vw, 32px)',
               borderTop: '1px solid var(--border)',
               background: 'var(--bg-surface)',
               display: 'flex',
@@ -554,7 +554,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '36px 16px',
+        padding: 'clamp(20px, 4vw, 36px) clamp(12px, 3vw, 16px)',
         background: 'var(--bg-main)'
       }}
     >
@@ -572,7 +572,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
         {/* ── Dedicated Brand Header (Role Specific) ── */}
         <div
           style={{
-            padding: '24px 28px 18px',
+            padding: '24px clamp(16px, 4vw, 28px) 18px',
             borderBottom: '1px solid var(--border)',
             background: 'var(--bg-surface)'
           }}
@@ -614,7 +614,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
 
         {/* ── Watermelon UI Tabs List (Sign In / Register) ── */}
         {/* ── Body Container ── */}
-        <div style={{ padding: '24px 28px' }}>
+        <div style={{ padding: '24px clamp(16px, 4vw, 28px)' }}>
           {/* Feedback Alerts */}
           {errorMessage && (
             <div
