@@ -60,6 +60,7 @@ export const SecureMCQExam: React.FC = () => {
   const [result, setResult] = useState<Result | null>(null);
   const submitLock = useRef(false);
   const serverOffsetMs = useRef(0);
+  const timeoutSubmitAttempted = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -116,7 +117,10 @@ export const SecureMCQExam: React.FC = () => {
     const tick = () => {
       const value = Math.max(0, Number(attempt.deadline) - (Date.now() + serverOffsetMs.current));
       setRemaining(value);
-      if (value <= 0) void submit();
+      if (value <= 0 && !timeoutSubmitAttempted.current) {
+        timeoutSubmitAttempted.current = true;
+        void submit();
+      }
     };
     tick();
     const timer = window.setInterval(tick, 500);
@@ -202,10 +206,10 @@ export const SecureMCQExam: React.FC = () => {
       </article>}
       <footer style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 28, flexWrap: 'wrap' }}>
         <button style={secondaryButton} disabled={index === 0 || saving} onClick={() => setIndex((i) => Math.max(0, i - 1))}>Previous</button>
-        <div style={{ display: 'flex', gap: 10 }}>
-          {index < attempt.assignedQuestions.length - 1
-            ? <button style={primaryButton} disabled={saving} onClick={() => setIndex((i) => Math.min(attempt.assignedQuestions.length - 1, i + 1))}>Next question →</button>
-            : <button style={primaryButton} disabled={saving || submitting} onClick={() => void submit()}>{submitting ? 'Submitting…' : 'Submit examination'}</button>}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {index < attempt.assignedQuestions.length - 1 &&
+            <button style={secondaryButton} disabled={saving} onClick={() => setIndex((i) => Math.min(attempt.assignedQuestions.length - 1, i + 1))}>Next question →</button>}
+          <button style={primaryButton} disabled={saving || submitting} onClick={() => void submit()}>{submitting ? 'Submitting…' : 'Submit examination'}</button>
         </div>
       </footer>
       {saving && <p role="status" style={{ color: '#64748b' }}>Saving answer securely…</p>}
