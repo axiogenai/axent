@@ -27,6 +27,8 @@ ALTER TABLE public.mcq_candidate_tickets ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.mcq_candidate_tickets FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.mcq_candidate_tickets TO service_role;
 
+ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS student_div text DEFAULT 'A';
+ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS last_activity_at bigint;
 ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS candidate_ticket_id uuid
   REFERENCES public.mcq_candidate_tickets(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_mcq_attempts_candidate_ticket
