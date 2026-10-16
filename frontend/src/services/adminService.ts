@@ -33,6 +33,7 @@ export interface CctvBroadcastMessage {
   station?: CandidateStation;
   isLocked?: boolean;
   warningMessage?: string;
+  pardon?: boolean;
 }
 
 // ── WORKSTATION IDENTIFIER GENERATOR ──
@@ -766,11 +767,17 @@ export function sendProctorLockCommand(stationId: string, isLocked: boolean, lab
         isLockedByProctor: isLocked,
         tabSwitchViolations: isLocked ? (s.metrics?.tabSwitchViolations || 0) : 0,
         unfocusedTimeSeconds: isLocked ? (s.metrics?.unfocusedTimeSeconds || 0) : 0,
+        integrityStatus: isLocked ? s.integrityStatus : ('Verified Original Work' as const),
+        cheatingRisk: isLocked ? s.cheatingRisk : ('Low' as const),
         metrics: {
           ...s.metrics,
           tabSwitchViolations: isLocked ? (s.metrics?.tabSwitchViolations || 0) : 0,
           unfocusedTimeSeconds: isLocked ? (s.metrics?.unfocusedTimeSeconds || 0) : 0
         },
+        mcqProgress: s.mcqProgress ? {
+          ...s.mcqProgress,
+          tabSwitches: isLocked ? s.mcqProgress.tabSwitches : 0
+        } : undefined,
         proctorWarningMessage: isLocked ? s.proctorWarningMessage : undefined
       };
     }
@@ -778,7 +785,7 @@ export function sendProctorLockCommand(stationId: string, isLocked: boolean, lab
   });
   saveAllStations(updated);
   updateStationLockInCloud(stationId, isLocked, undefined, labId);
-  broadcastCctvMessage({ type: 'LOCK_COMMAND', stationId, labId, isLocked });
+  broadcastCctvMessage({ type: 'LOCK_COMMAND', stationId, labId, isLocked, pardon: !isLocked });
 }
 
 /**
@@ -797,6 +804,17 @@ export function sendProctorConcludeAndFreeCommand(stationId: string, labId?: str
         ...s,
         status: 'Submitted & Done' as const,
         isLockedByProctor: false,
+        tabSwitchViolations: 0,
+        unfocusedTimeSeconds: 0,
+        metrics: {
+          ...s.metrics,
+          tabSwitchViolations: 0,
+          unfocusedTimeSeconds: 0
+        },
+        mcqProgress: s.mcqProgress ? {
+          ...s.mcqProgress,
+          tabSwitches: 0
+        } : undefined,
         proctorWarningMessage: 'Examination concluded by central proctor. Terminal released.',
         lastActive: 'Concluded & Freed Just Now',
         lastUpdatedTimestamp: Date.now()
@@ -867,6 +885,14 @@ export function syncMcqLiveStation(
       cheatingRisk = 'Medium';
     }
 
+    const resolvedMaxMarks = attempt?.maxScore && attempt.maxScore > 0
+      ? attempt.maxScore
+      : (exam as any)?.totalMarks && (exam as any).totalMarks > 0
+      ? (exam as any).totalMarks
+      : totalQuestions > 0
+      ? totalQuestions
+      : 25;
+
     const existing = stations.find((s) => s.id === currentStationId);
     const isLocked = isStationLocked(currentStationId, activeLab);
 
@@ -885,7 +911,7 @@ export function syncMcqLiveStation(
         assignmentTitle: examTitle
       },
       language: 'MCQ',
-      code: `// MCQ Exam: ${examTitle}\n// Answered: ${answeredCount}/${totalQuestions} questions\n// Score: ${attempt?.score ?? 0}/${attempt?.maxScore ?? 0}\n// Tab Switches: ${tabSwitches}`,
+      code: `// MCQ Exam: ${examTitle}\n// Answered: ${answeredCount}/${totalQuestions} questions\n// Score: ${attempt?.score ?? 0}/${resolvedMaxMarks}\n// Tab Switches: ${tabSwitches}`,
       metrics: {
         typingSpeed: 0,
         timeSpent: Math.round((Date.now() - (attempt?.startTime || Date.now())) / 1000),
@@ -912,8 +938,8 @@ export function syncMcqLiveStation(
         vivaMarks: 0,
         integrityMarks: tabSwitches > 2 ? 0 : 10,
         totalMarks: attempt.score,
-        maxMarks: attempt.maxScore ?? 0
-      } : undefined,
+        maxMarks: resolvedMaxMarks
+      } : (existing?.marks ? { ...existing.marks, maxMarks: resolvedMaxMarks } : undefined),
       screenImageData: extra?.screenImageData !== undefined ? extra.screenImageData : existing?.screenImageData,
       hasLiveScreenStream: extra?.hasLiveScreenStream !== undefined ? extra.hasLiveScreenStream : existing?.hasLiveScreenStream ?? false,
       isLockedByProctor: isLocked,
@@ -928,7 +954,7 @@ export function syncMcqLiveStation(
         totalQuestions,
         currentQuestionIndex: currentIdx,
         currentScore: attempt?.score,
-        maxScore: attempt?.maxScore,
+        maxScore: resolvedMaxMarks,
         tabSwitches
       }
     };

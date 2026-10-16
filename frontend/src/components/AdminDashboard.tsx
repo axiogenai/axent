@@ -87,6 +87,23 @@ import {
   SimpleSelect
 } from './watermelon-ui';
 
+export const getEffectiveMaxMarks = (station: CandidateStation): number => {
+  if (station.mcqProgress?.maxScore && station.mcqProgress.maxScore > 0) return station.mcqProgress.maxScore;
+  if (station.marks?.maxMarks && station.marks.maxMarks > 0 && station.marks.maxMarks !== 50) return station.marks.maxMarks;
+  if (station.mcqProgress?.totalQuestions && station.mcqProgress.totalQuestions > 0) return station.mcqProgress.totalQuestions;
+  if (station.examMode === 'MCQ' || station.language === 'MCQ') {
+    return station.marks?.maxMarks && station.marks.maxMarks > 0 ? station.marks.maxMarks : 25;
+  }
+  return station.marks?.maxMarks || 50;
+};
+
+export const isStationEffectiveLocked = (station: CandidateStation): boolean => {
+  return isStationLocked(station.id, station.labId) ||
+    Boolean(station.isLockedByProctor) ||
+    (station.metrics?.tabSwitchViolations || 0) >= 3 ||
+    (station.mcqProgress?.tabSwitches || 0) >= 3;
+};
+
 interface AdminDashboardProps {
   theme?: ThemeMode;
   onSelectReportForStudent?: (report: AnalysisReport, codeSubmission?: CodeSubmission) => void;
@@ -278,7 +295,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       'Keystrokes',
       'Cheating Risk',
       'Integrity Status',
-      'Total Marks (out of 50)'
+      'Total Marks / Score'
     ];
 
     const rows = stations.map((s) => [
@@ -294,7 +311,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       s.metrics.keystrokes,
       `"${s.cheatingRisk}"`,
       `"${s.integrityStatus}"`,
-      s.marks ? s.marks.totalMarks : 'Pending'
+      s.marks ? `${s.marks.totalMarks}/${getEffectiveMaxMarks(s)}` : 'Pending'
     ]);
 
     const csvContent =
@@ -1010,7 +1027,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 (station.metrics?.tabSwitchViolations || 0) > 0;
 
               const isSubmitted = station.status === 'Submitted & Done';
-              const isLocked = isStationLocked(station.id, station.labId);
+              const isLocked = isStationEffectiveLocked(station);
               const previewMode = stationViewMode[station.id] || 'camera';
 
               // Format station title nicely, e.g. "Station 01" or "Station 22" (removing any stray #)
@@ -1362,10 +1379,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#e4e4e7' }}>
                       {station.marks ? (
                         <span>
-                          {station.marks.totalMarks}/{station.marks.maxMarks || 50}
+                          {station.marks.totalMarks}/{getEffectiveMaxMarks(station)}
                         </span>
                       ) : (
-                        <span>0/{station.examMode === 'MCQ' ? (station.mcqProgress?.totalQuestions || 30) : 50}</span>
+                        <span>0/{getEffectiveMaxMarks(station)}</span>
                       )}
                     </div>
                   </div>
@@ -1583,7 +1600,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <th>Paste %</th>
                 <th>Tab Swaps</th>
                 <th>Cheating Risk</th>
-                <th>Marks (/50)</th>
+                <th>Marks</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -1653,13 +1670,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </td>
                     <td style={{ fontFamily: 'var(--font-mono)' }}>
                       <span className="badge badge-sm badge-primary">
-                        {station.marks ? `${station.marks.totalMarks}/50` : 'PENDING'}
+                        {station.marks ? `${station.marks.totalMarks}/${getEffectiveMaxMarks(station)}` : 'PENDING'}
                       </span>
                     </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         {(() => {
-                          const stationLocked = isStationLocked(station.id, station.labId);
+                          const stationLocked = isStationEffectiveLocked(station);
                           return (
                             <button
                               className={`btn ${stationLocked ? 'btn-danger' : 'btn-ghost'} btn-sm`}
@@ -1676,7 +1693,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </button>
                           );
                         })()}
-                        {((station.status !== 'Submitted & Done' && isStationLocked(station.id, station.labId)) || (station.tabSwitchViolations || station.mcqProgress?.tabSwitches || 0) >= 3) && (
+                        {station.status !== 'Submitted & Done' && isStationEffectiveLocked(station) && (
                           <button
                             className="btn btn-secondary btn-sm"
                             onClick={() => {
@@ -1788,7 +1805,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span>CODE TELEMETRY MIRROR</span>
                     </span>
                   )}
-                  {isStationLocked(selectedStation.id, selectedStation.labId) ? (
+                  {isStationEffectiveLocked(selectedStation) ? (
                     <span className="badge badge-danger" style={{ fontSize: '10px', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                       <Lock size={10} />
                       <span>LOCKED BY PROCTOR</span>
@@ -1888,7 +1905,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 {/* Lock/Unlock Toggle */}
                 {(() => {
-                  const isStationCurrentlyLocked = isStationLocked(selectedStation.id, selectedStation.labId);
+                  const isStationCurrentlyLocked = isStationEffectiveLocked(selectedStation);
                   return (
                     <button
                       className={`btn btn-sm ${isStationCurrentlyLocked ? 'btn-danger' : 'btn-secondary'}`}
@@ -2167,7 +2184,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                         <span>Final Grade / Marks:</span>
                         <strong style={{ color: 'var(--accent)' }}>
-                          {selectedStation.marks.totalMarks} / {selectedStation.marks.maxMarks || 50} pts
+                          {selectedStation.marks.totalMarks} / {getEffectiveMaxMarks(selectedStation)} pts
                         </strong>
                       </div>
                     )}
@@ -2278,7 +2295,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="card" style={{ padding: '10px' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Awarded Marks</div>
                 <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--accent)' }}>
-                  {selectedStation.marks ? `${selectedStation.marks.totalMarks}/50` : 'Pending'}
+                  {selectedStation.marks ? `${selectedStation.marks.totalMarks}/${getEffectiveMaxMarks(selectedStation)}` : 'Pending'}
                 </div>
               </div>
             </div>

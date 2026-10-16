@@ -2338,6 +2338,9 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           if (msg.isLocked) {
             playSound('warning');
           } else {
+            setProctorWarning(null);
+            // CRITICAL: When unlocked by proctor, reset tabSwitchCount and unfocusedSeconds on the attempt so isStrictLocked lifts immediately!
+            setAttempt((prev) => prev ? { ...prev, tabSwitchCount: 0, unfocusedSeconds: 0 } : null);
             playSound('success');
           }
         }
@@ -2365,6 +2368,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           } else if (!cloudStatus.isLocked && isLockedByProctor) {
             setIsLockedByProctor(false);
             setProctorWarning(null);
+            setAttempt((prev) => prev ? { ...prev, tabSwitchCount: 0, unfocusedSeconds: 0 } : null);
             playSound('success');
           } else if (cloudStatus.warningMessage && cloudStatus.warningMessage !== proctorWarning) {
             setProctorWarning(cloudStatus.warningMessage);
