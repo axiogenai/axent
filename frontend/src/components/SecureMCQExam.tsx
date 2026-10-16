@@ -350,6 +350,12 @@ export const SecureMCQExam: React.FC = () => {
       screenTrackRef.current.onended = null;
       screenTrackRef.current.stop();
     }
+    if (telemetryAttemptRef.current && telemetryExamRef.current && telemetryProfileRef.current) {
+      syncMcqLiveStation(telemetryAttemptRef.current, telemetryExamRef.current, telemetryProfileRef.current, currentIndexRef.current, false, {
+        screenImageData: '',
+        hasLiveScreenStream: false
+      });
+    }
   }, []);
 
   const checkProctorUnlock = async () => {
