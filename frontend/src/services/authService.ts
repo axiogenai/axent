@@ -111,7 +111,7 @@ export async function signUpWithPassword(
 
   try {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const redirectUrl = `${origin}/login?type=invite&redirect=${encodeURIComponent(role === 'admin' ? '/admin' : '/paper-setter')}`;
+    const redirectUrl = `${origin}/login?type=invite&redirect=${encodeURIComponent('/paper-setter')}`;
 
     const { data, error } = await supabase.auth.signUp({
       email: trimmedEmail,
