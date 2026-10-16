@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase, fetchExamsFromCloud } from '../services/supabaseService';
 import { MCQExamConfig } from '../types/mcq';
 
-type CandidateTicket = { ticket_id: string; student_name: string; student_roll: string; issued_at: string; expires_at: string; revoked_at: string | null; attempt_status: string | null };
+type CandidateTicket = { ticket_id: string; student_name: string; student_roll: string; issued_at: string; expires_at: string; revoked_at: string | null; attempt_id: string | null; attempt_status: string | null; attempt_tab_switch_count: number; proctor_lock_override: boolean };
 
 export const AdminMCQTicketIssuer: React.FC = () => {
   const [exams, setExams] = useState<MCQExamConfig[]>([]);
@@ -19,6 +19,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
   const [tickets, setTickets] = useState<CandidateTicket[]>([]);
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [revoking, setRevoking] = useState(false);
+  const [unlockingAttemptId, setUnlockingAttemptId] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
   const [loading, setLoading] = useState(true);
   const [issuing, setIssuing] = useState(false);
@@ -139,6 +140,26 @@ export const AdminMCQTicketIssuer: React.FC = () => {
     }
   };
 
+  const unlockAttempt = async (attemptId: string) => {
+    if (!attemptId || unlockingAttemptId) return;
+    setUnlockingAttemptId(attemptId);
+    setError('');
+    try {
+      const { data, error: rpcError } = await supabase.rpc('unlock_mcq_attempt', {
+        p_attempt_id: attemptId,
+        p_note: 'Unlocked by administrator from the MCQ ticket console'
+      });
+      if (rpcError) throw new Error(rpcError.message);
+      if (data !== true) throw new Error('The attempt could not be unlocked; it may no longer be in progress.');
+      setTickets((rows) => rows.map((row) => row.attempt_id === attemptId ? { ...row, proctor_lock_override: true } : row));
+      setNotice('Attempt unlocked. The original proctoring history has been preserved.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not unlock this attempt.');
+    } finally {
+      setUnlockingAttemptId('');
+    }
+  };
+
   return <main style={page}><section style={panel}>
     <p style={eyebrow}>AXENT · EXAM AUTHORITY</p>
     <h1 style={{ marginBottom: 8 }}>Issue a secure MCQ ticket</h1>
@@ -188,7 +209,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead><tr>
-              <th style={tableHead}>Candidate</th><th style={tableHead}>Issued / expires</th><th style={tableHead}>Attempt</th><th style={tableHead}>Ticket</th><th style={tableHead}>Action</th>
+              <th style={tableHead}>Candidate</th><th style={tableHead}>Issued / expires</th><th style={tableHead}>Attempt / proctoring</th><th style={tableHead}>Ticket</th><th style={tableHead}>Actions</th>
             </tr></thead>
             <tbody>{tickets.map((ticket) => {
               const expired = new Date(ticket.expires_at).getTime() <= Date.now();
@@ -196,9 +217,9 @@ export const AdminMCQTicketIssuer: React.FC = () => {
               return <tr key={ticket.ticket_id}>
                 <td style={tableCell}><strong>{ticket.student_name}</strong><div style={{ color: '#64748b' }}>{ticket.student_roll}</div></td>
                 <td style={tableCell}>{new Date(ticket.issued_at).toLocaleString()}<div style={{ color: '#64748b' }}>Expires {new Date(ticket.expires_at).toLocaleString()}</div></td>
-                <td style={tableCell}>{ticket.attempt_status || 'Not started'}</td>
+                <td style={tableCell}>{ticket.attempt_status || 'Not started'}{ticket.attempt_id && <div style={{ color: '#64748b' }}>Tab switches: {ticket.attempt_tab_switch_count || 0}</div>}{ticket.attempt_id && ticket.attempt_status === 'IN_PROGRESS' && (ticket.attempt_tab_switch_count || 0) >= 3 && !ticket.proctor_lock_override && <div style={{ color: '#b45309', fontWeight: 700 }}>Locked pending invigilator</div>}</td>
                 <td style={tableCell}>{status}</td>
-                <td style={tableCell}><button type="button" onClick={() => void revokeTicket(ticket.ticket_id)} disabled={revoking || Boolean(ticket.revoked_at)} style={{ ...secondaryButton, color: '#dc2626', opacity: ticket.revoked_at ? .5 : 1 }}>{ticket.revoked_at ? 'Revoked' : revoking ? 'Revoking…' : 'Revoke'}</button></td>
+                <td style={tableCell}><div style={{ display: 'grid', gap: 6 }}><button type="button" onClick={() => void revokeTicket(ticket.ticket_id)} disabled={revoking || Boolean(ticket.revoked_at)} style={{ ...secondaryButton, color: '#dc2626', opacity: ticket.revoked_at ? .5 : 1 }}>{ticket.revoked_at ? 'Revoked' : revoking ? 'Revoking…' : 'Revoke'}</button>{ticket.attempt_id && ticket.attempt_status === 'IN_PROGRESS' && (ticket.attempt_tab_switch_count || 0) >= 3 && !ticket.proctor_lock_override && <button type="button" onClick={() => void unlockAttempt(ticket.attempt_id!)} disabled={Boolean(unlockingAttemptId)} style={secondaryButton}>{unlockingAttemptId === ticket.attempt_id ? 'Unlocking…' : 'Unlock attempt'}</button>}</div></td>
               </tr>;
             })}</tbody>
           </table>
