@@ -159,6 +159,14 @@ ALTER TABLE public.candidate_stations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.college_labs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.code_submissions ENABLE ROW LEVEL SECURITY;
 
+-- Remove legacy permissive MCQ policies and make this schema block rerunnable.
+DROP POLICY IF EXISTS "Allow public read-write for mcq_questions" ON public.mcq_questions;
+DROP POLICY IF EXISTS "Allow public read-write for mcq_exams" ON public.mcq_exams;
+DROP POLICY IF EXISTS "Allow public read-write for mcq_attempts" ON public.mcq_attempts;
+DROP POLICY IF EXISTS "Trusted authorities manage MCQ questions" ON public.mcq_questions;
+DROP POLICY IF EXISTS "Trusted authorities manage MCQ exams" ON public.mcq_exams;
+DROP POLICY IF EXISTS "Trusted admin manages MCQ attempts" ON public.mcq_attempts;
+DROP POLICY IF EXISTS "Trusted authorities read MCQ attempts" ON public.mcq_attempts;
 -- MCQ data is only accessible to users with trusted Supabase app_metadata roles.
 -- Candidate attempts are created/graded through the secure RPCs in the Step 4 migration.
 REVOKE ALL ON public.mcq_questions, public.mcq_exams, public.mcq_attempts FROM anon;
