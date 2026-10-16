@@ -293,6 +293,21 @@ export function deleteQuestionFromCloud(id: string): Promise<boolean> {
   return enqueueEntityWrite(questionWriteQueues, id, () => writeDeleteQuestionFromCloud(id));
 }
 
+export async function deleteQuestionsByIdsFromCloud(questionIds: string[]): Promise<boolean> {
+  if (!questionIds || questionIds.length === 0) return true;
+  try {
+    const { error } = await supabase.from('mcq_questions').delete().in('id', questionIds);
+    if (error) {
+      console.warn('[Supabase] Failed to bulk delete questions from cloud:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('[Supabase] Error bulk deleting questions from cloud:', err);
+    return false;
+  }
+}
+
 export function saveExamToCloud(exam: MCQExamConfig): Promise<boolean> {
   return enqueueEntityWrite(examWriteQueues, exam.id, () => writeExamToCloud(exam));
 }
@@ -407,6 +422,38 @@ export function saveAttemptToCloud(attempt: MCQAttempt): Promise<boolean> {
     if (attemptWriteQueues.get(attempt.id) === current) attemptWriteQueues.delete(attempt.id);
   }).catch(() => undefined);
   return current;
+}
+
+export async function deleteAttemptFromCloud(attemptId: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('mcq_attempts').delete().eq('id', attemptId);
+    if (error) {
+      console.warn('[Supabase] Failed to delete attempt from cloud:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('[Supabase] Error deleting attempt from cloud:', err);
+    return false;
+  }
+}
+
+export async function purgeExpiredAttemptsFromCloud(cutoffEpochMs: number): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('mcq_attempts')
+      .delete()
+      .neq('status', 'IN_PROGRESS')
+      .or(`submit_time.lt.${cutoffEpochMs},start_time.lt.${cutoffEpochMs}`);
+    if (error) {
+      console.warn('[Supabase] Failed to purge expired attempts from cloud:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('[Supabase] Error purging expired attempts from cloud:', err);
+    return false;
+  }
 }
 
 // ── CANDIDATE STATIONS (CCTV) SYNC ───────────────────────────────────────────

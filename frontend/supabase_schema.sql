@@ -201,3 +201,73 @@ DROP POLICY IF EXISTS "Allow public read-write for code_submissions" ON public.c
 CREATE POLICY "Allow public read-write for candidate_stations" ON public.candidate_stations FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read-write for college_labs" ON public.college_labs FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read-write for code_submissions" ON public.code_submissions FOR ALL USING (true) WITH CHECK (true);
+
+-- ============================================================================
+-- 5. Database Maintenance & Auto-Purge Procedure (2-Day Retention & Cascade)
+-- Run this function manually or via pg_cron to prune old attempts & concluded exam questions:
+-- SELECT public.cleanup_expired_mcq_data();
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.cleanup_expired_mcq_data()
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_deleted_attempts INT := 0;
+  v_deleted_questions INT := 0;
+  v_cutoff BIGINT;
+  v_now BIGINT;
+BEGIN
+  -- Current epoch milliseconds and 2 days cutoff (48 hours = 172,800,000 ms)
+  v_now := (EXTRACT(EPOCH FROM now()) * 1000)::BIGINT;
+  v_cutoff := v_now - 172800000;
+
+  -- 1. Purge non-in-progress attempts older than 2 days
+  WITH deleted_att AS (
+    DELETE FROM public.mcq_attempts
+    WHERE status <> 'IN_PROGRESS'
+      AND (
+        (submit_time IS NOT NULL AND submit_time < v_cutoff)
+        OR (submit_time IS NULL AND start_time < v_cutoff)
+      )
+    RETURNING id
+  )
+  SELECT count(*) INTO v_deleted_attempts FROM deleted_att;
+
+  -- 2. Purge questions belonging to exams that are concluded/closed/ended,
+  -- provided those questions are not referenced by any still-active exam
+  WITH active_q_ids AS (
+    SELECT DISTINCT unnest(question_ids) AS q_id
+    FROM public.mcq_exams
+    WHERE status NOT IN ('CLOSED', 'ARCHIVED')
+      AND (end_time IS NULL OR end_time > v_now)
+  ),
+  concluded_q_ids AS (
+    SELECT DISTINCT unnest(question_ids) AS q_id
+    FROM public.mcq_exams
+    WHERE status IN ('CLOSED', 'ARCHIVED')
+       OR (end_time IS NOT NULL AND end_time <= v_now)
+  ),
+  orphan_concluded_q AS (
+    SELECT c.q_id
+    FROM concluded_q_ids c
+    LEFT JOIN active_q_ids a ON c.q_id = a.q_id
+    WHERE a.q_id IS NULL
+  ),
+  deleted_q AS (
+    DELETE FROM public.mcq_questions q
+    USING orphan_concluded_q o
+    WHERE q.id = o.q_id
+    RETURNING q.id
+  )
+  SELECT count(*) INTO v_deleted_questions FROM deleted_q;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'deleted_attempts', v_deleted_attempts,
+    'deleted_questions', v_deleted_questions,
+    'cutoff_epoch_ms', v_cutoff
+  );
+END;
+$$;
+

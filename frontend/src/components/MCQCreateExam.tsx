@@ -7,7 +7,7 @@ import { MCQExamConfig, MCQExamStatus } from '../types/mcq';
 import { MCQQuestion } from '../types/mcq';
 import {
   getAllQuestions, getAllExams, createExam, saveExam, deleteExam,
-  publishExam, validateExamForPublish, onMcqDataChanged
+  publishExam, closeExam, validateExamForPublish, onMcqDataChanged
 } from '../services/mcqService';
 import { AIPaperGeneratorModal } from './AIPaperGeneratorModal';
 import { ConfirmationModal } from './ConfirmationModal';
@@ -171,6 +171,25 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
                       <Check size={12} /> Publish
                     </button>
                   )}
+                  {exam.status === 'PUBLISHED' && (
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Close exam "${exam.title}"? This will conclude the examination and permanently purge its questions from the central database.`)) {
+                          closeExam(exam.id);
+                          reload();
+                        }
+                      }}
+                      title="Conclude and close exam"
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '4px',
+                        background: 'var(--warning-bg)', border: '1px solid var(--warning-border)',
+                        borderRadius: 'var(--radius-sm)', padding: '6px 12px',
+                        cursor: 'pointer', color: 'var(--warning)', fontSize: '12px', fontWeight: 600,
+                      }}
+                    >
+                      Close Exam
+                    </button>
+                  )}
                   <button onClick={() => onEdit(exam)} title="Edit exam" style={{
                     background: 'none', border: '1px solid var(--border)',
                     borderRadius: 'var(--radius-sm)', padding: '6px 10px',
@@ -195,7 +214,7 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
       <ConfirmationModal
         isOpen={confirmDelete !== null}
         title="Delete Examination?"
-        message="This will permanently delete this examination paper and erase its entry from the central cloud database. All scheduled sittings will be purged immediately."
+        message="This will permanently delete this examination paper, erase all its questions from the central cloud database, and purge all attached sessions immediately."
         confirmText="Yes, Delete Examination"
         cancelText="Cancel"
         tone="danger"

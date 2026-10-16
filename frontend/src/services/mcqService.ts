@@ -18,10 +18,13 @@ import { generateAttemptAssignment } from '../utils/mcqRandomizer';
 import {
   saveQuestionToCloud,
   deleteQuestionFromCloud,
+  deleteQuestionsByIdsFromCloud,
   clearAllQuestionsFromCloud,
   saveExamToCloud,
   deleteExamFromCloud,
   saveAttemptToCloud,
+  deleteAttemptFromCloud,
+  purgeExpiredAttemptsFromCloud,
   subscribeToMcqCloudChanges,
   fetchQuestionsFromCloud,
   fetchExamsFromCloud,
@@ -298,12 +301,21 @@ export function saveExam(exam: MCQExamConfig): MCQExamConfig {
 
 export async function deleteExam(id: string): Promise<boolean> {
   recordExamDeleted(id);
+  const examToDelete = getAllExams().find((e) => e.id === id);
   const all = getAllExams().filter((e) => e.id !== id);
   save(MCQ_STORAGE_KEYS.EXAMS, all);
 
   // Cascade delete any attempts for this exam locally
   const attempts = getAllAttempts().filter((a) => a.examId !== id);
   save(MCQ_STORAGE_KEYS.ATTEMPTS, attempts);
+
+  // Cascade delete questions attached to this exam from local storage & cloud
+  if (examToDelete && examToDelete.questionIds && examToDelete.questionIds.length > 0) {
+    const qSet = new Set(examToDelete.questionIds);
+    const remainingQuestions = getAllQuestions().filter((q) => !qSet.has(q.id));
+    save(MCQ_STORAGE_KEYS.QUESTIONS, remainingQuestions);
+    void deleteQuestionsByIdsFromCloud(examToDelete.questionIds);
+  }
 
   const ok = await deleteExamFromCloud(id);
   notifyExamsChanged();
@@ -324,6 +336,34 @@ export function publishExam(id: string): string[] {
   save(MCQ_STORAGE_KEYS.EXAMS, all);
   saveExamToCloud(all[idx]);
   return [];
+}
+
+export function closeExam(id: string): void {
+  const all = getAllExams();
+  const idx = all.findIndex((e) => e.id === id);
+  if (idx >= 0) {
+    const exam = all[idx];
+    all[idx] = { ...exam, status: 'CLOSED', updatedAt: Date.now() };
+    save(MCQ_STORAGE_KEYS.EXAMS, all);
+    saveExamToCloud(all[idx]);
+
+    // Cascade delete questions attached to this exam if no other active exam references them
+    if (exam.questionIds && exam.questionIds.length > 0) {
+      const now = Date.now();
+      const activeExams = all.filter((e) => e.id !== id && e.status !== 'CLOSED' && e.status !== 'ARCHIVED' && (!e.endTime || now < e.endTime));
+      const activeQuestionIds = new Set(activeExams.flatMap((e) => e.questionIds || []));
+      const questionsToDelete = exam.questionIds.filter((qId) => !activeQuestionIds.has(qId));
+      if (questionsToDelete.length > 0) {
+        const qSet = new Set(questionsToDelete);
+        const remainingQuestions = getAllQuestions().filter((q) => !qSet.has(q.id));
+        save(MCQ_STORAGE_KEYS.QUESTIONS, remainingQuestions);
+        void deleteQuestionsByIdsFromCloud(questionsToDelete);
+      }
+    }
+
+    notifyExamsChanged();
+    notifyMcqDataChanged();
+  }
 }
 
 export function validateExamForPublish(exam: MCQExamConfig): string[] {
@@ -1043,21 +1083,52 @@ function mergeAttempts(localAttempts: MCQAttempt[], cloudAttempts: MCQAttempt[])
   return Array.from(merged.values());
 }
 
-export const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+export const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+export const ONE_WEEK_MS = TWO_DAYS_MS; // Backwards compatibility alias
 
 export function pruneExpiredLocalData(): void {
   try {
-    const cutoff = Date.now() - ONE_WEEK_MS;
+    const now = Date.now();
+    const cutoff = now - TWO_DAYS_MS;
+
+    // 1. Purge attempts older than 2 days (48 hours)
     const attempts = getAllAttempts();
-    const pruned = attempts.filter((a) => {
+    const prunedAttempts = attempts.filter((a) => {
       if (a.status === 'IN_PROGRESS') return true;
       const refTime = a.submitTime || a.startTime || 0;
       return refTime >= cutoff;
     });
-    if (pruned.length !== attempts.length) {
-      save(MCQ_STORAGE_KEYS.ATTEMPTS, pruned);
+    if (prunedAttempts.length !== attempts.length) {
+      save(MCQ_STORAGE_KEYS.ATTEMPTS, prunedAttempts);
     }
-  } catch {}
+    // Asynchronously purge expired attempts from Supabase cloud
+    void purgeExpiredAttemptsFromCloud(cutoff);
+
+    // 2. Cascade delete questions belonging to concluded / over exams
+    const exams = getAllExams();
+    const overExams = exams.filter((e) => e.status === 'CLOSED' || e.status === 'ARCHIVED' || (Boolean(e.endTime) && now >= (e.endTime as number)));
+    const activeExams = exams.filter((e) => e.status !== 'CLOSED' && e.status !== 'ARCHIVED' && (!e.endTime || now < e.endTime));
+    const activeQuestionIds = new Set(activeExams.flatMap((e) => e.questionIds || []));
+
+    const questionsToDelete = new Set<string>();
+    for (const ex of overExams) {
+      for (const qId of (ex.questionIds || [])) {
+        if (!activeQuestionIds.has(qId)) {
+          questionsToDelete.add(qId);
+        }
+      }
+    }
+
+    if (questionsToDelete.size > 0) {
+      const remainingQuestions = getAllQuestions().filter((q) => !questionsToDelete.has(q.id));
+      if (remainingQuestions.length !== getAllQuestions().length) {
+        save(MCQ_STORAGE_KEYS.QUESTIONS, remainingQuestions);
+      }
+      void deleteQuestionsByIdsFromCloud(Array.from(questionsToDelete));
+    }
+  } catch (err) {
+    console.warn('[mcqService] Error in pruneExpiredLocalData:', err);
+  }
 }
 
 export async function persistAttemptToCloud(attemptId: string): Promise<boolean> {
@@ -1095,9 +1166,9 @@ export async function syncFromSupabase(): Promise<void> {
       notifyExamsChanged();
     }
 
-    // 3. Reconcile Attempts: Supabase cloud is authoritative
+    // 3. Reconcile Attempts: Supabase cloud is authoritative (2-day retention window)
     if (cloudA !== null) {
-      const cutoff = Date.now() - ONE_WEEK_MS;
+      const cutoff = Date.now() - TWO_DAYS_MS;
       const recentCloudAttempts = cloudA.filter(
         (a) => a.status === 'IN_PROGRESS' || (a.submitTime || a.startTime || 0) >= cutoff
       );
@@ -1107,7 +1178,7 @@ export async function syncFromSupabase(): Promise<void> {
       notifyMcqDataChanged();
     }
 
-    // 4. Prune local data older than 1 week
+    // 4. Prune expired attempts and concluded exam questions
     pruneExpiredLocalData();
   } catch (err) {
     console.warn('[mcqService] Background Supabase sync notice:', err);
