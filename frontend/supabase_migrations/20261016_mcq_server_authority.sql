@@ -45,7 +45,7 @@ CREATE OR REPLACE FUNCTION public.issue_mcq_candidate_ticket(
   p_student_dept text DEFAULT '', p_student_sem text DEFAULT '',
   p_student_div text DEFAULT 'A', p_ttl_hours integer DEFAULT 24
 ) RETURNS TABLE(ticket_id uuid, ticket_token text, ticket_expires_at timestamptz)
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions AS $
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions AS $$
 DECLARE v_token text; v_ticket_id uuid; v_exam public.mcq_exams%ROWTYPE; v_expires timestamptz;
 BEGIN
   IF COALESCE(auth.jwt()->'app_metadata'->>'role','') <> 'admin' OR auth.uid() IS NULL THEN
@@ -246,7 +246,7 @@ END $$;
 CREATE OR REPLACE FUNCTION public.list_mcq_candidate_tickets(p_exam_id text)
 RETURNS TABLE(ticket_id uuid, student_name text, student_roll text, issued_at timestamptz,
               expires_at timestamptz, revoked_at timestamptz, attempt_status text)
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 BEGIN
   IF COALESCE(auth.jwt()->'app_metadata'->>'role','') <> 'admin' OR auth.uid() IS NULL THEN
     RAISE EXCEPTION 'trusted administrator role required' USING ERRCODE='42501';
@@ -257,10 +257,10 @@ BEGIN
   FROM public.mcq_candidate_tickets t
   WHERE t.exam_id=p_exam_id
   ORDER BY t.issued_at DESC LIMIT 100;
-END $;
+END $$;
 
 CREATE OR REPLACE FUNCTION public.revoke_mcq_candidate_ticket_by_id(p_ticket_id uuid)
-RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE affected integer;
 BEGIN
   IF COALESCE(auth.jwt()->'app_metadata'->>'role','') <> 'admin' OR auth.uid() IS NULL THEN
@@ -277,7 +277,7 @@ BEGIN
       WHERE candidate_ticket_id=p_ticket_id AND status='IN_PROGRESS';
   END IF;
   RETURN affected=1;
-END $;
+END $$;
 
 CREATE OR REPLACE FUNCTION public.revoke_mcq_candidate_ticket(p_ticket_token text)
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions AS $$
