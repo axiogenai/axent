@@ -92,6 +92,8 @@ BEGIN
         'snapshot',(x->'snapshot')-'correctOptionId'-'explanation','shuffledOptionIds',x->'shuffledOptionIds')
         ORDER BY (x->>'order')::int),'[]'::jsonb) FROM jsonb_array_elements(a.assigned_questions) x));
   END IF;
+  -- Serialize starts across different tickets for the same candidate and exam.
+  PERFORM pg_advisory_xact_lock(hashtext(t.exam_id), hashtext(t.student_roll));
   IF (SELECT count(*) FROM public.mcq_attempts WHERE exam_id=t.exam_id AND student_roll=t.student_roll
       AND status IN ('IN_PROGRESS','SUBMITTED','TIMED_OUT'))>=GREATEST(COALESCE(e.max_attempts,1),1) THEN
     RAISE EXCEPTION 'maximum attempts reached' USING ERRCODE='22023';
@@ -139,7 +141,7 @@ RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extension
 DECLARE t public.mcq_candidate_tickets%ROWTYPE; a public.mcq_attempts%ROWTYPE; now_ms bigint;
 BEGIN
   SELECT * INTO t FROM public.mcq_candidate_tickets WHERE token_hash=encode(extensions.digest(convert_to(COALESCE(p_ticket_token,''),'UTF8'),'sha256'),'hex')
-    AND revoked_at IS NULL AND expires_at>now();
+    AND revoked_at IS NULL;
   IF NOT FOUND THEN RAISE EXCEPTION 'invalid candidate ticket' USING ERRCODE='28000'; END IF;
   SELECT * INTO a FROM public.mcq_attempts WHERE id=p_attempt_id AND exam_id=t.exam_id AND student_roll=t.student_roll AND candidate_ticket_id=t.id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'attempt not found' USING ERRCODE='22023'; END IF;
