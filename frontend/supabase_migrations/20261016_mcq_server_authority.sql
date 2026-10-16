@@ -27,6 +27,11 @@ ALTER TABLE public.mcq_candidate_tickets ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.mcq_candidate_tickets FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.mcq_candidate_tickets TO service_role;
 
+ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS candidate_ticket_id uuid
+  REFERENCES public.mcq_candidate_tickets(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_mcq_attempts_candidate_ticket
+  ON public.mcq_attempts(candidate_ticket_id);
+
 -- Trusted administrators issue a random ticket once; only its hash is persisted.
 CREATE OR REPLACE FUNCTION public.issue_mcq_candidate_ticket(
   p_exam_id text, p_student_name text, p_student_roll text,
@@ -79,7 +84,7 @@ BEGIN
   IF e.start_time IS NOT NULL AND now_ms<e.start_time THEN RAISE EXCEPTION 'exam has not started' USING ERRCODE='22023'; END IF;
   IF e.end_time IS NOT NULL AND now_ms>=e.end_time THEN RAISE EXCEPTION 'exam window closed' USING ERRCODE='22023'; END IF;
 
-  SELECT * INTO a FROM public.mcq_attempts WHERE exam_id=t.exam_id AND student_roll=t.student_roll AND status='IN_PROGRESS'
+  SELECT * INTO a FROM public.mcq_attempts WHERE exam_id=t.exam_id AND student_roll=t.student_roll AND candidate_ticket_id=t.id AND status='IN_PROGRESS'
     ORDER BY start_time DESC LIMIT 1 FOR UPDATE;
   IF FOUND THEN
     RETURN jsonb_build_object('attemptId',a.id,'deadline',a.deadline,'status',a.status,'answers',a.answers,
@@ -119,10 +124,10 @@ BEGIN
 
   IF jsonb_array_length(assignment)=0 THEN RAISE EXCEPTION 'no valid published questions' USING ERRCODE='22023'; END IF;
   INSERT INTO public.mcq_attempts(id,exam_id,exam_title,student_name,student_roll,student_dept,student_sem,student_div,
-    start_time,deadline,last_activity_at,status,assigned_questions,answers,max_score)
+    start_time,deadline,last_activity_at,status,assigned_questions,answers,max_score,candidate_ticket_id)
   VALUES(gen_random_uuid()::text,t.exam_id,e.title,t.student_name,t.student_roll,t.student_dept,t.student_sem,t.student_div,
     now_ms,deadline_ms,now_ms,'IN_PROGRESS',assignment,'{}'::jsonb,
-    (SELECT COALESCE(sum((x->'snapshot'->>'marks')::numeric),0) FROM jsonb_array_elements(assignment) x)) RETURNING * INTO a;
+    (SELECT COALESCE(sum((x->'snapshot'->>'marks')::numeric),0) FROM jsonb_array_elements(assignment) x),t.id) RETURNING * INTO a;
   RETURN jsonb_build_object('attemptId',a.id,'deadline',a.deadline,'status',a.status,'answers',a.answers,
     'assignedQuestions',(SELECT COALESCE(jsonb_agg(jsonb_build_object('questionId',x->>'questionId','order',x->'order',
       'snapshot',(x->'snapshot')-'correctOptionId'-'explanation','shuffledOptionIds',x->'shuffledOptionIds')
@@ -136,7 +141,7 @@ BEGIN
   SELECT * INTO t FROM public.mcq_candidate_tickets WHERE token_hash=encode(extensions.digest(convert_to(COALESCE(p_ticket_token,''),'UTF8'),'sha256'),'hex')
     AND revoked_at IS NULL AND expires_at>now();
   IF NOT FOUND THEN RAISE EXCEPTION 'invalid candidate ticket' USING ERRCODE='28000'; END IF;
-  SELECT * INTO a FROM public.mcq_attempts WHERE id=p_attempt_id AND exam_id=t.exam_id AND student_roll=t.student_roll FOR UPDATE;
+  SELECT * INTO a FROM public.mcq_attempts WHERE id=p_attempt_id AND exam_id=t.exam_id AND student_roll=t.student_roll AND candidate_ticket_id=t.id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'attempt not found' USING ERRCODE='22023'; END IF;
   IF a.status<>'IN_PROGRESS' THEN RAISE EXCEPTION 'attempt is not in progress' USING ERRCODE='22023'; END IF;
   now_ms:=floor(extract(epoch FROM clock_timestamp())*1000)::bigint;
