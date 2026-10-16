@@ -79,12 +79,17 @@ export const SecureMCQExam: React.FC = () => {
   const answersRef = useRef(answers);
   const tabSwitchCountRef = useRef(tabSwitchCount);
   const unfocusedSecondsRef = useRef(unfocusedSeconds);
+  const currentIndexRef = useRef(index);
+  const telemetryAttemptRef = useRef<MCQAttempt | null>(null);
+  const telemetryExamRef = useRef<MCQExamConfig | null>(null);
+  const telemetryProfileRef = useRef<StudentInfo | null>(null);
 
   useEffect(() => {
     answersRef.current = answers;
     tabSwitchCountRef.current = tabSwitchCount;
     unfocusedSecondsRef.current = unfocusedSeconds;
-  }, [answers, tabSwitchCount, unfocusedSeconds]);
+    currentIndexRef.current = index;
+  }, [answers, tabSwitchCount, unfocusedSeconds, index]);
   const screenTrackRef = useRef<MediaStreamTrack | null>(null);
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
   const screenCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -288,6 +293,9 @@ export const SecureMCQExam: React.FC = () => {
           durationMinutes: attempt.durationMinutes || 0, totalMarks: 0, questionIds: attempt.assignedQuestions.map(q => q.questionId),
           status: 'PUBLISHED'
         } as unknown as MCQExamConfig;
+        telemetryAttemptRef.current = telemetryAttempt;
+        telemetryExamRef.current = telemetryExam;
+        telemetryProfileRef.current = profile;
         const canvas = document.createElement('canvas');
         canvas.width = 480;
         canvas.height = 270;
@@ -300,7 +308,7 @@ export const SecureMCQExam: React.FC = () => {
           telemetryAttempt.answers = answersRef.current;
           telemetryAttempt.tabSwitchCount = tabSwitchCountRef.current;
           telemetryAttempt.unfocusedSeconds = unfocusedSecondsRef.current;
-          syncMcqLiveStation(telemetryAttempt, telemetryExam, profile, index, false, {
+          syncMcqLiveStation(telemetryAttempt, telemetryExam, profile, currentIndexRef.current, false, {
             screenImageData: canvas.toDataURL('image/jpeg', 0.55),
             hasLiveScreenStream: true
           });
@@ -324,6 +332,15 @@ export const SecureMCQExam: React.FC = () => {
       screenTrackRef.current = null;
     }
     setScreenSharing(false);
+    if (telemetryAttemptRef.current && telemetryExamRef.current && telemetryProfileRef.current) {
+      telemetryAttemptRef.current.answers = answersRef.current;
+      telemetryAttemptRef.current.tabSwitchCount = tabSwitchCountRef.current;
+      telemetryAttemptRef.current.unfocusedSeconds = unfocusedSecondsRef.current;
+      syncMcqLiveStation(telemetryAttemptRef.current, telemetryExamRef.current, telemetryProfileRef.current, currentIndexRef.current, false, {
+        screenImageData: '',
+        hasLiveScreenStream: false
+      });
+    }
     void recordProctorEvent('SCREEN_SHARE_STOPPED', 0, 'Candidate screen sharing stopped');
   };
 
