@@ -230,6 +230,20 @@ export const SecureMCQExam: React.FC = () => {
 
   const startScreenShare = async () => {
     if (!attempt || result || screenSharing) return;
+    const profile = (() => {
+      try {
+        const raw = localStorage.getItem('codedna_student_profile');
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as Partial<StudentInfo>;
+        if ((parsed.rollNumber || '').trim().toLowerCase() !== (attempt.candidate?.rollNumber || '').trim().toLowerCase()) return null;
+        if (!parsed.labId || !parsed.stationNumber) return null;
+        return parsed as StudentInfo;
+      } catch { return null; }
+    })();
+    if (!profile) {
+      setError('This candidate session is not linked to a registered lab workstation. Contact the invigilator before starting screen proctoring.');
+      return;
+    }
     try {
       if (!navigator.mediaDevices?.getDisplayMedia) {
         setError('This browser does not support screen sharing. Contact the invigilator.');
@@ -249,16 +263,7 @@ export const SecureMCQExam: React.FC = () => {
       setScreenSharing(true);
       void recordProctorEvent('SCREEN_SHARE_STARTED', 0, 'Candidate started screen sharing');
 
-      const profile = (() => {
-        try {
-          const raw = localStorage.getItem('codedna_student_profile');
-          if (!raw) return null;
-          const parsed = JSON.parse(raw) as Partial<StudentInfo>;
-          if ((parsed.rollNumber || '').trim().toLowerCase() !== (attempt.candidate?.rollNumber || '').trim().toLowerCase()) return null;
-          if (!parsed.labId || !parsed.stationNumber) return null;
-          return parsed as StudentInfo;
-        } catch { return null; }
-      })();
+
 
       if (profile) {
         const telemetryAttempt = {
@@ -443,11 +448,11 @@ export const SecureMCQExam: React.FC = () => {
         </div>
       </article>}
       <footer style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 28, flexWrap: 'wrap' }}>
-        <button style={secondaryButton} disabled={index === 0 || saving || attempt.allowReview === false} onClick={() => setIndex((i) => Math.max(0, i - 1))}>Previous</button>
+        <button style={secondaryButton} disabled={index === 0 || saving || proctorLocked || attempt.allowReview === false} onClick={() => setIndex((i) => Math.max(0, i - 1))}>Previous</button>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {index < attempt.assignedQuestions.length - 1 &&
-            <button style={secondaryButton} disabled={saving} onClick={() => setIndex((i) => Math.min(attempt.assignedQuestions.length - 1, i + 1))}>Next question →</button>}
-          <button style={primaryButton} disabled={saving || submitting} onClick={() => void submit()}>{submitting ? 'Submitting…' : 'Submit examination'}</button>
+            <button style={secondaryButton} disabled={saving || proctorLocked} onClick={() => setIndex((i) => Math.min(attempt.assignedQuestions.length - 1, i + 1))}>Next question →</button>}
+          <button style={primaryButton} disabled={saving || submitting || proctorLocked} onClick={() => void submit()}>{submitting ? 'Submitting…' : 'Submit examination'}</button>
         </div>
       </footer>
       {saving && <p role="status" style={{ color: '#64748b' }}>Saving answer securely…</p>}
