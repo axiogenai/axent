@@ -59,7 +59,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
         p_ttl_hours: ttlHours
       });
       if (rpcError) throw new Error(rpcError.message);
-      const row = Array.isArray(data) ? data[0] : data;
+      const row = (Array.isArray(data) ? data[0] : data) as unknown as { ticket_token?: string; ticket_expires_at?: string } | null;
       if (!row?.ticket_token) throw new Error('The server did not return a candidate ticket.');
       // Use the URL fragment so the bearer token is not sent in HTTP requests or referrer headers.
       const url = `${window.location.origin}/mcq#ticket=${encodeURIComponent(row.ticket_token)}`;
