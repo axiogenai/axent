@@ -178,7 +178,6 @@ const unavailablePill: React.CSSProperties = { ...availablePill, color: '#b45309
 const dot: React.CSSProperties = { width: 6, height: 6, borderRadius: '50%', background: 'currentColor' };
 const description: React.CSSProperties = { color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.55, margin: '0 0 18px', minHeight: 40 };
 const metaRow: React.CSSProperties = { display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: 'var(--text-secondary)', marginTop: 'auto', paddingTop: 12 };
-const metaBase: React.CSSProperties = {};
 const schedule: React.CSSProperties = { display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 12, color: 'var(--text-secondary)', margin: '13px 0 16px' };
 const primaryButton: React.CSSProperties = { display: 'inline-flex', justifyContent: 'center', alignItems: 'center', gap: 8, background: '#2563eb', color: '#fff', border: 0, borderRadius: 10, padding: '11px 15px', fontWeight: 700, cursor: 'pointer', fontSize: 13 };
 const disabledButton: React.CSSProperties = { ...primaryButton, background: 'var(--bg-main)', color: 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'not-allowed' };
