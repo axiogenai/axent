@@ -94,20 +94,28 @@ BEGIN
   deadline_ms:=now_ms+e.duration_minutes::bigint*60000;
   IF e.end_time IS NOT NULL THEN deadline_ms:=LEAST(deadline_ms,e.end_time); END IF;
 
-  SELECT COALESCE(jsonb_agg(jsonb_build_object('questionId',q.id,'order',picked.ord-1,
-    'snapshot',jsonb_build_object('questionId',q.id,'text',q.text,
-      'options',(SELECT COALESCE(jsonb_agg(jsonb_build_object('id',o->>'id','text',o->>'text') ORDER BY random()),'[]'::jsonb)
-        FROM jsonb_array_elements(q.options) o),
-      'correctOptionId',(SELECT o->>'id' FROM jsonb_array_elements(q.options) o WHERE COALESCE((o->>'isCorrect')::boolean,false) LIMIT 1),
-      'marks',q.marks,'negativeMarks',CASE WHEN e.negative_marking_enabled THEN q.negative_marks ELSE 0 END,
-      'explanation',COALESCE(q.explanation,''),'subject',q.subject,'topic',q.topic,'difficulty',q.difficulty),
-    'shuffledOptionIds',(SELECT COALESCE(jsonb_agg(o->>'id' ORDER BY random()),'[]'::jsonb) FROM jsonb_array_elements(q.options) o)
+  SELECT COALESCE(jsonb_agg(jsonb_build_object('questionId',picked.id,'order',picked.ord-1,
+    'snapshot',jsonb_build_object('questionId',picked.id,'text',picked.text,
+      'options',picked.safe_options,
+      'correctOptionId',picked.correct_id,
+      'marks',picked.marks,'negativeMarks',picked.penalty,
+      'explanation',picked.explanation,'subject',picked.subject,'topic',picked.topic,'difficulty',picked.difficulty),
+    'shuffledOptionIds',picked.shuffled_ids
     ) ORDER BY picked.ord),'[]'::jsonb) INTO assignment
   FROM (
-    SELECT question_id, row_number() OVER(ORDER BY random()) ord FROM unnest(e.question_ids) question_id
-  ) picked JOIN public.mcq_questions q ON q.id=picked.question_id AND q.status='PUBLISHED'
-  WHERE (SELECT count(*) FROM jsonb_array_elements(q.options) o WHERE COALESCE((o->>'isCorrect')::boolean,false)=true)=1
-  LIMIT GREATEST(1,LEAST(e.question_count,cardinality(e.question_ids)));
+    SELECT q.id, chosen.ord, q.text, q.marks,
+      CASE WHEN e.negative_marking_enabled THEN q.negative_marks ELSE 0 END AS penalty,
+      COALESCE(q.explanation,'') AS explanation, q.subject, q.topic, q.difficulty,
+      (SELECT COALESCE(jsonb_agg(jsonb_build_object('id',o->>'id','text',o->>'text') ORDER BY random()),'[]'::jsonb)
+        FROM jsonb_array_elements(q.options) o) AS safe_options,
+      (SELECT o->>'id' FROM jsonb_array_elements(q.options) o WHERE COALESCE((o->>'isCorrect')::boolean,false) LIMIT 1) AS correct_id,
+      (SELECT COALESCE(jsonb_agg(o->>'id' ORDER BY random()),'[]'::jsonb) FROM jsonb_array_elements(q.options) o) AS shuffled_ids
+    FROM (SELECT question_id, row_number() OVER(ORDER BY random()) ord FROM unnest(e.question_ids) question_id) chosen
+    JOIN public.mcq_questions q ON q.id=chosen.question_id AND q.status='PUBLISHED'
+    WHERE (SELECT count(*) FROM jsonb_array_elements(q.options) o WHERE COALESCE((o->>'isCorrect')::boolean,false)=true)=1
+    ORDER BY chosen.ord
+    LIMIT GREATEST(1,LEAST(e.question_count,cardinality(e.question_ids)))
+  ) picked;
 
   IF jsonb_array_length(assignment)=0 THEN RAISE EXCEPTION 'no valid published questions' USING ERRCODE='22023'; END IF;
   INSERT INTO public.mcq_attempts(id,exam_id,exam_title,student_name,student_roll,student_dept,student_sem,student_div,
@@ -148,7 +156,7 @@ CREATE OR REPLACE FUNCTION public.submit_mcq_attempt(p_ticket_token text,p_attem
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions AS $$
 DECLARE t public.mcq_candidate_tickets%ROWTYPE; a public.mcq_attempts%ROWTYPE; x jsonb;
   qid text; correct_id text; selected_id text; marks numeric; penalty numeric;
-  score numeric:=0; max_score numeric:=0; correct_count int:=0; wrong_count int:=0; unanswered_count int:=0; now_ms bigint;
+  v_score numeric:=0; v_max_score numeric:=0; v_correct_count int:=0; v_wrong_count int:=0; v_unanswered_count int:=0; now_ms bigint;
 BEGIN
   SELECT * INTO t FROM public.mcq_candidate_tickets WHERE token_hash=encode(extensions.digest(convert_to(COALESCE(p_ticket_token,''),'UTF8'),'sha256'),'hex')
     AND revoked_at IS NULL AND expires_at>now();
@@ -161,19 +169,19 @@ BEGIN
   FOR x IN SELECT value FROM jsonb_array_elements(a.assigned_questions) LOOP
     qid:=x->>'questionId'; correct_id:=x->'snapshot'->>'correctOptionId'; selected_id:=a.answers->>qid;
     marks:=COALESCE((x->'snapshot'->>'marks')::numeric,1); penalty:=COALESCE((x->'snapshot'->>'negativeMarks')::numeric,0);
-    max_score:=max_score+marks;
-    IF selected_id IS NULL OR selected_id='' THEN unanswered_count:=unanswered_count+1;
-    ELSIF selected_id=correct_id THEN correct_count:=correct_count+1; score:=score+marks;
-    ELSE wrong_count:=wrong_count+1; score:=score-penalty; END IF;
+    v_max_score:=v_max_score+marks;
+    IF selected_id IS NULL OR selected_id='' THEN v_unanswered_count:=v_unanswered_count+1;
+    ELSIF selected_id=correct_id THEN v_correct_count:=v_correct_count+1; v_score:=v_score+marks;
+    ELSE v_wrong_count:=v_wrong_count+1; v_score:=v_score-penalty; END IF;
   END LOOP;
-  score:=GREATEST(0,score);
+  v_score:=GREATEST(0,v_score);
   UPDATE public.mcq_attempts SET status=CASE WHEN now_ms>=deadline THEN 'TIMED_OUT' ELSE 'SUBMITTED' END,
-    submit_time=now_ms,last_activity_at=now_ms,score=score,max_score=max_score,correct_count=correct_count,
-    wrong_count=wrong_count,unanswered_count=unanswered_count,
-    percentage_score=CASE WHEN max_score>0 THEN round((score/max_score)*100,2) ELSE 0 END,graded_at=now_ms WHERE id=a.id;
+    submit_time=now_ms,last_activity_at=now_ms,score=v_score,max_score=v_max_score,correct_count=v_correct_count,
+    wrong_count=v_wrong_count,unanswered_count=v_unanswered_count,
+    percentage_score=CASE WHEN v_max_score>0 THEN round((v_score/v_max_score)*100,2) ELSE 0 END,graded_at=now_ms WHERE id=a.id;
   RETURN jsonb_build_object('attemptId',a.id,'status',CASE WHEN now_ms>=a.deadline THEN 'TIMED_OUT' ELSE 'SUBMITTED' END,
-    'score',score,'maxScore',max_score,'correctCount',correct_count,'wrongCount',wrong_count,'unansweredCount',unanswered_count,
-    'percentageScore',CASE WHEN max_score>0 THEN round((score/max_score)*100,2) ELSE 0 END);
+    'score',v_score,'maxScore',v_max_score,'correctCount',v_correct_count,'wrongCount',v_wrong_count,'unansweredCount',v_unanswered_count,
+    'percentageScore',CASE WHEN v_max_score>0 THEN round((v_score/v_max_score)*100,2) ELSE 0 END);
 END $$;
 
 REVOKE ALL ON FUNCTION public.issue_mcq_candidate_ticket(text,text,text,text,text,text,integer) FROM PUBLIC,anon;
