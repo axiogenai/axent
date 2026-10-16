@@ -82,7 +82,7 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION 'exam unavailable' USING ERRCODE='22023'; END IF;
   now_ms:=floor(extract(epoch FROM clock_timestamp())*1000)::bigint;
 
-  SELECT * INTO a FROM public.mcq_attempts WHERE exam_id=t.exam_id AND student_roll=t.student_roll AND candidate_ticket_id=t.id AND status='IN_PROGRESS'
+  SELECT * INTO a FROM public.mcq_attempts WHERE exam_id=t.exam_id AND lower(trim(student_roll))=lower(trim(t.student_roll)) AND candidate_ticket_id=t.id AND status='IN_PROGRESS'
     ORDER BY start_time DESC LIMIT 1 FOR UPDATE;
   IF FOUND AND now_ms<a.deadline THEN
     RETURN jsonb_build_object('examId',e.id,'examTitle',e.title,'instructions',e.instructions,'allowReview',e.allow_review,'durationMinutes',e.duration_minutes,
@@ -103,8 +103,8 @@ BEGIN
   IF e.end_time IS NOT NULL AND now_ms>=e.end_time THEN RAISE EXCEPTION 'exam window closed' USING ERRCODE='22023'; END IF;
   -- Serialize starts across different tickets for the same candidate and exam.
   PERFORM pg_advisory_xact_lock(hashtext(t.exam_id), hashtext(t.student_roll));
-  IF (SELECT count(*) FROM public.mcq_attempts WHERE exam_id=t.exam_id AND student_roll=t.student_roll
-      AND status IN ('IN_PROGRESS','SUBMITTED','TIMED_OUT'))>=GREATEST(COALESCE(e.max_attempts,1),1) THEN
+  IF (SELECT count(*) FROM public.mcq_attempts WHERE exam_id=t.exam_id AND lower(trim(student_roll))=lower(trim(t.student_roll))
+      AND status IN ('IN_PROGRESS','SUBMITTED','TIMED_OUT','ABANDONED'))>=GREATEST(COALESCE(e.max_attempts,1),1) THEN
     RAISE EXCEPTION 'maximum attempts reached' USING ERRCODE='22023';
   END IF;
   deadline_ms:=now_ms+e.duration_minutes::bigint*60000;
@@ -132,6 +132,7 @@ BEGIN
       FROM unnest(e.question_ids) WITH ORDINALITY AS selected(question_id, ordinality)) chosen
     JOIN public.mcq_questions q ON q.id=chosen.question_id AND q.status='PUBLISHED'
     WHERE (SELECT count(*) FROM jsonb_array_elements(q.options) o WHERE COALESCE((o->>'isCorrect')::boolean,false)=true)=1
+      AND jsonb_array_length(q.options) BETWEEN 2 AND 6 AND q.marks>0 AND q.negative_marks>=0 AND length(trim(q.text))>0
     ORDER BY chosen.ord
     LIMIT GREATEST(1,LEAST(e.question_count,cardinality(e.question_ids)))
   ) picked;
