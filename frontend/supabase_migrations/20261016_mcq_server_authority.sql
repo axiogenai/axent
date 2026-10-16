@@ -32,11 +32,11 @@ ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS whatsapp_group_name text D
 ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS whatsapp_group_link text DEFAULT '';
 
 -- Preserve result-release settings previously embedded in the instructions metadata.
-DO $
+DO $backfill$
 DECLARE r record; v_meta jsonb;
 BEGIN
   FOR r IN
-    SELECT id, substring(instructions FROM '<!--AXENT_META:([\\s\\S]*?)-->') AS meta
+    SELECT id, substring(instructions FROM '<!--AXENT_META:(.*?)-->') AS meta
     FROM public.mcq_exams
     WHERE instructions ~ '<!--AXENT_META:'
   LOOP
@@ -54,7 +54,8 @@ BEGIN
       RAISE NOTICE 'Skipped invalid AXENT_META JSON for MCQ exam id %', r.id;
     END;
   END LOOP;
-END $;
+END $backfill$;
+
 ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS student_div text DEFAULT 'A';
 ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS last_activity_at bigint;
 ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS candidate_ticket_id uuid
