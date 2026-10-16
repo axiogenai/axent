@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS public.mcq_attempts (
     student_sem TEXT DEFAULT '',
     start_time BIGINT NOT NULL,
     deadline BIGINT NOT NULL,
+    proctor_lock_override BOOLEAN NOT NULL DEFAULT false,
     submit_time BIGINT,
     status TEXT NOT NULL DEFAULT 'IN_PROGRESS' CHECK (status IN ('IN_PROGRESS', 'SUBMITTED', 'TIMED_OUT', 'ABANDONED')),
     assigned_questions JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -121,6 +122,7 @@ CREATE TABLE IF NOT EXISTS public.mcq_attempts (
 ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS result_declaration_mode TEXT NOT NULL DEFAULT 'IMMEDIATE';
 ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS whatsapp_group_name TEXT DEFAULT '';
 ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS whatsapp_group_link TEXT DEFAULT '';
+ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS proctor_lock_override BOOLEAN NOT NULL DEFAULT false;
 
 -- 4. Candidate Workstations (CCTV Telemetry)
 CREATE TABLE IF NOT EXISTS public.candidate_stations (
