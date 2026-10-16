@@ -209,7 +209,7 @@ DROP POLICY IF EXISTS "Trusted authorities manage MCQ exams" ON public.mcq_exams
 DROP POLICY IF EXISTS "Trusted admin manages MCQ attempts" ON public.mcq_attempts;
 DROP POLICY IF EXISTS "Trusted authorities read MCQ attempts" ON public.mcq_attempts;
 -- Secure MCQ data with trusted Supabase app_metadata roles.
-REVOKE ALL ON public.mcq_questions, public.mcq_exams, public.mcq_attempts FROM anon;
+REVOKE ALL ON public.mcq_questions, public.mcq_exams, public.mcq_attempts FROM PUBLIC, anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.mcq_questions, public.mcq_exams, public.mcq_attempts TO authenticated;
 CREATE POLICY "Trusted authorities manage MCQ questions" ON public.mcq_questions FOR ALL TO authenticated
   USING ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'))
