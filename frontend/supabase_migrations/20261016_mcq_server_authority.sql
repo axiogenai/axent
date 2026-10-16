@@ -221,6 +221,14 @@ BEGIN
   SET revoked_at=COALESCE(revoked_at,now())
   WHERE token_hash=encode(extensions.digest(convert_to(p_ticket_token,'UTF8'),'sha256'),'hex');
   GET DIAGNOSTICS affected = ROW_COUNT;
+  IF affected=1 THEN
+    UPDATE public.mcq_attempts
+      SET status='ABANDONED',submit_time=floor(extract(epoch FROM clock_timestamp())*1000)::bigint,
+          last_activity_at=floor(extract(epoch FROM clock_timestamp())*1000)::bigint
+      WHERE candidate_ticket_id=(SELECT id FROM public.mcq_candidate_tickets
+        WHERE token_hash=encode(extensions.digest(convert_to(p_ticket_token,'UTF8'),'sha256'),'hex'))
+        AND status='IN_PROGRESS';
+  END IF;
   RETURN affected=1;
 END $;
 
