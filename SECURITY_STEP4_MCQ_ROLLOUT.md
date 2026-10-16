@@ -32,3 +32,11 @@ This migration secures the **MCQ tables and new ticket-based MCQ flow**. The exi
 - Staging-test the SQL migration against the actual Supabase schema. Verify result-release mode, WhatsApp result-group fields, negative-marking settings, attempt limits, RLS policies, ticket issue/revoke, and server-side grading.
 - For exams configured to announce results later, the submit RPC must not return scores or answer explanations. Answer explanations are released only after submission when immediate results and the exam setting allow them.
 - Do not modify any .env or .env.example files as part of this rollout.
+
+
+## Proctoring safeguards in the secure candidate flow
+
+- Focus loss, right-click attempts, restricted keyboard shortcuts, fullscreen exits, and screen-share start/stop are recorded through a ticket-bound server RPC.
+- Three tab/window focus-loss events lock further answer saves on the server, not only in the UI. An administrator can unlock an in-progress attempt from the ticket console; the original infraction history remains intact.
+- Screen capture is available only when the local workstation profile matches the ticket candidate and includes a lab/station identifier. Frames are sent through the existing MCQ station telemetry path, and the live-stream flag is cleared when sharing stops or the page unmounts.
+- These browser-side controls are deterrents, not a guarantee against a compromised client. Validate screen-share telemetry, lock/unlock, and station identity in a controlled environment before production use.
