@@ -88,6 +88,8 @@ BEGIN
     ORDER BY start_time DESC LIMIT 1 FOR UPDATE;
   IF FOUND AND now_ms<a.deadline THEN
     RETURN jsonb_build_object('examId',e.id,'examTitle',e.title,'instructions',e.instructions,'allowReview',e.allow_review,'durationMinutes',e.duration_minutes,
+      'resultDeclarationMode',COALESCE(e.result_declaration_mode,'IMMEDIATE'),'whatsappGroupName',e.whatsapp_group_name,
+      'whatsappGroupLink',e.whatsapp_group_link,'showExplanationsAfterSubmit',COALESCE(e.show_explanations_after_submit,false),
       'candidate',jsonb_build_object('name',a.student_name,'rollNumber',a.student_roll,'department',a.student_dept,'semester',a.student_sem,'division',a.student_div),
       'attemptId',a.id,'deadline',a.deadline,'serverTime',now_ms,'status',a.status,'answers',a.answers,
       'assignedQuestions',(SELECT COALESCE(jsonb_agg(jsonb_build_object('questionId',x->>'questionId','order',x->'order',
@@ -178,6 +180,7 @@ END $$;
 CREATE OR REPLACE FUNCTION public.submit_mcq_attempt(p_ticket_token text,p_attempt_id text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions AS $$
 DECLARE t public.mcq_candidate_tickets%ROWTYPE; a public.mcq_attempts%ROWTYPE; x jsonb;
+  e public.mcq_exams%ROWTYPE;
   qid text; correct_id text; selected_id text; marks numeric; penalty numeric;
   v_score numeric:=0; v_max_score numeric:=0; v_correct_count int:=0; v_wrong_count int:=0; v_unanswered_count int:=0; now_ms bigint;
 BEGIN
@@ -186,8 +189,14 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION 'invalid candidate ticket' USING ERRCODE='28000'; END IF;
   SELECT * INTO a FROM public.mcq_attempts WHERE id=p_attempt_id AND exam_id=t.exam_id AND student_roll=t.student_roll AND candidate_ticket_id=t.id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'attempt not found' USING ERRCODE='22023'; END IF;
-  IF a.status<>'IN_PROGRESS' THEN RETURN jsonb_build_object('attemptId',a.id,'status',a.status,'score',a.score,'maxScore',a.max_score,
-    'correctCount',a.correct_count,'wrongCount',a.wrong_count,'unansweredCount',a.unanswered_count,'percentageScore',a.percentage_score); END IF;
+  SELECT * INTO e FROM public.mcq_exams WHERE id=a.exam_id;
+  IF a.status<>'IN_PROGRESS' THEN
+    IF COALESCE(e.result_declaration_mode,'IMMEDIATE')='IMMEDIATE' THEN
+      RETURN jsonb_build_object('attemptId',a.id,'status',a.status,'resultsReleased',true,'score',a.score,'maxScore',a.max_score,
+        'correctCount',a.correct_count,'wrongCount',a.wrong_count,'unansweredCount',a.unanswered_count,'percentageScore',a.percentage_score);
+    END IF;
+    RETURN jsonb_build_object('attemptId',a.id,'status',a.status,'resultsReleased',false);
+  END IF;
   now_ms:=floor(extract(epoch FROM clock_timestamp())*1000)::bigint;
   FOR x IN SELECT value FROM jsonb_array_elements(a.assigned_questions) LOOP
     qid:=x->>'questionId'; correct_id:=x->'snapshot'->>'correctOptionId'; selected_id:=a.answers->>qid;
@@ -195,16 +204,22 @@ BEGIN
     v_max_score:=v_max_score+marks;
     IF selected_id IS NULL OR selected_id='' THEN v_unanswered_count:=v_unanswered_count+1;
     ELSIF selected_id=correct_id THEN v_correct_count:=v_correct_count+1; v_score:=v_score+marks;
-    ELSE v_wrong_count:=v_wrong_count+1; v_score:=v_score-penalty; END IF;
+    ELSE
+      v_wrong_count:=v_wrong_count+1;
+      IF COALESCE(e.negative_marking_enabled,false) THEN v_score:=v_score-penalty; END IF;
+    END IF;
   END LOOP;
   v_score:=GREATEST(0,v_score);
   UPDATE public.mcq_attempts SET status=CASE WHEN now_ms>=deadline THEN 'TIMED_OUT' ELSE 'SUBMITTED' END,
     submit_time=now_ms,last_activity_at=now_ms,score=v_score,max_score=v_max_score,correct_count=v_correct_count,
     wrong_count=v_wrong_count,unanswered_count=v_unanswered_count,
     percentage_score=CASE WHEN v_max_score>0 THEN round((v_score/v_max_score)*100,2) ELSE 0 END,graded_at=now_ms WHERE id=a.id;
-  RETURN jsonb_build_object('attemptId',a.id,'status',CASE WHEN now_ms>=a.deadline THEN 'TIMED_OUT' ELSE 'SUBMITTED' END,
-    'score',v_score,'maxScore',v_max_score,'correctCount',v_correct_count,'wrongCount',v_wrong_count,'unansweredCount',v_unanswered_count,
-    'percentageScore',CASE WHEN v_max_score>0 THEN round((v_score/v_max_score)*100,2) ELSE 0 END);
+  IF COALESCE(e.result_declaration_mode,'IMMEDIATE')='IMMEDIATE' THEN
+    RETURN jsonb_build_object('attemptId',a.id,'status',CASE WHEN now_ms>=a.deadline THEN 'TIMED_OUT' ELSE 'SUBMITTED' END,
+      'resultsReleased',true,'score',v_score,'maxScore',v_max_score,'correctCount',v_correct_count,'wrongCount',v_wrong_count,'unansweredCount',v_unanswered_count,
+      'percentageScore',CASE WHEN v_max_score>0 THEN round((v_score/v_max_score)*100,2) ELSE 0 END);
+  END IF;
+  RETURN jsonb_build_object('attemptId',a.id,'status',CASE WHEN now_ms>=a.deadline THEN 'TIMED_OUT' ELSE 'SUBMITTED' END,'resultsReleased',false);
 END $$;
 
 CREATE OR REPLACE FUNCTION public.revoke_mcq_candidate_ticket(p_ticket_token text)
