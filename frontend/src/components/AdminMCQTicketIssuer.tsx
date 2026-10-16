@@ -12,6 +12,8 @@ export const AdminMCQTicketIssuer: React.FC = () => {
   const [division, setDivision] = useState('A');
   const [ttlHours, setTtlHours] = useState(24);
   const [ticketUrl, setTicketUrl] = useState('');
+  const [ticketToken, setTicketToken] = useState('');
+  const [revoking, setRevoking] = useState(false);
   const [expiresAt, setExpiresAt] = useState('');
   const [loading, setLoading] = useState(true);
   const [issuing, setIssuing] = useState(false);
@@ -40,6 +42,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
     setError('');
     setNotice('');
     setTicketUrl('');
+    setTicketToken('');
     if (!examId || !name.trim() || !roll.trim()) {
       setError('Choose a published exam and enter the candidate name and roll number.');
       return;
@@ -61,6 +64,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
       // Use the URL fragment so the bearer token is not sent in HTTP requests or referrer headers.
       const url = `${window.location.origin}/mcq#ticket=${encodeURIComponent(row.ticket_token)}`;
       setTicketUrl(url);
+      setTicketToken(row.ticket_token);
       setExpiresAt(row.ticket_expires_at || '');
       setNotice('Ticket issued. Share this link privately with the intended candidate. Anyone holding the link can use it until it expires or is revoked.');
     } catch (err) {
@@ -76,6 +80,24 @@ export const AdminMCQTicketIssuer: React.FC = () => {
       setNotice('Secure candidate link copied.');
     } catch {
       setNotice('Copy was blocked by the browser. Select and copy the link manually.');
+    }
+  };
+
+  const revokeTicket = async () => {
+    if (!ticketToken || revoking) return;
+    setRevoking(true);
+    setError('');
+    try {
+      const { data, error: rpcError } = await supabase.rpc('revoke_mcq_candidate_ticket', { p_ticket_token: ticketToken });
+      if (rpcError) throw new Error(rpcError.message);
+      if (data !== true) throw new Error('Ticket was not found or could not be revoked.');
+      setTicketUrl('');
+      setTicketToken('');
+      setNotice('Ticket revoked. The candidate can no longer start or continue this attempt.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not revoke this ticket.');
+    } finally {
+      setRevoking(false);
     }
   };
 
@@ -114,7 +136,10 @@ export const AdminMCQTicketIssuer: React.FC = () => {
     {ticketUrl && <div style={linkBox}>
       <strong>Candidate link — shown once</strong>
       <p style={{ overflowWrap: 'anywhere', fontSize: 13 }}>{ticketUrl}</p>
-      <button type="button" onClick={() => void copyLink()} style={secondaryButton}>Copy secure link</button>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <button type="button" onClick={() => void copyLink()} style={secondaryButton}>Copy secure link</button>
+        <button type="button" onClick={() => void revokeTicket()} disabled={revoking || !ticketToken} style={{ ...secondaryButton, color: '#dc2626' }}>{revoking ? 'Revoking…' : 'Revoke ticket'}</button>
+      </div>
       {expiresAt && <p style={{ fontSize: 12, color: '#64748b' }}>Expires: {new Date(expiresAt).toLocaleString()}</p>}
       <p style={{ fontSize: 12, color: '#b45309' }}>Treat this link like a password. It grants access to the named candidate's exam until it expires or is revoked.</p>
     </div>}
