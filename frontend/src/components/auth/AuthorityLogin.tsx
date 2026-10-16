@@ -25,7 +25,6 @@ import {
   sendMagicLink,
   updateUserPassword,
   getAuthSession,
-  loginWithInviteToken,
   AuthorityRole,
   setStoredAuthorityRole
 } from '../../services/authService';
@@ -83,30 +82,25 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Detect Supabase access_token, invite token, or recovery hash on initial mount
+  // Only provider-verified Supabase callbacks may establish an authenticated session.
   useEffect(() => {
     const hash = window.location.hash;
-    const tokenParam = searchParams.get('token');
-    const emailParam = searchParams.get('email');
-
-    if (typeParam === 'invite' || tokenParam) {
-      const activeEmail = emailParam || email || (role === 'admin' ? 'admin@axent.edu' : 'setter@axent.edu');
-      if (emailParam && !email) setEmail(emailParam);
-      // Immediately issue authorized authority session for invited faculty
-      loginWithInviteToken(tokenParam || 'direct-token', activeEmail, role);
+    const hasProviderCallback = hash.includes('access_token=') ||
+      hash.includes('type=recovery') || hash.includes('type=invite');
+    if (hasProviderCallback) {
       setActiveTab('set_password');
-      setSuccessMessage(`Authority invitation confirmed for ${activeEmail}. You are authenticated as ${role === 'admin' ? 'Chief Proctor' : 'Paper Setter'}.`);
-    } else if (hash && (hash.includes('access_token=') || hash.includes('type=recovery') || hash.includes('type=invite'))) {
-      setActiveTab('set_password');
-      setSuccessMessage('Authority verification confirmed. Please configure your institutional password below.');
-    } else {
-      void getAuthSession().then((session) => {
-        if (session && !typeParam) {
-          navigate(redirectTarget, { replace: true });
-        }
-      });
+      setSuccessMessage('Authentication callback detected. Complete this step only after the provider session is verified.');
+      return;
     }
-  }, [navigate, redirectTarget, typeParam, searchParams, role]);
+    if (typeParam === 'invite' || searchParams.has('token')) {
+      setActiveTab('signin');
+      setErrorMessage('This invitation link is not verified. Request a fresh sign-in link from the authentication service.');
+      return;
+    }
+    void getAuthSession().then((session) => {
+      if (session && !typeParam) navigate(redirectTarget, { replace: true });
+    });
+  }, [navigate, redirectTarget, typeParam, searchParams]);
 
   // Handle Role Change
   const handleRoleSelect = (newRole: AuthorityRole) => {
@@ -129,10 +123,9 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
       playSound('warning');
       return;
     }
-    const isMasterAuth = trimmedEmail === 'teamaxiogen' || trimmedEmail === 'teamaxiogen@axent.edu' || trimmedEmail === 'teamaxiogen@axent.in';
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!isMasterAuth && !emailRegex.test(trimmedEmail)) {
-      setErrorMessage('Please provide a valid institutional email or Authority ID (e.g. Teamaxiogen).');
+    if (!emailRegex.test(trimmedEmail)) {
+      setErrorMessage('Please provide a valid institutional email address.');
       playSound('warning');
       return;
     }
@@ -195,7 +188,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
       if (user) {
         playSound('success');
         if (needsEmailConfirmation) {
-          setSuccessMessage(`Registration received! A confirmation email was dispatched to ${trimmedEmail}. You may also log in with the default password.`);
+          setSuccessMessage(`Registration received! Confirm your email before signing in.`);
         } else {
           setSuccessMessage('Authority account configured! Entering portal...');
           setTimeout(() => {
@@ -272,22 +265,10 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
     }
   };
 
-  // Local development bypass
+  // Development bypass is intentionally disabled: localStorage cannot authenticate users.
   const handleDevBypass = () => {
-    const dummySession = {
-      access_token: 'dev-token',
-      user: {
-        id: 'dev-authority-id',
-        email: email || 'authority@axent.edu',
-        user_metadata: { role }
-      }
-    };
-    try {
-      localStorage.setItem('axent_authority_session', JSON.stringify(dummySession));
-      setStoredAuthorityRole(role);
-    } catch {}
-    playSound('success');
-    navigate(redirectTarget, { replace: true });
+    setErrorMessage('Development bypass is disabled. Sign in using a verified institutional account.');
+    playSound('warning');
   };
 
   const isPasswordValid = newPassword.length >= 8;
@@ -743,7 +724,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
                     Supabase Free-Tier Email Limit Reached (3 emails/hr)
                   </div>
                   <div style={{ marginBottom: '8px', color: 'var(--text-muted)' }}>
-                    Supabase default email service failed to deliver to this address. Use the default password or Dev Mode to enter immediately:
+                    If email delivery fails, configure the Supabase email provider. Direct bypass and default passwords are disabled.
                   </div>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <button
@@ -752,20 +733,19 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
                       className="btn btn-primary btn-sm"
                       style={{ height: '26px', fontSize: '11px', padding: '0 10px', fontWeight: 700 }}
                     >
-                      Bypass & Enter Console Directly
+                      Bypass disabled
                     </button>
                     <button
                       type="button"
                       onClick={() => {
                         setActiveTab('signin');
-                        setEmail(role === 'admin' ? 'admin@axent.edu' : 'setter@axent.edu');
-                        setPassword('axent@123');
+                        setPassword('');
                         setErrorMessage(null);
                       }}
                       className="btn btn-ghost btn-sm"
                       style={{ height: '26px', fontSize: '11px', padding: '0 8px', border: '1px solid var(--border)' }}
                     >
-                      Use Default Pass
+                      Back to sign in
                     </button>
                   </div>
                 </div>
