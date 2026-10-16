@@ -136,6 +136,8 @@ export async function signInWithPassword(
       }
     };
     try {
+      sessionStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(session));
+      sessionStorage.setItem(LOCAL_ROLE_KEY, effectiveRole);
       localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(session));
       localStorage.setItem(LOCAL_ROLE_KEY, effectiveRole);
     } catch {}
@@ -153,8 +155,9 @@ export async function signInWithPassword(
 
       // Check both app_metadata and user_metadata
       const userRole = data.user.app_metadata?.role || data.user.user_metadata?.role;
+      const effectiveRole: AuthorityRole = userRole === 'admin' ? 'admin' : 'paper_setter';
       const roleAllowed = role === 'admin'
-        ? userRole === 'admin'
+        ? userRole === 'admin' || userRole === 'paper_setter'
         : userRole === 'paper_setter' || userRole === 'admin' || !userRole;
 
       if (!roleAllowed) {
@@ -167,8 +170,10 @@ export async function signInWithPassword(
       }
 
       try {
+        sessionStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(data.session));
+        sessionStorage.setItem(LOCAL_ROLE_KEY, effectiveRole);
         localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(data.session));
-        localStorage.setItem(LOCAL_ROLE_KEY, role);
+        localStorage.setItem(LOCAL_ROLE_KEY, effectiveRole);
       } catch {}
       return { user: data.user, session: data.session, error: null };
     } catch (err: any) {

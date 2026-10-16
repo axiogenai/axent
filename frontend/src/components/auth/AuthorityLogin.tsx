@@ -122,12 +122,8 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
     } else if (hasProviderCallback) {
       setActiveTab('set_password');
       setSuccessMessage('Authentication callback detected. Please configure your institutional password below.');
-    } else {
-      void getAuthSession().then((session) => {
-        if (session && !typeParam) navigate(redirectTarget, { replace: true });
-      });
     }
-  }, [navigate, redirectTarget, typeParam, searchParams, role]);
+  }, [typeParam, searchParams, role]);
 
   // Handle Role Change
   const handleRoleSelect = (newRole: AuthorityRole) => {
@@ -173,7 +169,12 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
       }
       if (user) {
         playSound('success');
-        navigate(redirectTarget, { replace: true });
+        const userRole = user.app_metadata?.role || user.user_metadata?.role || role;
+        let dest = redirectTarget;
+        if (userRole === 'paper_setter' && (dest === '/admin' || dest.startsWith('/admin'))) {
+          dest = '/paper-setter';
+        }
+        navigate(dest, { replace: true });
       }
     } finally {
       setIsLoading(false);

@@ -84,9 +84,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   if (isLandingRoute) {
     activeNavItems = [
-      { path: '/mcq', label: 'Exam Hall', icon: ListChecks },
-      { path: '/paper-setter', label: 'Paper Setter', icon: Layers },
-      { path: '/admin', label: 'CCTV Proctoring', icon: ShieldAlert }
+      { path: '/mcq', label: 'Exam Hall', icon: ListChecks }
     ];
   } else if (isLoginRoute) {
     // Authority Gateway / Login — No student tabs!

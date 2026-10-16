@@ -400,19 +400,19 @@ export const App: React.FC = () => {
           />
           <Route
             path="/login"
-            element={<AuthorityLogin />}
+            element={<Navigate to="/login/admin" replace />}
           />
           <Route
             path="/login/paper-setter"
-            element={<PaperSetterLogin />}
+            element={<Navigate to="/login/admin?redirect=/paper-setter" replace />}
           />
           <Route
             path="/login/setter"
-            element={<PaperSetterLogin />}
+            element={<Navigate to="/login/admin?redirect=/paper-setter" replace />}
           />
           <Route
             path="/setter-login"
-            element={<PaperSetterLogin />}
+            element={<Navigate to="/login/admin?redirect=/paper-setter" replace />}
           />
           <Route
             path="/login/admin"
@@ -420,7 +420,7 @@ export const App: React.FC = () => {
           />
           <Route
             path="/admin-login"
-            element={<AdminLogin />}
+            element={<Navigate to="/login/admin" replace />}
           />
           <Route
             path="/invite"
