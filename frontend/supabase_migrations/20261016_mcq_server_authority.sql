@@ -60,6 +60,7 @@ ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS student_div text DEFAUL
 ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS last_activity_at bigint;
 ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS candidate_ticket_id uuid
   REFERENCES public.mcq_candidate_tickets(id) ON DELETE SET NULL;
+ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS proctor_lock_override boolean NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS idx_mcq_attempts_candidate_ticket
   ON public.mcq_attempts(candidate_ticket_id);
 
@@ -199,6 +200,9 @@ BEGIN
   SELECT * INTO a FROM public.mcq_attempts WHERE id=p_attempt_id AND exam_id=t.exam_id AND student_roll=t.student_roll AND candidate_ticket_id=t.id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'attempt not found' USING ERRCODE='22023'; END IF;
   IF a.status<>'IN_PROGRESS' THEN RAISE EXCEPTION 'attempt is not in progress' USING ERRCODE='22023'; END IF;
+  IF COALESCE(a.tab_switch_count,0)>=3 AND NOT COALESCE(a.proctor_lock_override,false) THEN
+    RAISE EXCEPTION 'attempt locked by proctoring policy; contact the invigilator' USING ERRCODE='42501';
+  END IF;
   now_ms:=floor(extract(epoch FROM clock_timestamp())*1000)::bigint;
   IF now_ms>=a.deadline THEN
     RETURN jsonb_build_object('saved',false,'status','TIMED_OUT','serverTime',now_ms);
@@ -210,6 +214,62 @@ BEGIN
   UPDATE public.mcq_attempts SET answers=jsonb_set(COALESCE(answers,'{}'::jsonb),ARRAY[p_question_id],to_jsonb(p_option_id),true),last_activity_at=now_ms WHERE id=a.id;
   RETURN jsonb_build_object('saved',true,'serverTime',now_ms);
 END $$;
+
+CREATE OR REPLACE FUNCTION public.record_mcq_proctor_event(
+  p_ticket_token text, p_attempt_id text, p_event text,
+  p_away_seconds integer DEFAULT 0, p_details text DEFAULT ''
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions AS $
+DECLARE t public.mcq_candidate_tickets%ROWTYPE; a public.mcq_attempts%ROWTYPE; now_ms bigint; v_count integer;
+BEGIN
+  IF p_event NOT IN ('TAB_SWITCH','RIGHT_CLICK','RESTRICTED_SHORTCUT','FULLSCREEN_EXIT','SCREEN_SHARE_STOPPED','SCREEN_SHARE_STARTED') THEN
+    RAISE EXCEPTION 'unsupported proctor event' USING ERRCODE='22023';
+  END IF;
+  IF COALESCE(p_away_seconds,0)<0 OR COALESCE(p_away_seconds,0)>3600 THEN
+    RAISE EXCEPTION 'invalid away duration' USING ERRCODE='22023';
+  END IF;
+  SELECT * INTO t FROM public.mcq_candidate_tickets
+    WHERE token_hash=encode(extensions.digest(convert_to(COALESCE(p_ticket_token,''),'UTF8'),'sha256'),'hex')
+      AND revoked_at IS NULL;
+  IF NOT FOUND THEN RAISE EXCEPTION 'invalid candidate ticket' USING ERRCODE='28000'; END IF;
+  SELECT * INTO a FROM public.mcq_attempts
+    WHERE id=p_attempt_id AND exam_id=t.exam_id AND student_roll=t.student_roll AND candidate_ticket_id=t.id
+    FOR UPDATE;
+  IF NOT FOUND OR a.status<>'IN_PROGRESS' THEN
+    RAISE EXCEPTION 'active attempt not found' USING ERRCODE='22023';
+  END IF;
+  now_ms:=floor(extract(epoch FROM clock_timestamp())*1000)::bigint;
+  UPDATE public.mcq_attempts
+    SET tab_switch_count=COALESCE(tab_switch_count,0)+CASE WHEN p_event='TAB_SWITCH' THEN 1 ELSE 0 END,
+        unfocused_seconds=COALESCE(unfocused_seconds,0)+CASE WHEN p_event='TAB_SWITCH' THEN COALESCE(p_away_seconds,0) ELSE 0 END,
+        infraction_log=COALESCE(infraction_log,'[]'::jsonb)||jsonb_build_array(jsonb_build_object(
+          'timestamp',now_ms,'event',p_event,'details',left(COALESCE(p_details,''),300))),
+        proctor_lock_override=CASE WHEN p_event='TAB_SWITCH' THEN false ELSE proctor_lock_override END,
+        last_activity_at=now_ms
+    WHERE id=a.id RETURNING * INTO a;
+  v_count:=COALESCE(a.tab_switch_count,0);
+  RETURN jsonb_build_object('recorded',true,'tabSwitchCount',v_count,
+    'unfocusedSeconds',COALESCE(a.unfocused_seconds,0),
+    'locked',v_count>=3 AND NOT COALESCE(a.proctor_lock_override,false),'serverTime',now_ms);
+END $;
+
+CREATE OR REPLACE FUNCTION public.unlock_mcq_attempt(p_attempt_id text, p_note text DEFAULT 'Unlocked by invigilator')
+RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+DECLARE affected integer;
+BEGIN
+  IF COALESCE(auth.jwt()->'app_metadata'->>'role','') <> 'admin' OR auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'trusted administrator role required' USING ERRCODE='42501';
+  END IF;
+  UPDATE public.mcq_attempts
+    SET proctor_lock_override=true,
+        infraction_log=COALESCE(infraction_log,'[]'::jsonb)||jsonb_build_array(jsonb_build_object(
+          'timestamp',floor(extract(epoch FROM clock_timestamp())*1000)::bigint,
+          'event','ADMIN_UNLOCK','details',left(COALESCE(p_note,''),300)))
+    WHERE id=p_attempt_id AND status='IN_PROGRESS';
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  RETURN affected=1;
+END $;
 
 CREATE OR REPLACE FUNCTION public.submit_mcq_attempt(p_ticket_token text,p_attempt_id text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions AS $$
@@ -270,21 +330,27 @@ BEGIN
   RETURN jsonb_build_object('attemptId',a.id,'status',CASE WHEN now_ms>=a.deadline THEN 'TIMED_OUT' ELSE 'SUBMITTED' END,'resultsReleased',false);
 END $$;
 
+DROP FUNCTION IF EXISTS public.list_mcq_candidate_tickets(text);
 CREATE OR REPLACE FUNCTION public.list_mcq_candidate_tickets(p_exam_id text)
 RETURNS TABLE(ticket_id uuid, student_name text, student_roll text, issued_at timestamptz,
-              expires_at timestamptz, revoked_at timestamptz, attempt_status text)
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+              expires_at timestamptz, revoked_at timestamptz, attempt_id text, attempt_status text,
+              attempt_tab_switch_count integer, proctor_lock_override boolean)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
 BEGIN
   IF COALESCE(auth.jwt()->'app_metadata'->>'role','') <> 'admin' OR auth.uid() IS NULL THEN
     RAISE EXCEPTION 'trusted administrator role required' USING ERRCODE='42501';
   END IF;
   RETURN QUERY
   SELECT t.id, t.student_name, t.student_roll, t.issued_at, t.expires_at, t.revoked_at,
-    (SELECT a.status FROM public.mcq_attempts a WHERE a.candidate_ticket_id=t.id ORDER BY a.start_time DESC LIMIT 1)
+    a.id, a.status, COALESCE(a.tab_switch_count,0), COALESCE(a.proctor_lock_override,false)
   FROM public.mcq_candidate_tickets t
+  LEFT JOIN LATERAL (
+    SELECT ax.id, ax.status, ax.tab_switch_count, ax.proctor_lock_override
+    FROM public.mcq_attempts ax WHERE ax.candidate_ticket_id=t.id ORDER BY ax.start_time DESC LIMIT 1
+  ) a ON true
   WHERE t.exam_id=p_exam_id
   ORDER BY t.issued_at DESC LIMIT 100;
-END $$;
+END $;
 
 CREATE OR REPLACE FUNCTION public.revoke_mcq_candidate_ticket_by_id(p_ticket_id uuid)
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
@@ -331,6 +397,10 @@ BEGIN
   RETURN affected=1;
 END $$;
 
+REVOKE ALL ON FUNCTION public.record_mcq_proctor_event(text,text,text,integer,text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.record_mcq_proctor_event(text,text,text,integer,text) TO anon,authenticated;
+REVOKE ALL ON FUNCTION public.unlock_mcq_attempt(text,text) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.unlock_mcq_attempt(text,text) TO authenticated;
 REVOKE ALL ON FUNCTION public.list_mcq_candidate_tickets(text) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.list_mcq_candidate_tickets(text) TO authenticated;
 REVOKE ALL ON FUNCTION public.revoke_mcq_candidate_ticket_by_id(uuid) FROM PUBLIC,anon;
