@@ -31,30 +31,6 @@ ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS result_declaration_mode te
 ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS whatsapp_group_name text DEFAULT '';
 ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS whatsapp_group_link text DEFAULT '';
 
--- Preserve result-release settings previously embedded in the instructions metadata.
-DO $backfill$
-DECLARE r record; v_meta jsonb;
-BEGIN
-  FOR r IN
-    SELECT id, substring(instructions FROM '<!--AXENT_META:(.*?)-->') AS meta
-    FROM public.mcq_exams
-    WHERE instructions ~ '<!--AXENT_META:'
-  LOOP
-    BEGIN
-      v_meta := r.meta::jsonb;
-      UPDATE public.mcq_exams
-      SET result_declaration_mode = CASE
-            WHEN v_meta->>'resultDeclarationMode' IN ('IMMEDIATE','WHATSAPP_GROUP')
-              THEN v_meta->>'resultDeclarationMode'
-            ELSE result_declaration_mode END,
-          whatsapp_group_name = COALESCE(NULLIF(v_meta->>'whatsappGroupName',''), whatsapp_group_name),
-          whatsapp_group_link = COALESCE(NULLIF(v_meta->>'whatsappGroupLink',''), whatsapp_group_link)
-      WHERE id=r.id;
-    EXCEPTION WHEN others THEN
-      RAISE NOTICE 'Skipped invalid AXENT_META JSON for MCQ exam id %', r.id;
-    END;
-  END LOOP;
-END $backfill$;
 
 ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS student_div text DEFAULT 'A';
 ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS last_activity_at bigint;
@@ -127,8 +103,6 @@ BEGIN
       'attemptId',a.id,'deadline',a.deadline,'serverTime',now_ms,'status',a.status,'answers',a.answers,
     'tabSwitchCount',COALESCE(a.tab_switch_count,0),'unfocusedSeconds',COALESCE(a.unfocused_seconds,0),
     'proctorLocked',COALESCE(a.tab_switch_count,0)>=3 AND NOT COALESCE(a.proctor_lock_override,false),
-      'tabSwitchCount',COALESCE(a.tab_switch_count,0),'unfocusedSeconds',COALESCE(a.unfocused_seconds,0),
-      'proctorLocked',COALESCE(a.tab_switch_count,0)>=3 AND NOT COALESCE(a.proctor_lock_override,false),
       'assignedQuestions',(SELECT COALESCE(jsonb_agg(jsonb_build_object('questionId',x->>'questionId','order',x->'order',
         'snapshot',(x->'snapshot')-'correctOptionId'-'explanation','shuffledOptionIds',x->'shuffledOptionIds')
         ORDER BY (x->>'order')::int),'[]'::jsonb) FROM jsonb_array_elements(a.assigned_questions) x));
@@ -189,6 +163,8 @@ BEGIN
       'whatsappGroupLink',e.whatsapp_group_link,'showExplanationsAfterSubmit',COALESCE(e.show_explanations_after_submit,false),
     'candidate',jsonb_build_object('name',a.student_name,'rollNumber',a.student_roll,'department',a.student_dept,'semester',a.student_sem,'division',a.student_div),
     'attemptId',a.id,'deadline',a.deadline,'serverTime',now_ms,'status',a.status,'answers',a.answers,
+    'tabSwitchCount',COALESCE(a.tab_switch_count,0),'unfocusedSeconds',COALESCE(a.unfocused_seconds,0),
+    'proctorLocked',COALESCE(a.tab_switch_count,0)>=3 AND NOT COALESCE(a.proctor_lock_override,false),
     'assignedQuestions',(SELECT COALESCE(jsonb_agg(jsonb_build_object('questionId',x->>'questionId','order',x->'order',
       'snapshot',(x->'snapshot')-'correctOptionId'-'explanation','shuffledOptionIds',x->'shuffledOptionIds')
       ORDER BY (x->>'order')::int),'[]'::jsonb) FROM jsonb_array_elements(a.assigned_questions) x));
@@ -223,7 +199,7 @@ CREATE OR REPLACE FUNCTION public.record_mcq_proctor_event(
   p_ticket_token text, p_attempt_id text, p_event text,
   p_away_seconds integer DEFAULT 0, p_details text DEFAULT ''
 ) RETURNS jsonb
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions AS $
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions AS $$
 DECLARE t public.mcq_candidate_tickets%ROWTYPE; a public.mcq_attempts%ROWTYPE; now_ms bigint; v_count integer;
 BEGIN
   IF p_event IS NULL OR p_event NOT IN ('TAB_SWITCH','RIGHT_CLICK','RESTRICTED_SHORTCUT','FULLSCREEN_EXIT','SCREEN_SHARE_STOPPED','SCREEN_SHARE_STARTED') THEN
@@ -255,11 +231,11 @@ BEGIN
   RETURN jsonb_build_object('recorded',true,'tabSwitchCount',v_count,
     'unfocusedSeconds',COALESCE(a.unfocused_seconds,0),
     'locked',v_count>=3 AND NOT COALESCE(a.proctor_lock_override,false),'serverTime',now_ms);
-END $;
+END $$;
 
 CREATE OR REPLACE FUNCTION public.unlock_mcq_attempt(p_attempt_id text, p_note text DEFAULT 'Unlocked by invigilator')
 RETURNS boolean
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE affected integer;
 BEGIN
   IF COALESCE(auth.jwt()->'app_metadata'->>'role','') <> 'admin' OR auth.uid() IS NULL THEN
@@ -273,7 +249,7 @@ BEGIN
     WHERE id=p_attempt_id AND status='IN_PROGRESS';
   GET DIAGNOSTICS affected = ROW_COUNT;
   RETURN affected=1;
-END $;
+END $$;
 
 CREATE OR REPLACE FUNCTION public.submit_mcq_attempt(p_ticket_token text,p_attempt_id text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions AS $$
@@ -339,7 +315,7 @@ CREATE OR REPLACE FUNCTION public.list_mcq_candidate_tickets(p_exam_id text)
 RETURNS TABLE(ticket_id uuid, student_name text, student_roll text, issued_at timestamptz,
               expires_at timestamptz, revoked_at timestamptz, attempt_id text, attempt_status text,
               attempt_tab_switch_count integer, proctor_lock_override boolean)
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 BEGIN
   IF COALESCE(auth.jwt()->'app_metadata'->>'role','') <> 'admin' OR auth.uid() IS NULL THEN
     RAISE EXCEPTION 'trusted administrator role required' USING ERRCODE='42501';
@@ -354,7 +330,7 @@ BEGIN
   ) a ON true
   WHERE t.exam_id=p_exam_id
   ORDER BY t.issued_at DESC LIMIT 100;
-END $;
+END $$;
 
 CREATE OR REPLACE FUNCTION public.revoke_mcq_candidate_ticket_by_id(p_ticket_id uuid)
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
