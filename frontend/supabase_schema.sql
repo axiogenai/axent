@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS public.mcq_exams (
     negative_marking_enabled BOOLEAN DEFAULT false,
     allow_review BOOLEAN DEFAULT true,
     show_explanations_after_submit BOOLEAN DEFAULT true,
+    result_declaration_mode TEXT NOT NULL DEFAULT 'IMMEDIATE',
+    whatsapp_group_name TEXT DEFAULT '',
+    whatsapp_group_link TEXT DEFAULT '',
     max_attempts INT DEFAULT 1,
     status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT', 'PUBLISHED', 'CLOSED', 'ARCHIVED')),
     created_at BIGINT NOT NULL,
@@ -63,6 +66,7 @@ CREATE TABLE IF NOT EXISTS public.mcq_attempts (
     start_time BIGINT NOT NULL,
     deadline BIGINT NOT NULL,
     last_activity_at BIGINT,
+    proctor_lock_override BOOLEAN NOT NULL DEFAULT false,
     submit_time BIGINT,
     status TEXT NOT NULL DEFAULT 'IN_PROGRESS' CHECK (status IN ('IN_PROGRESS', 'SUBMITTED', 'TIMED_OUT', 'ABANDONED')),
     assigned_questions JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -80,8 +84,13 @@ CREATE TABLE IF NOT EXISTS public.mcq_attempts (
 );
 
 -- Safe, repeatable upgrades for databases created from earlier versions of this file.
+ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS result_declaration_mode TEXT NOT NULL DEFAULT 'IMMEDIATE';
+ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS whatsapp_group_name TEXT DEFAULT '';
+ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS whatsapp_group_link TEXT DEFAULT '';
+
 ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS student_div TEXT DEFAULT 'A';
 ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS last_activity_at BIGINT;
+ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS proctor_lock_override BOOLEAN NOT NULL DEFAULT false;
 
 -- 4. Candidate Workstations (CCTV Telemetry)
 CREATE TABLE IF NOT EXISTS public.candidate_stations (
@@ -159,9 +168,36 @@ ALTER TABLE public.candidate_stations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.college_labs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.code_submissions ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow public read-write for mcq_questions" ON public.mcq_questions FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write for mcq_exams" ON public.mcq_exams FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write for mcq_attempts" ON public.mcq_attempts FOR ALL USING (true) WITH CHECK (true);
+-- Remove legacy permissive MCQ policies and make this schema block rerunnable.
+DROP POLICY IF EXISTS "Allow public read-write for mcq_questions" ON public.mcq_questions;
+DROP POLICY IF EXISTS "Allow public read-write for mcq_exams" ON public.mcq_exams;
+DROP POLICY IF EXISTS "Allow public read-write for mcq_attempts" ON public.mcq_attempts;
+DROP POLICY IF EXISTS "Trusted authorities manage MCQ questions" ON public.mcq_questions;
+DROP POLICY IF EXISTS "Trusted authorities manage MCQ exams" ON public.mcq_exams;
+DROP POLICY IF EXISTS "Trusted admin manages MCQ attempts" ON public.mcq_attempts;
+DROP POLICY IF EXISTS "Trusted authorities read MCQ attempts" ON public.mcq_attempts;
+-- MCQ data is only accessible to users with trusted Supabase app_metadata roles.
+-- Candidate attempts are created/graded through the secure RPCs in the Step 4 migration.
+REVOKE ALL ON public.mcq_questions, public.mcq_exams, public.mcq_attempts FROM PUBLIC, anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.mcq_questions, public.mcq_exams, public.mcq_attempts TO authenticated;
+
+CREATE POLICY "Trusted authorities manage MCQ questions" ON public.mcq_questions FOR ALL TO authenticated
+  USING ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'))
+  WITH CHECK ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'));
+CREATE POLICY "Trusted authorities manage MCQ exams" ON public.mcq_exams FOR ALL TO authenticated
+  USING ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'))
+  WITH CHECK ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'));
+CREATE POLICY "Trusted admin manages MCQ attempts" ON public.mcq_attempts FOR ALL TO authenticated
+  USING (auth.jwt()->'app_metadata'->>'role' = 'admin')
+  WITH CHECK (auth.jwt()->'app_metadata'->>'role' = 'admin');
+CREATE POLICY "Trusted authorities read MCQ attempts" ON public.mcq_attempts FOR SELECT TO authenticated
+  USING ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'));
+
+DROP POLICY IF EXISTS "Allow public read-write for candidate_stations" ON public.candidate_stations;
+DROP POLICY IF EXISTS "Allow public read-write for college_labs" ON public.college_labs;
+DROP POLICY IF EXISTS "Allow public read-write for code_submissions" ON public.code_submissions;
+-- Coding-related tables remain unchanged for compatibility with the current coding workflow.
+-- Their public policies require a separate authorization migration.
 CREATE POLICY "Allow public read-write for candidate_stations" ON public.candidate_stations FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read-write for college_labs" ON public.college_labs FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read-write for code_submissions" ON public.code_submissions FOR ALL USING (true) WITH CHECK (true);

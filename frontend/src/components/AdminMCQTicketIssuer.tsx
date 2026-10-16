@@ -1,0 +1,260 @@
+import React, { useEffect, useState } from 'react';
+import { supabase, fetchExamsFromCloud } from '../services/supabaseService';
+import { MCQExamConfig } from '../types/mcq';
+
+type CandidateTicket = { ticket_id: string; student_name: string; student_roll: string; issued_at: string; expires_at: string; revoked_at: string | null; attempt_id: string | null; attempt_status: string | null; attempt_tab_switch_count: number; proctor_lock_override: boolean };
+
+export const AdminMCQTicketIssuer: React.FC = () => {
+  const [exams, setExams] = useState<MCQExamConfig[]>([]);
+  const [examId, setExamId] = useState('');
+  const [name, setName] = useState('');
+  const [roll, setRoll] = useState('');
+  const [department, setDepartment] = useState('CSE');
+  const [semester, setSemester] = useState('4th Sem');
+  const [division, setDivision] = useState('A');
+  const [ttlHours, setTtlHours] = useState(24);
+  const [ticketUrl, setTicketUrl] = useState('');
+  const [ticketToken, setTicketToken] = useState('');
+  const [activeTicketId, setActiveTicketId] = useState('');
+  const [tickets, setTickets] = useState<CandidateTicket[]>([]);
+  const [loadingTickets, setLoadingTickets] = useState(false);
+  const [revoking, setRevoking] = useState(false);
+  const [unlockingAttemptId, setUnlockingAttemptId] = useState('');
+  const [expiresAt, setExpiresAt] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [issuing, setIssuing] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    void fetchExamsFromCloud().then((rows) => {
+      if (!active) return;
+      const published = (rows || []).filter((exam) => exam.status === 'PUBLISHED');
+      setExams(published);
+      setExamId((current) => current || published[0]?.id || '');
+      setLoading(false);
+    }).catch(() => {
+      if (active) {
+        setError('Could not load published exams. Confirm the trusted administrator session and Supabase connection.');
+        setLoading(false);
+      }
+    });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (!examId) { setTickets([]); return () => { active = false; }; }
+    setLoadingTickets(true);
+    void (async () => {
+      try {
+        const { data, error: rpcError } = await supabase.rpc('list_mcq_candidate_tickets', { p_exam_id: examId });
+        if (!active) return;
+        if (rpcError) {
+          setError('Could not load issued tickets. Apply the Step 4 Supabase migration and confirm administrator access.');
+          setTickets([]);
+        } else {
+          setTickets((data || []) as unknown as CandidateTicket[]);
+        }
+      } catch {
+        if (active) {
+          setError('Could not load issued tickets. Check the Supabase connection.');
+          setTickets([]);
+        }
+      } finally {
+        if (active) setLoadingTickets(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [examId]);
+
+  const issueTicket = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError('');
+    setNotice('');
+    setTicketUrl('');
+    setTicketToken('');
+    if (!examId || !name.trim() || !roll.trim()) {
+      setError('Choose a published exam and enter the candidate name and roll number.');
+      return;
+    }
+    setIssuing(true);
+    try {
+      const { data, error: rpcError } = await supabase.rpc('issue_mcq_candidate_ticket', {
+        p_exam_id: examId,
+        p_student_name: name.trim(),
+        p_student_roll: roll.trim(),
+        p_student_dept: department.trim(),
+        p_student_sem: semester.trim(),
+        p_student_div: division.trim(),
+        p_ttl_hours: ttlHours
+      });
+      if (rpcError) throw new Error(rpcError.message);
+      const row = (Array.isArray(data) ? data[0] : data) as unknown as { ticket_id?: string; ticket_token?: string; ticket_expires_at?: string } | null;
+      if (!row?.ticket_token) throw new Error('The server did not return a candidate ticket.');
+      // Use the URL fragment so the bearer token is not sent in HTTP requests or referrer headers.
+      const url = `${window.location.origin}/mcq#ticket=${encodeURIComponent(row.ticket_token)}`;
+      setTicketUrl(url);
+      setTicketToken(row.ticket_token);
+      setActiveTicketId(row.ticket_id || '');
+      setExpiresAt(row.ticket_expires_at || '');
+      const { data: ticketRows } = await supabase.rpc('list_mcq_candidate_tickets', { p_exam_id: examId });
+      setTickets((ticketRows || []) as unknown as CandidateTicket[]);
+      setNotice('Ticket issued. Share this link privately with the intended candidate. Anyone holding the link can use it until it expires or is revoked.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to issue candidate ticket.');
+    } finally {
+      setIssuing(false);
+    }
+  };
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(ticketUrl);
+      setNotice('Secure candidate link copied.');
+    } catch {
+      setNotice('Copy was blocked by the browser. Select and copy the link manually.');
+    }
+  };
+
+  const revokeTicket = async (ticketId = activeTicketId) => {
+    if (!ticketId || revoking) return;
+    setRevoking(true);
+    setError('');
+    try {
+      const { data, error: rpcError } = await supabase.rpc('revoke_mcq_candidate_ticket_by_id', { p_ticket_id: ticketId });
+      if (rpcError) throw new Error(rpcError.message);
+      if (data !== true) throw new Error('Ticket was not found or could not be revoked.');
+      setTickets((rows) => rows.map((row) => row.ticket_id === ticketId ? { ...row, revoked_at: row.revoked_at || new Date().toISOString(), attempt_status: row.attempt_status === 'IN_PROGRESS' ? 'ABANDONED' : row.attempt_status } : row));
+      if (ticketId === activeTicketId) {
+        setTicketUrl('');
+        setTicketToken('');
+        setActiveTicketId('');
+      }
+      setNotice('Ticket revoked. The candidate can no longer start or continue this attempt.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not revoke this ticket.');
+    } finally {
+      setRevoking(false);
+    }
+  };
+
+  const refreshTickets = async () => {
+    if (!examId || loadingTickets) return;
+    setLoadingTickets(true);
+    setError('');
+    try {
+      const { data, error: rpcError } = await supabase.rpc('list_mcq_candidate_tickets', { p_exam_id: examId });
+      if (rpcError) throw new Error(rpcError.message);
+      setTickets((data || []) as unknown as CandidateTicket[]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not refresh candidate tickets.');
+    } finally {
+      setLoadingTickets(false);
+    }
+  };
+
+  const unlockAttempt = async (attemptId: string) => {
+    if (!attemptId || unlockingAttemptId) return;
+    setUnlockingAttemptId(attemptId);
+    setError('');
+    try {
+      const { data, error: rpcError } = await supabase.rpc('unlock_mcq_attempt', {
+        p_attempt_id: attemptId,
+        p_note: 'Unlocked by administrator from the MCQ ticket console'
+      });
+      if (rpcError) throw new Error(rpcError.message);
+      if (data !== true) throw new Error('The attempt could not be unlocked; it may no longer be in progress.');
+      setTickets((rows) => rows.map((row) => row.attempt_id === attemptId ? { ...row, proctor_lock_override: true } : row));
+      setNotice('Attempt unlocked. The original proctoring history has been preserved.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not unlock this attempt.');
+    } finally {
+      setUnlockingAttemptId('');
+    }
+  };
+
+  return <main style={page}><section style={panel}>
+    <p style={eyebrow}>AXENT · EXAM AUTHORITY</p>
+    <h1 style={{ marginBottom: 8 }}>Issue a secure MCQ ticket</h1>
+    <p style={{ color: '#64748b', lineHeight: 1.6 }}>Candidate access is issued per exam. The database stores only a hash of the random ticket; the full link is shown once here.</p>
+    {loading ? <p>Loading published exams…</p> : exams.length === 0 ? <p role="alert">No published exams are available. Publish an exam before issuing candidate tickets.</p> : (
+      <form onSubmit={(event) => void issueTicket(event)} style={{ display: 'grid', gap: 14, marginTop: 22 }}>
+        <label style={label}>Published examination
+          <select required value={examId} onChange={(e) => { setExamId(e.target.value); setTicketUrl(''); setTicketToken(''); setActiveTicketId(''); }} style={input}>
+            {exams.map((exam) => <option key={exam.id} value={exam.id}>{exam.title}</option>)}
+          </select>
+        </label>
+        <div style={twoCols}>
+          <label style={label}>Candidate full name<input required value={name} onChange={(e) => setName(e.target.value)} style={input} autoComplete="off" /></label>
+          <label style={label}>Roll number / USN<input required value={roll} onChange={(e) => setRoll(e.target.value)} style={input} autoComplete="off" /></label>
+        </div>
+        <div style={twoCols}>
+          <label style={label}>Department<input value={department} onChange={(e) => setDepartment(e.target.value)} style={input} /></label>
+          <label style={label}>Semester<input value={semester} onChange={(e) => setSemester(e.target.value)} style={input} /></label>
+        </div>
+        <div style={twoCols}>
+          <label style={label}>Division<input value={division} onChange={(e) => setDivision(e.target.value)} style={input} /></label>
+          <label style={label}>Ticket validity
+            <select value={ttlHours} onChange={(e) => setTtlHours(Number(e.target.value))} style={input}>
+              <option value={1}>1 hour</option><option value={4}>4 hours</option><option value={12}>12 hours</option><option value={24}>24 hours</option><option value={48}>48 hours</option><option value={168}>7 days</option>
+            </select>
+          </label>
+        </div>
+        <button disabled={issuing || loading} style={primaryButton}>{issuing ? 'Issuing securely…' : 'Issue candidate link'}</button>
+      </form>
+    )}
+    {error && <p role="alert" style={{ color: '#dc2626', marginTop: 16 }}>{error}</p>}
+    {notice && <p role="status" style={{ color: '#166534', marginTop: 16 }}>{notice}</p>}
+    {ticketUrl && <div style={linkBox}>
+      <strong>Candidate link — shown once</strong>
+      <p style={{ overflowWrap: 'anywhere', fontSize: 13 }}>{ticketUrl}</p>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <button type="button" onClick={() => void copyLink()} style={secondaryButton}>Copy secure link</button>
+        <button type="button" onClick={() => void revokeTicket()} disabled={revoking || !activeTicketId} style={{ ...secondaryButton, color: '#dc2626' }}>{revoking ? 'Revoking…' : 'Revoke ticket'}</button>
+      </div>
+      {expiresAt && <p style={{ fontSize: 12, color: '#64748b' }}>Expires: {new Date(expiresAt).toLocaleString()}</p>}
+      <p style={{ fontSize: 12, color: '#b45309' }}>Treat this link like a password. It grants access to the named candidate's exam until it expires or is revoked.</p>
+    </div>}
+    <section style={{ marginTop: 28, borderTop: '1px solid var(--border)', paddingTop: 22 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <h2 style={{ fontSize: 17, marginBottom: 8 }}>Issued candidate tickets</h2>
+        <button type="button" onClick={() => void refreshTickets()} disabled={loadingTickets} style={secondaryButton}>{loadingTickets ? 'Refreshing…' : 'Refresh list'}</button>
+      </div>
+      <p style={{ color: '#64748b', fontSize: 13, lineHeight: 1.5 }}>Ticket links are shown only once. This list stores no bearer token and lets you revoke tickets later.</p>
+      {loadingTickets ? <p>Loading tickets…</p> : tickets.length === 0 ? <p style={{ color: '#64748b' }}>No tickets issued for this exam yet.</p> : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead><tr>
+              <th style={tableHead}>Candidate</th><th style={tableHead}>Issued / expires</th><th style={tableHead}>Attempt / proctoring</th><th style={tableHead}>Ticket</th><th style={tableHead}>Actions</th>
+            </tr></thead>
+            <tbody>{tickets.map((ticket) => {
+              const expired = new Date(ticket.expires_at).getTime() <= Date.now();
+              const status = ticket.revoked_at ? 'REVOKED' : expired ? 'EXPIRED' : 'ACTIVE';
+              return <tr key={ticket.ticket_id}>
+                <td style={tableCell}><strong>{ticket.student_name}</strong><div style={{ color: '#64748b' }}>{ticket.student_roll}</div></td>
+                <td style={tableCell}>{new Date(ticket.issued_at).toLocaleString()}<div style={{ color: '#64748b' }}>Expires {new Date(ticket.expires_at).toLocaleString()}</div></td>
+                <td style={tableCell}>{ticket.attempt_status || 'Not started'}{ticket.attempt_id && <div style={{ color: '#64748b' }}>Tab switches: {ticket.attempt_tab_switch_count || 0}</div>}{ticket.attempt_id && ticket.attempt_status === 'IN_PROGRESS' && (ticket.attempt_tab_switch_count || 0) >= 3 && !ticket.proctor_lock_override && <div style={{ color: '#b45309', fontWeight: 700 }}>Locked pending invigilator</div>}</td>
+                <td style={tableCell}>{status}</td>
+                <td style={tableCell}><div style={{ display: 'grid', gap: 6 }}><button type="button" onClick={() => void revokeTicket(ticket.ticket_id)} disabled={revoking || Boolean(ticket.revoked_at)} style={{ ...secondaryButton, color: '#dc2626', opacity: ticket.revoked_at ? .5 : 1 }}>{ticket.revoked_at ? 'Revoked' : revoking ? 'Revoking…' : 'Revoke'}</button>{ticket.attempt_id && ticket.attempt_status === 'IN_PROGRESS' && (ticket.attempt_tab_switch_count || 0) >= 3 && !ticket.proctor_lock_override && <button type="button" onClick={() => void unlockAttempt(ticket.attempt_id!)} disabled={Boolean(unlockingAttemptId)} style={secondaryButton}>{unlockingAttemptId === ticket.attempt_id ? 'Unlocking…' : 'Unlock attempt'}</button>}</div></td>
+              </tr>;
+            })}</tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  </section></main>;
+};
+
+const page: React.CSSProperties = { minHeight: 'calc(100vh - 52px)', background: 'var(--bg-main)', padding: '32px 16px', color: 'var(--text-primary)' };
+const panel: React.CSSProperties = { maxWidth: 760, margin: '0 auto', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 18, padding: 28, boxShadow: '0 12px 40px rgba(15,23,42,.08)' };
+const eyebrow: React.CSSProperties = { color: '#64748b', letterSpacing: '.14em', fontSize: 11, fontWeight: 800 };
+const label: React.CSSProperties = { display: 'grid', gap: 7, fontSize: 13, fontWeight: 700 };
+const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: '11px 12px', border: '1px solid var(--border)', borderRadius: 9, background: 'var(--bg-main)', color: 'var(--text-primary)', fontSize: 14 };
+const twoCols: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 };
+const primaryButton: React.CSSProperties = { background: '#2563eb', color: '#fff', border: 0, borderRadius: 10, padding: '12px 18px', fontWeight: 700, cursor: 'pointer' };
+const secondaryButton: React.CSSProperties = { background: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 14px', fontWeight: 600, cursor: 'pointer' };
+const linkBox: React.CSSProperties = { marginTop: 22, border: '1px solid var(--border)', borderRadius: 12, padding: 16, background: 'var(--bg-main)' };
+const tableHead: React.CSSProperties = { textAlign: 'left', borderBottom: '1px solid var(--border)', padding: '10px 8px', color: '#64748b', whiteSpace: 'nowrap' };
+const tableCell: React.CSSProperties = { textAlign: 'left', borderBottom: '1px solid var(--border)', padding: '12px 8px', verticalAlign: 'top' };

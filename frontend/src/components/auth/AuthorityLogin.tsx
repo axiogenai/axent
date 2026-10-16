@@ -1,5 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
+
+const SAFE_AUTH_REDIRECTS = new Set([
+  '/admin',
+  '/admin/mcq-tickets',
+  '/paper-setter',
+  '/invite',
+  '/login/invite',
+  '/authority-invite',
+  '/login/admin',
+  '/login/paper-setter'
+]);
+
+function resolveSafeRedirect(candidate: string | null, fallback: string): string {
+  if (!candidate) return fallback;
+  try {
+    const url = new URL(candidate, window.location.origin);
+    if (url.origin !== window.location.origin || !SAFE_AUTH_REDIRECTS.has(url.pathname)) {
+      return fallback;
+    }
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return fallback;
+  }
+}
+
 import {
   Hexagon,
   Shield,
@@ -53,7 +78,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
   const isDedicatedPortal = Boolean(fixedRole || isSetterPath || isAdminPath || roleParam);
 
   const defaultRedirect = effectiveRole === 'admin' ? '/admin' : '/paper-setter';
-  const redirectTarget = searchParams.get('redirect') || defaultRedirect;
+  const redirectTarget = resolveSafeRedirect(searchParams.get('redirect'), defaultRedirect);
 
   const [role, setRole] = useState<AuthorityRole>(effectiveRole);
   const isDarkMode = typeof window !== 'undefined' && (
@@ -188,12 +213,9 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
       if (user) {
         playSound('success');
         if (needsEmailConfirmation) {
-          setSuccessMessage(`Registration received! Confirm your email before signing in.`);
+          setSuccessMessage('Registration received. Confirm your email if requested; portal access remains pending until a trusted administrator provisions your paper-setter role.');
         } else {
-          setSuccessMessage('Authority account configured! Entering portal...');
-          setTimeout(() => {
-            navigate(redirectTarget, { replace: true });
-          }, 800);
+          setSuccessMessage('Registration received. Confirm your email if requested; portal access remains pending until a trusted administrator provisions your paper-setter role.');
         }
       }
     } finally {

@@ -2,7 +2,7 @@ name: Quality checks
 
 on:
   push:
-    branches: ["main", "fix/axent-core-stability"]
+    branches: ["main", "fix/axent-core-stability", "security/**"]
   pull_request:
     branches: ["main"]
 
@@ -24,7 +24,30 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - run: npm run lint
       - run: npm run build
+
+
+  sql:
+    name: Supabase SQL syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check pglast
+      - name: Parse baseline schema and migrations
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from pglast import parse_sql
+
+          paths = [Path("frontend/supabase_schema.sql"), *sorted(Path("frontend/supabase_migrations").glob("*.sql"))]
+          for path in paths:
+              parse_sql(path.read_text(encoding="utf-8"))
+              print(f"PASS: {path}")
+          PY
 
   backend:
     name: Django checks and tests

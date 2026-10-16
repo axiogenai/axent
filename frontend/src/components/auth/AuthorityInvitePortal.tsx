@@ -18,13 +18,9 @@ import {
   GraduationCap,
   History,
   ShieldCheck,
-  Lock,
-  KeyRound,
-  Eye,
-  EyeOff,
-  LogOut
 } from 'lucide-react';
 import {
+  getAuthSession,
   sendMagicLink,
   AuthorityRole
 } from '../../services/authService';
@@ -41,10 +37,6 @@ interface DispatchedInvite {
 }
 
 const STORAGE_INVITES_KEY = 'axent_authority_dispatched_invites';
-const AUTH_STORAGE_KEY = 'axent_magic_portal_authed';
-
-const REQUIRED_ID = 'Teamaxiogen';
-const REQUIRED_PASS = 'Adi.patil#1';
 
 export const AuthorityInvitePortal: React.FC = () => {
   const navigate = useNavigate();
@@ -53,19 +45,26 @@ export const AuthorityInvitePortal: React.FC = () => {
     localStorage.getItem('codedna_theme') === 'dark'
   );
 
-  // Authentication Gate states
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(AUTH_STORAGE_KEY) === 'true';
-    } catch {
-      return false;
-    }
-  });
+  // Only a real Supabase session with a trusted app_metadata role may access this dispatcher.
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-  const [gateId, setGateId] = useState('');
-  const [gatePass, setGatePass] = useState('');
-  const [showGatePass, setShowGatePass] = useState(false);
-  const [gateError, setGateError] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    void getAuthSession().then((session) => {
+      if (!active) return;
+      const authorized = session?.user.app_metadata?.role === 'admin';
+      setIsAuthenticated(Boolean(authorized));
+      setIsCheckingAuth(false);
+      if (!authorized) navigate('/login/admin?redirect=%2Finvite', { replace: true });
+    }).catch(() => {
+      if (!active) return;
+      setIsAuthenticated(false);
+      setIsCheckingAuth(false);
+      navigate('/login/admin?redirect=%2Finvite', { replace: true });
+    });
+    return () => { active = false; };
+  }, [navigate]);
 
   // Dispatcher Form states
   const [role, setRole] = useState<AuthorityRole>('paper_setter');
@@ -99,41 +98,25 @@ export const AuthorityInvitePortal: React.FC = () => {
     } catch {}
   }, [recentInvites]);
 
-  // Handle Security Gate Authentication
-  const handleGateLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    setGateError(null);
-
-    const enteredId = gateId.trim().toLowerCase();
-    const enteredPass = gatePass.trim();
-
-    if (
-      (enteredId === REQUIRED_ID.toLowerCase() || enteredId === 'teamaxiogen@axent.edu' || enteredId === 'teamaxiogen@axent.in') &&
-      enteredPass === REQUIRED_PASS
-    ) {
-      playSound('success');
-      setIsAuthenticated(true);
-      try {
-        localStorage.setItem(AUTH_STORAGE_KEY, 'true');
-      } catch {}
-    } else {
-      playSound('warning');
-      setGateError('Invalid Authority ID or Security Password. Required: ID Teamaxiogen, Pass Adi.patil#1');
-    }
-  };
-
-  const handleGateLogout = () => {
-    playSound('click');
-    setIsAuthenticated(false);
-    try {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-    } catch {}
-  };
-
   // Handle Magic Link Dispatch
   const handleDispatch = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+
+    const session = await getAuthSession();
+    if (!session || session.user.app_metadata?.role !== 'admin') {
+      setIsAuthenticated(false);
+      setErrorMessage('A verified administrator session is required to dispatch invitations.');
+      navigate('/login/admin?redirect=%2Finvite', { replace: true });
+      return;
+    }
+
+    // Admin privileges must be provisioned by a trusted server-side administrator.
+    if (role === 'admin') {
+      setErrorMessage('Administrator access must be provisioned by a trusted platform administrator. This form can invite paper setters only.');
+      playSound('warning');
+      return;
+    }
     setSuccessInfo(null);
     setIsCopied(false);
 
@@ -153,8 +136,7 @@ export const AuthorityInvitePortal: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const targetPortal = role === 'admin' ? '/admin' : '/paper-setter';
-      const { success, error, directLink } = await sendMagicLink(trimmedEmail, targetPortal, role);
+      const { success, error, directLink } = await sendMagicLink(trimmedEmail, '/paper-setter', 'paper_setter');
 
       if (!success || error) {
         setErrorMessage(error || 'Failed to dispatch magic link invitation.');
@@ -196,6 +178,14 @@ export const AuthorityInvitePortal: React.FC = () => {
     });
   };
 
+  if (isCheckingAuth || !isAuthenticated) {
+    return (
+      <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+        Verifying administrator session…
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -209,7 +199,7 @@ export const AuthorityInvitePortal: React.FC = () => {
     >
       <div
         style={{
-          maxWidth: isAuthenticated ? '580px' : '440px',
+          maxWidth: '580px',
           width: '100%',
           background: 'var(--bg-elevated)',
           border: '1px solid var(--border)',
@@ -248,7 +238,7 @@ export const AuthorityInvitePortal: React.FC = () => {
                   color: 'var(--accent)'
                 }}
               >
-                {isAuthenticated ? 'Authority Provisioning & Onboarding' : 'Restricted Security Gate'}
+                Authority Provisioning & Onboarding
               </span>
               <h1
                 style={{
@@ -259,167 +249,17 @@ export const AuthorityInvitePortal: React.FC = () => {
                   letterSpacing: '-0.02em'
                 }}
               >
-                {isAuthenticated ? 'Magic Link Invite Dispatcher' : 'Magic Link Portal Gate'}
+                Magic Link Invite Dispatcher
               </h1>
             </div>
           </div>
           <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-            {isAuthenticated
-              ? 'Dispatch cryptographic onboarding invites to faculty examiners and exam proctors without manual password setup.'
-              : 'Enter institutional root credentials to unlock the Authority Magic Link Dispatcher.'}
+            Dispatch verified onboarding invitations to faculty examiners. Only trusted administrators can access this portal.
           </p>
         </div>
 
-        {/* ── 1. LOCKED SECURITY GATE (Authentication Required) ── */}
-        {!isAuthenticated ? (
-          <div style={{ padding: '24px 30px' }}>
-            {gateError && (
-              <div
-                style={{
-                  marginBottom: '16px',
-                  padding: '12px 14px',
-                  borderRadius: 'var(--radius-sm)',
-                  background: 'var(--danger-bg)',
-                  border: '1px solid var(--danger-border)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px'
-                }}
-              >
-                <AlertTriangle size={15} color="var(--danger)" style={{ flexShrink: 0 }} />
-                <div style={{ fontSize: '12px', color: 'var(--danger)', lineHeight: 1.4 }}>
-                  {gateError}
-                </div>
-              </div>
-            )}
+        <>
 
-            <form onSubmit={handleGateLogin} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                    color: 'var(--text-secondary)',
-                    marginBottom: '6px'
-                  }}
-                >
-                  Authority ID
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <User
-                    size={14}
-                    color="var(--text-muted)"
-                    style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}
-                  />
-                  <input
-                    type="text"
-                    required
-                    value={gateId}
-                    onChange={(e) => setGateId(e.target.value)}
-                    placeholder="Enter Authority ID"
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px 10px 36px',
-                      borderRadius: 'var(--radius-xs)',
-                      border: '1px solid var(--border)',
-                      background: 'var(--bg-main)',
-                      color: 'var(--text-primary)',
-                      fontSize: '13px',
-                      outline: 'none',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                    color: 'var(--text-secondary)',
-                    marginBottom: '6px'
-                  }}
-                >
-                  Security Password
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <Lock
-                    size={14}
-                    color="var(--text-muted)"
-                    style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}
-                  />
-                  <input
-                    type={showGatePass ? 'text' : 'password'}
-                    required
-                    value={gatePass}
-                    onChange={(e) => setGatePass(e.target.value)}
-                    placeholder="Enter password (Adi.patil#1)"
-                    style={{
-                      width: '100%',
-                      padding: '10px 36px 10px 36px',
-                      borderRadius: 'var(--radius-xs)',
-                      border: '1px solid var(--border)',
-                      background: 'var(--bg-main)',
-                      color: 'var(--text-primary)',
-                      fontSize: '13px',
-                      outline: 'none',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowGatePass(!showGatePass)}
-                    style={{
-                      position: 'absolute',
-                      right: '12px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      padding: 0,
-                      cursor: 'pointer',
-                      color: 'var(--text-muted)'
-                    }}
-                  >
-                    {showGatePass ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  width: '100%',
-                  padding: '11px 16px',
-                  borderRadius: 'var(--radius-xs)',
-                  border: 'none',
-                  background: 'var(--accent)',
-                  color: 'var(--accent-fg)',
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  marginTop: '8px'
-                }}
-              >
-                <KeyRound size={15} />
-                <span>Unlock Magic Link Dispatcher</span>
-              </button>
-            </form>
-          </div>
-        ) : (
-          /* ── 2. UNLOCKED DISPATCHER INTERFACE ── */
-          <>
             {/* Authenticated Authority Status Banner */}
             <div
               style={{
@@ -435,27 +275,10 @@ export const AuthorityInvitePortal: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <ShieldCheck size={14} color="var(--accent)" />
                 <span style={{ color: 'var(--text-muted)' }}>
-                  Authenticated: <strong style={{ color: 'var(--text-primary)' }}>Teamaxiogen</strong> (Institutional Root)
+                  Verified session: <strong style={{ color: 'var(--text-primary)' }}>Supabase administrator</strong>
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={handleGateLogout}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  background: 'none',
-                  border: 'none',
-                  padding: 0,
-                  fontSize: '11px',
-                  color: 'var(--text-dim)',
-                  cursor: 'pointer'
-                }}
-              >
-                <LogOut size={12} />
-                <span>Lock Gate</span>
-              </button>
+
             </div>
 
             {/* Role Selector: Paper Setter vs Admin */}
@@ -961,8 +784,7 @@ export const AuthorityInvitePortal: React.FC = () => {
                 </div>
               </div>
             )}
-          </>
-        )}
+        </>
 
         {/* ── Card Footer: Dedicated Portals Navigation ── */}
         <div

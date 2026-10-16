@@ -1,51 +1,41 @@
 import React, { useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { MCQExamSelector } from './MCQExamScreen';
-import { ErrorBoundary } from './ErrorBoundary';
+import { useNavigate } from 'react-router-dom';
+import { SecureMCQExam } from './SecureMCQExam';
 
 export const MCQHub: React.FC = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  // Candidate bearer tickets are accepted only in the fragment, never in query strings.
+  const ticket = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('ticket');
 
-  // Strict Exam-Lock Guard:
-  // If a student is accessing a specific MCQ exam (?examId=...), allow it unconditionally.
-  // Only redirect if genuinely registered for an active CODING practical session.
   useEffect(() => {
+    if (ticket) {
+      try { localStorage.setItem('codedna_active_exam_mode', 'MCQ'); } catch {}
+      return;
+    }
     try {
-      const examId = searchParams.get('examId');
-      if (examId) {
-        localStorage.setItem('codedna_active_exam_mode', 'MCQ');
-        return;
-      }
-
       const activeMode = localStorage.getItem('codedna_active_exam_mode');
       const rawProfile = localStorage.getItem('codedna_student_profile');
       let isCodingStudent = activeMode === 'CODING';
-
       if (rawProfile) {
-        const p = JSON.parse(rawProfile);
-        if (p.name && p.rollNumber && p.examMode === 'CODING') {
-          isCodingStudent = true;
-        }
+        const profile = JSON.parse(rawProfile);
+        if (profile.name && profile.rollNumber && profile.examMode === 'CODING') isCodingStudent = true;
       }
+      if (isCodingStudent) navigate('/workspace', { replace: true });
+    } catch {}
+  }, [navigate, ticket]);
 
-      if (isCodingStudent) {
-        console.warn('[Exam Guard] Student registered for Coding Practical attempted to access /mcq. Redirecting to /workspace.');
-        navigate('/workspace', { replace: true });
-      }
-    } catch {
-      // Ignore
-    }
-  }, [navigate, searchParams]);
+  if (ticket) return <SecureMCQExam />;
 
   return (
-    <div style={{ minHeight: 'calc(100vh - 52px)', background: 'var(--bg-main)', display: 'flex', flexDirection: 'column' }}>
-      <ErrorBoundary fallbackTitle="Examination Portal Error Caught">
-        <MCQExamSelector />
-      </ErrorBoundary>
-    </div>
+    <main style={{ minHeight: 'calc(100vh - 52px)', display: 'grid', placeItems: 'center', padding: 24, background: 'var(--bg-main)', color: 'var(--text-primary)' }}>
+      <section style={{ maxWidth: 620, width: '100%', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 18, padding: 28 }}>
+        <p style={{ color: '#64748b', fontSize: 11, letterSpacing: '.14em', fontWeight: 800 }}>AXENT · SECURE EXAM ACCESS</p>
+        <h1>Candidate ticket required</h1>
+        <p style={{ lineHeight: 1.65 }}>MCQ examinations now require a unique candidate link issued by a trusted administrator. Manual identity forms and decoded Base64 tokens are not valid exam credentials.</p>
+        <p style={{ color: '#64748b', fontSize: 13 }}>If you are a candidate, contact your invigilator and ask them to issue or resend your secure examination link.</p>
+      </section>
+    </main>
   );
 };
 
 export default MCQHub;
-
