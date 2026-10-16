@@ -1,12 +1,11 @@
 import React, { useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { SecureMCQExam } from './SecureMCQExam';
 
 export const MCQHub: React.FC = () => {
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const hashTicket = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('ticket');
-  const ticket = hashTicket || searchParams.get('ticket');
+  // Candidate bearer tickets are accepted only in the fragment, never in query strings.
+  const ticket = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('ticket');
 
   useEffect(() => {
     if (ticket) {

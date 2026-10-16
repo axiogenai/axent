@@ -53,10 +53,10 @@ type Result = {
 };
 
 function getTicket(): string {
+  // Bearer credentials must stay in the URL fragment, which browsers do not send
+  // in HTTP requests or referrer headers. Never accept query-string tickets.
   const hash = window.location.hash.replace(/^#/, '');
-  const fromHash = new URLSearchParams(hash).get('ticket');
-  const fromQuery = new URLSearchParams(window.location.search).get('ticket');
-  return (fromHash || fromQuery || '').trim();
+  return (new URLSearchParams(hash).get('ticket') || '').trim();
 }
 
 export const SecureMCQExam: React.FC = () => {
