@@ -76,7 +76,7 @@ export const SecureMCQExam: React.FC = () => {
         setLoading(false);
         return;
       }
-      const next = data as ActiveAttempt;
+      const next = data as unknown as ActiveAttempt;
       setAttempt(next);
       setAnswers(next.answers || {});
       serverOffsetMs.current = Number((data as any).serverTime || Date.now()) - Date.now();
@@ -107,8 +107,8 @@ export const SecureMCQExam: React.FC = () => {
       submitLock.current = false;
       return;
     }
-    setResult(data as Result);
-    setAttempt((previous) => previous ? { ...previous, status: String((data as Result).status || 'SUBMITTED') } : previous);
+    setResult(data as unknown as Result);
+    setAttempt((previous) => previous ? { ...previous, status: String((data as unknown as Result).status || 'SUBMITTED') } : previous);
     setSubmitting(false);
   }, [attempt, result, ticket]);
 
