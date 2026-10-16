@@ -585,12 +585,12 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
   };
 
   return (
-    <div style={{ minHeight: 'calc(100vh - 52px)', padding: '32px 36px', background: 'var(--bg-main)' }}>
+    <div className="mcq-reg-wrapper">
       <div style={{ maxWidth: '1360px', margin: '0 auto', width: '100%' }}>
         {/* Top Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '22px', flexWrap: 'wrap', gap: '12px' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '2px 8px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
                 Computer-Based Examination Terminal
               </span>
@@ -598,7 +598,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
                 CCTV Synced
               </span>
             </div>
-            <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)' }}>
+            <h1 style={{ margin: 0, fontSize: 'clamp(18px, 3.5vw, 22px)', fontWeight: 800, color: 'var(--text-primary)' }}>
               Candidate Verification & Session Check-In
             </h1>
           </div>
@@ -618,7 +618,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
         </div>
 
         {/* 2-Column Split: Left = Examination Blueprint, Right = Registration Form */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(340px, 1fr) minmax(380px, 1.25fr)', gap: '24px', alignItems: 'flex-start' }}>
+        <div className="mcq-reg-grid">
         
         {/* Gateway Card */}
         <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '24px', marginBottom: '16px' }}>
@@ -1025,7 +1025,7 @@ const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attem
   }, [attempt?.submitTime]);
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'clamp(12px, 3vw, 24px)', boxSizing: 'border-box' }}>
       <div
         style={{
           maxWidth: '680px',
@@ -1041,7 +1041,7 @@ const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attem
           style={{
             background: 'var(--bg-surface)',
             borderBottom: '1px solid var(--border)',
-            padding: '28px 32px 24px',
+            padding: 'clamp(20px, 4vw, 28px) clamp(16px, 4vw, 32px) clamp(16px, 3.5vw, 24px)',
             textAlign: 'center',
             display: 'flex',
             flexDirection: 'column',
@@ -1054,7 +1054,7 @@ const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attem
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-pill)', padding: '3px 12px', fontSize: '11px', fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>
               <FileCheck size={12} /> Submission Recorded
             </div>
-            <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px', letterSpacing: '-0.02em' }}>
+            <h1 style={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px', letterSpacing: '-0.02em' }}>
               Hold tight, results will be deployed soon
             </h1>
             <p style={{ fontSize: '13.5px', color: 'var(--text-muted)', margin: 0, maxWidth: '520px', lineHeight: 1.5 }}>
@@ -1064,7 +1064,7 @@ const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attem
         </div>
 
         {/* WhatsApp Notice Box */}
-        <div style={{ padding: '20px 32px 0 32px' }}>
+        <div style={{ padding: '20px clamp(16px, 4vw, 32px) 0 clamp(16px, 4vw, 32px)' }}>
           <div
             style={{
               background: 'var(--bg-surface)',
@@ -1104,7 +1104,7 @@ const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attem
         </div>
 
         {/* Verification Receipt Card */}
-        <div style={{ padding: '20px 32px' }}>
+        <div style={{ padding: '20px clamp(16px, 4vw, 32px)' }}>
           <div
             style={{
               background: 'var(--bg-surface)',
@@ -1220,7 +1220,7 @@ const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attem
           style={{
             background: 'var(--bg-surface)',
             borderTop: '1px solid var(--border)',
-            padding: '16px 32px',
+            padding: '16px clamp(14px, 4vw, 32px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -1249,7 +1249,7 @@ const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attem
             <span>Print Receipt</span>
           </button>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             {onNewCandidate && (
               <button
                 type="button"
@@ -1344,7 +1344,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
   });
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-main)', padding: '28px 32px' }}>
+    <div className="mcq-results-wrapper">
       <div style={{ maxWidth: '1440px', margin: '0 auto', width: '100%' }}>
         {/* Time Expired Auto-Submit Banner */}
         {attempt.status === 'TIMED_OUT' && (
@@ -1405,20 +1405,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
         )}
 
         {/* Top Official Ledger Header */}
-        <div
-          style={{
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '24px 28px',
-            marginBottom: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '16px'
-          }}
-        >
+        <div className="mcq-results-header">
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
               <span
@@ -1542,14 +1529,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
         </div>
 
         {/* 5-Card High-Density Scoreboard */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: '14px',
-            marginBottom: '24px'
-          }}
-        >
+        <div className="mcq-results-scoreboard">
           <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px 20px' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Total Marks Awarded</div>
             <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-primary)' }}>
@@ -1590,7 +1570,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
         </div>
 
         {/* 2-Column Main Body: Left 68% Detailed Questions, Right 32% Matrix & Telemetry */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(500px, 1fr) 340px', gap: '24px', alignItems: 'flex-start' }}>
+        <div className="mcq-results-layout">
           {/* Left Column: Question-by-Question Review */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div
@@ -1756,7 +1736,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
           </div>
 
           {/* Right Column: Question Navigator Matrix & Metadata Sidebar */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'sticky', top: '72px' }}>
+          <div className="mcq-results-sidebar">
             <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px' }}>
               <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Question Matrix
@@ -3439,18 +3419,14 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       )}
 
       {/* Top bar */}
-      <div style={{
-        position: 'sticky', top: 0, zIndex: 100,
-        background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)',
-        padding: '0 20px', height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div className="mcq-exam-topbar">
+        <div className="mcq-exam-topbar-info">
           <BookOpen size={16} color="var(--text-muted)" />
           <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{exam.title}</span>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{attempt.studentName}</span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div className="mcq-exam-topbar-actions">
           {/* Anti-cheat indicator */}
           {attempt.tabSwitchCount > 0 && (
             <span style={{
@@ -3566,25 +3542,8 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
       {/* Fullscreen Required Non-Obstructive Alert Banner */}
       {!isFullscreen && (
-        <div
-          style={{
-            maxWidth: '1520px',
-            margin: '12px auto 0',
-            width: 'calc(100% - 56px)',
-            background: 'rgba(239, 68, 68, 0.08)',
-            border: '1px solid rgba(239, 68, 68, 0.25)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '8px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px',
-            color: 'var(--danger)',
-            fontSize: '12px',
-            fontWeight: 600
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="mcq-alert-banner">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)', fontSize: '12px', fontWeight: 600 }}>
             <ShieldAlert size={15} />
             <span>Institutional Anti-Cheat Policy: Screen must remain in Fullscreen mode during the examination.</span>
           </div>
@@ -3613,25 +3572,8 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
       {/* CCTV Screen Sharing Required Surveillance Banner */}
       {!isScreenSharing && (
-        <div
-          style={{
-            maxWidth: '1520px',
-            margin: '8px auto 0',
-            width: 'calc(100% - 56px)',
-            background: 'rgba(239, 68, 68, 0.08)',
-            border: '1px solid rgba(239, 68, 68, 0.25)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '8px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px',
-            color: 'var(--danger)',
-            fontSize: '12px',
-            fontWeight: 600
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="mcq-alert-banner">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)', fontSize: '12px', fontWeight: 600 }}>
             <Video size={15} />
             <span>Proctor Surveillance Notice: Live CCTV screen feed is inactive. Click 'Share Screen (CCTV)' to stream your workstation to the proctoring console.</span>
           </div>
@@ -3658,14 +3600,14 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         </div>
       )}
 
-      <div style={{ flex: 1, display: 'flex', maxWidth: '1520px', margin: '0 auto', width: '100%', padding: '20px 28px', gap: '24px' }}>
+      <div className="mcq-exam-container">
         {/* Question navigator sidebar */}
-        <div style={{ width: '220px', flexShrink: 0 }}>
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '16px', position: 'sticky', top: '72px' }}>
+        <div className="mcq-exam-sidebar">
+          <div className="mcq-exam-sidebar-inner">
             <p style={{ margin: '0 0 12px', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Questions
             </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '5px', marginBottom: '14px' }}>
+            <div className="mcq-palette-grid">
               {assignedQuestions.map((aq, idx) => {
                 const answered = !!answers[aq.questionId];
                 const isCurrent = idx === currentIdx;
@@ -3722,8 +3664,8 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         </div>
 
         {/* Main question area */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '28px' }}>
+        <div className="mcq-exam-main">
+          <div className="mcq-question-card">
             {/* Question header */}
             {(() => {
               const safeAQSnapshot = currentAQ?.snapshot || {
@@ -3740,11 +3682,11 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
               return (
                 <>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
                     <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                       Question {currentIdx + 1} of {totalQ}
                     </span>
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '12px', color: 'var(--text-muted)', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
                         {safeAQSnapshot.marks ?? 1}pt
                       </span>
@@ -3809,7 +3751,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           </div>
 
           {/* Navigation footer */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
+          <div className="mcq-exam-footer">
             <button
               onClick={() => handleNavigateQuestion(Math.max(0, currentIdx - 1))}
               disabled={(!exam?.allowReview && currentIdx === 0) || currentIdx === 0}
@@ -3823,7 +3765,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
               <ChevronLeft size={14} /> Previous
             </button>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div className="mcq-exam-footer-right">
               {currentIdx < totalQ - 1 && (
                 <button
                   type="button"
@@ -4243,7 +4185,7 @@ export const MCQExamSelector: React.FC = () => {
                 }}
               >
                 {/* Left Side: Category, Title, Topic & Metric Chips */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 0 }}>
+                <div className="mcq-card-main" style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 0 }}>
                   {/* Category Micro-Badge */}
                   <span
                     style={{

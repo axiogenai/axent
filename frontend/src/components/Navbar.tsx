@@ -188,7 +188,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }}
           >
             <ExternalLink size={12} />
-            <span>Candidate Portal</span>
+            <span className="hidden sm:inline">Candidate Portal</span>
           </button>
         ) : null}
 
@@ -211,7 +211,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }}
           >
             <ExternalLink size={12} />
-            <span>Candidate Terminal</span>
+            <span className="hidden sm:inline">Candidate Terminal</span>
           </button>
         ) : null}
 
@@ -237,7 +237,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }}
           >
             <LogOut size={12} />
-            <span>Sign Out</span>
+            <span className="hidden sm:inline">Sign Out</span>
           </button>
         )}
 

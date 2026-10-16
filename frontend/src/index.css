@@ -918,7 +918,296 @@ input[type=number].no-spin {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 }
+
+@media (max-width: 560px) {
+  .mcq-card-main {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   MCQ RESPONSIVE SYSTEM (Mobile 320px+, Tablet 768px+, Desktop 1024px+)
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+/* Registration & Gateway View */
+.mcq-reg-wrapper {
+  min-height: calc(100vh - 52px);
+  padding: clamp(14px, 3.5vw, 36px);
+  background: var(--bg-main);
+  box-sizing: border-box;
+}
+
+.mcq-reg-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(360px, 1.25fr);
+  gap: 24px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+@media (max-width: 960px) {
+  .mcq-reg-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+}
+
+/* Active Exam Top Header */
+.mcq-exam-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  padding: 8px clamp(12px, 2.5vw, 24px);
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  box-sizing: border-box;
+}
+
+.mcq-exam-topbar-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-shrink: 1;
+  flex-wrap: wrap;
+}
+
+.mcq-exam-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .mcq-exam-topbar {
+    padding: 8px 12px;
+  }
+  .mcq-exam-topbar-actions {
+    gap: 6px;
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+/* Alert & Surveillance Banners */
+.mcq-alert-banner {
+  max-width: 1520px;
+  margin: 10px auto 0;
+  width: calc(100% - clamp(20px, 4vw, 56px));
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 8px clamp(10px, 2.5vw, 16px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .mcq-alert-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .mcq-alert-banner button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Active Exam Main Layout */
+.mcq-exam-container {
+  flex: 1;
+  display: flex;
+  max-width: 1520px;
+  margin: 0 auto;
+  width: 100%;
+  padding: clamp(12px, 2.5vw, 28px);
+  gap: 24px;
+  box-sizing: border-box;
+}
+
+.mcq-exam-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+}
+
+.mcq-exam-sidebar-inner {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  position: sticky;
+  top: 72px;
+}
+
+.mcq-exam-main {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+
+.mcq-question-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: clamp(16px, 3.5vw, 28px);
+  box-sizing: border-box;
+}
+
+.mcq-palette-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 1024px) {
+  .mcq-exam-container {
+    flex-direction: column-reverse;
+    gap: 16px;
+  }
+  .mcq-exam-sidebar {
+    width: 100%;
+  }
+  .mcq-exam-sidebar-inner {
+    position: static;
+  }
+  .mcq-palette-grid {
+    grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+    gap: 6px;
+  }
+}
+
+/* Exam Navigation Footer */
+.mcq-exam-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.mcq-exam-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+@media (max-width: 520px) {
+  .mcq-exam-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .mcq-exam-footer > button {
+    width: 100%;
+    justify-content: center !important;
+  }
+  .mcq-exam-footer-right {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 8px;
+  }
+  .mcq-exam-footer-right > button {
+    width: 100%;
+    justify-content: center !important;
+  }
+}
+
+/* Results View */
+.mcq-results-wrapper {
+  min-height: 100vh;
+  background: var(--bg-main);
+  padding: clamp(14px, 3.5vw, 32px);
+  box-sizing: border-box;
+}
+
+.mcq-results-header {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: clamp(16px, 3vw, 24px) clamp(16px, 3.5vw, 28px);
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  box-sizing: border-box;
+}
+
+.mcq-results-scoreboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.mcq-results-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.mcq-results-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 72px;
+}
+
+@media (max-width: 980px) {
+  .mcq-results-layout {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .mcq-results-sidebar {
+    position: static;
+  }
+}
+
+/* Modal responsive actions */
+.mcq-modal-actions {
+  padding: 14px clamp(14px, 3vw, 22px);
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 480px) {
+  .mcq-modal-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .mcq-modal-actions > button {
+    width: 100%;
+    justify-content: center !important;
+  }
+}
+
 
 
