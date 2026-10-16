@@ -30,6 +30,31 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.mcq_candidate_tickets TO service_
 ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS result_declaration_mode text NOT NULL DEFAULT 'IMMEDIATE';
 ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS whatsapp_group_name text DEFAULT '';
 ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS whatsapp_group_link text DEFAULT '';
+
+-- Preserve result-release settings previously embedded in the instructions metadata.
+DO $
+DECLARE r record; v_meta jsonb;
+BEGIN
+  FOR r IN
+    SELECT id, substring(instructions FROM '<!--AXENT_META:([\\s\\S]*?)-->') AS meta
+    FROM public.mcq_exams
+    WHERE instructions ~ '<!--AXENT_META:'
+  LOOP
+    BEGIN
+      v_meta := r.meta::jsonb;
+      UPDATE public.mcq_exams
+      SET result_declaration_mode = CASE
+            WHEN v_meta->>'resultDeclarationMode' IN ('IMMEDIATE','WHATSAPP_GROUP')
+              THEN v_meta->>'resultDeclarationMode'
+            ELSE result_declaration_mode END,
+          whatsapp_group_name = COALESCE(NULLIF(v_meta->>'whatsappGroupName',''), whatsapp_group_name),
+          whatsapp_group_link = COALESCE(NULLIF(v_meta->>'whatsappGroupLink',''), whatsapp_group_link)
+      WHERE id=r.id;
+    EXCEPTION WHEN others THEN
+      RAISE NOTICE 'Skipped invalid AXENT_META JSON for MCQ exam id %', r.id;
+    END;
+  END LOOP;
+END $;
 ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS student_div text DEFAULT 'A';
 ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS last_activity_at bigint;
 ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS candidate_ticket_id uuid
