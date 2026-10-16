@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   FileEdit,
   BookOpen,
   BarChart2,
-  GraduationCap
+  GraduationCap,
+  ShieldAlert
 } from 'lucide-react';
 import { MCQQuestionBank } from './MCQQuestionBank';
 import { MCQCreateExam } from './MCQCreateExam';
@@ -19,6 +21,7 @@ const tabs = [
 ];
 
 export const PaperSetterPortal: React.FC = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<PaperSetterTab>('exams');
 
   return (
@@ -31,32 +34,60 @@ export const PaperSetterPortal: React.FC = () => {
           padding: '12px 24px',
           display: 'flex',
           alignItems: 'center',
-          gap: '12px'
+          justifyContent: 'space-between',
+          gap: '12px',
+          flexWrap: 'wrap'
         }}
       >
-        <div
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: 'var(--radius-sm)',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--accent)'
+            }}
+          >
+            <GraduationCap size={16} />
+          </div>
+          <div>
+            <h1 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)' }}>
+              Paper Setter Portal
+            </h1>
+            <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted)' }}>
+              Author questions, configure exam papers, and schedule examination sittings.
+            </p>
+          </div>
+        </div>
+
+        {/* 1-Click Back to Chief Proctor CCTV Control Room */}
+        <button
+          type="button"
+          onClick={() => navigate('/admin')}
+          className="btn btn-secondary btn-sm"
           style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: 'var(--radius-sm)',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border)',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--accent)'
+            gap: '6px',
+            fontSize: '12px',
+            fontWeight: 600,
+            padding: '6px 14px',
+            borderRadius: 'var(--radius-sm)',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            background: 'rgba(239, 68, 68, 0.08)',
+            color: '#ef4444',
+            cursor: 'pointer'
           }}
+          title="Return to Chief Proctor CCTV Live Surveillance"
         >
-          <GraduationCap size={16} />
-        </div>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)' }}>
-            Paper Setter Portal
-          </h1>
-          <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted)' }}>
-            Author questions, configure exam papers, and schedule examination sittings.
-          </p>
-        </div>
+          <ShieldAlert size={14} color="#ef4444" />
+          <span>Chief Proctor CCTV</span>
+        </button>
       </div>
 
       {/* ── Tab Navigation ── */}

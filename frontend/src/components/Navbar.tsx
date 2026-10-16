@@ -89,11 +89,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   } else if (isLoginRoute) {
     // Authority Gateway / Login — No student tabs!
     activeNavItems = [];
-  } else if (isPaperSetterRoute) {
-    // Paper setter — clean header, no redundant pills
-    activeNavItems = [];
-  } else if (isAdminRoute) {
-    // Invigilator & Examination Administration Navigation
+  } else if (isAdminRoute || isPaperSetterRoute) {
+    // Authority Navigation: Chief Proctor (Admin CCTV) & Paper Setter Portals
     activeNavItems = [
       { path: '/admin', label: 'CCTV Live Proctoring', icon: ShieldAlert, badge: 'PROCTOR', badgeColor: 'danger' },
       { path: '/paper-setter', label: 'Paper Setter Portal', icon: Layers }
@@ -192,12 +189,35 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         ) : null}
 
-        {/* If in Admin, provide 1-click switch to Candidate View */}
+        {/* If in Paper Setter, provide 1-click switch back to Admin CCTV */}
+        {isPaperSetterRoute ? (
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => navigate('/admin')}
+            title="Switch to Chief Proctor CCTV Live Surveillance"
+            style={{
+              height: '28px',
+              padding: '0 10px',
+              gap: '5px',
+              fontSize: '11px',
+              fontWeight: 600,
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              background: 'rgba(239, 68, 68, 0.08)',
+              color: '#ef4444'
+            }}
+          >
+            <ShieldAlert size={12} color="#ef4444" />
+            <span className="hidden sm:inline">Admin CCTV</span>
+          </button>
+        ) : null}
+
+        {/* If in Admin, provide 1-click switch to Paper Setter */}
         {isAdminRoute ? (
           <button
             className="btn btn-ghost btn-sm"
-            onClick={() => navigate('/mcq')}
-            title="Open Candidate Examination View"
+            onClick={() => navigate('/paper-setter')}
+            title="Open Paper Setter & Examination Builder Portal"
             style={{
               height: '28px',
               padding: '0 10px',
@@ -210,8 +230,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               color: 'var(--text-secondary)'
             }}
           >
-            <ExternalLink size={12} />
-            <span className="hidden sm:inline">Candidate Terminal</span>
+            <Layers size={12} />
+            <span className="hidden sm:inline">Paper Setter</span>
           </button>
         ) : null}
 
