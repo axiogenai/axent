@@ -224,6 +224,7 @@ export interface MCQStationProgress {
   totalQuestions: number;
   currentQuestionIndex: number;
   currentScore?: number;
+  score?: number;
   maxScore: number;
   tabSwitches: number;
 }

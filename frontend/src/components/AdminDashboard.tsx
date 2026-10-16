@@ -336,7 +336,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       s.metrics.keystrokes,
       `"${s.cheatingRisk}"`,
       `"${s.integrityStatus}"`,
-      s.marks ? `${s.marks.totalMarks}/${getEffectiveMaxMarks(s)}` : 'Pending'
+      s.marks ? `${s.marks.totalMarks}/${getEffectiveMaxMarks(s)}` : s.mcqProgress?.score !== undefined ? `${s.mcqProgress.score}/${getEffectiveMaxMarks(s)}` : 'Pending'
     ]);
 
     const csvContent =
@@ -1414,6 +1414,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <span>
                           {station.marks.totalMarks}/{getEffectiveMaxMarks(station)}
                         </span>
+                      ) : station.mcqProgress?.score !== undefined ? (
+                        <span>
+                          {station.mcqProgress.score}/{getEffectiveMaxMarks(station)}
+                        </span>
                       ) : (
                         <span>0/{getEffectiveMaxMarks(station)}</span>
                       )}
@@ -1698,7 +1702,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </td>
                     <td style={{ fontFamily: 'var(--font-mono)' }}>
                       <span className="badge badge-sm badge-primary">
-                        {station.marks ? `${station.marks.totalMarks}/${getEffectiveMaxMarks(station)}` : 'PENDING'}
+                        {station.marks ? `${station.marks.totalMarks}/${getEffectiveMaxMarks(station)}` : station.mcqProgress?.score !== undefined ? `${station.mcqProgress.score}/${getEffectiveMaxMarks(station)}` : 'PENDING'}
                       </span>
                     </td>
                     <td>
@@ -2217,11 +2221,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         {selectedStation.metrics.tabSwitchViolations || 0} violations ({selectedStation.metrics.unfocusedTimeSeconds || 0}s away)
                       </strong>
                     </div>
-                    {selectedStation.marks && (
+                    {(selectedStation.marks || selectedStation.mcqProgress?.score !== undefined) && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                         <span>Final Grade / Marks:</span>
                         <strong style={{ color: 'var(--accent)' }}>
-                          {selectedStation.marks.totalMarks} / {getEffectiveMaxMarks(selectedStation)} pts
+                          {selectedStation.marks ? selectedStation.marks.totalMarks : selectedStation.mcqProgress?.score} / {getEffectiveMaxMarks(selectedStation)} pts
                         </strong>
                       </div>
                     )}
@@ -2332,7 +2336,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="card" style={{ padding: '10px' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Awarded Marks</div>
                 <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--accent)' }}>
-                  {selectedStation.marks ? `${selectedStation.marks.totalMarks}/${getEffectiveMaxMarks(selectedStation)}` : 'Pending'}
+                  {selectedStation.marks ? `${selectedStation.marks.totalMarks}/${getEffectiveMaxMarks(selectedStation)}` : selectedStation.mcqProgress?.score !== undefined ? `${selectedStation.mcqProgress.score}/${getEffectiveMaxMarks(selectedStation)}` : 'Pending'}
                 </div>
               </div>
             </div>

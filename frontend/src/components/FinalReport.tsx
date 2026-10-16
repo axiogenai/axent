@@ -244,6 +244,9 @@ export const FinalReport: React.FC<FinalReportProps> = ({
     window.print();
   };
 
+  // Dynamic Rubric Max Marks
+  const effectiveMaxMarks = safeAnalysis.marks?.maxMarks && safeAnalysis.marks.maxMarks > 0 ? safeAnalysis.marks.maxMarks : 50;
+
   // Rubric Marks
   const marks = safeAnalysis.marks || {
     executionMarks: compilerResult?.isError ? 8 : 19,
@@ -251,7 +254,7 @@ export const FinalReport: React.FC<FinalReportProps> = ({
     vivaMarks: isCopied ? 4 : 8,
     integrityMarks: isCopied ? 2 : isModerate ? 6 : 10,
     totalMarks: isCopied ? 18 : isModerate ? 35 : 46,
-    maxMarks: 50
+    maxMarks: effectiveMaxMarks
   };
 
   const actualVivaMarks = vivaEvaluation
@@ -259,11 +262,11 @@ export const FinalReport: React.FC<FinalReportProps> = ({
     : 0;
 
   const totalCalculatedMarks = Math.min(
-    50,
+    effectiveMaxMarks,
     marks.executionMarks + marks.logicMarks + actualVivaMarks + marks.integrityMarks
   );
 
-  const totalPercentage = Math.round((totalCalculatedMarks / 50) * 100);
+  const totalPercentage = Math.round((totalCalculatedMarks / effectiveMaxMarks) * 100);
 
   // Grade classification
   const gradeClassification =
@@ -477,7 +480,7 @@ export const FinalReport: React.FC<FinalReportProps> = ({
           >
             <BklitSemiGauge
               value={totalPercentage}
-              label={`${totalCalculatedMarks}/50 MARKS`}
+              label={`${totalCalculatedMarks}/${effectiveMaxMarks} MARKS`}
               color={totalCalculatedMarks >= 38 ? 'var(--success)' : totalCalculatedMarks >= 25 ? 'var(--warning)' : 'var(--danger)'}
               size={120}
             />
@@ -647,8 +650,8 @@ export const FinalReport: React.FC<FinalReportProps> = ({
               id: 'dossier',
               label: 'Executive Dossier & Rubrics',
               icon: <Award size={13} />,
-              badge: `${totalCalculatedMarks}/50`,
-              badgeTone: totalCalculatedMarks >= 38 ? 'success' : totalCalculatedMarks >= 25 ? 'warning' : 'danger'
+              badge: `${totalCalculatedMarks}/${effectiveMaxMarks}`,
+              badgeTone: totalCalculatedMarks >= Math.round(effectiveMaxMarks * 0.75) ? 'success' : totalCalculatedMarks >= Math.round(effectiveMaxMarks * 0.5) ? 'warning' : 'danger'
             },
             {
               id: 'code',
@@ -723,7 +726,7 @@ export const FinalReport: React.FC<FinalReportProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px' }}>
               <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                Official Practical Examination Marking Scheme (50 Marks)
+                Official Practical Examination Marking Scheme ({effectiveMaxMarks} Marks)
               </span>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                 SCHEME: AUTONOMOUS 2026 REVISED

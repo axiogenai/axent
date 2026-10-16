@@ -1013,6 +1013,7 @@ export function syncMcqLiveStation(
         totalQuestions,
         currentQuestionIndex: currentIdx,
         currentScore: attempt?.score,
+        score: attempt?.score,
         maxScore: resolvedMaxMarks,
         tabSwitches
       }
