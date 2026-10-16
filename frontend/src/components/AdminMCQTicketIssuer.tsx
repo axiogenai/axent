@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { supabase, fetchExamsFromCloud } from '../services/supabaseService';
 import { MCQExamConfig } from '../types/mcq';
 
+type CandidateTicket = { ticket_id: string; student_name: string; student_roll: string; issued_at: string; expires_at: string; revoked_at: string | null; attempt_status: string | null };
+
 export const AdminMCQTicketIssuer: React.FC = () => {
   const [exams, setExams] = useState<MCQExamConfig[]>([]);
   const [examId, setExamId] = useState('');
@@ -13,6 +15,9 @@ export const AdminMCQTicketIssuer: React.FC = () => {
   const [ttlHours, setTtlHours] = useState(24);
   const [ticketUrl, setTicketUrl] = useState('');
   const [ticketToken, setTicketToken] = useState('');
+  const [activeTicketId, setActiveTicketId] = useState('');
+  const [tickets, setTickets] = useState<CandidateTicket[]>([]);
+  const [loadingTickets, setLoadingTickets] = useState(false);
   const [revoking, setRevoking] = useState(false);
   const [expiresAt, setExpiresAt] = useState('');
   const [loading, setLoading] = useState(true);
@@ -37,6 +42,28 @@ export const AdminMCQTicketIssuer: React.FC = () => {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    if (!examId) { setTickets([]); return () => { active = false; }; }
+    setLoadingTickets(true);
+    void supabase.rpc('list_mcq_candidate_tickets', { p_exam_id: examId }).then(({ data, error: rpcError }) => {
+      if (!active) return;
+      if (rpcError) {
+        setError('Could not load issued tickets. Apply the Step 4 Supabase migration and confirm administrator access.');
+        setTickets([]);
+      } else {
+        setTickets((data || []) as unknown as CandidateTicket[]);
+      }
+      setLoadingTickets(false);
+    }).catch(() => {
+      if (active) {
+        setError('Could not load issued tickets. Check the Supabase connection.');
+        setLoadingTickets(false);
+      }
+    });
+    return () => { active = false; };
+  }, [examId]);
+
   const issueTicket = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
@@ -59,13 +86,16 @@ export const AdminMCQTicketIssuer: React.FC = () => {
         p_ttl_hours: ttlHours
       });
       if (rpcError) throw new Error(rpcError.message);
-      const row = (Array.isArray(data) ? data[0] : data) as unknown as { ticket_token?: string; ticket_expires_at?: string } | null;
+      const row = (Array.isArray(data) ? data[0] : data) as unknown as { ticket_id?: string; ticket_token?: string; ticket_expires_at?: string } | null;
       if (!row?.ticket_token) throw new Error('The server did not return a candidate ticket.');
       // Use the URL fragment so the bearer token is not sent in HTTP requests or referrer headers.
       const url = `${window.location.origin}/mcq#ticket=${encodeURIComponent(row.ticket_token)}`;
       setTicketUrl(url);
       setTicketToken(row.ticket_token);
+      setActiveTicketId(row.ticket_id || '');
       setExpiresAt(row.ticket_expires_at || '');
+      const { data: ticketRows } = await supabase.rpc('list_mcq_candidate_tickets', { p_exam_id: examId });
+      setTickets((ticketRows || []) as unknown as CandidateTicket[]);
       setNotice('Ticket issued. Share this link privately with the intended candidate. Anyone holding the link can use it until it expires or is revoked.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to issue candidate ticket.');
@@ -83,16 +113,20 @@ export const AdminMCQTicketIssuer: React.FC = () => {
     }
   };
 
-  const revokeTicket = async () => {
-    if (!ticketToken || revoking) return;
+  const revokeTicket = async (ticketId = activeTicketId) => {
+    if (!ticketId || revoking) return;
     setRevoking(true);
     setError('');
     try {
-      const { data, error: rpcError } = await supabase.rpc('revoke_mcq_candidate_ticket', { p_ticket_token: ticketToken });
+      const { data, error: rpcError } = await supabase.rpc('revoke_mcq_candidate_ticket_by_id', { p_ticket_id: ticketId });
       if (rpcError) throw new Error(rpcError.message);
       if (data !== true) throw new Error('Ticket was not found or could not be revoked.');
-      setTicketUrl('');
-      setTicketToken('');
+      setTickets((rows) => rows.map((row) => row.ticket_id === ticketId ? { ...row, revoked_at: row.revoked_at || new Date().toISOString(), attempt_status: row.attempt_status === 'IN_PROGRESS' ? 'ABANDONED' : row.attempt_status } : row));
+      if (ticketId === activeTicketId) {
+        setTicketUrl('');
+        setTicketToken('');
+        setActiveTicketId('');
+      }
       setNotice('Ticket revoked. The candidate can no longer start or continue this attempt.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not revoke this ticket.');
@@ -108,7 +142,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
     {loading ? <p>Loading published exams…</p> : exams.length === 0 ? <p role="alert">No published exams are available. Publish an exam before issuing candidate tickets.</p> : (
       <form onSubmit={(event) => void issueTicket(event)} style={{ display: 'grid', gap: 14, marginTop: 22 }}>
         <label style={label}>Published examination
-          <select required value={examId} onChange={(e) => setExamId(e.target.value)} style={input}>
+          <select required value={examId} onChange={(e) => { setExamId(e.target.value); setTicketUrl(''); setTicketToken(''); setActiveTicketId(''); }} style={input}>
             {exams.map((exam) => <option key={exam.id} value={exam.id}>{exam.title}</option>)}
           </select>
         </label>
@@ -138,11 +172,35 @@ export const AdminMCQTicketIssuer: React.FC = () => {
       <p style={{ overflowWrap: 'anywhere', fontSize: 13 }}>{ticketUrl}</p>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <button type="button" onClick={() => void copyLink()} style={secondaryButton}>Copy secure link</button>
-        <button type="button" onClick={() => void revokeTicket()} disabled={revoking || !ticketToken} style={{ ...secondaryButton, color: '#dc2626' }}>{revoking ? 'Revoking…' : 'Revoke ticket'}</button>
+        <button type="button" onClick={() => void revokeTicket()} disabled={revoking || !activeTicketId} style={{ ...secondaryButton, color: '#dc2626' }}>{revoking ? 'Revoking…' : 'Revoke ticket'}</button>
       </div>
       {expiresAt && <p style={{ fontSize: 12, color: '#64748b' }}>Expires: {new Date(expiresAt).toLocaleString()}</p>}
       <p style={{ fontSize: 12, color: '#b45309' }}>Treat this link like a password. It grants access to the named candidate's exam until it expires or is revoked.</p>
     </div>}
+    <section style={{ marginTop: 28, borderTop: '1px solid var(--border)', paddingTop: 22 }}>
+      <h2 style={{ fontSize: 17, marginBottom: 8 }}>Issued candidate tickets</h2>
+      <p style={{ color: '#64748b', fontSize: 13, lineHeight: 1.5 }}>Ticket links are shown only once. This list stores no bearer token and lets you revoke tickets later.</p>
+      {loadingTickets ? <p>Loading tickets…</p> : tickets.length === 0 ? <p style={{ color: '#64748b' }}>No tickets issued for this exam yet.</p> : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead><tr>
+              <th style={tableHead}>Candidate</th><th style={tableHead}>Issued / expires</th><th style={tableHead}>Attempt</th><th style={tableHead}>Ticket</th><th style={tableHead}>Action</th>
+            </tr></thead>
+            <tbody>{tickets.map((ticket) => {
+              const expired = new Date(ticket.expires_at).getTime() <= Date.now();
+              const status = ticket.revoked_at ? 'REVOKED' : expired ? 'EXPIRED' : 'ACTIVE';
+              return <tr key={ticket.ticket_id}>
+                <td style={tableCell}><strong>{ticket.student_name}</strong><div style={{ color: '#64748b' }}>{ticket.student_roll}</div></td>
+                <td style={tableCell}>{new Date(ticket.issued_at).toLocaleString()}<div style={{ color: '#64748b' }}>Expires {new Date(ticket.expires_at).toLocaleString()}</div></td>
+                <td style={tableCell}>{ticket.attempt_status || 'Not started'}</td>
+                <td style={tableCell}>{status}</td>
+                <td style={tableCell}><button type="button" onClick={() => void revokeTicket(ticket.ticket_id)} disabled={revoking || Boolean(ticket.revoked_at)} style={{ ...secondaryButton, color: '#dc2626', opacity: ticket.revoked_at ? .5 : 1 }}>{ticket.revoked_at ? 'Revoked' : revoking ? 'Revoking…' : 'Revoke'}</button></td>
+              </tr>;
+            })}</tbody>
+          </table>
+        </div>
+      )}
+    </section>
   </section></main>;
 };
 
@@ -155,3 +213,5 @@ const twoCols: React.CSSProperties = { display: 'grid', gridTemplateColumns: 're
 const primaryButton: React.CSSProperties = { background: '#2563eb', color: '#fff', border: 0, borderRadius: 10, padding: '12px 18px', fontWeight: 700, cursor: 'pointer' };
 const secondaryButton: React.CSSProperties = { background: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 14px', fontWeight: 600, cursor: 'pointer' };
 const linkBox: React.CSSProperties = { marginTop: 22, border: '1px solid var(--border)', borderRadius: 12, padding: 16, background: 'var(--bg-main)' };
+const tableHead: React.CSSProperties = { textAlign: 'left', borderBottom: '1px solid var(--border)', padding: '10px 8px', color: '#64748b', whiteSpace: 'nowrap' };
+const tableCell: React.CSSProperties = { textAlign: 'left', borderBottom: '1px solid var(--border)', padding: '12px 8px', verticalAlign: 'top' };
