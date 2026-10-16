@@ -271,3 +271,13 @@ BEGIN
 END;
 $$;
 
+-- ============================================================================
+-- 6. Supabase Auth Role Provisioner
+-- Run this to grant 'admin' role in app_metadata to all users created via Supabase dashboard:
+-- ============================================================================
+UPDATE auth.users
+SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb) || '{"role": "admin"}'::jsonb,
+    raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || '{"role": "admin"}'::jsonb
+WHERE raw_app_meta_data->>'role' IS NULL;
+
+

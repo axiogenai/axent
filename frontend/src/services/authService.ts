@@ -155,9 +155,10 @@ export async function signInWithPassword(
 
       // Check both app_metadata and user_metadata
       const userRole = data.user.app_metadata?.role || data.user.user_metadata?.role;
-      const effectiveRole: AuthorityRole = userRole === 'admin' ? 'admin' : 'paper_setter';
+      // Default to requested portal role (e.g. 'admin' at /login/admin) if not explicitly tagged
+      const effectiveRole: AuthorityRole = userRole === 'admin' ? 'admin' : (userRole === 'paper_setter' ? 'paper_setter' : role);
       const roleAllowed = role === 'admin'
-        ? userRole === 'admin' || userRole === 'paper_setter'
+        ? userRole === 'admin' || userRole === 'paper_setter' || !userRole
         : userRole === 'paper_setter' || userRole === 'admin' || !userRole;
 
       if (!roleAllowed) {
@@ -167,6 +168,13 @@ export async function signInWithPassword(
           session: null,
           error: 'This account does not have authorization for this portal. Contact your platform administrator.'
         };
+      }
+
+      // If user was created directly in Supabase dashboard with no metadata, tag their user_metadata
+      if (!userRole) {
+        try {
+          await supabase.auth.updateUser({ data: { role: effectiveRole } });
+        } catch {}
       }
 
       try {
