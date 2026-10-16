@@ -80,6 +80,9 @@ CREATE TABLE IF NOT EXISTS public.mcq_exams (
     negative_marking_enabled BOOLEAN DEFAULT false,
     allow_review BOOLEAN DEFAULT true,
     show_explanations_after_submit BOOLEAN DEFAULT true,
+    result_declaration_mode TEXT NOT NULL DEFAULT 'IMMEDIATE',
+    whatsapp_group_name TEXT DEFAULT '',
+    whatsapp_group_link TEXT DEFAULT '',
     max_attempts INT DEFAULT 1,
     status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT', 'PUBLISHED', 'CLOSED', 'ARCHIVED')),
     created_at BIGINT NOT NULL,
@@ -114,6 +117,10 @@ CREATE TABLE IF NOT EXISTS public.mcq_attempts (
     unfocused_seconds NUMERIC DEFAULT 0,
     infraction_log JSONB DEFAULT '[]'::jsonb
 );
+
+ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS result_declaration_mode TEXT NOT NULL DEFAULT 'IMMEDIATE';
+ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS whatsapp_group_name TEXT DEFAULT '';
+ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS whatsapp_group_link TEXT DEFAULT '';
 
 -- 4. Candidate Workstations (CCTV Telemetry)
 CREATE TABLE IF NOT EXISTS public.candidate_stations (
