@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS public.mcq_candidate_tickets (
 CREATE INDEX IF NOT EXISTS idx_mcq_candidate_tickets_exam_roll
   ON public.mcq_candidate_tickets(exam_id, student_roll);
 ALTER TABLE public.mcq_candidate_tickets ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.mcq_candidate_tickets FROM anon, authenticated;
+REVOKE ALL ON public.mcq_candidate_tickets FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.mcq_candidate_tickets TO service_role;
 
 ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS result_declaration_mode text NOT NULL DEFAULT 'IMMEDIATE';
@@ -434,7 +434,7 @@ DROP POLICY IF EXISTS "Trusted authorities read MCQ attempts" ON public.mcq_atte
 ALTER TABLE public.mcq_questions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mcq_exams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mcq_attempts ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.mcq_questions, public.mcq_exams, public.mcq_attempts FROM anon;
+REVOKE ALL ON public.mcq_questions, public.mcq_exams, public.mcq_attempts FROM PUBLIC, anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.mcq_questions, public.mcq_exams, public.mcq_attempts TO authenticated;
 
 CREATE POLICY "Trusted authorities manage MCQ questions"
