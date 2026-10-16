@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, useLocation, Link } from 'react-router-do
 
 const SAFE_AUTH_REDIRECTS = new Set([
   '/admin',
+  '/admin/mcq-tickets',
   '/paper-setter',
   '/invite',
   '/login/invite',
