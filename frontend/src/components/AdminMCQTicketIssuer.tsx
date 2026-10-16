@@ -140,6 +140,21 @@ export const AdminMCQTicketIssuer: React.FC = () => {
     }
   };
 
+  const refreshTickets = async () => {
+    if (!examId || loadingTickets) return;
+    setLoadingTickets(true);
+    setError('');
+    try {
+      const { data, error: rpcError } = await supabase.rpc('list_mcq_candidate_tickets', { p_exam_id: examId });
+      if (rpcError) throw new Error(rpcError.message);
+      setTickets((data || []) as unknown as CandidateTicket[]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not refresh candidate tickets.');
+    } finally {
+      setLoadingTickets(false);
+    }
+  };
+
   const unlockAttempt = async (attemptId: string) => {
     if (!attemptId || unlockingAttemptId) return;
     setUnlockingAttemptId(attemptId);
@@ -203,7 +218,10 @@ export const AdminMCQTicketIssuer: React.FC = () => {
       <p style={{ fontSize: 12, color: '#b45309' }}>Treat this link like a password. It grants access to the named candidate's exam until it expires or is revoked.</p>
     </div>}
     <section style={{ marginTop: 28, borderTop: '1px solid var(--border)', paddingTop: 22 }}>
-      <h2 style={{ fontSize: 17, marginBottom: 8 }}>Issued candidate tickets</h2>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <h2 style={{ fontSize: 17, marginBottom: 8 }}>Issued candidate tickets</h2>
+        <button type="button" onClick={() => void refreshTickets()} disabled={loadingTickets} style={secondaryButton}>{loadingTickets ? 'Refreshing…' : 'Refresh list'}</button>
+      </div>
       <p style={{ color: '#64748b', fontSize: 13, lineHeight: 1.5 }}>Ticket links are shown only once. This list stores no bearer token and lets you revoke tickets later.</p>
       {loadingTickets ? <p>Loading tickets…</p> : tickets.length === 0 ? <p style={{ color: '#64748b' }}>No tickets issued for this exam yet.</p> : (
         <div style={{ overflowX: 'auto' }}>
