@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../services/supabaseService';
+import { syncMcqLiveStation } from '../services/adminService';
+import { MCQAttempt, MCQExamConfig } from '../types/mcq';
+import { StudentInfo } from '../types/dna';
 
 type Option = { id: string; text: string };
 type AssignedQuestion = {
@@ -33,6 +36,9 @@ type ActiveAttempt = {
   candidate?: { name: string; rollNumber: string; department?: string; semester?: string; division?: string };
   assignedQuestions: AssignedQuestion[];
   answers: Record<string, string>;
+  tabSwitchCount?: number;
+  unfocusedSeconds?: number;
+  proctorLocked?: boolean;
 };
 type Result = {
   status: string;
@@ -64,6 +70,16 @@ export const SecureMCQExam: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<Result | null>(null);
+  const [proctorLocked, setProctorLocked] = useState(false);
+  const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const [unfocusedSeconds, setUnfocusedSeconds] = useState(0);
+  const [screenSharing, setScreenSharing] = useState(false);
+  const [checkingUnlock, setCheckingUnlock] = useState(false);
+  const awayStartMs = useRef<number | null>(null);
+  const screenTrackRef = useRef<MediaStreamTrack | null>(null);
+  const screenVideoRef = useRef<HTMLVideoElement | null>(null);
+  const screenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const screenIntervalRef = useRef<number | null>(null);
   const submitLock = useRef(false);
   const serverOffsetMs = useRef(0);
   const timeoutSubmitAttempted = useRef(false);
@@ -87,6 +103,9 @@ export const SecureMCQExam: React.FC = () => {
         const next = data as unknown as ActiveAttempt;
         setAttempt(next);
         setAnswers(next.answers || {});
+        setTabSwitchCount(Number(next.tabSwitchCount || 0));
+        setUnfocusedSeconds(Number(next.unfocusedSeconds || 0));
+        setProctorLocked(Boolean(next.proctorLocked));
         serverOffsetMs.current = Number((data as any).serverTime || Date.now()) - Date.now();
         setRemaining(Math.max(0, Number(next.deadline) - (Date.now() + serverOffsetMs.current)));
         setLoading(false);
@@ -135,6 +154,189 @@ export const SecureMCQExam: React.FC = () => {
     const timer = window.setInterval(tick, 500);
     return () => window.clearInterval(timer);
   }, [attempt, result, submit]);
+
+  const recordProctorEvent = useCallback(async (eventName: string, awaySeconds = 0, details = '') => {
+    if (!attempt || result) return;
+    try {
+      const { data, error: rpcError } = await supabase.rpc('record_mcq_proctor_event', {
+        p_ticket_token: ticket,
+        p_attempt_id: attempt.attemptId,
+        p_event: eventName,
+        p_away_seconds: Math.max(0, Math.min(3600, Math.floor(awaySeconds))),
+        p_details: details.slice(0, 300)
+      });
+      if (rpcError || !data) {
+        setError(rpcError?.message || 'Proctoring event could not be synchronized.');
+        return;
+      }
+      const event = data as { tabSwitchCount?: number; unfocusedSeconds?: number; locked?: boolean };
+      setTabSwitchCount(Number(event.tabSwitchCount || 0));
+      setUnfocusedSeconds(Number(event.unfocusedSeconds || 0));
+      setProctorLocked(Boolean(event.locked));
+    } catch {
+      setError('Proctoring connection interrupted. Keep the examination open and contact the invigilator.');
+    }
+  }, [attempt, result, ticket]);
+
+  useEffect(() => {
+    if (!attempt || result) return;
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        if (awayStartMs.current === null) awayStartMs.current = Date.now();
+        return;
+      }
+      if (awayStartMs.current !== null) {
+        const awaySeconds = Math.round((Date.now() - awayStartMs.current) / 1000);
+        awayStartMs.current = null;
+        void recordProctorEvent('TAB_SWITCH', awaySeconds, 'Examination tab or window lost focus');
+      }
+    };
+    const onContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      void recordProctorEvent('RIGHT_CLICK', 0, 'Context menu attempt blocked');
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      const restricted = event.key === 'F12' ||
+        ((event.ctrlKey || event.metaKey) && ['c','v','x','u','s','p'].includes(key)) ||
+        ((event.ctrlKey || event.metaKey) && event.shiftKey && ['i','j','c'].includes(key));
+      if (!restricted) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void recordProctorEvent('RESTRICTED_SHORTCUT', 0, 'Restricted keyboard shortcut blocked');
+    };
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement) void recordProctorEvent('FULLSCREEN_EXIT', 0, 'Exam left full-screen mode');
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    document.addEventListener('contextmenu', onContextMenu);
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      document.removeEventListener('contextmenu', onContextMenu);
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+    };
+  }, [attempt, result, recordProctorEvent]);
+
+  const requestFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+    } catch {
+      setError('Full-screen permission was not granted. Use the full-screen control or contact the invigilator.');
+    }
+  };
+
+  const startScreenShare = async () => {
+    if (!attempt || result || screenSharing) return;
+    try {
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        setError('This browser does not support screen sharing. Contact the invigilator.');
+        return;
+      }
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: 'always' } as MediaTrackConstraints, audio: false });
+      const track = stream.getVideoTracks()[0];
+      if (!track) throw new Error('No screen-sharing track was provided.');
+      screenTrackRef.current = track;
+      const video = document.createElement('video');
+      video.autoplay = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.srcObject = stream;
+      screenVideoRef.current = video;
+      await video.play();
+      setScreenSharing(true);
+      void recordProctorEvent('SCREEN_SHARE_STARTED', 0, 'Candidate started screen sharing');
+
+      const profile = (() => {
+        try {
+          const raw = localStorage.getItem('codedna_student_profile');
+          if (!raw) return null;
+          const parsed = JSON.parse(raw) as Partial<StudentInfo>;
+          if ((parsed.rollNumber || '').trim().toLowerCase() !== (attempt.candidate?.rollNumber || '').trim().toLowerCase()) return null;
+          if (!parsed.labId || !parsed.stationNumber) return null;
+          return parsed as StudentInfo;
+        } catch { return null; }
+      })();
+
+      if (profile) {
+        const telemetryAttempt = {
+          id: attempt.attemptId, examId: attempt.examId, examTitle: attempt.examTitle,
+          studentName: attempt.candidate?.name || '', studentRoll: attempt.candidate?.rollNumber || '',
+          studentDept: attempt.candidate?.department || '', studentSem: attempt.candidate?.semester || '',
+          studentDiv: attempt.candidate?.division || '', startTime: Number(attempt.deadline) - Number(attempt.durationMinutes || 0) * 60000,
+          deadline: Number(attempt.deadline), status: attempt.status, assignedQuestions: attempt.assignedQuestions,
+          answers, maxScore: 0, tabSwitchCount, unfocusedSeconds, infractionLog: []
+        } as unknown as MCQAttempt;
+        const telemetryExam = {
+          id: attempt.examId, title: attempt.examTitle, questionCount: attempt.assignedQuestions.length,
+          durationMinutes: attempt.durationMinutes || 0, totalMarks: 0, questionIds: attempt.assignedQuestions.map(q => q.questionId),
+          status: 'PUBLISHED'
+        } as unknown as MCQExamConfig;
+        const canvas = document.createElement('canvas');
+        canvas.width = 480;
+        canvas.height = 270;
+        screenCanvasRef.current = canvas;
+        screenIntervalRef.current = window.setInterval(() => {
+          if (!screenVideoRef.current || !screenTrackRef.current || screenTrackRef.current.readyState !== 'live') return;
+          const ctx = canvas.getContext('2d');
+          if (!ctx || screenVideoRef.current.videoWidth <= 0) return;
+          ctx.drawImage(screenVideoRef.current, 0, 0, 480, 270);
+          syncMcqLiveStation(telemetryAttempt, telemetryExam, profile, index, false, {
+            screenImageData: canvas.toDataURL('image/jpeg', 0.55),
+            hasLiveScreenStream: true
+          });
+        }, 1800);
+      }
+      track.onended = () => stopScreenShare();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Screen sharing was canceled or could not start.');
+      setScreenSharing(false);
+    }
+  };
+
+  const stopScreenShare = () => {
+    if (screenIntervalRef.current !== null) {
+      window.clearInterval(screenIntervalRef.current);
+      screenIntervalRef.current = null;
+    }
+    if (screenTrackRef.current) {
+      screenTrackRef.current.onended = null;
+      screenTrackRef.current.stop();
+      screenTrackRef.current = null;
+    }
+    setScreenSharing(false);
+    void recordProctorEvent('SCREEN_SHARE_STOPPED', 0, 'Candidate screen sharing stopped');
+  };
+
+  useEffect(() => () => {
+    if (screenIntervalRef.current !== null) window.clearInterval(screenIntervalRef.current);
+    if (screenTrackRef.current) {
+      screenTrackRef.current.onended = null;
+      screenTrackRef.current.stop();
+    }
+  }, []);
+
+  const checkProctorUnlock = async () => {
+    if (!attempt || checkingUnlock) return;
+    setCheckingUnlock(true);
+    try {
+      const { data, error: rpcError } = await supabase.rpc('start_mcq_attempt', { p_ticket_token: ticket });
+      if (rpcError || !data) throw new Error(rpcError?.message || 'Could not refresh the attempt state.');
+      const latest = data as unknown as ActiveAttempt;
+      setAttempt(latest);
+      setAnswers(latest.answers || {});
+      setTabSwitchCount(Number(latest.tabSwitchCount || 0));
+      setUnfocusedSeconds(Number(latest.unfocusedSeconds || 0));
+      setProctorLocked(Boolean(latest.proctorLocked));
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not check unlock status.');
+    } finally {
+      setCheckingUnlock(false);
+    }
+  };
 
   const selectAnswer = async (question: AssignedQuestion, optionId: string) => {
     if (!attempt || result || saving || submitting) return;
@@ -214,6 +416,16 @@ export const SecureMCQExam: React.FC = () => {
       </header>
       {attempt.instructions && <p style={{ background: '#f1f5f9', borderRadius: 10, padding: 12 }}>{attempt.instructions}</p>}
       {error && <p role="alert" style={{ color: '#dc2626' }}>{error}</p>}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', margin: '12px 0' }}>
+        <span style={{ fontSize: 12, color: proctorLocked ? '#b45309' : '#64748b' }}>Proctoring: {tabSwitchCount} tab switches · {unfocusedSeconds}s away · {screenSharing ? 'screen shared' : 'screen not shared'}</span>
+        <button type="button" style={secondaryButton} onClick={() => void requestFullscreen()}>Enter full screen</button>
+        <button type="button" style={secondaryButton} onClick={() => void (screenSharing ? stopScreenShare() : startScreenShare())}>{screenSharing ? 'Stop screen share' : 'Share screen with invigilator'}</button>
+      </div>
+      {proctorLocked && <div role="alert" style={{ border: '1px solid #f59e0b', background: 'rgba(245,158,11,.10)', padding: 14, borderRadius: 10, marginBottom: 16 }}>
+        <strong>Examination locked after three focus violations.</strong>
+        <p>Answers are blocked by the server until an administrator unlocks this attempt. Contact the invigilator, then check again.</p>
+        <button type="button" style={secondaryButton} disabled={checkingUnlock} onClick={() => void checkProctorUnlock()}>{checkingUnlock ? 'Checking…' : 'Check invigilator unlock'}</button>
+      </div>}
       <div style={progressRow}><span>Question {index + 1} of {attempt.assignedQuestions.length}</span><span>{Object.keys(answers).filter((key) => Boolean(answers[key])).length} answered</span></div>
       <div style={progressTrack}><div style={{ ...progressFill, width: `${((index + 1) / Math.max(1, attempt.assignedQuestions.length)) * 100}%` }} /></div>
       {question && <article>
@@ -222,7 +434,7 @@ export const SecureMCQExam: React.FC = () => {
         <div style={{ display: 'grid', gap: 10, marginTop: 18 }}>
           {orderedOptions.map((option, optionIndex) => {
             const selected = answers[question.questionId] === option.id;
-            return <button key={option.id} type="button" disabled={saving || submitting} onClick={() => void selectAnswer(question, option.id)}
+            return <button key={option.id} type="button" disabled={saving || submitting || proctorLocked} onClick={() => void selectAnswer(question, option.id)}
               style={{ ...optionStyle, ...(selected ? selectedOptionStyle : {}) }}>
               <span style={optionLetter}>{String.fromCharCode(65 + optionIndex)}</span><span style={{ textAlign: 'left', flex: 1 }}>{option.text}</span>
               {selected && <span aria-label="Selected">✓</span>}
