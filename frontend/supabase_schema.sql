@@ -202,7 +202,7 @@ DROP POLICY IF EXISTS "Trusted admin manages MCQ attempts" ON public.mcq_attempt
 DROP POLICY IF EXISTS "Trusted authorities read MCQ attempts" ON public.mcq_attempts;
 -- MCQ data is only accessible to users with trusted Supabase app_metadata roles.
 -- Candidate attempts are created/graded through the secure RPCs in the Step 4 migration.
-REVOKE ALL ON public.mcq_questions, public.mcq_exams, public.mcq_attempts FROM anon;
+REVOKE ALL ON public.mcq_questions, public.mcq_exams, public.mcq_attempts FROM PUBLIC, anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.mcq_questions, public.mcq_exams, public.mcq_attempts TO authenticated;
 
 CREATE POLICY "Trusted authorities manage MCQ questions" ON public.mcq_questions FOR ALL TO authenticated
