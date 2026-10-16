@@ -1,11 +1,29 @@
-import React from 'react';
-import { useSearchParams } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SecureMCQExam } from './SecureMCQExam';
 
 export const MCQHub: React.FC = () => {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const hashTicket = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('ticket');
   const ticket = hashTicket || searchParams.get('ticket');
+
+  useEffect(() => {
+    if (ticket) {
+      try { localStorage.setItem('codedna_active_exam_mode', 'MCQ'); } catch {}
+      return;
+    }
+    try {
+      const activeMode = localStorage.getItem('codedna_active_exam_mode');
+      const rawProfile = localStorage.getItem('codedna_student_profile');
+      let isCodingStudent = activeMode === 'CODING';
+      if (rawProfile) {
+        const profile = JSON.parse(rawProfile);
+        if (profile.name && profile.rollNumber && profile.examMode === 'CODING') isCodingStudent = true;
+      }
+      if (isCodingStudent) navigate('/workspace', { replace: true });
+    } catch {}
+  }, [navigate, ticket]);
 
   if (ticket) return <SecureMCQExam />;
 
