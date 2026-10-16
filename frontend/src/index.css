@@ -1271,3 +1271,36 @@ input[type=number].no-spin {
     min-height: 200px;
   }
 }
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   UNIVERSAL MOBILE RESPONSIVENESS & TOUCH HARDENING (ACROSS ALL PORTALS)
+═════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Prevent horizontal screen bleed */
+  body, #root {
+    overflow-x: hidden;
+    width: 100%;
+  }
+
+  /* Make form inputs touchable without iOS auto-zoom */
+  input[type="text"],
+  input[type="password"],
+  input[type="email"],
+  input[type="number"],
+  select,
+  textarea {
+    font-size: 14px !important;
+  }
+
+  /* Touch buttons standard touch-action */
+  .btn {
+    touch-action: manipulation;
+  }
+
+  /* Modals full-width clamp on mobile */
+  .modal-dialog {
+    width: 96vw !important;
+    max-width: 96vw !important;
+    margin: 8px auto !important;
+  }
+}

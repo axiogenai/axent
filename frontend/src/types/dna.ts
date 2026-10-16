@@ -209,6 +209,8 @@ export interface CandidateStation {
   proctorWarningMessage?: string;
   tabSwitchViolations?: number;
   unfocusedTimeSeconds?: number;
+  audioViolations?: number;
+  aiAssistanceAlerts?: number;
   infractionHistory?: Array<{ timestamp: string; event: string; duration?: number }>;
   lastUpdatedTimestamp?: number;
   examMode?: 'CODING' | 'MCQ';

@@ -33,7 +33,7 @@ export const PaperSetterPortal: React.FC = () => {
         style={{
           background: 'var(--bg-elevated)',
           borderBottom: '1px solid var(--border)',
-          padding: '12px 24px',
+          padding: '12px clamp(12px, 3vw, 24px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -99,10 +99,12 @@ export const PaperSetterPortal: React.FC = () => {
         style={{
           background: 'var(--bg-elevated)',
           borderBottom: '1px solid var(--border)',
-          padding: '0 24px',
+          padding: '0 clamp(12px, 3vw, 24px)',
           display: 'flex',
           alignItems: 'center',
-          height: '46px'
+          height: '46px',
+          overflowX: 'auto',
+          scrollbarWidth: 'none'
         }}
       >
         <ContinuousTabs
@@ -115,7 +117,7 @@ export const PaperSetterPortal: React.FC = () => {
       </div>
 
       {/* ── Content Area (full width) ── */}
-      <div style={{ flex: 1, padding: '24px', width: '100%', boxSizing: 'border-box' }}>
+      <div style={{ flex: 1, padding: 'clamp(12px, 3vw, 24px)', width: '100%', boxSizing: 'border-box' }}>
         {activeTab === 'exams' && <MCQCreateExam />}
         {activeTab === 'bank' && <MCQQuestionBank />}
         {activeTab === 'results' && <MCQResults />}

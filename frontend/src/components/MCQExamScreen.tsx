@@ -9,12 +9,14 @@ import {
 import { MCQAttempt, MCQExamConfig, MCQGradeResult, MCQ_STORAGE_KEYS } from '../types/mcq';
 import {
   getAllExams, getActiveAttempt, getAllAttempts, getAttemptsForExam, startAttempt, saveAnswer,
-  submitAttempt, gradeAttempt, getRecentSessionAttempt, recordInfraction, updateUnfocusedTime, onMcqDataChanged, onExamsChanged, syncFromSupabase, persistAttemptToCloud
+  submitAttempt, gradeAttempt, getRecentSessionAttempt, recordInfraction, updateUnfocusedTime,
+  pardonInfractions, onMcqDataChanged, onExamsChanged, syncFromSupabase, persistAttemptToCloud
 } from '../services/mcqService';
 import { playSound } from '../utils/sounds';
 import { parseExamToken } from '../utils/tokenParser';
 import { syncMcqLiveStation, subscribeToCctvBroadcast, isStationLocked } from '../services/adminService';
 import { fetchSingleStationLockStatus, updateStationLockInCloud } from '../services/supabaseService';
+import { startAntiCheatingShield } from '../services/antiCheatingGuard';
 import { StudentInfo, ExamCategory } from '../types/dna';
 import { SimpleSelect } from './watermelon/Select';
 import { ConfirmationModal, ModalDetailItem } from './ConfirmationModal';
@@ -2239,7 +2241,16 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     void persistAttemptToCloud(currentAttemptId);
   }, [attempt, student, answers, exam, allExamsList, currentIdx]);
 
-  const isStrictLocked = Boolean((isLockedByProctor || (attempt && attempt.tabSwitchCount >= 3)) && attempt && attempt.status === 'IN_PROGRESS' && !submitted);
+  const cleanStationNum = (student.stationNumber || '01').replace(/[^0-9]/g, '') || '01';
+  const stationId = `${student.labId || 'LAB-01'}-WS-${cleanStationNum.padStart(2, '0')}`;
+  const isExplicitPardoned = typeof window !== 'undefined' ? localStorage.getItem(`codedna_lock_station_${stationId}`) === 'false' : false;
+  const isStrictLocked = Boolean(
+    !isExplicitPardoned &&
+    (isLockedByProctor || (attempt && attempt.tabSwitchCount >= 3)) &&
+    attempt &&
+    attempt.status === 'IN_PROGRESS' &&
+    !submitted
+  );
 
   // Strict Hardware Lockdown: Intercept and freeze all Keyboard, Mouse, Pointer, Touch & Scroll events
   useEffect(() => {
@@ -2315,6 +2326,53 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     };
   }, []);
 
+  // Multi-Vector Anti-Cheating & AI Surveillance Shield (Acoustic mic, DOM AI extensions, Cursor departures, Mobile strictness)
+  useEffect(() => {
+    if (!attempt || attempt.status !== 'IN_PROGRESS' || submitted) return;
+
+    const shield = startAntiCheatingShield({
+      stationId,
+      labId: student.labId || 'LAB-01',
+      onInfraction: (reason: string) => {
+        recordInfraction(attempt.id, reason);
+        playSound('warning');
+        setAttempt((prev) => {
+          if (!prev) return null;
+          const newCount = prev.tabSwitchCount + 1;
+          const updated: MCQAttempt = {
+            ...prev,
+            tabSwitchCount: newCount,
+          };
+          if (newCount >= 3) {
+            setProctorWarning(`ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded! Workstation frozen. Contact Invigilator.`);
+            setIsLockedByProctor(true);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(`codedna_lock_station_${stationId}`, 'true');
+            }
+            updateStationLockInCloud(stationId, true, `ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded.`, student.labId || 'LAB-01');
+          }
+          return updated;
+        });
+      },
+      onWarningBanner: (msg: string) => {
+        setProctorWarning(msg);
+        playSound('warning');
+      },
+      onAudioAlert: () => {
+        setProctorWarning('AUDIO SURVEILLANCE ALERT: Voice or ambient acoustic activity detected in workstation environment.');
+      },
+      onAiAlert: (source: string) => {
+        recordInfraction(attempt.id, `AI Assistant Injection Detected: ${source}`);
+        setProctorWarning(`CRITICAL PROCTOR INTERVENTION: Unauthorized AI Assistant or Extension (${source}) detected! Close all sidebars.`);
+        playSound('warning');
+      }
+    });
+
+    return () => {
+      shield.stop();
+    };
+  }, [attempt?.id, attempt?.status, submitted, stationId, student.name, student.labId]);
+
   useEffect(() => {
     // Academic Lockdown only activates during an active examination session
     if (!attempt || attempt.status !== 'IN_PROGRESS') {
@@ -2322,8 +2380,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       return;
     }
 
-    const cleanStationNum = (student.stationNumber || '01').replace(/[^0-9]/g, '') || '01';
-    const stationId = `${student.labId || 'LAB-01'}-WS-${cleanStationNum.padStart(2, '0')}`;
+    const cleanNum = cleanStationNum.padStart(2, '0');
     
     // Explicit station lock check: if station was explicitly unlocked, do not trigger stale lock
     const explicitStationLock = typeof window !== 'undefined' ? localStorage.getItem(`codedna_lock_station_${stationId}`) : null;
@@ -2334,8 +2391,15 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     }
 
     const unsubscribe = subscribeToCctvBroadcast((msg) => {
+      const isMatch = msg.stationId === 'all' ||
+        msg.stationId === stationId ||
+        msg.stationId === student.stationNumber ||
+        msg.stationId?.endsWith(`WS-${cleanNum}`) ||
+        msg.stationId === cleanStationNum ||
+        msg.stationId === parseInt(cleanStationNum, 10).toString();
+
       if (msg.type === 'LOCK_COMMAND') {
-        if (msg.stationId === 'all' || msg.stationId === stationId) {
+        if (isMatch) {
           if (typeof window !== 'undefined') {
             localStorage.setItem(`codedna_lock_station_${stationId}`, msg.isLocked ? 'true' : 'false');
           }
@@ -2344,18 +2408,21 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
             playSound('warning');
           } else {
             setProctorWarning(null);
+            if (attempt) {
+              pardonInfractions(attempt.id);
+            }
             // CRITICAL: When unlocked by proctor, reset tabSwitchCount and unfocusedSeconds on the attempt so isStrictLocked lifts immediately!
             setAttempt((prev) => prev ? { ...prev, tabSwitchCount: 0, unfocusedSeconds: 0 } : null);
             playSound('success');
           }
         }
       } else if (msg.type === 'PROCTOR_MESSAGE') {
-        if (msg.stationId === 'all' || msg.stationId === stationId) {
+        if (isMatch) {
           setProctorWarning(msg.warningMessage || 'Attention: Maintain visual focus on your examination terminal.');
           playSound('warning');
         }
       } else if (msg.type === 'CONCLUDE_AND_FREE') {
-        if (msg.stationId === 'all' || msg.stationId === stationId) {
+        if (isMatch) {
           void handleConcludeAndReleaseDevice();
         }
       }
@@ -2373,6 +2440,9 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           } else if (!cloudStatus.isLocked && isLockedByProctor) {
             setIsLockedByProctor(false);
             setProctorWarning(null);
+            if (attempt) {
+              pardonInfractions(attempt.id);
+            }
             setAttempt((prev) => prev ? { ...prev, tabSwitchCount: 0, unfocusedSeconds: 0 } : null);
             playSound('success');
           } else if (cloudStatus.warningMessage && cloudStatus.warningMessage !== proctorWarning) {
@@ -2389,7 +2459,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       unsubscribe();
       clearInterval(pollInterval);
     };
-  }, [student.labId, student.stationNumber, attempt]);
+  }, [student.labId, student.stationNumber, attempt, stationId, cleanStationNum]);
 
   // Load exam config & subscribe to cloud sync
   useEffect(() => {

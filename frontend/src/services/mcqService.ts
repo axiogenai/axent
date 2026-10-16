@@ -832,6 +832,21 @@ export function updateUnfocusedTime(attemptId: string, totalSeconds: number): vo
   void saveAttemptToCloud(all[idx]);
 }
 
+/** Pardon candidate infractions when unlocked by proctor */
+export function pardonInfractions(attemptId: string): void {
+  const all = getAllAttempts();
+  const idx = all.findIndex((a) => a.id === attemptId);
+  if (idx < 0) return;
+  all[idx] = {
+    ...all[idx],
+    tabSwitchCount: 0,
+    unfocusedSeconds: 0,
+    lastActivityAt: Date.now()
+  };
+  save(MCQ_STORAGE_KEYS.ATTEMPTS, all);
+  void saveAttemptToCloud(all[idx]);
+}
+
 // ── GRADING ENGINE ────────────────────────────────────────────────────────────
 
 /**

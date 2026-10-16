@@ -175,19 +175,21 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* ── Navigation Tabs (Filtered strictly by Role and Registered Exam Type) ── */}
       {activeNavItems.length > 1 ? (
-        <ContinuousTabs
-          layoutId="navbar-primary-tabs"
-          size="md"
-          activeId={activeId}
-          onChange={(path) => navigate(path)}
-          tabs={activeNavItems.map(({ path, label, icon: Icon, badge, badgeColor }) => ({
-            id: path,
-            label,
-            icon: <Icon size={13} />,
-            badge,
-            badgeTone: badgeColor === 'danger' ? 'danger' : badgeColor === 'warning' ? 'warning' : 'neutral'
-          }))}
-        />
+        <div style={{ overflowX: 'auto', scrollbarWidth: 'none', maxWidth: '60vw', display: 'flex', alignItems: 'center' }}>
+          <ContinuousTabs
+            layoutId="navbar-primary-tabs"
+            size="md"
+            activeId={activeId}
+            onChange={(path) => navigate(path)}
+            tabs={activeNavItems.map(({ path, label, icon: Icon, badge, badgeColor }) => ({
+              id: path,
+              label,
+              icon: <Icon size={13} />,
+              badge,
+              badgeTone: badgeColor === 'danger' ? 'danger' : badgeColor === 'warning' ? 'warning' : 'neutral'
+            }))}
+          />
+        </div>
       ) : null}
 
       {/* ── Controls & Mode ── */}
@@ -199,7 +201,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => navigate('/mcq')}
             title="Candidate Examination Portal"
             style={{
-              height: '28px',
+              height: '30px',
               padding: '0 10px',
               gap: '5px',
               fontSize: '11px',
@@ -211,7 +213,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }}
           >
             <ExternalLink size={12} />
-            <span className="hidden sm:inline">Candidate Portal</span>
+            <span>Candidate Portal</span>
           </button>
         ) : null}
 
@@ -222,7 +224,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => navigate('/admin')}
             title="Switch to Chief Proctor CCTV Live Surveillance"
             style={{
-              height: '28px',
+              height: '30px',
               padding: '0 10px',
               gap: '5px',
               fontSize: '11px',
@@ -233,8 +235,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               color: '#ef4444'
             }}
           >
-            <ShieldAlert size={12} color="#ef4444" />
-            <span className="hidden sm:inline">Admin CCTV</span>
+            <ShieldAlert size={13} color="#ef4444" />
+            <span>Admin CCTV</span>
           </button>
         ) : null}
 
@@ -245,7 +247,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => navigate('/paper-setter')}
             title="Open Paper Setter & Examination Builder Portal"
             style={{
-              height: '28px',
+              height: '30px',
               padding: '0 10px',
               gap: '5px',
               fontSize: '11px',
@@ -256,8 +258,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               color: 'var(--text-secondary)'
             }}
           >
-            <Layers size={12} />
-            <span className="hidden sm:inline">Paper Setter</span>
+            <Layers size={13} />
+            <span>Paper Setter</span>
           </button>
         ) : null}
 

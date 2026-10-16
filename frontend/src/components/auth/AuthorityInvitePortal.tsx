@@ -212,7 +212,7 @@ export const AuthorityInvitePortal: React.FC = () => {
         {/* ── Brand Header ── */}
         <div
           style={{
-            padding: '26px 30px 20px',
+            padding: 'clamp(16px, 4vw, 26px) clamp(16px, 4vw, 30px) clamp(14px, 3vw, 20px)',
             borderBottom: '1px solid var(--border)',
             background: 'var(--bg-surface)'
           }}
@@ -263,13 +263,15 @@ export const AuthorityInvitePortal: React.FC = () => {
             {/* Authenticated Authority Status Banner */}
             <div
               style={{
-                padding: '10px 30px',
+                padding: '10px clamp(16px, 4vw, 30px)',
                 background: 'var(--bg-surface)',
                 borderBottom: '1px solid var(--border)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                fontSize: '11.5px'
+                fontSize: '11.5px',
+                flexWrap: 'wrap',
+                gap: '8px'
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -282,7 +284,7 @@ export const AuthorityInvitePortal: React.FC = () => {
             </div>
 
             {/* Role Selector: Paper Setter vs Admin */}
-            <div style={{ padding: '20px 30px 10px' }}>
+            <div style={{ padding: '20px clamp(16px, 4vw, 30px) 10px' }}>
               <label
                 style={{
                   display: 'block',
@@ -299,7 +301,7 @@ export const AuthorityInvitePortal: React.FC = () => {
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))',
                   gap: '10px'
                 }}
               >
@@ -374,7 +376,7 @@ export const AuthorityInvitePortal: React.FC = () => {
             </div>
 
             {/* Form Container */}
-            <form onSubmit={handleDispatch} style={{ padding: '10px 30px 24px' }}>
+            <form onSubmit={handleDispatch} style={{ padding: '10px clamp(16px, 4vw, 30px) 24px' }}>
               {/* Feedback Alerts */}
               {errorMessage && (
                 <div

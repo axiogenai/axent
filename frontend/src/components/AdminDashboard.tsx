@@ -77,7 +77,10 @@ import {
   ListChecks,
   BookOpen,
   Database,
-  VideoOff
+  VideoOff,
+  Bot,
+  Mic,
+  Send
 } from 'lucide-react';
 import { playSound } from '../utils/sounds';
 import {
@@ -100,6 +103,14 @@ export const getEffectiveMaxMarks = (station: CandidateStation): number => {
 };
 
 export const isStationEffectiveLocked = (station: CandidateStation): boolean => {
+  if (typeof window !== 'undefined') {
+    const explicit = localStorage.getItem(`codedna_lock_station_${station.id}`);
+    if (explicit === 'false') return false; // Proctor explicitly pardoned and unlocked!
+    if (explicit === 'true') return true;  // Proctor explicitly locked!
+  }
+  if (station.isLockedByProctor === false && (station.metrics?.tabSwitchViolations || 0) === 0) {
+    return false;
+  }
   return isStationLocked(station.id, station.labId) ||
     Boolean(station.isLockedByProctor) ||
     (station.metrics?.tabSwitchViolations || 0) >= 3 ||
@@ -136,6 +147,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [showResetRoomConfirm, setShowResetRoomConfirm] = useState(false);
   const [showClearSubmittedConfirm, setShowClearSubmittedConfirm] = useState(false);
   const [noticeModalMessage, setNoticeModalMessage] = useState<string | null>(null);
+  const [warningStationTarget, setWarningStationTarget] = useState<CandidateStation | null>(null);
+  const [warningMessageInput, setWarningMessageInput] = useState<string>('Maintain your visual focus on the examination screen at all times.');
   const [stationViewMode, setStationViewMode] = useState<Record<string, 'camera' | 'activity'>>({});
 
   const loadData = async () => {
@@ -444,9 +457,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         display: 'flex',
         flexDirection: 'column',
         background: 'var(--bg-main)',
-        padding: '20px 24px',
+        padding: 'clamp(12px, 2.5vw, 24px)',
         overflowY: 'auto',
-        gap: '18px'
+        gap: 'clamp(12px, 2vw, 18px)'
       }}
     >
       {/* ── TOP CAMPUS MACRO KPI RIBBON (50 LABS SCALE) ── */}
@@ -1368,8 +1381,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       fontSize: '12px'
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {Boolean((station.metrics?.tabSwitchViolations || 0) > 0) ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      {Boolean(station.aiAssistanceAlerts && station.aiAssistanceAlerts > 0) ? (
+                        <span style={{ color: '#ef4444', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          <Bot size={12} /> AI Alert ({station.aiAssistanceAlerts})
+                        </span>
+                      ) : Boolean(station.audioViolations && station.audioViolations > 0) ? (
+                        <span style={{ color: '#f59e0b', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          <Mic size={12} /> Voice ({station.audioViolations})
+                        </span>
+                      ) : Boolean((station.metrics?.tabSwitchViolations || 0) > 0) ? (
                         <span style={{ color: '#ef4444', fontWeight: 600 }}>
                           {station.metrics.tabSwitchViolations}/3 strikes
                         </span>
@@ -1480,14 +1501,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          const msg = window.prompt(
-                            `Broadcast proctor alert to ${station.student.name || station.stationNumber}:`,
-                            'Keep your hands on the keyboard and focus on your exam window.'
-                          );
-                          if (msg) {
-                            sendProctorWarningMessage(station.id, msg);
-                            setNoticeModalMessage(`Proctor notice broadcast to ${station.stationNumber}`);
-                          }
+                          setWarningStationTarget(station);
+                          setWarningMessageInput('Maintain your visual focus on the examination screen at all times.');
+                          playSound('click');
                         }}
                         style={{
                           background: 'rgba(255, 255, 255, 0.05)',
@@ -1705,6 +1721,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </button>
                           );
                         })()}
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => {
+                            setWarningStationTarget(station);
+                            setWarningMessageInput('Maintain your visual focus on the examination screen at all times.');
+                            playSound('click');
+                          }}
+                          style={{ height: '24px', padding: '0 6px', fontSize: '11px', color: 'var(--warning)' }}
+                          title="Broadcast warning alert"
+                        >
+                          <ShieldAlert size={11} />
+                          <span>Warn</span>
+                        </button>
                         {station.status !== 'Submitted & Done' && isStationEffectiveLocked(station) && (
                           <button
                             className="btn btn-secondary btn-sm"
@@ -1773,7 +1803,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 100,
-            padding: '16px'
+            padding: 'clamp(8px, 2vw, 16px)'
           }}
           onClick={() => setSelectedStationId(null)}
         >
@@ -1787,7 +1817,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               background: 'var(--bg-main)',
               border: '1px solid var(--border)',
               borderRadius: 'var(--radius-md)',
-              padding: '20px',
+              padding: 'clamp(12px, 3vw, 20px)',
               display: 'flex',
               flexDirection: 'column',
               gap: '16px',
@@ -1964,14 +1994,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => {
-                    const msg = window.prompt(
-                      `Broadcast invigilator alert notice to ${selectedStation.student.name || selectedStation.stationNumber}:`,
-                      'Please focus on your code window. Invigilator is monitoring your workstation.'
-                    );
-                    if (msg) {
-                      sendProctorWarningMessage(selectedStation.id, msg);
-                      setNoticeModalMessage(`Notice sent to ${selectedStation.stationNumber}`);
-                    }
+                    setWarningStationTarget(selectedStation);
+                    setWarningMessageInput('Maintain your visual focus on the examination screen at all times.');
+                    playSound('click');
                   }}
                   style={{ height: '28px', fontSize: '11px', padding: '0 10px' }}
                   title="Display warning banner directly on student terminal"
@@ -2410,6 +2435,150 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           onConfirm={() => setNoticeModalMessage(null)}
           onCancel={() => setNoticeModalMessage(null)}
         />
+      )}
+
+      {/* Proctor Warning Dispatch Modal */}
+      {warningStationTarget && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000,
+            background: 'rgba(0, 0, 0, 0.75)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            backdropFilter: 'blur(4px)'
+          }}
+          onClick={() => setWarningStationTarget(null)}
+        >
+          <div
+            style={{
+              maxWidth: '480px',
+              width: '100%',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: 'var(--shadow-md)',
+              overflow: 'hidden'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                padding: '14px 18px',
+                borderBottom: '1px solid var(--border)',
+                background: 'var(--bg-surface)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ShieldAlert size={16} color="var(--danger, #ef4444)" />
+                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Dispatch Proctor Warning to {warningStationTarget.stationNumber}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWarningStationTarget(null)}
+                className="btn btn-ghost btn-sm"
+                style={{ padding: '2px 6px' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                Candidate: <strong>{warningStationTarget.student.name || 'Unnamed Candidate'}</strong> ({warningStationTarget.student.rollNumber || 'No USN'})
+              </div>
+
+              <div>
+                <span style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
+                  Quick Preset Warnings
+                </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {[
+                    'Maintain your visual focus on the examination screen at all times.',
+                    'Notice: Secondary monitors and floating AI assistants are strictly prohibited.',
+                    'Acoustic alert: Speech / whisper detected. Maintain absolute examination silence.',
+                    'Final warning: Alt+Tab / window blur recorded. Next infraction will trigger academic freeze.'
+                  ].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setWarningMessageInput(preset)}
+                      style={{
+                        padding: '6px 10px',
+                        fontSize: '11.5px',
+                        textAlign: 'left',
+                        borderRadius: 'var(--radius-xs)',
+                        border: warningMessageInput === preset ? '1px solid var(--accent)' : '1px solid var(--border)',
+                        background: warningMessageInput === preset ? 'var(--bg-surface)' : 'transparent',
+                        color: warningMessageInput === preset ? 'var(--text-primary)' : 'var(--text-secondary)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      • {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
+                  Broadcast Message
+                </label>
+                <textarea
+                  value={warningMessageInput}
+                  onChange={(e) => setWarningMessageInput(e.target.value)}
+                  rows={3}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    fontSize: '12.5px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg-surface)',
+                    color: 'var(--text-primary)',
+                    boxSizing: 'border-box',
+                    fontFamily: 'inherit',
+                    resize: 'none'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => setWarningStationTarget(null)}
+                  className="btn btn-secondary btn-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (warningMessageInput.trim()) {
+                      sendProctorWarningMessage(warningStationTarget.id, warningMessageInput.trim(), warningStationTarget.labId);
+                      setNoticeModalMessage(`Proctor warning broadcast to ${warningStationTarget.stationNumber}`);
+                      playSound('click');
+                      setWarningStationTarget(null);
+                    }
+                  }}
+                  className="btn btn-danger btn-sm"
+                  style={{ gap: '6px' }}
+                >
+                  <Send size={12} />
+                  <span>Send Warning Banner</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

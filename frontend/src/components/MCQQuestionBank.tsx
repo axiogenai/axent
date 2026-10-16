@@ -228,7 +228,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({ initial, onSave, onClos
         </div>
 
         {/* Metadata row */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '12px', marginBottom: '16px' }}>
           <div>
             <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' }}>Subject *</label>
             <input value={form.subject} onChange={(e) => set('subject', e.target.value)}
@@ -414,7 +414,7 @@ const AiGeneratorModal: React.FC<AiGeneratorModalProps> = ({ onAddQuestions, onC
               Use the autonomous reasoning engine to synthesize university-level multiple choice questions with 4 verified options, single correct answer, and explanation.
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '12px' }}>
               <div>
                 <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '5px' }}>Subject</label>
                 <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Operating Systems"
@@ -427,7 +427,7 @@ const AiGeneratorModal: React.FC<AiGeneratorModalProps> = ({ onAddQuestions, onC
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '12px' }}>
               <div>
                 <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '5px' }}>Difficulty</label>
                 <select value={difficulty} onChange={(e) => setDifficulty(e.target.value as MCQDifficulty)}
@@ -487,7 +487,7 @@ const AiGeneratorModal: React.FC<AiGeneratorModalProps> = ({ onAddQuestions, onC
                       </div>
                       <div style={{ flex: 1 }}>
                         <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{idx + 1}. {q.text}</p>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '6px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '4px', marginBottom: '6px' }}>
                           {q.options.map((opt, oIdx) => (
                             <div key={oIdx} style={{ fontSize: '11.5px', color: opt.isCorrect ? 'var(--success)' : 'var(--text-secondary)', fontWeight: opt.isCorrect ? 700 : 400 }}>
                               {String.fromCharCode(65 + oIdx)}. {opt.text} {opt.isCorrect && '✓'}

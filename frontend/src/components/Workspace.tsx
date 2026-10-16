@@ -79,6 +79,7 @@ import { fetchSingleStationLockStatus } from '../services/supabaseService';
 import { ExtendedToolbar } from './watermelon/ExtendedToolbar';
 import { SubmitActionButton } from './watermelon/SubmitActionButton';
 import { ContinuousTabs, MetricTag, SimpleSelect } from './watermelon-ui';
+import { startAntiCheatingShield } from '../services/antiCheatingGuard';
 
 interface WorkspaceProps {
   initialCode?: string;
@@ -487,14 +488,24 @@ export const Workspace: React.FC<WorkspaceProps> = ({
       }
     }, 2000);
 
-    const unsubscribe = subscribeToCctvBroadcast((msg) => {
-      if (msg.type === 'LOCK_COMMAND') {
-        const isForMe =
-          msg.stationId === myStationId ||
-          msg.stationId === 'all' ||
-          (!msg.stationId && (msg.labId === 'all' || msg.labId === activeLab || !msg.labId));
+    const cleanStationNum = (student.stationNumber || '01').replace(/[^0-9]/g, '') || '01';
+    const paddedStationNum = cleanStationNum.padStart(2, '0');
 
+    const unsubscribe = subscribeToCctvBroadcast((msg) => {
+      const isForMe =
+        msg.stationId === myStationId ||
+        msg.stationId === 'all' ||
+        msg.stationId === student.stationNumber ||
+        msg.stationId?.endsWith(`WS-${paddedStationNum}`) ||
+        msg.stationId === cleanStationNum ||
+        msg.stationId === parseInt(cleanStationNum, 10).toString() ||
+        (!msg.stationId && (msg.labId === 'all' || msg.labId === activeLab || !msg.labId));
+
+      if (msg.type === 'LOCK_COMMAND') {
         if (isForMe && msg.isLocked !== undefined) {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`${STATION_LOCK_PREFIX}${myStationId}`, msg.isLocked ? 'true' : 'false');
+          }
           setIsLockedByProctor(msg.isLocked);
           if (!msg.isLocked) {
             setTabSwitchCount(0);
@@ -515,9 +526,18 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           checkLockStatus();
         }
       } else if (msg.type === 'PROCTOR_MESSAGE') {
-        if (msg.stationId === myStationId || msg.stationId === 'all' || msg.labId === activeLab) {
+        if (isForMe) {
           setProctorNotice(msg.warningMessage || 'Invigilator Notice Received');
           playSound('warning');
+        }
+      } else if (msg.type === 'CONCLUDE_AND_FREE') {
+        if (isForMe) {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`${STATION_LOCK_PREFIX}${myStationId}`, 'false');
+          }
+          setIsLockedByProctor(false);
+          executeStartNewCandidate();
+          playSound('success');
         }
       } else if (msg.type === 'RESET_ALL') {
         setIsLockedByProctor(false);
@@ -574,6 +594,50 @@ export const Workspace: React.FC<WorkspaceProps> = ({
     window.addEventListener('keydown', blockAllKeystrokes, true);
     return () => window.removeEventListener('keydown', blockAllKeystrokes, true);
   }, [isEffectiveLocked]);
+
+  // ── MULTI-VECTOR ANTI-CHEATING & AI SURVEILLANCE SHIELD (Workspace) ──
+  useEffect(() => {
+    if (isExamSubmitted || !isCandidateRegistered) return;
+
+    const activeLab = student.labId || getActiveLabId() || 'LAB-01';
+    const myStationId = buildWorkstationId(activeLab, student.stationNumber);
+
+    const shield = startAntiCheatingShield({
+      stationId: myStationId,
+      labId: activeLab,
+      onInfraction: (reason: string) => {
+        playSound('warning');
+        setTabSwitchCount((prev) => {
+          const newCount = prev + 1;
+          setInfractionNotice({
+            strike: newCount,
+            message: `PROCTOR INFRACTION: ${reason}`,
+            duration: 5
+          });
+          if (newCount >= 3) {
+            setIsLockedByProctor(true);
+            setProctorNotice(`TERMINAL LOCKED: 3/3 Infractions Exceeded! Contact Invigilator.`);
+          }
+          return newCount;
+        });
+      },
+      onWarningBanner: (msg: string) => {
+        setProctorNotice(msg);
+        playSound('warning');
+      },
+      onAudioAlert: () => {
+        setProctorNotice('AUDIO SURVEILLANCE: Voice/sound detected in exam environment.');
+      },
+      onAiAlert: (source: string) => {
+        playSound('warning');
+        setProctorNotice(`CRITICAL SECURITY ALERT: Unauthorized AI Assistant (${source}) detected! Close all extensions.`);
+      }
+    });
+
+    return () => {
+      shield.stop();
+    };
+  }, [isExamSubmitted, isCandidateRegistered, student.labId, student.stationNumber, student.name]);
 
   // ── ADVANCED KIOSK & TAB-SWITCH / ALT+TAB INFRACTION DETECTOR ──
   useEffect(() => {
