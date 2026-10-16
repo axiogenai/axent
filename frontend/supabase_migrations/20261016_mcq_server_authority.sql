@@ -224,7 +224,7 @@ CREATE OR REPLACE FUNCTION public.record_mcq_proctor_event(
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions AS $
 DECLARE t public.mcq_candidate_tickets%ROWTYPE; a public.mcq_attempts%ROWTYPE; now_ms bigint; v_count integer;
 BEGIN
-  IF p_event NOT IN ('TAB_SWITCH','RIGHT_CLICK','RESTRICTED_SHORTCUT','FULLSCREEN_EXIT','SCREEN_SHARE_STOPPED','SCREEN_SHARE_STARTED') THEN
+  IF p_event IS NULL OR p_event NOT IN ('TAB_SWITCH','RIGHT_CLICK','RESTRICTED_SHORTCUT','FULLSCREEN_EXIT','SCREEN_SHARE_STOPPED','SCREEN_SHARE_STARTED') THEN
     RAISE EXCEPTION 'unsupported proctor event' USING ERRCODE='22023';
   END IF;
   IF COALESCE(p_away_seconds,0)<0 OR COALESCE(p_away_seconds,0)>3600 THEN
