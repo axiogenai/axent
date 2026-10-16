@@ -511,6 +511,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </a>
 
           <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => navigate('/admin/mcq-tickets')}
+            style={{ gap: '5px', fontSize: '11px' }}
+            title="Issue a server-verified, candidate-specific MCQ exam link"
+          >
+            <BookOpen size={12} />
+            <span>Issue MCQ Ticket</span>
+          </button>
+
+          <button
             className="btn btn-ghost btn-sm"
             onClick={() => {
               setShowResetRoomConfirm(true);
