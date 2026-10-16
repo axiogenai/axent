@@ -689,21 +689,9 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
               </div>
 
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>
-                    Password
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playSound('click');
-                      navigate('/invite');
-                    }}
-                    style={{ background: 'none', border: 'none', padding: 0, fontSize: '11.5px', color: 'var(--accent)', cursor: 'pointer', fontWeight: 600 }}
-                  >
-                    Need an Invite Link?
-                  </button>
-                </div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', marginBottom: '5px' }}>
+                  Password
+                </label>
                 <div style={{ position: 'relative' }}>
                   <Lock size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
                   <input
