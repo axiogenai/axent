@@ -31,6 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SECRET_KEY: test-only-ci-secret-key-not-used-in-deployment
+      SECURE_SSL_REDIRECT: "False"
     defaults:
       run:
         working-directory: backend
