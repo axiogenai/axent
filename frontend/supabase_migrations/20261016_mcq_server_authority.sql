@@ -27,6 +27,9 @@ ALTER TABLE public.mcq_candidate_tickets ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.mcq_candidate_tickets FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.mcq_candidate_tickets TO service_role;
 
+ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS result_declaration_mode text NOT NULL DEFAULT 'IMMEDIATE';
+ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS whatsapp_group_name text DEFAULT '';
+ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS whatsapp_group_link text DEFAULT '';
 ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS student_div text DEFAULT 'A';
 ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS last_activity_at bigint;
 ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS candidate_ticket_id uuid
