@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS public.mcq_attempts (
     start_time BIGINT NOT NULL,
     deadline BIGINT NOT NULL,
     last_activity_at BIGINT,
+    proctor_lock_override BOOLEAN NOT NULL DEFAULT false,
     submit_time BIGINT,
     status TEXT NOT NULL DEFAULT 'IN_PROGRESS' CHECK (status IN ('IN_PROGRESS', 'SUBMITTED', 'TIMED_OUT', 'ABANDONED')),
     assigned_questions JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -113,6 +114,7 @@ BEGIN
 END $backfill$;
 ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS student_div TEXT DEFAULT 'A';
 ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS last_activity_at BIGINT;
+ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS proctor_lock_override BOOLEAN NOT NULL DEFAULT false;
 
 -- 4. Candidate Workstations (CCTV Telemetry)
 CREATE TABLE IF NOT EXISTS public.candidate_stations (
