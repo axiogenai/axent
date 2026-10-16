@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase, fetchExamsFromCloud } from '../services/supabaseService';
+import { getAllExams } from '../services/mcqService';
 import { MCQExamConfig } from '../types/mcq';
 
 type CandidateTicket = { ticket_id: string; student_name: string; student_roll: string; issued_at: string; expires_at: string; revoked_at: string | null; attempt_id: string | null; attempt_status: string | null; attempt_tab_switch_count: number; proctor_lock_override: boolean };
@@ -30,13 +31,18 @@ export const AdminMCQTicketIssuer: React.FC = () => {
     let active = true;
     void fetchExamsFromCloud().then((rows) => {
       if (!active) return;
-      const published = (rows || []).filter((exam) => exam.status === 'PUBLISHED');
+      let published = (rows || []).filter((exam) => exam.status === 'PUBLISHED');
+      if (published.length === 0) {
+        published = getAllExams().filter((exam) => exam.status === 'PUBLISHED');
+      }
       setExams(published);
       setExamId((current) => current || published[0]?.id || '');
       setLoading(false);
     }).catch(() => {
       if (active) {
-        setError('Could not load published exams. Confirm the trusted administrator session and Supabase connection.');
+        const localPublished = getAllExams().filter((exam) => exam.status === 'PUBLISHED');
+        setExams(localPublished);
+        setExamId((current) => current || localPublished[0]?.id || '');
         setLoading(false);
       }
     });

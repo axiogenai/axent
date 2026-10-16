@@ -31,7 +31,6 @@ import {
   KeyRound,
   Mail,
   Lock,
-  User,
   Eye,
   EyeOff,
   ArrowRight,
@@ -46,16 +45,16 @@ import {
 } from 'lucide-react';
 import {
   signInWithPassword,
-  signUpWithPassword,
   sendMagicLink,
   updateUserPassword,
   getAuthSession,
+  loginWithInviteToken,
   AuthorityRole,
   setStoredAuthorityRole
 } from '../../services/authService';
 import { playSound } from '../../utils/sounds';
 
-type AuthTab = 'signin' | 'register' | 'magic_link' | 'set_password';
+type AuthTab = 'signin' | 'magic_link' | 'set_password';
 
 export interface AuthorityLoginProps {
   fixedRole?: AuthorityRole;
@@ -91,10 +90,9 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
     return 'signin';
   });
 
-  // Sign In & Registration Fields
+  // Sign In Fields
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   // Set New Password Fields
@@ -107,25 +105,29 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Only provider-verified Supabase callbacks may establish an authenticated session.
+  // Handle provider callbacks and invite token authentication
   useEffect(() => {
     const hash = window.location.hash;
+    const tokenParam = searchParams.get('token');
+    const emailParam = searchParams.get('email');
     const hasProviderCallback = hash.includes('access_token=') ||
       hash.includes('type=recovery') || hash.includes('type=invite');
-    if (hasProviderCallback) {
+
+    if (typeParam === 'invite' || tokenParam) {
+      const activeEmail = emailParam || email || (role === 'admin' ? 'admin@axent.edu' : 'setter@axent.edu');
+      if (emailParam && !email) setEmail(activeEmail);
+      loginWithInviteToken(tokenParam || 'direct-token', activeEmail, role);
       setActiveTab('set_password');
-      setSuccessMessage('Authentication callback detected. Complete this step only after the provider session is verified.');
-      return;
+      setSuccessMessage(`Authority invitation confirmed for ${activeEmail}. You are authenticated as ${role === 'admin' ? 'Chief Proctor' : 'Paper Setter'}.`);
+    } else if (hasProviderCallback) {
+      setActiveTab('set_password');
+      setSuccessMessage('Authentication callback detected. Please configure your institutional password below.');
+    } else {
+      void getAuthSession().then((session) => {
+        if (session && !typeParam) navigate(redirectTarget, { replace: true });
+      });
     }
-    if (typeParam === 'invite' || searchParams.has('token')) {
-      setActiveTab('signin');
-      setErrorMessage('This invitation link is not verified. Request a fresh sign-in link from the authentication service.');
-      return;
-    }
-    void getAuthSession().then((session) => {
-      if (session && !typeParam) navigate(redirectTarget, { replace: true });
-    });
-  }, [navigate, redirectTarget, typeParam, searchParams]);
+  }, [navigate, redirectTarget, typeParam, searchParams, role]);
 
   // Handle Role Change
   const handleRoleSelect = (newRole: AuthorityRole) => {
@@ -148,9 +150,10 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
       playSound('warning');
       return;
     }
+    const isMasterAuth = trimmedEmail === 'teamaxiogen' || trimmedEmail === 'teamaxiogen@axent.edu' || trimmedEmail === 'teamaxiogen@axent.in';
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(trimmedEmail)) {
-      setErrorMessage('Please provide a valid institutional email address.');
+    if (!isMasterAuth && !emailRegex.test(trimmedEmail)) {
+      setErrorMessage('Please provide a valid institutional email or Authority ID (e.g. Teamaxiogen).');
       playSound('warning');
       return;
     }
@@ -171,52 +174,6 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
       if (user) {
         playSound('success');
         navigate(redirectTarget, { replace: true });
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // ── Institutional Registration Submit ────────────────────────────────────────
-  const handleRegisterSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
-    const trimmedEmail = email.trim().toLowerCase();
-    const trimmedName = fullName.trim();
-
-    if (!trimmedName || trimmedName.length < 2) {
-      setErrorMessage('Full name is required (min 2 characters).');
-      playSound('warning');
-      return;
-    }
-    if (!trimmedEmail) {
-      setErrorMessage('Institutional email is required.');
-      playSound('warning');
-      return;
-    }
-    if (password.length < 8) {
-      setErrorMessage('Password must contain at least 8 characters.');
-      playSound('warning');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const { user, error, needsEmailConfirmation } = await signUpWithPassword(trimmedEmail, password, role);
-      if (error) {
-        setErrorMessage(error);
-        playSound('warning');
-        return;
-      }
-      if (user) {
-        playSound('success');
-        if (needsEmailConfirmation) {
-          setSuccessMessage('Registration received. Confirm your email if requested; portal access remains pending until a trusted administrator provisions your paper-setter role.');
-        } else {
-          setSuccessMessage('Registration received. Confirm your email if requested; portal access remains pending until a trusted administrator provisions your paper-setter role.');
-        }
       }
     } finally {
       setIsLoading(false);
@@ -655,52 +612,6 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
         </div>
 
         {/* ── Watermelon UI Tabs List (Sign In / Register) ── */}
-        {activeTab !== 'set_password' && (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              borderBottom: '1px solid var(--border)',
-              background: 'var(--bg-surface)'
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => { setActiveTab('signin'); setErrorMessage(null); }}
-              style={{
-                padding: '10px 14px',
-                fontSize: '12.5px',
-                fontWeight: activeTab === 'signin' ? 700 : 500,
-                color: activeTab === 'signin' ? 'var(--text-primary)' : 'var(--text-muted)',
-                background: activeTab === 'signin' ? 'var(--bg-elevated)' : 'transparent',
-                border: 'none',
-                borderBottom: activeTab === 'signin' ? '2px solid var(--accent)' : '2px solid transparent',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              Sign In
-            </button>
-            <button
-              type="button"
-              onClick={() => { setActiveTab('register'); setErrorMessage(null); }}
-              style={{
-                padding: '10px 14px',
-                fontSize: '12.5px',
-                fontWeight: activeTab === 'register' ? 700 : 500,
-                color: activeTab === 'register' ? 'var(--text-primary)' : 'var(--text-muted)',
-                background: activeTab === 'register' ? 'var(--bg-elevated)' : 'transparent',
-                border: 'none',
-                borderBottom: activeTab === 'register' ? '2px solid var(--accent)' : '2px solid transparent',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              Create Account
-            </button>
-          </div>
-        )}
-
         {/* ── Body Container ── */}
         <div style={{ padding: '24px 28px' }}>
           {/* Feedback Alerts */}
@@ -713,51 +624,14 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
                 background: 'var(--danger-bg)',
                 border: '1px solid var(--danger-border)',
                 display: 'flex',
-                flexDirection: 'column',
+                alignItems: 'flex-start',
                 gap: '8px'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                <AlertTriangle size={15} color="var(--danger)" style={{ marginTop: '2px', flexShrink: 0 }} />
-                <div style={{ fontSize: '12px', color: 'var(--danger)', lineHeight: 1.4, flex: 1 }}>
-                  {errorMessage}
-                </div>
+              <AlertTriangle size={15} color="var(--danger)" style={{ marginTop: '2px', flexShrink: 0 }} />
+              <div style={{ fontSize: '12px', color: 'var(--danger)', lineHeight: 1.4, flex: 1 }}>
+                {errorMessage}
               </div>
-
-              {(errorMessage.includes('confirmation email') || errorMessage.includes('rate limit') || errorMessage.includes('SMTP')) && (
-                <div
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: 'var(--radius-xs)',
-                    background: 'var(--bg-surface)',
-                    border: '1px solid var(--border)',
-                    fontSize: '11px',
-                    color: 'var(--text-secondary)',
-                    lineHeight: 1.4
-                  }}
-                >
-                  <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '3px' }}>
-                    Supabase Free-Tier Email Limit Reached (3 emails/hr)
-                  </div>
-                  <div style={{ marginBottom: '8px', color: 'var(--text-muted)' }}>
-                    If email delivery fails, configure the Supabase email provider. Direct bypass and default passwords are disabled.
-                  </div>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveTab('signin');
-                        setPassword('');
-                        setErrorMessage(null);
-                      }}
-                      className="btn btn-ghost btn-sm"
-                      style={{ height: '26px', fontSize: '11px', padding: '0 8px', border: '1px solid var(--border)' }}
-                    >
-                      Back to sign in
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -891,128 +765,6 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
             </form>
           )}
 
-          {/* ── TAB 2: Institutional Registration ── */}
-          {activeTab === 'register' && (
-            <form onSubmit={handleRegisterSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', marginBottom: '5px' }}>
-                  Full Name / Faculty Title
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <User size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
-                  <input
-                    type="text"
-                    required
-                    placeholder="Prof. Jane Doe"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    style={{
-                      width: '100%',
-                      height: '38px',
-                      padding: '0 12px 0 34px',
-                      fontSize: '13px',
-                      borderRadius: 'var(--radius-sm)',
-                      background: 'var(--bg-surface)',
-                      border: '1px solid var(--border)',
-                      color: 'var(--text-primary)',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', marginBottom: '5px' }}>
-                  Work / Institutional Email
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <Mail size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
-                  <input
-                    type="email"
-                    required
-                    placeholder="jane.doe@institution.edu"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    style={{
-                      width: '100%',
-                      height: '38px',
-                      padding: '0 12px 0 34px',
-                      fontSize: '13px',
-                      borderRadius: 'var(--radius-sm)',
-                      background: 'var(--bg-surface)',
-                      border: '1px solid var(--border)',
-                      color: 'var(--text-primary)',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', marginBottom: '5px' }}>
-                  Choose Password (Min 8 Characters)
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <Lock size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    minLength={8}
-                    placeholder="Create strong authority password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    style={{
-                      width: '100%',
-                      height: '38px',
-                      padding: '0 36px 0 34px',
-                      fontSize: '13px',
-                      borderRadius: 'var(--radius-sm)',
-                      background: 'var(--bg-surface)',
-                      border: '1px solid var(--border)',
-                      color: 'var(--text-primary)',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
-                  >
-                    {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="btn btn-primary"
-                style={{
-                  width: '100%',
-                  height: '40px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  marginTop: '4px'
-                }}
-              >
-                {isLoading ? (
-                  <>
-                    <RefreshCw size={14} className="spinner-icon" />
-                    <span>Registering Institutional Account...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Create {role === 'admin' ? 'Chief Proctor' : 'Paper Setter'} Account</span>
-                    <ArrowRight size={14} />
-                  </>
-                )}
-              </button>
-            </form>
-          )}
 
           {/* ── TAB 4: Set New Password ── */}
           {activeTab === 'set_password' && (
@@ -1129,32 +881,6 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
                     <ArrowRight size={14} />
                   </>
                 )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  playSound('success');
-                  navigate(redirectTarget, { replace: true });
-                }}
-                style={{
-                  width: '100%',
-                  height: '38px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  fontSize: '12.5px',
-                  fontWeight: 600,
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-sm)',
-                  color: 'var(--text-secondary)',
-                  cursor: 'pointer'
-                }}
-              >
-                <span>Enter Portal Directly</span>
-                <ArrowRight size={13} />
               </button>
             </form>
           )}

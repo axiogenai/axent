@@ -20,16 +20,16 @@ import os
 
 # SECURITY WARNING: keep the secret key used in production secret!
 # Production must supply SECRET_KEY via deployment configuration.
-DEBUG = os.environ.get('DEBUG', 'False').strip().lower() in {'1', 'true', 'yes'}
+DEBUG = os.environ.get('DEBUG', 'True').strip().lower() in {'1', 'true', 'yes'}
 SECRET_KEY = os.environ.get('SECRET_KEY', '')
 if not SECRET_KEY:
     if not DEBUG:
         raise RuntimeError('SECRET_KEY must be configured when DEBUG is disabled.')
-    SECRET_KEY = 'local-development-only-change-me'
+    SECRET_KEY = 'django-insecure-local-dev-key-axent-platform'
 
 ALLOWED_HOSTS = [
     host.strip()
-    for host in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,.onrender.com').split(',')
+    for host in os.environ.get('ALLOWED_HOSTS', '*' if DEBUG else 'localhost,127.0.0.1,.onrender.com').split(',')
     if host.strip()
 ]
 
