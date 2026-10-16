@@ -59,6 +59,7 @@ export const SecureMCQExam: React.FC = () => {
   const [error, setError] = useState('');
   const [result, setResult] = useState<Result | null>(null);
   const submitLock = useRef(false);
+  const serverOffsetMs = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -77,7 +78,8 @@ export const SecureMCQExam: React.FC = () => {
       const next = data as ActiveAttempt;
       setAttempt(next);
       setAnswers(next.answers || {});
-      setRemaining(Math.max(0, Number(next.deadline) - Date.now()));
+      serverOffsetMs.current = Number((data as any).serverTime || Date.now()) - Date.now();
+      setRemaining(Math.max(0, Number(next.deadline) - (Date.now() + serverOffsetMs.current)));
       setLoading(false);
       // Remove the bearer token from the visible URL after it has been read.
       window.history.replaceState(null, '', window.location.pathname);
@@ -112,7 +114,7 @@ export const SecureMCQExam: React.FC = () => {
   useEffect(() => {
     if (!attempt || result) return;
     const tick = () => {
-      const value = Math.max(0, Number(attempt.deadline) - Date.now());
+      const value = Math.max(0, Number(attempt.deadline) - (Date.now() + serverOffsetMs.current));
       setRemaining(value);
       if (value <= 0) void submit();
     };
@@ -125,7 +127,7 @@ export const SecureMCQExam: React.FC = () => {
     if (!attempt || result || saving || submitting) return;
     setSaving(true);
     setError('');
-    const { error: rpcError } = await supabase.rpc('save_mcq_answer', {
+    const { data, error: rpcError } = await supabase.rpc('save_mcq_answer', {
       p_ticket_token: ticket,
       p_attempt_id: attempt.attemptId,
       p_question_id: question.questionId,
@@ -133,6 +135,11 @@ export const SecureMCQExam: React.FC = () => {
     });
     if (rpcError) {
       setError(rpcError.message || 'Your answer was not saved. Please select again.');
+    } else if ((data as any)?.saved === false && (data as any)?.status === 'TIMED_OUT') {
+      setError('The server deadline has passed. Submitting your saved answers…');
+      setSaving(false);
+      void submit();
+      return;
     } else {
       setAnswers((previous) => ({ ...previous, [question.questionId]: optionId }));
     }
