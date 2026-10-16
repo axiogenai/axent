@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Plus, Save, Trash2, ChevronLeft, ChevronRight, CheckSquare,
-  Clock, List, Settings, Eye, AlertCircle, BookOpen, X, Check, GraduationCap, MessageCircle
+  Clock, List, Settings, Eye, AlertCircle, BookOpen, X, Check, GraduationCap, MessageCircle, Copy
 } from 'lucide-react';
 import { MCQExamConfig, MCQExamStatus } from '../types/mcq';
 import { MCQQuestion } from '../types/mcq';
@@ -31,6 +31,15 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [publishErrors, setPublishErrors] = useState<Record<string, string[]>>({});
   const [showAIModal, setShowAIModal] = useState(false);
+  const [copiedExamId, setCopiedExamId] = useState<string | null>(null);
+
+  const handleCopyLink = (examId: string) => {
+    const url = `${window.location.origin}/mcq?examId=${encodeURIComponent(examId)}`;
+    navigator.clipboard.writeText(url);
+    setCopiedExamId(examId);
+    playSound('click');
+    setTimeout(() => setCopiedExamId(null), 2500);
+  };
 
   const reload = () => setExams(getAllExams());
 
@@ -172,23 +181,40 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
                     </button>
                   )}
                   {exam.status === 'PUBLISHED' && (
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`Close exam "${exam.title}"? This will conclude the examination and permanently purge its questions from the central database.`)) {
-                          closeExam(exam.id);
-                          reload();
-                        }
-                      }}
-                      title="Conclude and close exam"
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '4px',
-                        background: 'var(--warning-bg)', border: '1px solid var(--warning-border)',
-                        borderRadius: 'var(--radius-sm)', padding: '6px 12px',
-                        cursor: 'pointer', color: 'var(--warning)', fontSize: '12px', fontWeight: 600,
-                      }}
-                    >
-                      Close Exam
-                    </button>
+                    <>
+                      <button
+                        onClick={() => handleCopyLink(exam.id)}
+                        title="Copy universal student examination link for this paper"
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '5px',
+                          background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-sm)', padding: '6px 12px',
+                          cursor: 'pointer', color: copiedExamId === exam.id ? 'var(--success)' : 'var(--text-primary)',
+                          fontSize: '12px', fontWeight: 600,
+                        }}
+                      >
+                        {copiedExamId === exam.id ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
+                        <span>{copiedExamId === exam.id ? 'Link Copied!' : 'Copy Student Link'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Close exam "${exam.title}"? This will conclude the examination and permanently purge its questions from the central database.`)) {
+                            closeExam(exam.id);
+                            reload();
+                          }
+                        }}
+                        title="Conclude and close exam"
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          background: 'var(--warning-bg)', border: '1px solid var(--warning-border)',
+                          borderRadius: 'var(--radius-sm)', padding: '6px 12px',
+                          cursor: 'pointer', color: 'var(--warning)', fontSize: '12px', fontWeight: 600,
+                        }}
+                      >
+                        Close Exam
+                      </button>
+                    </>
                   )}
                   <button onClick={() => onEdit(exam)} title="Edit exam" style={{
                     background: 'none', border: '1px solid var(--border)',

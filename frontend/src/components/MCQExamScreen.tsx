@@ -1910,8 +1910,8 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
   const [searchParams, setSearchParams] = useSearchParams();
   const [allExamsList, setAllExamsList] = useState<MCQExamConfig[]>(() => getAllExams());
 
-  // Check if there is an active in-progress attempt for this exam or globally
-  const activeAttempt = getActiveAttempt(examId) || getActiveAttempt();
+  // Check if there is an active in-progress attempt for this exam in the active tab session
+  const activeAttempt = getActiveAttempt(examId);
   const initialExamId = (activeAttempt && activeAttempt.status === 'IN_PROGRESS')
     ? activeAttempt.examId
     : examId;
@@ -2419,15 +2419,14 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       const e = exams.find((x) => x.id === activeExamId);
       if (e) setExam(e);
 
-      // Restore active attempt if exists — but NEVER overwrite an already-finalized attempt
-      const active = getActiveAttempt(activeExamId) || getActiveAttempt();
+      // Restore active attempt ONLY if one is actively running in this tab session
+      const active = getActiveAttempt(activeExamId);
       if (active && active.examId === activeExamId && active.status === 'IN_PROGRESS') {
         if (getSynchronizedNow() >= active.deadline) {
-          // Automatically finalize and display results if deadline elapsed!
+          // Automatically finalize if deadline elapsed
           const result = submitAttempt(active.id, active.answers, 'TIMED_OUT') || gradeAttempt(active);
           const finished = { ...active, status: 'TIMED_OUT' as const, score: result.score, correctCount: result.correctCount, wrongCount: result.wrongCount };
           setAttempt((prev) => {
-            // Don't overwrite an already-submitted attempt
             if (prev && prev.status !== 'IN_PROGRESS') return prev;
             return finished;
           });
@@ -2437,7 +2436,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         } else {
           // Only restore IN_PROGRESS state if we haven't already finalized
           setAttempt((prev) => {
-            if (prev && prev.status !== 'IN_PROGRESS') return prev; // Keep finalized state
+            if (prev && prev.status !== 'IN_PROGRESS') return prev;
             return active;
           });
           setAnswers((prev) => {
@@ -2474,17 +2473,8 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
             }));
           }
         }
-      } else {
-        // Check for finished or timed-out attempt for this exam session to display scorecard immediately
-        const recent = getRecentSessionAttempt(activeExamId);
-        if (recent && (recent.status === 'TIMED_OUT' || recent.status === 'SUBMITTED')) {
-          const grade = gradeAttempt(recent);
-          setAttempt((prev) => prev ?? recent);
-          setAnswers((prev) => Object.keys(prev || {}).length > 0 ? prev : (recent.answers || {}));
-          setGradeResult((prev) => prev ?? grade);
-          setSubmitted(true);
-        }
       }
+      // If no active in-progress attempt for this tab session, attempt remains null so RegistrationForm renders cleanly!
     };
 
     // Initial local read
@@ -4017,8 +4007,8 @@ export const MCQExamSelector: React.FC = () => {
     };
   }, []);
 
-  // If candidate has an active attempt in progress, ALWAYS restore that exam immediately!
-  const activeAttempt = getActiveAttempt(queryExamId || undefined) || getActiveAttempt();
+  // If candidate has an active attempt in progress in this tab session, restore it
+  const activeAttempt = getActiveAttempt(queryExamId || undefined);
   const activeExamId = (activeAttempt && activeAttempt.status === 'IN_PROGRESS')
     ? activeAttempt.examId
     : null;
