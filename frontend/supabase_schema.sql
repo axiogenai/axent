@@ -184,6 +184,9 @@ CREATE POLICY "Trusted admin manages MCQ attempts" ON public.mcq_attempts FOR AL
 CREATE POLICY "Trusted authorities read MCQ attempts" ON public.mcq_attempts FOR SELECT TO authenticated
   USING ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'));
 
+DROP POLICY IF EXISTS "Allow public read-write for candidate_stations" ON public.candidate_stations;
+DROP POLICY IF EXISTS "Allow public read-write for college_labs" ON public.college_labs;
+DROP POLICY IF EXISTS "Allow public read-write for code_submissions" ON public.code_submissions;
 -- Coding-related tables remain unchanged for compatibility with the current coding workflow.
 -- Their public policies require a separate authorization migration.
 CREATE POLICY "Allow public read-write for candidate_stations" ON public.candidate_stations FOR ALL USING (true) WITH CHECK (true);
