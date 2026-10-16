@@ -90,7 +90,7 @@ BEGIN
   IF FOUND THEN
     RETURN jsonb_build_object('examId',e.id,'examTitle',e.title,'instructions',e.instructions,'allowReview',e.allow_review,'durationMinutes',e.duration_minutes,
       'candidate',jsonb_build_object('name',a.student_name,'rollNumber',a.student_roll,'department',a.student_dept,'semester',a.student_sem,'division',a.student_div),
-      'attemptId',a.id,'deadline',a.deadline,'status',a.status,'answers',a.answers,
+      'attemptId',a.id,'deadline',a.deadline,'serverTime',now_ms,'status',a.status,'answers',a.answers,
       'assignedQuestions',(SELECT COALESCE(jsonb_agg(jsonb_build_object('questionId',x->>'questionId','order',x->'order',
         'snapshot',(x->'snapshot')-'correctOptionId'-'explanation','shuffledOptionIds',x->'shuffledOptionIds')
         ORDER BY (x->>'order')::int),'[]'::jsonb) FROM jsonb_array_elements(a.assigned_questions) x));
@@ -135,7 +135,7 @@ BEGIN
     (SELECT COALESCE(sum((x->'snapshot'->>'marks')::numeric),0) FROM jsonb_array_elements(assignment) x),t.id) RETURNING * INTO a;
   RETURN jsonb_build_object('examId',e.id,'examTitle',e.title,'instructions',e.instructions,'allowReview',e.allow_review,'durationMinutes',e.duration_minutes,
     'candidate',jsonb_build_object('name',a.student_name,'rollNumber',a.student_roll,'department',a.student_dept,'semester',a.student_sem,'division',a.student_div),
-    'attemptId',a.id,'deadline',a.deadline,'status',a.status,'answers',a.answers,
+    'attemptId',a.id,'deadline',a.deadline,'serverTime',now_ms,'status',a.status,'answers',a.answers,
     'assignedQuestions',(SELECT COALESCE(jsonb_agg(jsonb_build_object('questionId',x->>'questionId','order',x->'order',
       'snapshot',(x->'snapshot')-'correctOptionId'-'explanation','shuffledOptionIds',x->'shuffledOptionIds')
       ORDER BY (x->>'order')::int),'[]'::jsonb) FROM jsonb_array_elements(a.assigned_questions) x));
