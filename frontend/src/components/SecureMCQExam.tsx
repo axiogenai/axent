@@ -76,6 +76,15 @@ export const SecureMCQExam: React.FC = () => {
   const [screenSharing, setScreenSharing] = useState(false);
   const [checkingUnlock, setCheckingUnlock] = useState(false);
   const awayStartMs = useRef<number | null>(null);
+  const answersRef = useRef(answers);
+  const tabSwitchCountRef = useRef(tabSwitchCount);
+  const unfocusedSecondsRef = useRef(unfocusedSeconds);
+
+  useEffect(() => {
+    answersRef.current = answers;
+    tabSwitchCountRef.current = tabSwitchCount;
+    unfocusedSecondsRef.current = unfocusedSeconds;
+  }, [answers, tabSwitchCount, unfocusedSeconds]);
   const screenTrackRef = useRef<MediaStreamTrack | null>(null);
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
   const screenCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -288,6 +297,9 @@ export const SecureMCQExam: React.FC = () => {
           const ctx = canvas.getContext('2d');
           if (!ctx || screenVideoRef.current.videoWidth <= 0) return;
           ctx.drawImage(screenVideoRef.current, 0, 0, 480, 270);
+          telemetryAttempt.answers = answersRef.current;
+          telemetryAttempt.tabSwitchCount = tabSwitchCountRef.current;
+          telemetryAttempt.unfocusedSeconds = unfocusedSecondsRef.current;
           syncMcqLiveStation(telemetryAttempt, telemetryExam, profile, index, false, {
             screenImageData: canvas.toDataURL('image/jpeg', 0.55),
             hasLiveScreenStream: true
