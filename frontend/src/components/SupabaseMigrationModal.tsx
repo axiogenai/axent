@@ -20,6 +20,7 @@ import {
 import { getAllQuestions, getAllExams } from '../services/mcqService';
 import { getAllCollegeLabs } from '../services/adminService';
 import { playSound } from '../utils/sounds';
+import mcqSecurityMigration from '../../supabase_migrations/20261016_mcq_server_authority.sql?raw';
 
 interface SupabaseMigrationModalProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ export const SupabaseMigrationModal: React.FC<SupabaseMigrationModalProps> = ({ 
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedSecurity, setCopiedSecurity] = useState(false);
   const [syncSummary, setSyncSummary] = useState<string | null>(null);
 
   const sqlSchema = `-- ============================================================================
@@ -188,9 +190,21 @@ ALTER TABLE public.candidate_stations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.college_labs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.code_submissions ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow public read-write for mcq_questions" ON public.mcq_questions FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write for mcq_exams" ON public.mcq_exams FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write for mcq_attempts" ON public.mcq_attempts FOR ALL USING (true) WITH CHECK (true);
+-- Secure MCQ data with trusted Supabase app_metadata roles.
+REVOKE ALL ON public.mcq_questions, public.mcq_exams, public.mcq_attempts FROM anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.mcq_questions, public.mcq_exams, public.mcq_attempts TO authenticated;
+CREATE POLICY "Trusted authorities manage MCQ questions" ON public.mcq_questions FOR ALL TO authenticated
+  USING ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'))
+  WITH CHECK ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'));
+CREATE POLICY "Trusted authorities manage MCQ exams" ON public.mcq_exams FOR ALL TO authenticated
+  USING ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'))
+  WITH CHECK ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'));
+CREATE POLICY "Trusted admin manages MCQ attempts" ON public.mcq_attempts FOR ALL TO authenticated
+  USING (auth.jwt()->'app_metadata'->>'role' = 'admin')
+  WITH CHECK (auth.jwt()->'app_metadata'->>'role' = 'admin');
+CREATE POLICY "Trusted authorities read MCQ attempts" ON public.mcq_attempts FOR SELECT TO authenticated
+  USING ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'));
+-- Coding-related policies remain unchanged for compatibility; they need a separate authorization migration.
 CREATE POLICY "Allow public read-write for candidate_stations" ON public.candidate_stations FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read-write for college_labs" ON public.college_labs FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read-write for code_submissions" ON public.code_submissions FOR ALL USING (true) WITH CHECK (true);`;
@@ -217,6 +231,17 @@ CREATE POLICY "Allow public read-write for code_submissions" ON public.code_subm
     setCopied(true);
     playSound('success');
     setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handleCopySecurityMigration = async () => {
+    try {
+      await navigator.clipboard.writeText(mcqSecurityMigration);
+      setCopiedSecurity(true);
+      playSound('success');
+      setTimeout(() => setCopiedSecurity(false), 2500);
+    } catch {
+      playSound('warning');
+    }
   };
 
   const handleSyncData = async () => {
@@ -441,7 +466,7 @@ CREATE POLICY "Allow public read-write for code_submissions" ON public.code_subm
               <span>How to Apply the Schema in 5 Seconds</span>
             </div>
             <p style={{ margin: '0 0 12px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-              The central cloud database gateway enforces strict schema security and prevents automated <code style={{ color: 'var(--accent)' }}>CREATE TABLE</code> execution over anonymous HTTP. To provision or verify tables:
+              The baseline schema creates the tables and restricts MCQ tables to trusted authority roles. For existing projects, apply the separate Step 4 migration below to add ticket-based candidate access and server-side grading. Coding-table policies remain unchanged in this step.
             </p>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -484,8 +509,28 @@ CREATE POLICY "Allow public read-write for code_submissions" ON public.code_subm
                 }}
               >
                 <ExternalLink size={13} />
-                <span>2. Open Database SQL Console & Run</span>
+                <span>3. Open Database SQL Console & Run</span>
               </a>
+
+              <button
+                onClick={handleCopySecurityMigration}
+                style={{
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '9px 14px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: 'var(--text-primary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                {copiedSecurity ? <Check size={13} /> : <ShieldCheck size={13} />}
+                <span>{copiedSecurity ? 'Copied Step 4 Migration' : '2. Copy Step 4 Security Migration'}</span>
+              </button>
 
               <button
                 onClick={handleSyncData}
@@ -505,7 +550,7 @@ CREATE POLICY "Allow public read-write for code_submissions" ON public.code_subm
                 }}
               >
                 <UploadCloud size={13} />
-                <span>{syncing ? 'Syncing...' : '3. Bulk Sync Local Data to Cloud'}</span>
+                <span>{syncing ? 'Syncing...' : '4. Bulk Sync Local Data to Cloud'}</span>
               </button>
             </div>
 
