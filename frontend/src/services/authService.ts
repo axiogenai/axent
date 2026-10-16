@@ -50,13 +50,36 @@ export async function getAuthUser(): Promise<User | null> {
 
 export function getStoredAuthorityRole(): AuthorityRole {
   if (typeof window === 'undefined') return 'paper_setter';
-  const role = localStorage.getItem(LOCAL_ROLE_KEY);
+  const role = sessionStorage.getItem(LOCAL_ROLE_KEY) || localStorage.getItem(LOCAL_ROLE_KEY);
   if (role === 'admin' || role === 'paper_setter') return role;
   return 'paper_setter';
 }
 
+export function getCurrentAuthorityRole(): AuthorityRole | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(LOCAL_AUTH_KEY) || localStorage.getItem(LOCAL_AUTH_KEY);
+    if (!raw) return null;
+    const session = JSON.parse(raw);
+    const metaRole = session?.user?.app_metadata?.role || session?.user?.user_metadata?.role;
+    const storedRole = sessionStorage.getItem(LOCAL_ROLE_KEY) || localStorage.getItem(LOCAL_ROLE_KEY);
+    const effectiveRole = storedRole || metaRole;
+    if (effectiveRole === 'admin' || effectiveRole === 'paper_setter') {
+      return effectiveRole as AuthorityRole;
+    }
+  } catch {}
+  return null;
+}
+
+export function isAuthorityAdmin(): boolean {
+  return getCurrentAuthorityRole() === 'admin';
+}
+
 export function setStoredAuthorityRole(role: AuthorityRole): void {
-  localStorage.setItem(LOCAL_ROLE_KEY, role);
+  try {
+    sessionStorage.setItem(LOCAL_ROLE_KEY, role);
+    localStorage.setItem(LOCAL_ROLE_KEY, role);
+  } catch {}
 }
 
 // ── Auth State Listener ───────────────────────────────────────────────────────
@@ -122,7 +145,9 @@ export async function signInWithPassword(
   } catch {}
 
   if (isMasterAdmin || isDefaultAdmin || isDefaultSetter || isLocalCredValid) {
-    const effectiveRole: AuthorityRole = isMasterAdmin || isDefaultAdmin ? 'admin' : role;
+    const effectiveRole: AuthorityRole = role === 'paper_setter'
+      ? 'paper_setter'
+      : (isMasterAdmin || isDefaultAdmin ? 'admin' : role);
     const session = {
       access_token: `axent-local-${effectiveRole}-${Date.now()}`,
       user: {
@@ -155,8 +180,10 @@ export async function signInWithPassword(
 
       // Check both app_metadata and user_metadata
       const userRole = data.user.app_metadata?.role || data.user.user_metadata?.role;
-      // Default to requested portal role (e.g. 'admin' at /login/admin) if not explicitly tagged
-      const effectiveRole: AuthorityRole = userRole === 'admin' ? 'admin' : (userRole === 'paper_setter' ? 'paper_setter' : role);
+      // If user signed in via Paper Setter Portal, assign paper_setter session role; if via Admin Portal, assign admin
+      const effectiveRole: AuthorityRole = role === 'paper_setter'
+        ? 'paper_setter'
+        : (userRole === 'admin' ? 'admin' : (role === 'admin' ? 'admin' : (userRole === 'paper_setter' ? 'paper_setter' : role)));
       const roleAllowed = role === 'admin'
         ? userRole === 'admin' || userRole === 'paper_setter' || !userRole
         : userRole === 'paper_setter' || userRole === 'admin' || !userRole;
@@ -421,6 +448,8 @@ export async function signOut(): Promise<void> {
     try {
       localStorage.removeItem(LOCAL_AUTH_KEY);
       sessionStorage.removeItem(LOCAL_AUTH_KEY);
+      localStorage.removeItem(LOCAL_ROLE_KEY);
+      sessionStorage.removeItem(LOCAL_ROLE_KEY);
     } catch {}
   }
 }

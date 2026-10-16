@@ -11,6 +11,7 @@ import { MCQQuestionBank } from './MCQQuestionBank';
 import { MCQCreateExam } from './MCQCreateExam';
 import { MCQResults } from './MCQResults';
 import { ContinuousTabs } from './watermelon-ui';
+import { isAuthorityAdmin } from '../services/authService';
 
 type PaperSetterTab = 'exams' | 'bank' | 'results';
 
@@ -23,6 +24,7 @@ const tabs = [
 export const PaperSetterPortal: React.FC = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<PaperSetterTab>('exams');
+  const isAdmin = isAuthorityAdmin();
 
   return (
     <div style={{ minHeight: 'calc(100vh - 52px)', background: 'var(--bg-main)', display: 'flex', flexDirection: 'column' }}>
@@ -65,29 +67,31 @@ export const PaperSetterPortal: React.FC = () => {
           </div>
         </div>
 
-        {/* 1-Click Back to Chief Proctor CCTV Control Room */}
-        <button
-          type="button"
-          onClick={() => navigate('/admin')}
-          className="btn btn-secondary btn-sm"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontSize: '12px',
-            fontWeight: 600,
-            padding: '6px 14px',
-            borderRadius: 'var(--radius-sm)',
-            border: '1px solid rgba(239, 68, 68, 0.4)',
-            background: 'rgba(239, 68, 68, 0.08)',
-            color: '#ef4444',
-            cursor: 'pointer'
-          }}
-          title="Return to Chief Proctor CCTV Live Surveillance"
-        >
-          <ShieldAlert size={14} color="#ef4444" />
-          <span>Chief Proctor CCTV</span>
-        </button>
+        {/* 1-Click Back to Chief Proctor CCTV Control Room (Only visible for Admins) */}
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => navigate('/admin')}
+            className="btn btn-secondary btn-sm"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12px',
+              fontWeight: 600,
+              padding: '6px 14px',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              background: 'rgba(239, 68, 68, 0.08)',
+              color: '#ef4444',
+              cursor: 'pointer'
+            }}
+            title="Return to Chief Proctor CCTV Live Surveillance"
+          >
+            <ShieldAlert size={14} color="#ef4444" />
+            <span>Chief Proctor CCTV</span>
+          </button>
+        )}
       </div>
 
       {/* ── Tab Navigation ── */}

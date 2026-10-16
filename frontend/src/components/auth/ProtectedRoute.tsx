@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
-import { getAuthSession, AuthorityRole, onAuthStateChange } from '../../services/authService';
+import { getAuthSession, AuthorityRole, onAuthStateChange, getCurrentAuthorityRole } from '../../services/authService';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -23,8 +23,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
         return;
       }
 
-      const storedRole = (localStorage.getItem('axent_authority_role') || sessionStorage.getItem('axent_authority_role')) as AuthorityRole | null;
-      const trustedRole = session.user.app_metadata?.role || session.user.user_metadata?.role || storedRole || 'admin';
+      const activeRole = getCurrentAuthorityRole();
+      const trustedRole = activeRole || session.user.app_metadata?.role || session.user.user_metadata?.role || 'paper_setter';
       const roleAllowed = requiredRole === 'admin'
         ? trustedRole === 'admin'
         : trustedRole === 'paper_setter' || trustedRole === 'admin';
@@ -34,11 +34,15 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
     // Listen to live auth changes (e.g. sign in / sign out)
     const unsubscribe = onAuthStateChange((_event, session) => {
       if (!mounted) return;
-      const storedRole = (localStorage.getItem('axent_authority_role') || sessionStorage.getItem('axent_authority_role')) as AuthorityRole | null;
-      const trustedRole = session?.user?.app_metadata?.role || session?.user?.user_metadata?.role || storedRole || 'admin';
-      const roleAllowed = Boolean(session) && (requiredRole === 'admin'
+      if (!session) {
+        setIsAuthenticated(false);
+        return;
+      }
+      const activeRole = getCurrentAuthorityRole();
+      const trustedRole = activeRole || session?.user?.app_metadata?.role || session?.user?.user_metadata?.role || 'paper_setter';
+      const roleAllowed = requiredRole === 'admin'
         ? trustedRole === 'admin'
-        : trustedRole === 'paper_setter' || trustedRole === 'admin');
+        : trustedRole === 'paper_setter' || trustedRole === 'admin';
       setIsAuthenticated(roleAllowed);
     });
 
@@ -70,9 +74,16 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
     );
   }
 
-  // If unauthenticated, redirect to dedicated authority login portal
+  // If unauthenticated or unauthorized, redirect safely
   if (!isAuthenticated) {
-    const targetUrl = `/login/admin?redirect=${encodeURIComponent(location.pathname)}`;
+    const activeRole = getCurrentAuthorityRole();
+    // If a paper_setter user is logged in but attempts to access admin route, redirect back to /paper-setter
+    if (activeRole === 'paper_setter' && requiredRole === 'admin') {
+      return <Navigate to="/paper-setter" replace />;
+    }
+    const targetUrl = requiredRole === 'admin'
+      ? `/login/admin?redirect=${encodeURIComponent(location.pathname)}`
+      : `/login/paper-setter?redirect=${encodeURIComponent(location.pathname)}`;
     return <Navigate to={targetUrl} replace />;
   }
 

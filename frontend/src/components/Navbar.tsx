@@ -14,7 +14,13 @@ import {
   LucideIcon
 } from 'lucide-react';
 import { ThemeMode } from '../types/dna';
-import { signOut } from '../services/authService';
+import {
+  signOut,
+  getCurrentAuthorityRole,
+  isAuthorityAdmin,
+  onAuthStateChange,
+  AuthorityRole
+} from '../services/authService';
 import { ContinuousTabs } from './watermelon-ui';
 
 interface NavbarProps {
@@ -62,15 +68,22 @@ export const Navbar: React.FC<NavbarProps> = ({
   const location = useLocation();
 
   const [examMode, setExamMode] = useState<'MCQ' | 'CODING'>(() => getActiveExamMode());
+  const [authorityRole, setAuthorityRole] = useState<AuthorityRole | null>(() => getCurrentAuthorityRole());
+  const isAdmin = authorityRole === 'admin' || isAuthorityAdmin();
 
-  // Listen to profile/mode changes in local storage across tabs
+  // Listen to profile/mode and authority role changes in storage/auth
   useEffect(() => {
-    const checkMode = () => {
+    const checkState = () => {
       setExamMode(getActiveExamMode());
+      setAuthorityRole(getCurrentAuthorityRole());
     };
-    checkMode();
-    window.addEventListener('storage', checkMode);
-    return () => window.removeEventListener('storage', checkMode);
+    checkState();
+    const unsub = onAuthStateChange(() => checkState());
+    window.addEventListener('storage', checkState);
+    return () => {
+      unsub();
+      window.removeEventListener('storage', checkState);
+    };
   }, [location.pathname]);
 
   const isLandingRoute = location.pathname === '/';
@@ -89,12 +102,25 @@ export const Navbar: React.FC<NavbarProps> = ({
   } else if (isLoginRoute) {
     // Authority Gateway / Login — No student tabs!
     activeNavItems = [];
-  } else if (isAdminRoute || isPaperSetterRoute) {
-    // Authority Navigation: Chief Proctor (Admin CCTV) & Paper Setter Portals
+  } else if (isAdminRoute) {
+    // Admin CCTV Surveillance — Always expose both Admin CCTV & Paper Setter Portal
     activeNavItems = [
       { path: '/admin', label: 'CCTV Live Proctoring', icon: ShieldAlert, badge: 'PROCTOR', badgeColor: 'danger' },
       { path: '/paper-setter', label: 'Paper Setter Portal', icon: Layers }
     ];
+  } else if (isPaperSetterRoute) {
+    // If the authority logged in with Admin credentials, allow full bidirectional switching
+    // But if logged in with Paper Setter credentials, DO NOT show the Admin CCTV portal!
+    if (isAdmin) {
+      activeNavItems = [
+        { path: '/admin', label: 'CCTV Live Proctoring', icon: ShieldAlert, badge: 'PROCTOR', badgeColor: 'danger' },
+        { path: '/paper-setter', label: 'Paper Setter Portal', icon: Layers }
+      ];
+    } else {
+      activeNavItems = [
+        { path: '/paper-setter', label: 'Paper Setter Portal', icon: Layers }
+      ];
+    }
   } else if (isMcqRoute || examMode === 'MCQ') {
     // Registered MCQ Examination — Clean view, no redundant pill in navbar
     activeNavItems = [];
@@ -189,8 +215,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         ) : null}
 
-        {/* If in Paper Setter, provide 1-click switch back to Admin CCTV */}
-        {isPaperSetterRoute ? (
+        {/* If in Paper Setter AND user has Admin privileges, provide 1-click switch back to Admin CCTV */}
+        {isPaperSetterRoute && isAdmin ? (
           <button
             className="btn btn-ghost btn-sm"
             onClick={() => navigate('/admin')}

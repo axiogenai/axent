@@ -80,6 +80,10 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
   const redirectTarget = resolveSafeRedirect(searchParams.get('redirect'), defaultRedirect);
 
   const [role, setRole] = useState<AuthorityRole>(effectiveRole);
+
+  useEffect(() => {
+    setRole(effectiveRole);
+  }, [effectiveRole]);
   const isDarkMode = typeof window !== 'undefined' && (
     document.documentElement.getAttribute('data-theme') === 'dark' ||
     localStorage.getItem('codedna_theme') === 'dark'
@@ -877,35 +881,101 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
 
         </div>
 
-        {/* ── Card Footer: Return to Candidate Terminal ── */}
+        {/* ── Card Footer: Gateway Switcher & Student Portal Link ── */}
         <div
           style={{
-            padding: '12px 28px',
+            padding: '14px 28px',
             borderTop: '1px solid var(--border)',
             background: 'var(--bg-surface)',
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: 'center'
+            gap: '8px'
           }}
         >
-          <button
-            type="button"
-            onClick={() => navigate('/mcq')}
-            style={{
-              background: 'none',
-              border: 'none',
-              padding: 0,
-              fontSize: '12px',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <GraduationCap size={13} color="var(--accent)" />
-            <span>Are you a student taking an exam? <strong>Go to Candidate Portal</strong></span>
-          </button>
+          {/* Switch between Admin and Paper Setter login */}
+          {role === 'admin' ? (
+            <button
+              type="button"
+              onClick={() => {
+                playSound('click');
+                navigate('/login/paper-setter');
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                fontSize: '12px',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <Layers size={13} color="var(--accent)" />
+              <span>Are you authoring test papers? <strong style={{ color: 'var(--text-primary)' }}>Switch to Paper Setter Gateway</strong></span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                playSound('click');
+                navigate('/login/admin');
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                fontSize: '12px',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <ShieldAlert size={13} color="var(--danger, #ef4444)" />
+              <span>Chief Proctor or Invigilator? <strong style={{ color: 'var(--text-primary)' }}>Switch to Admin CCTV Gateway</strong></span>
+            </button>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '2px' }}>
+            <button
+              type="button"
+              onClick={() => navigate('/login')}
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                fontSize: '11px',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                textDecoration: 'underline'
+              }}
+            >
+              All Gateways
+            </button>
+            <span style={{ fontSize: '11px', color: 'var(--border)' }}>•</span>
+            <button
+              type="button"
+              onClick={() => navigate('/mcq')}
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                fontSize: '11.5px',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <GraduationCap size={12} color="var(--accent)" />
+              <span>Candidate Portal</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

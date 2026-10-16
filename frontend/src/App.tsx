@@ -400,19 +400,19 @@ export const App: React.FC = () => {
           />
           <Route
             path="/login"
-            element={<Navigate to="/login/admin" replace />}
+            element={<AuthorityLogin />}
           />
           <Route
             path="/login/paper-setter"
-            element={<Navigate to="/login/admin?redirect=/paper-setter" replace />}
+            element={<PaperSetterLogin />}
           />
           <Route
             path="/login/setter"
-            element={<Navigate to="/login/admin?redirect=/paper-setter" replace />}
+            element={<Navigate to="/login/paper-setter" replace />}
           />
           <Route
             path="/setter-login"
-            element={<Navigate to="/login/admin?redirect=/paper-setter" replace />}
+            element={<Navigate to="/login/paper-setter" replace />}
           />
           <Route
             path="/login/admin"
