@@ -1013,10 +1013,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               const isLocked = isStationLocked(station.id, station.labId);
               const previewMode = stationViewMode[station.id] || 'camera';
 
-              // Format station title nicely, e.g. "Station 01" or "Station 22"
-              const stationTitle = station.stationNumber.toLowerCase().startsWith('station')
-                ? station.stationNumber
-                : `Station ${station.stationNumber}`;
+              // Format station title nicely, e.g. "Station 01" or "Station 22" (removing any stray #)
+              const cleanNum = station.stationNumber.replace(/^#/, '').trim();
+              const stationTitle = cleanNum.toLowerCase().startsWith('station')
+                ? cleanNum
+                : `Station ${cleanNum}`;
 
               return (
                 <div
@@ -1030,13 +1031,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       ? '1px solid rgba(239, 68, 68, 0.45)'
                       : isSubmitted
                       ? '1px solid rgba(34, 197, 94, 0.4)'
-                      : '1px solid var(--border)',
+                      : '1px solid rgba(255, 255, 255, 0.12)',
                     background: '#090a0f',
                     borderRadius: '12px',
                     overflow: 'hidden',
                     position: 'relative',
                     padding: '16px',
-                    boxShadow: 'var(--shadow-sm)',
+                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.35)',
                     boxSizing: 'border-box'
                   }}
                 >
@@ -1061,11 +1062,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       >
                         {stationTitle}
                       </h3>
-                      {station.ipAddress && (
-                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                          ({station.ipAddress})
-                        </span>
-                      )}
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1126,7 +1122,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             borderRadius: '16px',
                             background: 'rgba(255, 255, 255, 0.08)',
                             border: '1px solid rgba(255, 255, 255, 0.14)',
-                            color: 'var(--text-secondary)',
+                            color: '#a1a1aa',
                             fontSize: '11.5px',
                             fontWeight: 600
                           }}
@@ -1210,10 +1206,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       station.examMode === 'MCQ' || station.language === 'MCQ' ? (
                         <div style={{ width: '100%', height: '100%', padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxSizing: 'border-box' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#a1a1aa' }}>
                               MCQ EXAMINATION
                             </span>
-                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                            <span style={{ fontSize: '10px', color: '#71717a' }}>
                               Q {(station.mcqProgress?.currentQuestionIndex ?? 0) + 1} / {station.mcqProgress?.totalQuestions || 10}
                             </span>
                           </div>
@@ -1236,7 +1232,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               );
                             })}
                           </div>
-                          <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                          <div style={{ fontSize: '10.5px', color: '#71717a' }}>
                             {station.mcqProgress?.answeredCount ?? 0}/{station.mcqProgress?.totalQuestions ?? 10} Answered
                           </div>
                         </div>
@@ -1314,22 +1310,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     )}
                   </div>
 
-                  {/* ── CANDIDATE DETAILS (Matching Screenshot) ── */}
+                  {/* ── CANDIDATE DETAILS (Matching Screenshot - Pure White Name & Clean Dot) ── */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '14px' }}>
                     <h4
                       style={{
                         margin: 0,
                         fontSize: '16px',
                         fontWeight: 700,
-                        color: 'var(--text-primary)',
+                        color: '#ffffff',
                         letterSpacing: '-0.01em'
                       }}
                     >
                       {station.student.name || 'Candidate (Unregistered)'}
                     </h4>
-                    <div style={{ fontSize: '12px', color: '#71717a' }}>
-                      Candidate &bull; {station.examMode === 'MCQ' || station.language === 'MCQ' ? 'MCQ exam' : 'Practical coding'}
-                      {station.student.rollNumber ? ` &bull; ${station.student.rollNumber}` : ''}
+                    <div style={{ fontSize: '12px', color: '#a1a1aa' }}>
+                      Candidate · {station.examMode === 'MCQ' || station.language === 'MCQ' ? 'MCQ exam' : 'Practical coding'}
+                      {station.student.rollNumber ? ` · ${station.student.rollNumber.replace(/^#/, '')}` : ''}
                     </div>
                   </div>
 
@@ -1363,18 +1359,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       )}
                     </div>
 
-                    <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#e4e4e7' }}>
                       {station.marks ? (
                         <span>
                           {station.marks.totalMarks}/{station.marks.maxMarks || 50}
                         </span>
                       ) : (
-                        <span>0/50 marks</span>
+                        <span>0/{station.examMode === 'MCQ' ? (station.mcqProgress?.totalQuestions || 30) : 50}</span>
                       )}
                     </div>
                   </div>
 
-                  {/* ── PRIMARY ACTION BUTTON (Matching Screenshot) ── */}
+                  {/* ── PRIMARY ACTION BUTTON (Matching Screenshot - Pure White Text) ── */}
                   <button
                     type="button"
                     onClick={() => {
@@ -1385,9 +1381,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       width: '100%',
                       padding: '10px 16px',
                       borderRadius: '24px',
-                      border: '1px solid rgba(255, 255, 255, 0.18)',
-                      background: 'transparent',
-                      color: 'var(--text-primary)',
+                      border: '1px solid rgba(255, 255, 255, 0.22)',
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      color: '#ffffff',
                       fontSize: '13px',
                       fontWeight: 600,
                       cursor: 'pointer',
@@ -1397,18 +1393,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       transition: 'all 0.15s ease'
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
-                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.35)';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.18)';
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.22)';
                     }}
                   >
                     <span>{isSubmitted ? 'View submission' : 'Inspect audit'}</span>
                   </button>
 
-                  {/* ── QUICK PROCTOR TOOLS (Integrated "Other Stuffs") ── */}
+                  {/* ── QUICK PROCTOR TOOLS (Integrated & High Contrast) ── */}
                   <div
                     style={{
                       display: 'flex',
@@ -1416,7 +1412,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       justifyContent: 'space-between',
                       marginTop: '12px',
                       paddingTop: '10px',
-                      borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+                      borderTop: '1px solid rgba(255, 255, 255, 0.08)',
                       gap: '6px',
                       flexWrap: 'wrap'
                     }}
@@ -1432,17 +1428,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           playSound('click');
                         }}
                         style={{
-                          background: isLocked ? 'rgba(239, 68, 68, 0.15)' : 'transparent',
-                          border: isLocked ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
-                          color: isLocked ? '#ef4444' : 'var(--text-secondary)',
+                          background: isLocked ? 'rgba(239, 68, 68, 0.18)' : 'rgba(255, 255, 255, 0.05)',
+                          border: isLocked ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(255, 255, 255, 0.14)',
+                          color: isLocked ? '#f87171' : '#e4e4e7',
                           borderRadius: '6px',
-                          padding: '4px 8px',
+                          padding: '5px 10px',
                           fontSize: '11px',
                           fontWeight: 600,
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '4px'
+                          gap: '4px',
+                          transition: 'all 0.15s ease'
                         }}
                         title={isLocked ? 'Unlock student editor' : 'Freeze student editor remotely'}
                       >
@@ -1464,17 +1461,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           }
                         }}
                         style={{
-                          background: 'transparent',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          color: 'var(--text-secondary)',
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          border: '1px solid rgba(255, 255, 255, 0.14)',
+                          color: '#e4e4e7',
                           borderRadius: '6px',
-                          padding: '4px 8px',
+                          padding: '5px 10px',
                           fontSize: '11px',
                           fontWeight: 600,
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '4px'
+                          gap: '4px',
+                          transition: 'all 0.15s ease'
                         }}
                         title="Broadcast alert warning notice directly to student's screen"
                       >
@@ -1489,17 +1487,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         type="button"
                         onClick={() => handleViewStudentReport(station)}
                         style={{
-                          background: 'transparent',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          color: 'var(--text-secondary)',
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          border: '1px solid rgba(255, 255, 255, 0.14)',
+                          color: '#e4e4e7',
                           borderRadius: '6px',
-                          padding: '4px 8px',
+                          padding: '5px 10px',
                           fontSize: '11px',
                           fontWeight: 600,
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '4px'
+                          gap: '4px',
+                          transition: 'all 0.15s ease'
                         }}
                         title="Open full invigilation marks dossier"
                       >
@@ -1517,17 +1516,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             playSound('click');
                           }}
                           style={{
-                            background: 'rgba(34, 197, 94, 0.12)',
-                            border: '1px solid rgba(34, 197, 94, 0.3)',
-                            color: '#22c55e',
+                            background: 'rgba(34, 197, 94, 0.15)',
+                            border: '1px solid rgba(34, 197, 94, 0.35)',
+                            color: '#4ade80',
                             borderRadius: '6px',
-                            padding: '4px 8px',
+                            padding: '5px 10px',
                             fontSize: '11px',
                             fontWeight: 600,
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '4px'
+                            gap: '4px',
+                            transition: 'all 0.15s ease'
                           }}
                           title="Conclude exam, calculate marks, and release physical workstation"
                         >
@@ -1542,16 +1542,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           type="button"
                           onClick={() => handleRemoveSingleStation(station.id)}
                           style={{
-                            background: 'transparent',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                            color: 'var(--text-muted)',
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid rgba(255, 255, 255, 0.14)',
+                            color: '#a1a1aa',
                             borderRadius: '6px',
-                            padding: '4px 8px',
+                            padding: '5px 10px',
                             fontSize: '11px',
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '4px'
+                            gap: '4px',
+                            transition: 'all 0.15s ease'
                           }}
                           title="Dismiss completed station from live CCTV grid"
                         >
