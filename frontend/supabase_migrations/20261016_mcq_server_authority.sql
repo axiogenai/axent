@@ -87,7 +87,10 @@ BEGIN
 
   SELECT * INTO a FROM public.mcq_attempts WHERE exam_id=t.exam_id AND student_roll=t.student_roll AND candidate_ticket_id=t.id AND status='IN_PROGRESS'
     ORDER BY start_time DESC LIMIT 1 FOR UPDATE;
-  IF FOUND THEN
+  IF FOUND AND now_ms>=a.deadline THEN
+    -- Finalize stale attempts when a candidate returns after the deadline.
+    PERFORM public.submit_mcq_attempt(p_ticket_token,a.id);
+  ELSIF FOUND THEN
     RETURN jsonb_build_object('examId',e.id,'examTitle',e.title,'instructions',e.instructions,'allowReview',e.allow_review,'durationMinutes',e.duration_minutes,
       'candidate',jsonb_build_object('name',a.student_name,'rollNumber',a.student_roll,'department',a.student_dept,'semester',a.student_sem,'division',a.student_div),
       'attemptId',a.id,'deadline',a.deadline,'serverTime',now_ms,'status',a.status,'answers',a.answers,
@@ -195,8 +198,27 @@ BEGIN
     'percentageScore',CASE WHEN v_max_score>0 THEN round((v_score/v_max_score)*100,2) ELSE 0 END);
 END $$;
 
+CREATE OR REPLACE FUNCTION public.revoke_mcq_candidate_ticket(p_ticket_token text)
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions AS $
+DECLARE affected integer;
+BEGIN
+  IF COALESCE(auth.jwt()->'app_metadata'->>'role','') <> 'admin' OR auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'trusted administrator role required' USING ERRCODE='42501';
+  END IF;
+  IF length(COALESCE(p_ticket_token,''))<32 OR length(p_ticket_token)>256 THEN
+    RAISE EXCEPTION 'invalid candidate ticket' USING ERRCODE='22023';
+  END IF;
+  UPDATE public.mcq_candidate_tickets
+  SET revoked_at=COALESCE(revoked_at,now())
+  WHERE token_hash=encode(extensions.digest(convert_to(p_ticket_token,'UTF8'),'sha256'),'hex');
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  RETURN affected=1;
+END $;
+
 REVOKE ALL ON FUNCTION public.issue_mcq_candidate_ticket(text,text,text,text,text,text,integer) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.issue_mcq_candidate_ticket(text,text,text,text,text,text,integer) TO authenticated;
+REVOKE ALL ON FUNCTION public.revoke_mcq_candidate_ticket(text) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.revoke_mcq_candidate_ticket(text) TO authenticated;
 REVOKE ALL ON FUNCTION public.start_mcq_attempt(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.start_mcq_attempt(text) TO anon,authenticated;
 REVOKE ALL ON FUNCTION public.save_mcq_answer(text,text,text,text) FROM PUBLIC;
@@ -234,12 +256,11 @@ CREATE POLICY "Trusted authorities read MCQ attempts"
   ON public.mcq_attempts FOR SELECT TO authenticated
   USING ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'));
 
--- Rollout checklist before production:
--- 1) Apply/test this SQL in staging; verify actual options JSON uses isCorrect.
--- 2) Switch candidate start/save/submit UI to these RPCs and trusted ticket issuance.
--- 3) Switch authority question/exam management off unrestricted anonymous CRUD.
--- 4) Add regression tests for expiry, revocation, attempts, timing, cross-ticket access,
---    invalid options, no answer-key leakage, negative marking and duplicate submissions.
--- 5) Only then replace the six USING(true)/WITH CHECK(true) policies and revoke direct
---    anonymous table access. Do not run that policy lockdown before the client cutover.
--- 6) Re-test MCQ and coding flows end-to-end. No coding runtime files are changed here.
+-- Deployment validation checklist:
+-- 1) Apply/test this SQL in a staging Supabase project first; verify options JSON uses isCorrect.
+-- 2) Confirm admin and paper-setter users have trusted app_metadata.role values.
+-- 3) Test expiry/revocation, max attempts, schedule windows, stale-attempt finalization,
+--    cross-ticket access, invalid options, answer-key absence, negative marking and retries.
+-- 4) Confirm the MCQ admin/paper-setter screens work under the new role policies.
+-- 5) Re-test coding workspace, compiler, submission archival, station telemetry and lab setup.
+-- 6) Only deploy after staging checks pass; this migration is not auto-applied to production.
