@@ -76,28 +76,32 @@ BEGIN
   SELECT * INTO t FROM public.mcq_candidate_tickets
    WHERE token_hash=encode(extensions.digest(convert_to(p_ticket_token,'UTF8'),'sha256'),'hex')
    FOR UPDATE;
-  IF NOT FOUND OR t.revoked_at IS NOT NULL OR t.expires_at<=now() THEN
-    RAISE EXCEPTION 'candidate ticket invalid or expired' USING ERRCODE='28000';
+  IF NOT FOUND OR t.revoked_at IS NOT NULL THEN
+    RAISE EXCEPTION 'candidate ticket invalid or revoked' USING ERRCODE='28000';
   END IF;
   SELECT * INTO e FROM public.mcq_exams WHERE id=t.exam_id FOR SHARE;
-  IF NOT FOUND OR e.status<>'PUBLISHED' THEN RAISE EXCEPTION 'exam unavailable' USING ERRCODE='22023'; END IF;
+  IF NOT FOUND THEN RAISE EXCEPTION 'exam unavailable' USING ERRCODE='22023'; END IF;
   now_ms:=floor(extract(epoch FROM clock_timestamp())*1000)::bigint;
-  IF e.start_time IS NOT NULL AND now_ms<e.start_time THEN RAISE EXCEPTION 'exam has not started' USING ERRCODE='22023'; END IF;
-  IF e.end_time IS NOT NULL AND now_ms>=e.end_time THEN RAISE EXCEPTION 'exam window closed' USING ERRCODE='22023'; END IF;
 
   SELECT * INTO a FROM public.mcq_attempts WHERE exam_id=t.exam_id AND student_roll=t.student_roll AND candidate_ticket_id=t.id AND status='IN_PROGRESS'
     ORDER BY start_time DESC LIMIT 1 FOR UPDATE;
-  IF FOUND AND now_ms>=a.deadline THEN
-    -- Finalize stale attempts when a candidate returns after the deadline.
-    PERFORM public.submit_mcq_attempt(p_ticket_token,a.id);
-  ELSIF FOUND THEN
+  IF FOUND AND now_ms<a.deadline THEN
     RETURN jsonb_build_object('examId',e.id,'examTitle',e.title,'instructions',e.instructions,'allowReview',e.allow_review,'durationMinutes',e.duration_minutes,
       'candidate',jsonb_build_object('name',a.student_name,'rollNumber',a.student_roll,'department',a.student_dept,'semester',a.student_sem,'division',a.student_div),
       'attemptId',a.id,'deadline',a.deadline,'serverTime',now_ms,'status',a.status,'answers',a.answers,
       'assignedQuestions',(SELECT COALESCE(jsonb_agg(jsonb_build_object('questionId',x->>'questionId','order',x->'order',
         'snapshot',(x->'snapshot')-'correctOptionId'-'explanation','shuffledOptionIds',x->'shuffledOptionIds')
         ORDER BY (x->>'order')::int),'[]'::jsonb) FROM jsonb_array_elements(a.assigned_questions) x));
+  ELSIF FOUND THEN
+    -- Finalize stale attempts when a candidate returns after the deadline.
+    PERFORM public.submit_mcq_attempt(p_ticket_token,a.id);
   END IF;
+
+  -- Ticket expiry blocks new attempts, but does not interrupt an attempt started while valid.
+  IF t.expires_at<=now() THEN RAISE EXCEPTION 'candidate ticket expired' USING ERRCODE='28000'; END IF;
+  IF e.status<>'PUBLISHED' THEN RAISE EXCEPTION 'exam unavailable' USING ERRCODE='22023'; END IF;
+  IF e.start_time IS NOT NULL AND now_ms<e.start_time THEN RAISE EXCEPTION 'exam has not started' USING ERRCODE='22023'; END IF;
+  IF e.end_time IS NOT NULL AND now_ms>=e.end_time THEN RAISE EXCEPTION 'exam window closed' USING ERRCODE='22023'; END IF;
   -- Serialize starts across different tickets for the same candidate and exam.
   PERFORM pg_advisory_xact_lock(hashtext(t.exam_id), hashtext(t.student_roll));
   IF (SELECT count(*) FROM public.mcq_attempts WHERE exam_id=t.exam_id AND student_roll=t.student_roll
