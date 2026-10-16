@@ -69,27 +69,30 @@ export const SecureMCQExam: React.FC = () => {
       setLoading(false);
       return;
     }
-    void supabase.rpc('start_mcq_attempt', { p_ticket_token: ticket }).then(({ data, error: rpcError }) => {
-      if (!active) return;
-      if (rpcError || !data || typeof data !== 'object' || !data.attemptId) {
-        setError(rpcError?.message || 'Unable to start this examination. The ticket may be expired, revoked, or already used.');
+    void (async () => {
+      try {
+        const { data, error: rpcError } = await supabase.rpc('start_mcq_attempt', { p_ticket_token: ticket });
+        if (!active) return;
+        if (rpcError || !data || typeof data !== 'object' || !(data as any).attemptId) {
+          setError(rpcError?.message || 'Unable to start this examination. The ticket may be expired, revoked, or already used.');
+          setLoading(false);
+          return;
+        }
+        const next = data as unknown as ActiveAttempt;
+        setAttempt(next);
+        setAnswers(next.answers || {});
+        serverOffsetMs.current = Number((data as any).serverTime || Date.now()) - Date.now();
+        setRemaining(Math.max(0, Number(next.deadline) - (Date.now() + serverOffsetMs.current)));
         setLoading(false);
-        return;
+        // Remove the bearer token from the visible URL after it has been read.
+        window.history.replaceState(null, '', window.location.pathname);
+      } catch {
+        if (active) {
+          setError('Could not contact the examination service. Check your connection and retry the secure link.');
+          setLoading(false);
+        }
       }
-      const next = data as unknown as ActiveAttempt;
-      setAttempt(next);
-      setAnswers(next.answers || {});
-      serverOffsetMs.current = Number((data as any).serverTime || Date.now()) - Date.now();
-      setRemaining(Math.max(0, Number(next.deadline) - (Date.now() + serverOffsetMs.current)));
-      setLoading(false);
-      // Remove the bearer token from the visible URL after it has been read.
-      window.history.replaceState(null, '', window.location.pathname);
-    }).catch(() => {
-      if (active) {
-        setError('Could not contact the examination service. Check your connection and retry the secure link.');
-        setLoading(false);
-      }
-    });
+    })();
     return () => { active = false; };
   }, [ticket]);
 
@@ -221,6 +224,7 @@ const page: React.CSSProperties = { minHeight: 'calc(100vh - 52px)', background:
 const panel: React.CSSProperties = { maxWidth: 900, margin: '0 auto', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 18, padding: 28, boxShadow: '0 12px 40px rgba(15,23,42,.08)' };
 const eyebrow: React.CSSProperties = { color: '#64748b', letterSpacing: '.14em', fontSize: 11, fontWeight: 800 };
 const timerStyle: React.CSSProperties = { display: 'grid', gap: 4, textAlign: 'right', background: '#0f172a', color: '#fff', padding: '12px 16px', borderRadius: 12 };
+const scoreGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12, margin: '24px 0' };
 const progressRow: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', marginTop: 24, color: '#64748b', fontSize: 13 };
 const progressTrack: React.CSSProperties = { height: 5, background: '#e2e8f0', borderRadius: 99, overflow: 'hidden', marginTop: 8 };
 const progressFill: React.CSSProperties = { height: '100%', background: '#2563eb', borderRadius: 99 };
