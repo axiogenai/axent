@@ -159,9 +159,25 @@ ALTER TABLE public.candidate_stations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.college_labs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.code_submissions ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow public read-write for mcq_questions" ON public.mcq_questions FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write for mcq_exams" ON public.mcq_exams FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write for mcq_attempts" ON public.mcq_attempts FOR ALL USING (true) WITH CHECK (true);
+-- MCQ data is only accessible to users with trusted Supabase app_metadata roles.
+-- Candidate attempts are created/graded through the secure RPCs in the Step 4 migration.
+REVOKE ALL ON public.mcq_questions, public.mcq_exams, public.mcq_attempts FROM anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.mcq_questions, public.mcq_exams, public.mcq_attempts TO authenticated;
+
+CREATE POLICY "Trusted authorities manage MCQ questions" ON public.mcq_questions FOR ALL TO authenticated
+  USING ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'))
+  WITH CHECK ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'));
+CREATE POLICY "Trusted authorities manage MCQ exams" ON public.mcq_exams FOR ALL TO authenticated
+  USING ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'))
+  WITH CHECK ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'));
+CREATE POLICY "Trusted admin manages MCQ attempts" ON public.mcq_attempts FOR ALL TO authenticated
+  USING (auth.jwt()->'app_metadata'->>'role' = 'admin')
+  WITH CHECK (auth.jwt()->'app_metadata'->>'role' = 'admin');
+CREATE POLICY "Trusted authorities read MCQ attempts" ON public.mcq_attempts FOR SELECT TO authenticated
+  USING ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'));
+
+-- Coding-related tables remain unchanged for compatibility with the current coding workflow.
+-- Their public policies require a separate authorization migration.
 CREATE POLICY "Allow public read-write for candidate_stations" ON public.candidate_stations FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read-write for college_labs" ON public.college_labs FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read-write for code_submissions" ON public.code_submissions FOR ALL USING (true) WITH CHECK (true);
