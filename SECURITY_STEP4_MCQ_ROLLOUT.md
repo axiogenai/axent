@@ -24,3 +24,11 @@
 ## Remaining boundary
 
 This migration secures the **MCQ tables and new ticket-based MCQ flow**. The existing RLS policies on `candidate_stations`, `college_labs`, and `code_submissions` are deliberately unchanged because the current coding workflow relies on them. Those tables need a separate identity/authorization migration before Axent can be described as fully secure. Never claim the entire product is secure solely because this MCQ step is deployed.
+
+
+## Additional release blockers
+
+- The secure MCQ candidate screen currently does not port every feature from the legacy MCQ proctoring screen. Audit and restore required anti-cheat/monitoring behavior before production use; passing TypeScript/build checks does not prove feature parity.
+- Staging-test the SQL migration against the actual Supabase schema. Verify result-release mode, WhatsApp result-group fields, negative-marking settings, attempt limits, RLS policies, ticket issue/revoke, and server-side grading.
+- For exams configured to announce results later, the submit RPC must not return scores or answer explanations. Answer explanations are released only after submission when immediate results and the exam setting allow them.
+- Do not modify any .env or .env.example files as part of this rollout.
