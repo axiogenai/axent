@@ -46,21 +46,25 @@ export const AdminMCQTicketIssuer: React.FC = () => {
     let active = true;
     if (!examId) { setTickets([]); return () => { active = false; }; }
     setLoadingTickets(true);
-    void supabase.rpc('list_mcq_candidate_tickets', { p_exam_id: examId }).then(({ data, error: rpcError }) => {
-      if (!active) return;
-      if (rpcError) {
-        setError('Could not load issued tickets. Apply the Step 4 Supabase migration and confirm administrator access.');
-        setTickets([]);
-      } else {
-        setTickets((data || []) as unknown as CandidateTicket[]);
+    void (async () => {
+      try {
+        const { data, error: rpcError } = await supabase.rpc('list_mcq_candidate_tickets', { p_exam_id: examId });
+        if (!active) return;
+        if (rpcError) {
+          setError('Could not load issued tickets. Apply the Step 4 Supabase migration and confirm administrator access.');
+          setTickets([]);
+        } else {
+          setTickets((data || []) as unknown as CandidateTicket[]);
+        }
+      } catch {
+        if (active) {
+          setError('Could not load issued tickets. Check the Supabase connection.');
+          setTickets([]);
+        }
+      } finally {
+        if (active) setLoadingTickets(false);
       }
-      setLoadingTickets(false);
-    }).catch(() => {
-      if (active) {
-        setError('Could not load issued tickets. Check the Supabase connection.');
-        setLoadingTickets(false);
-      }
-    });
+    })();
     return () => { active = false; };
   }, [examId]);
 
