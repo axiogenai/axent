@@ -208,7 +208,7 @@ BEGIN
 END $$;
 
 CREATE OR REPLACE FUNCTION public.revoke_mcq_candidate_ticket(p_ticket_token text)
-RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions AS $
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions AS $$
 DECLARE affected integer;
 BEGIN
   IF COALESCE(auth.jwt()->'app_metadata'->>'role','') <> 'admin' OR auth.uid() IS NULL THEN
@@ -230,7 +230,7 @@ BEGIN
         AND status='IN_PROGRESS';
   END IF;
   RETURN affected=1;
-END $;
+END $$;
 
 REVOKE ALL ON FUNCTION public.issue_mcq_candidate_ticket(text,text,text,text,text,text,integer) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.issue_mcq_candidate_ticket(text,text,text,text,text,text,integer) TO authenticated;
