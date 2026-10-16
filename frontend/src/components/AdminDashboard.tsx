@@ -74,7 +74,8 @@ import {
   UserCheck,
   ListChecks,
   BookOpen,
-  Database
+  Database,
+  VideoOff
 } from 'lucide-react';
 import { playSound } from '../utils/sounds';
 import {
@@ -116,6 +117,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [showResetRoomConfirm, setShowResetRoomConfirm] = useState(false);
   const [showClearSubmittedConfirm, setShowClearSubmittedConfirm] = useState(false);
   const [noticeModalMessage, setNoticeModalMessage] = useState<string | null>(null);
+  const [stationViewMode, setStationViewMode] = useState<Record<string, 'camera' | 'activity'>>({});
 
   const loadData = async () => {
     purgeDemoStations();
@@ -1004,438 +1006,453 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               const isFlagged =
                 station.cheatingRisk === 'High' ||
                 station.cheatingRisk === 'Critical' ||
-                station.metrics.pasteRatio >= 50;
+                station.metrics.pasteRatio >= 50 ||
+                (station.metrics?.tabSwitchViolations || 0) > 0;
 
               const isSubmitted = station.status === 'Submitted & Done';
               const isLocked = isStationLocked(station.id, station.labId);
+              const previewMode = stationViewMode[station.id] || 'camera';
+
+              // Format station title nicely, e.g. "Station 01" or "Station 22"
+              const stationTitle = station.stationNumber.toLowerCase().startsWith('station')
+                ? station.stationNumber
+                : `Station ${station.stationNumber}`;
 
               return (
                 <div
                   key={station.id}
-                  className="card"
                   style={{
                     display: 'flex',
                     flexDirection: 'column',
                     border: isLocked
-                      ? '1px solid var(--danger)'
+                      ? '1px solid rgba(239, 68, 68, 0.45)'
                       : isFlagged
-                      ? '1px solid var(--danger)'
+                      ? '1px solid rgba(239, 68, 68, 0.45)'
                       : isSubmitted
-                      ? '1px solid var(--success)'
+                      ? '1px solid rgba(34, 197, 94, 0.4)'
                       : '1px solid var(--border)',
-                    background: 'var(--bg-elevated)',
-                    borderRadius: 'var(--radius-sm)',
+                    background: '#090a0f',
+                    borderRadius: '12px',
                     overflow: 'hidden',
                     position: 'relative',
-                    padding: 0
+                    padding: '16px',
+                    boxShadow: 'var(--shadow-sm)',
+                    boxSizing: 'border-box'
                   }}
                 >
-                  {/* CCTV Camera Header Bar */}
+                  {/* ── CARD HEADER (Station Number on Left, Status Pill on Right) ── */}
                   <div
                     style={{
-                      height: '32px',
-                      background: isLocked
-                        ? 'var(--danger-bg)'
-                        : isFlagged
-                        ? 'var(--danger-bg)'
-                        : isSubmitted
-                        ? 'var(--success-bg)'
-                        : 'var(--bg-surface)',
-                      borderBottom: '1px solid var(--border)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      padding: '0 10px',
-                      fontSize: '11px'
+                      marginBottom: '14px'
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Video
-                        size={12}
-                        color={isLocked || isFlagged ? 'var(--danger)' : isSubmitted ? 'var(--success)' : 'var(--text-secondary)'}
-                      />
-                      <strong style={{ color: 'var(--text-primary)' }}>{station.stationNumber}</strong>
-                      <span style={{ color: 'var(--text-muted)', fontSize: '10px' }}>({station.ipAddress})</span>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <span
-                        className={`badge badge-sm ${
-                          isLocked
-                            ? 'badge-danger'
-                            : isFlagged
-                            ? 'badge-danger'
-                            : isSubmitted
-                            ? 'badge-success'
-                            : 'badge-neutral'
-                        }`}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <h3
+                        style={{
+                          margin: 0,
+                          fontSize: '15px',
+                          fontWeight: 700,
+                          color: '#ffffff',
+                          letterSpacing: '-0.01em'
+                        }}
                       >
-                        {isLocked ? (
-                          <Lock size={10} />
-                        ) : isFlagged ? (
-                          <ShieldAlert size={10} />
-                        ) : isSubmitted ? (
-                          <CheckCircle2 size={10} />
-                        ) : (
-                          <Radio size={10} />
-                        )}
-                        <span>{isLocked ? 'LOCKED' : isFlagged ? 'FLAGGED' : isSubmitted ? 'SUBMITTED' : 'LIVE'}</span>
-                      </span>
-                      {Boolean((station.metrics?.tabSwitchViolations || 0) > 0) && (
-                        <span
-                          className={`badge badge-sm ${(station.metrics?.tabSwitchViolations || 0) >= 3 ? 'badge-danger' : 'badge-warning'}`}
-                          style={{ height: '20px', fontSize: '9.5px', padding: '0 5px', gap: '3px' }}
-                          title={`${station.metrics?.tabSwitchViolations} Tab switches detected (${station.metrics?.unfocusedTimeSeconds || 0}s unfocused)`}
-                        >
-                          <EyeOff size={10} />
-                          <span>{station.metrics?.tabSwitchViolations}/3 Strikes</span>
+                        {stationTitle}
+                      </h3>
+                      {station.ipAddress && (
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          ({station.ipAddress})
                         </span>
                       )}
-                      {isSubmitted && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveSingleStation(station.id);
-                          }}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {isLocked ? (
+                        <span
                           style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: 'var(--text-muted)',
-                            cursor: 'pointer',
-                            padding: '2px 4px',
-                            borderRadius: '3px',
-                            display: 'flex',
+                            display: 'inline-flex',
                             alignItems: 'center',
-                            justifyContent: 'center',
-                            marginLeft: '2px'
+                            padding: '3px 12px',
+                            borderRadius: '16px',
+                            background: 'rgba(239, 68, 68, 0.14)',
+                            border: '1px solid rgba(239, 68, 68, 0.4)',
+                            color: '#ef4444',
+                            fontSize: '11.5px',
+                            fontWeight: 600
                           }}
-                          title="Dismiss submitted workstation from live CCTV grid"
                         >
-                          <X size={12} />
-                        </button>
+                          Locked
+                        </span>
+                      ) : isFlagged ? (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '3px 12px',
+                            borderRadius: '16px',
+                            background: 'rgba(239, 68, 68, 0.14)',
+                            border: '1px solid rgba(239, 68, 68, 0.4)',
+                            color: '#ef4444',
+                            fontSize: '11.5px',
+                            fontWeight: 600
+                          }}
+                        >
+                          Flagged
+                        </span>
+                      ) : isSubmitted ? (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '3px 12px',
+                            borderRadius: '16px',
+                            background: 'rgba(34, 197, 94, 0.14)',
+                            border: '1px solid rgba(34, 197, 94, 0.4)',
+                            color: '#22c55e',
+                            fontSize: '11.5px',
+                            fontWeight: 600
+                          }}
+                        >
+                          Submitted
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '3px 12px',
+                            borderRadius: '16px',
+                            background: 'rgba(255, 255, 255, 0.08)',
+                            border: '1px solid rgba(255, 255, 255, 0.14)',
+                            color: 'var(--text-secondary)',
+                            fontSize: '11.5px',
+                            fontWeight: 600
+                          }}
+                        >
+                          Live
+                        </span>
                       )}
                     </div>
                   </div>
 
-                  {/* Student Identity Strip */}
+                  {/* ── CCTV / SCREEN STREAM WINDOW (Matching Screenshot) ── */}
                   <div
                     style={{
-                      padding: '8px 10px',
-                      borderBottom: '1px solid var(--border)',
-                      background: 'var(--bg-surface)',
+                      height: '170px',
+                      background: '#040508',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255, 255, 255, 0.05)',
+                      marginBottom: '16px',
                       display: 'flex',
+                      flexDirection: 'column',
                       alignItems: 'center',
-                      justifyContent: 'space-between',
-                      fontSize: '11.5px'
+                      justifyContent: 'center',
+                      position: 'relative',
+                      overflow: 'hidden'
                     }}
                   >
-                    <div>
-                      <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                        {station.student.name || 'Candidate (Unregistered)'}
-                      </div>
-                      <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-                        {station.student.rollNumber || 'No USN'} &bull; {station.language}
-                      </div>
-                    </div>
+                    {/* View mode toggle button in top right of feed box */}
+                    {!isSubmitted && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setStationViewMode((prev) => ({
+                            ...prev,
+                            [station.id]: previewMode === 'camera' ? 'activity' : 'camera'
+                          }));
+                          playSound('click');
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: '6px',
+                          right: '6px',
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          border: '1px solid rgba(255, 255, 255, 0.12)',
+                          borderRadius: '4px',
+                          color: '#a1a1aa',
+                          fontSize: '10px',
+                          padding: '2px 6px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          zIndex: 5
+                        }}
+                        title={previewMode === 'camera' ? 'Switch to live answer / code preview' : 'Switch to camera feed'}
+                      >
+                        {previewMode === 'camera' ? <ListChecks size={10} /> : <Video size={10} />}
+                        <span>{previewMode === 'camera' ? 'Activity' : 'Camera'}</span>
+                      </button>
+                    )}
 
-                    {station.marks && (
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '13px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>
-                          {station.marks.totalMarks}/50
+                    {isSubmitted ? (
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '10px',
+                          textAlign: 'center',
+                          padding: '12px'
+                        }}
+                      >
+                        <CheckCircle2 size={32} color="#22c55e" strokeWidth={2} />
+                        <span style={{ fontSize: '13px', fontWeight: 500, color: '#e4e4e7' }}>
+                          Examination completed
+                        </span>
+                      </div>
+                    ) : previewMode === 'activity' ? (
+                      /* Live Answering / Code Preview Mode */
+                      station.examMode === 'MCQ' || station.language === 'MCQ' ? (
+                        <div style={{ width: '100%', height: '100%', padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxSizing: 'border-box' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                              MCQ EXAMINATION
+                            </span>
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                              Q {(station.mcqProgress?.currentQuestionIndex ?? 0) + 1} / {station.mcqProgress?.totalQuestions || 10}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap', margin: '8px 0' }}>
+                            {Array.from({ length: Math.min(20, station.mcqProgress?.totalQuestions || 10) }).map((_, idx) => {
+                              const isAnswered = idx < (station.mcqProgress?.answeredCount ?? (station.metrics.editCount || 0));
+                              const isCurrent = idx === (station.mcqProgress?.currentQuestionIndex ?? 0);
+                              return (
+                                <div
+                                  key={idx}
+                                  style={{
+                                    width: '12px',
+                                    height: '12px',
+                                    borderRadius: '2px',
+                                    background: isCurrent ? 'var(--accent)' : isAnswered ? '#22c55e' : 'rgba(255, 255, 255, 0.12)',
+                                    border: isCurrent ? '1px solid #fff' : 'none'
+                                  }}
+                                  title={`Question ${idx + 1}: ${isAnswered ? 'Answered' : 'Unanswered'}`}
+                                />
+                              );
+                            })}
+                          </div>
+                          <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                            {station.mcqProgress?.answeredCount ?? 0}/{station.mcqProgress?.totalQuestions ?? 10} Answered
+                          </div>
                         </div>
-                        <div style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>Marks</div>
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', padding: '10px', overflow: 'hidden', textAlign: 'left', boxSizing: 'border-box' }}>
+                          <pre style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: '#a1a1aa', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: '150px' }}>
+                            {station.code || '// Awaiting student keyboard input...'}
+                          </pre>
+                        </div>
+                      )
+                    ) : station.screenImageData ? (
+                      /* Live Screen Broadcast */
+                      <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <img
+                          src={station.screenImageData}
+                          alt={`Live Screen ${station.stationNumber}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                        />
+                        <span
+                          style={{
+                            position: 'absolute',
+                            bottom: '6px',
+                            left: '6px',
+                            height: '18px',
+                            fontSize: '9.5px',
+                            fontWeight: 700,
+                            background: 'rgba(239, 68, 68, 0.85)',
+                            color: '#fff',
+                            borderRadius: '3px',
+                            padding: '1px 6px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Radio size={9} />
+                          <span>SCREEN STREAM</span>
+                        </span>
+                      </div>
+                    ) : isLocked ? (
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '10px',
+                          textAlign: 'center',
+                          padding: '12px'
+                        }}
+                      >
+                        <Lock size={30} color="#ef4444" strokeWidth={2} />
+                        <span style={{ fontSize: '13px', fontWeight: 500, color: '#ef4444' }}>
+                          Workstation locked by proctor
+                        </span>
+                      </div>
+                    ) : (
+                      /* Camera feed unavailable (Station 01 in user image) */
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '10px',
+                          textAlign: 'center',
+                          padding: '12px'
+                        }}
+                      >
+                        <VideoOff size={28} color="#71717a" strokeWidth={1.75} />
+                        <span style={{ fontSize: '12.5px', color: '#71717a' }}>
+                          Camera feed unavailable
+                        </span>
                       </div>
                     )}
                   </div>
 
-                  {/* CCTV Screen Stream: If Submitted, show concluded status. Otherwise Live Captured Screen OR Live Answering / Code Mirror */}
-                  {isSubmitted ? (
-                    <div
+                  {/* ── CANDIDATE DETAILS (Matching Screenshot) ── */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '14px' }}>
+                    <h4
                       style={{
-                        height: '145px',
-                        background: '#09090b',
-                        padding: '12px 14px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        textAlign: 'center',
-                        gap: '8px',
-                        borderBottom: '1px solid var(--border)'
+                        margin: 0,
+                        fontSize: '16px',
+                        fontWeight: 700,
+                        color: 'var(--text-primary)',
+                        letterSpacing: '-0.01em'
                       }}
                     >
-                      <div
-                        style={{
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: '50%',
-                          background: 'rgba(34, 197, 94, 0.12)',
-                          border: '1px solid rgba(34, 197, 94, 0.3)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: 'var(--success)'
-                        }}
-                      >
-                        <CheckCircle2 size={16} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          Examination Concluded
-                        </div>
-                        <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                          Workstation Disengaged &bull; Score: <strong style={{ color: 'var(--text-primary)' }}>{station.marks?.totalMarks ?? 0}/{station.marks?.maxMarks ?? 50}</strong>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => setSelectedStationId(station.id)}
-                          style={{ height: '24px', fontSize: '10.5px', padding: '0 8px' }}
-                        >
-                          Inspect Audit
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => handleRemoveSingleStation(station.id)}
-                          style={{ height: '24px', fontSize: '10.5px', padding: '0 8px', color: 'var(--text-muted)' }}
-                          title="Dismiss from CCTV grid"
-                        >
-                          Dismiss
-                        </button>
-                      </div>
+                      {station.student.name || 'Candidate (Unregistered)'}
+                    </h4>
+                    <div style={{ fontSize: '12px', color: '#71717a' }}>
+                      Candidate &bull; {station.examMode === 'MCQ' || station.language === 'MCQ' ? 'MCQ exam' : 'Practical coding'}
+                      {station.student.rollNumber ? ` &bull; ${station.student.rollNumber}` : ''}
                     </div>
-                  ) : station.screenImageData ? (
-                    <div
-                      style={{
-                        height: '145px',
-                        background: '#000',
-                        position: 'relative',
-                        overflow: 'hidden',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                    >
-                      <img
-                        src={station.screenImageData}
-                        alt={`Live Screen ${station.stationNumber}`}
-                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                      />
-                      <span
-                        className="badge badge-sm badge-danger"
-                        style={{
-                          position: 'absolute',
-                          top: '6px',
-                          right: '6px',
-                          height: '18px',
-                          fontSize: '9.5px',
-                          background: 'rgba(239, 68, 68, 0.85)',
-                          color: '#fff'
-                        }}
-                      >
-                        <Radio size={9} />
-                        <span>SCREEN STREAM</span>
-                      </span>
-                    </div>
-                  ) : station.examMode === 'MCQ' || station.language === 'MCQ' ? (
-                    <div
-                      style={{
-                        height: '145px',
-                        background: '#0d0d0d',
-                        padding: '10px 12px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between',
-                        position: 'relative'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                          <ListChecks size={12} color="var(--accent)" />
-                          <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                            MCQ EXAMINATION
-                          </span>
-                        </div>
-                        <span
-                          className="badge badge-sm badge-neutral"
-                          style={{
-                            fontSize: '9px',
-                            background: 'rgba(0, 0, 0, 0.75)',
-                            border: '1px solid rgba(255, 255, 255, 0.12)',
-                            color: '#d4d4d4'
-                          }}
-                        >
-                          <Radio size={8} color="var(--accent)" />
-                          <span>Q {(station.mcqProgress?.currentQuestionIndex ?? 0) + 1} / {station.mcqProgress?.totalQuestions || station.metrics.totalLines || 10}</span>
-                        </span>
-                      </div>
+                  </div>
 
-                      <div>
-                        <div style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {station.student.assignmentTitle || 'MCQ Examination Paper'}
-                        </div>
-                        {/* Live Answering Dots Matrix */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '3px', flexWrap: 'wrap' }}>
-                          {Array.from({ length: Math.min(20, station.mcqProgress?.totalQuestions || station.metrics.totalLines || 10) }).map((_, idx) => {
-                            const isAnswered = idx < (station.mcqProgress?.answeredCount ?? (station.metrics.editCount || 0));
-                            const isCurrent = idx === (station.mcqProgress?.currentQuestionIndex ?? 0);
-                            return (
-                              <div
-                                key={idx}
-                                style={{
-                                  width: '12px',
-                                  height: '12px',
-                                  borderRadius: '2px',
-                                  background: isCurrent ? 'var(--accent)' : isAnswered ? 'var(--success)' : 'rgba(255, 255, 255, 0.12)',
-                                  border: isCurrent ? '1px solid #fff' : 'none'
-                                }}
-                                title={`Question ${idx + 1}: ${isAnswered ? 'Answered' : 'Unanswered'}`}
-                              />
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-muted)' }}>
-                        <span>
-                          {station.mcqProgress?.answeredCount ?? (station.metrics.editCount || 0)}/{station.mcqProgress?.totalQuestions ?? (station.metrics.totalLines || 10)} Answered
-                        </span>
-                        {station.marks ? (
-                          <span style={{ color: 'var(--accent)', fontWeight: 700 }}>
-                            Score: {station.marks.totalMarks}/{station.marks.maxMarks || 50}
-                          </span>
-                        ) : (
-                          <span style={{ color: 'var(--text-secondary)' }}>Live Answering</span>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        height: '145px',
-                        background: '#0d0d0d',
-                        padding: '8px',
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: '11px',
-                        lineHeight: 1.45,
-                        color: '#d4d4d4',
-                        overflow: 'hidden',
-                        position: 'relative'
-                      }}
-                    >
-                      <span
-                        className="badge badge-sm badge-neutral"
-                        style={{
-                          position: 'absolute',
-                          top: '6px',
-                          right: '6px',
-                          height: '17px',
-                          fontSize: '9px',
-                          background: 'rgba(0, 0, 0, 0.75)',
-                          border: '1px solid rgba(255, 255, 255, 0.12)',
-                          color: '#d4d4d4'
-                        }}
-                      >
-                        <Radio size={8} color="var(--danger)" />
-                        <span>CODE MIRROR &bull; {station.language.toUpperCase()}</span>
-                      </span>
-                      <pre
-                        style={{
-                          margin: 0,
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-all',
-                          maxHeight: '128px',
-                          overflow: 'hidden'
-                        }}
-                      >
-                        {station.code || '// Awaiting student keyboard input...'}
-                      </pre>
-                    </div>
-                  )}
-
-                  {/* Telemetry Radar Footer & Remote Proctor Actions */}
+                  {/* ── METRICS ROW (Strikes/Keys on Left, Marks on Right) ── */}
                   <div
                     style={{
-                      padding: '8px 10px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      fontSize: '11px',
-                      background: 'var(--bg-surface)'
+                      marginBottom: '16px',
+                      fontSize: '12px'
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <span className="badge badge-sm badge-neutral">{station.metrics.keystrokes} Keys</span>
-                      <span className="badge badge-sm badge-neutral">{station.metrics.typingSpeed} WPM</span>
-                      <span
-                        className={`badge badge-sm ${
-                          station.metrics.pasteRatio >= 50
-                            ? 'badge-danger'
-                            : station.metrics.pasteRatio > 0
-                            ? 'badge-warning'
-                            : 'badge-success'
-                        }`}
-                      >
-                        {station.metrics.pasteRatio}% Pasted
-                      </span>
-                      {Boolean((station.metrics?.tabSwitchViolations || 0) > 0) && (
-                        <span
-                          className={`badge badge-sm ${(station.metrics?.tabSwitchViolations || 0) >= 3 ? 'badge-danger' : 'badge-warning'}`}
-                          title={`${station.metrics?.tabSwitchViolations} Tab/Window Switches (${station.metrics?.unfocusedTimeSeconds || 0}s unfocused)`}
-                        >
-                          <EyeOff size={9} />
-                          <span>{station.metrics?.tabSwitchViolations} Swaps</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {Boolean((station.metrics?.tabSwitchViolations || 0) > 0) ? (
+                        <span style={{ color: '#ef4444', fontWeight: 600 }}>
+                          {station.metrics.tabSwitchViolations}/3 strikes
+                        </span>
+                      ) : station.metrics.pasteRatio >= 50 ? (
+                        <span style={{ color: '#ef4444', fontWeight: 600 }}>
+                          {station.metrics.pasteRatio}% pasted (flagged)
+                        </span>
+                      ) : station.metrics.keystrokes > 0 ? (
+                        <span style={{ color: '#22c55e', fontWeight: 500 }}>
+                          {station.metrics.keystrokes} keys detected
+                        </span>
+                      ) : (
+                        <span style={{ color: '#71717a' }}>
+                          Awaiting keystrokes
                         </span>
                       )}
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      {/* Remote Lock/Unlock */}
+                    <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      {station.marks ? (
+                        <span>
+                          {station.marks.totalMarks}/{station.marks.maxMarks || 50}
+                        </span>
+                      ) : (
+                        <span>0/50 marks</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── PRIMARY ACTION BUTTON (Matching Screenshot) ── */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedStationId(station.id);
+                      setModalTab(station.screenImageData ? 'screen' : 'code');
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px 16px',
+                      borderRadius: '24px',
+                      border: '1px solid rgba(255, 255, 255, 0.18)',
+                      background: 'transparent',
+                      color: 'var(--text-primary)',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.18)';
+                    }}
+                  >
+                    <span>{isSubmitted ? 'View submission' : 'Inspect audit'}</span>
+                  </button>
+
+                  {/* ── QUICK PROCTOR TOOLS (Integrated "Other Stuffs") ── */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginTop: '12px',
+                      paddingTop: '10px',
+                      borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+                      gap: '6px',
+                      flexWrap: 'wrap'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {/* Remote Lock / Unlock */}
                       <button
-                        className={`btn ${isLocked ? 'btn-danger' : 'btn-ghost'} btn-sm`}
+                        type="button"
                         onClick={() => {
                           const nextLock = !isLocked;
                           sendProctorLockCommand(station.id, nextLock, station.labId);
                           loadData();
+                          playSound('click');
                         }}
-                        style={{ padding: '0 6px', fontSize: '10.5px', height: '24px' }}
+                        style={{
+                          background: isLocked ? 'rgba(239, 68, 68, 0.15)' : 'transparent',
+                          border: isLocked ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
+                          color: isLocked ? '#ef4444' : 'var(--text-secondary)',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
                         title={isLocked ? 'Unlock student editor' : 'Freeze student editor remotely'}
                       >
                         {isLocked ? <Unlock size={11} /> : <Lock size={11} />}
                         <span>{isLocked ? 'Unlock' : 'Lock'}</span>
                       </button>
 
-                      {/* Conclude & Free Device for frozen/locked workstation */}
-                      {(isLocked || (station.metrics?.tabSwitchViolations || 0) >= 3) && !isSubmitted && (
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => {
-                            sendProctorConcludeAndFreeCommand(station.id, station.labId);
-                            loadData();
-                            playSound('click');
-                          }}
-                          style={{
-                            padding: '0 6px',
-                            fontSize: '10.5px',
-                            height: '24px',
-                            color: 'var(--success)',
-                            borderColor: 'var(--success-border)',
-                            background: 'var(--success-bg)'
-                          }}
-                          title="Conclude exam, calculate marks, and release physical workstation"
-                        >
-                          <CheckCircle2 size={11} />
-                          <span>Conclude & Free</span>
-                        </button>
-                      )}
-
-                      {/* Instant Warning */}
+                      {/* Broadcast Warning */}
                       <button
-                        className="btn btn-ghost btn-sm"
+                        type="button"
                         onClick={() => {
                           const msg = window.prompt(
                             `Broadcast proctor alert to ${station.student.name || station.stationNumber}:`,
@@ -1446,35 +1463,102 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             setNoticeModalMessage(`Proctor notice broadcast to ${station.stationNumber}`);
                           }
                         }}
-                        style={{ padding: '0 6px', fontSize: '10.5px', height: '24px' }}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          color: 'var(--text-secondary)',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
                         title="Broadcast alert warning notice directly to student's screen"
                       >
                         <ShieldAlert size={11} />
                         <span>Warn</span>
                       </button>
+                    </div>
 
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {/* Dossier Report */}
                       <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => {
-                          setSelectedStationId(station.id);
-                          setModalTab(station.screenImageData ? 'screen' : 'code');
-                        }}
-                        style={{ padding: '0 6px', fontSize: '10.5px', height: '24px' }}
-                        title="Open full-screen CCTV surveillance feed"
-                      >
-                        <Eye size={12} />
-                        <span>Inspect</span>
-                      </button>
-
-                      <button
-                        className="btn btn-secondary btn-sm"
+                        type="button"
                         onClick={() => handleViewStudentReport(station)}
-                        style={{ padding: '0 6px', fontSize: '10.5px', height: '24px' }}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          color: 'var(--text-secondary)',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
                         title="Open full invigilation marks dossier"
                       >
-                        <FileText size={12} />
-                        <span>Report</span>
+                        <FileText size={11} />
+                        <span>Dossier</span>
                       </button>
+
+                      {/* Conclude & Free (if locked or strikes >= 3 and not submitted) */}
+                      {(isLocked || (station.metrics?.tabSwitchViolations || 0) >= 3) && !isSubmitted && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            sendProctorConcludeAndFreeCommand(station.id, station.labId);
+                            loadData();
+                            playSound('click');
+                          }}
+                          style={{
+                            background: 'rgba(34, 197, 94, 0.12)',
+                            border: '1px solid rgba(34, 197, 94, 0.3)',
+                            color: '#22c55e',
+                            borderRadius: '6px',
+                            padding: '4px 8px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                          title="Conclude exam, calculate marks, and release physical workstation"
+                        >
+                          <CheckCircle2 size={11} />
+                          <span>Free</span>
+                        </button>
+                      )}
+
+                      {/* Dismiss completed station */}
+                      {isSubmitted && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSingleStation(station.id)}
+                          style={{
+                            background: 'transparent',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            color: 'var(--text-muted)',
+                            borderRadius: '6px',
+                            padding: '4px 8px',
+                            fontSize: '11px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                          title="Dismiss completed station from live CCTV grid"
+                        >
+                          <Trash2 size={11} />
+                          <span>Dismiss</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
