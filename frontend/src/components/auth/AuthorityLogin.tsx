@@ -265,12 +265,6 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
     }
   };
 
-  // Development bypass is intentionally disabled: localStorage cannot authenticate users.
-  const handleDevBypass = () => {
-    setErrorMessage('Development bypass is disabled. Sign in using a verified institutional account.');
-    playSound('warning');
-  };
-
   const isPasswordValid = newPassword.length >= 8;
   const doPasswordsMatch = newPassword.length > 0 && newPassword === confirmPassword;
 
@@ -727,14 +721,6 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
                     If email delivery fails, configure the Supabase email provider. Direct bypass and default passwords are disabled.
                   </div>
                   <div style={{ display: 'flex', gap: '6px' }}>
-                    <button
-                      type="button"
-                      onClick={handleDevBypass}
-                      className="btn btn-primary btn-sm"
-                      style={{ height: '26px', fontSize: '11px', padding: '0 10px', fontWeight: 700 }}
-                    >
-                      Bypass disabled
-                    </button>
                     <button
                       type="button"
                       onClick={() => {
