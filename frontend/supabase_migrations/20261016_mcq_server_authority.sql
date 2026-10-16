@@ -1,9 +1,8 @@
 -- Axent Step 4: server-authoritative MCQ primitives.
 -- STAGED MIGRATION: see comments below before production rollout.
 -- This does not alter any .env/.env.example file or the coding-exam runtime.
--- IMPORTANT: current SPA still does direct table CRUD. Do NOT remove existing
--- permissive policies until candidate + authority clients have moved to these RPCs.
--- Until then this is a foundation, not a completed live security cutover.
+-- The candidate MCQ route now uses the RPCs below; authority CRUD remains role-protected.
+-- Apply this migration in staging first. It is not automatically applied to live Supabase.
 
 CREATE SCHEMA IF NOT EXISTS extensions;
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
