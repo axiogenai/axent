@@ -38,13 +38,15 @@ CREATE INDEX IF NOT EXISTS idx_mcq_attempts_candidate_ticket
   ON public.mcq_attempts(candidate_ticket_id);
 
 -- Trusted administrators issue a random ticket once; only its hash is persisted.
+DROP FUNCTION IF EXISTS public.issue_mcq_candidate_ticket(text,text,text,text,text,text,integer);
+
 CREATE OR REPLACE FUNCTION public.issue_mcq_candidate_ticket(
   p_exam_id text, p_student_name text, p_student_roll text,
   p_student_dept text DEFAULT '', p_student_sem text DEFAULT '',
   p_student_div text DEFAULT 'A', p_ttl_hours integer DEFAULT 24
-) RETURNS TABLE(ticket_token text, ticket_expires_at timestamptz)
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions AS $$
-DECLARE v_token text; v_exam public.mcq_exams%ROWTYPE; v_expires timestamptz;
+) RETURNS TABLE(ticket_id uuid, ticket_token text, ticket_expires_at timestamptz)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions AS $
+DECLARE v_token text; v_ticket_id uuid; v_exam public.mcq_exams%ROWTYPE; v_expires timestamptz;
 BEGIN
   IF COALESCE(auth.jwt()->'app_metadata'->>'role','') <> 'admin' OR auth.uid() IS NULL THEN
     RAISE EXCEPTION 'trusted administrator role required' USING ERRCODE='42501';
@@ -241,6 +243,42 @@ BEGIN
   RETURN jsonb_build_object('attemptId',a.id,'status',CASE WHEN now_ms>=a.deadline THEN 'TIMED_OUT' ELSE 'SUBMITTED' END,'resultsReleased',false);
 END $$;
 
+CREATE OR REPLACE FUNCTION public.list_mcq_candidate_tickets(p_exam_id text)
+RETURNS TABLE(ticket_id uuid, student_name text, student_roll text, issued_at timestamptz,
+              expires_at timestamptz, revoked_at timestamptz, attempt_status text)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+BEGIN
+  IF COALESCE(auth.jwt()->'app_metadata'->>'role','') <> 'admin' OR auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'trusted administrator role required' USING ERRCODE='42501';
+  END IF;
+  RETURN QUERY
+  SELECT t.id, t.student_name, t.student_roll, t.issued_at, t.expires_at, t.revoked_at,
+    (SELECT a.status FROM public.mcq_attempts a WHERE a.candidate_ticket_id=t.id ORDER BY a.start_time DESC LIMIT 1)
+  FROM public.mcq_candidate_tickets t
+  WHERE t.exam_id=p_exam_id
+  ORDER BY t.issued_at DESC LIMIT 100;
+END $;
+
+CREATE OR REPLACE FUNCTION public.revoke_mcq_candidate_ticket_by_id(p_ticket_id uuid)
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+DECLARE affected integer;
+BEGIN
+  IF COALESCE(auth.jwt()->'app_metadata'->>'role','') <> 'admin' OR auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'trusted administrator role required' USING ERRCODE='42501';
+  END IF;
+  UPDATE public.mcq_candidate_tickets
+    SET revoked_at=COALESCE(revoked_at,now())
+    WHERE id=p_ticket_id;
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  IF affected=1 THEN
+    UPDATE public.mcq_attempts
+      SET status='ABANDONED',submit_time=floor(extract(epoch FROM clock_timestamp())*1000)::bigint,
+          last_activity_at=floor(extract(epoch FROM clock_timestamp())*1000)::bigint
+      WHERE candidate_ticket_id=p_ticket_id AND status='IN_PROGRESS';
+  END IF;
+  RETURN affected=1;
+END $;
+
 CREATE OR REPLACE FUNCTION public.revoke_mcq_candidate_ticket(p_ticket_token text)
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions AS $$
 DECLARE affected integer;
@@ -266,6 +304,10 @@ BEGIN
   RETURN affected=1;
 END $$;
 
+REVOKE ALL ON FUNCTION public.list_mcq_candidate_tickets(text) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.list_mcq_candidate_tickets(text) TO authenticated;
+REVOKE ALL ON FUNCTION public.revoke_mcq_candidate_ticket_by_id(uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.revoke_mcq_candidate_ticket_by_id(uuid) TO authenticated;
 REVOKE ALL ON FUNCTION public.issue_mcq_candidate_ticket(text,text,text,text,text,text,integer) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.issue_mcq_candidate_ticket(text,text,text,text,text,text,integer) TO authenticated;
 REVOKE ALL ON FUNCTION public.revoke_mcq_candidate_ticket(text) FROM PUBLIC,anon;
