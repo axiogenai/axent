@@ -184,7 +184,7 @@ RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extension
 DECLARE t public.mcq_candidate_tickets%ROWTYPE; a public.mcq_attempts%ROWTYPE; x jsonb;
   e public.mcq_exams%ROWTYPE;
   qid text; correct_id text; selected_id text; marks numeric; penalty numeric;
-  v_score numeric:=0; v_max_score numeric:=0; v_correct_count int:=0; v_wrong_count int:=0; v_unanswered_count int:=0; now_ms bigint;
+  v_score numeric:=0; v_max_score numeric:=0; v_correct_count int:=0; v_wrong_count int:=0; v_unanswered_count int:=0; now_ms bigint; v_result jsonb;
 BEGIN
   SELECT * INTO t FROM public.mcq_candidate_tickets WHERE token_hash=encode(extensions.digest(convert_to(COALESCE(p_ticket_token,''),'UTF8'),'sha256'),'hex')
     AND revoked_at IS NULL;
@@ -194,8 +194,15 @@ BEGIN
   SELECT * INTO e FROM public.mcq_exams WHERE id=a.exam_id;
   IF a.status<>'IN_PROGRESS' THEN
     IF COALESCE(e.result_declaration_mode,'IMMEDIATE')='IMMEDIATE' THEN
-      RETURN jsonb_build_object('attemptId',a.id,'status',a.status,'resultsReleased',true,'score',a.score,'maxScore',a.max_score,
+      v_result:=jsonb_build_object('attemptId',a.id,'status',a.status,'resultsReleased',true,'score',a.score,'maxScore',a.max_score,
         'correctCount',a.correct_count,'wrongCount',a.wrong_count,'unansweredCount',a.unanswered_count,'percentageScore',a.percentage_score);
+      IF COALESCE(e.show_explanations_after_submit,false) THEN
+        v_result:=v_result||jsonb_build_object('explanations',(SELECT COALESCE(jsonb_agg(jsonb_build_object(
+          'questionId',x->>'questionId','correctOptionId',x->'snapshot'->>'correctOptionId',
+          'selectedOptionId',a.answers->>(x->>'questionId'),'explanation',x->'snapshot'->>'explanation')
+          ORDER BY (x->>'order')::int),'[]'::jsonb) FROM jsonb_array_elements(a.assigned_questions) x));
+      END IF;
+      RETURN v_result;
     END IF;
     RETURN jsonb_build_object('attemptId',a.id,'status',a.status,'resultsReleased',false);
   END IF;
@@ -217,9 +224,16 @@ BEGIN
     wrong_count=v_wrong_count,unanswered_count=v_unanswered_count,
     percentage_score=CASE WHEN v_max_score>0 THEN round((v_score/v_max_score)*100,2) ELSE 0 END,graded_at=now_ms WHERE id=a.id;
   IF COALESCE(e.result_declaration_mode,'IMMEDIATE')='IMMEDIATE' THEN
-    RETURN jsonb_build_object('attemptId',a.id,'status',CASE WHEN now_ms>=a.deadline THEN 'TIMED_OUT' ELSE 'SUBMITTED' END,
+    v_result:=jsonb_build_object('attemptId',a.id,'status',CASE WHEN now_ms>=a.deadline THEN 'TIMED_OUT' ELSE 'SUBMITTED' END,
       'resultsReleased',true,'score',v_score,'maxScore',v_max_score,'correctCount',v_correct_count,'wrongCount',v_wrong_count,'unansweredCount',v_unanswered_count,
       'percentageScore',CASE WHEN v_max_score>0 THEN round((v_score/v_max_score)*100,2) ELSE 0 END);
+    IF COALESCE(e.show_explanations_after_submit,false) THEN
+      v_result:=v_result||jsonb_build_object('explanations',(SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'questionId',x->>'questionId','correctOptionId',x->'snapshot'->>'correctOptionId',
+        'selectedOptionId',a.answers->>(x->>'questionId'),'explanation',x->'snapshot'->>'explanation')
+        ORDER BY (x->>'order')::int),'[]'::jsonb) FROM jsonb_array_elements(a.assigned_questions) x));
+    END IF;
+    RETURN v_result;
   END IF;
   RETURN jsonb_build_object('attemptId',a.id,'status',CASE WHEN now_ms>=a.deadline THEN 'TIMED_OUT' ELSE 'SUBMITTED' END,'resultsReleased',false);
 END $$;
