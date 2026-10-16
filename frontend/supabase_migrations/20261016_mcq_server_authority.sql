@@ -153,8 +153,7 @@ BEGIN
   IF a.status<>'IN_PROGRESS' THEN RAISE EXCEPTION 'attempt is not in progress' USING ERRCODE='22023'; END IF;
   now_ms:=floor(extract(epoch FROM clock_timestamp())*1000)::bigint;
   IF now_ms>=a.deadline THEN
-    UPDATE public.mcq_attempts SET status='TIMED_OUT',submit_time=deadline,last_activity_at=now_ms WHERE id=a.id;
-    RAISE EXCEPTION 'exam deadline passed' USING ERRCODE='22023';
+    RETURN jsonb_build_object('saved',false,'status','TIMED_OUT','serverTime',now_ms);
   END IF;
   IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(a.assigned_questions) x WHERE x->>'questionId'=p_question_id
     AND EXISTS(SELECT 1 FROM jsonb_array_elements(x->'snapshot'->'options') o WHERE o->>'id'=p_option_id)) THEN
@@ -171,9 +170,9 @@ DECLARE t public.mcq_candidate_tickets%ROWTYPE; a public.mcq_attempts%ROWTYPE; x
   v_score numeric:=0; v_max_score numeric:=0; v_correct_count int:=0; v_wrong_count int:=0; v_unanswered_count int:=0; now_ms bigint;
 BEGIN
   SELECT * INTO t FROM public.mcq_candidate_tickets WHERE token_hash=encode(extensions.digest(convert_to(COALESCE(p_ticket_token,''),'UTF8'),'sha256'),'hex')
-    AND revoked_at IS NULL AND expires_at>now();
+    AND revoked_at IS NULL;
   IF NOT FOUND THEN RAISE EXCEPTION 'invalid candidate ticket' USING ERRCODE='28000'; END IF;
-  SELECT * INTO a FROM public.mcq_attempts WHERE id=p_attempt_id AND exam_id=t.exam_id AND student_roll=t.student_roll FOR UPDATE;
+  SELECT * INTO a FROM public.mcq_attempts WHERE id=p_attempt_id AND exam_id=t.exam_id AND student_roll=t.student_roll AND candidate_ticket_id=t.id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'attempt not found' USING ERRCODE='22023'; END IF;
   IF a.status<>'IN_PROGRESS' THEN RETURN jsonb_build_object('attemptId',a.id,'status',a.status,'score',a.score,'maxScore',a.max_score,
     'correctCount',a.correct_count,'wrongCount',a.wrong_count,'unansweredCount',a.unanswered_count,'percentageScore',a.percentage_score); END IF;
@@ -212,6 +211,10 @@ GRANT EXECUTE ON FUNCTION public.submit_mcq_attempt(text,text) TO anon,authentic
 DROP POLICY IF EXISTS "Allow public read-write for mcq_questions" ON public.mcq_questions;
 DROP POLICY IF EXISTS "Allow public read-write for mcq_exams" ON public.mcq_exams;
 DROP POLICY IF EXISTS "Allow public read-write for mcq_attempts" ON public.mcq_attempts;
+DROP POLICY IF EXISTS "Trusted authorities manage MCQ questions" ON public.mcq_questions;
+DROP POLICY IF EXISTS "Trusted authorities manage MCQ exams" ON public.mcq_exams;
+DROP POLICY IF EXISTS "Trusted admin manages MCQ attempts" ON public.mcq_attempts;
+DROP POLICY IF EXISTS "Trusted authorities read MCQ attempts" ON public.mcq_attempts;
 REVOKE ALL ON public.mcq_questions, public.mcq_exams, public.mcq_attempts FROM anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.mcq_questions, public.mcq_exams, public.mcq_attempts TO authenticated;
 
