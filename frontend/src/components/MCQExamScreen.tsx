@@ -436,10 +436,9 @@ interface RegistrationFormProps {
   onStart: (student: StudentInfo) => void;
   startError?: string | null;
   onBack?: () => void;
-  onViewSubmittedResult?: (attempt: MCQAttempt) => void;
 }
 
-const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onSelectExam, onStart, startError, onBack, onViewSubmittedResult }) => {
+const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onSelectExam, onStart, startError, onBack }) => {
   const navigate = useNavigate();
   const [mode, setMode] = useState<'manual' | 'token'>('manual');
   
@@ -486,12 +485,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
       (item) => item.status === 'SUBMITTED' || item.status === 'TIMED_OUT'
     );
     if (existingSubmitted && Math.max(1, exam.maxAttempts || 1) <= 1) {
-      if (onViewSubmittedResult) {
-        playSound('success');
-        onViewSubmittedResult(existingSubmitted);
-        return;
-      }
-      errs.push(`Candidate with Roll Number / USN "${trimmedRoll}" has already submitted this examination. Re-attempting is strictly prohibited under institutional proctoring rules.`);
+      errs.push(`Candidate with Roll Number / USN "${trimmedRoll}" has already completed and submitted this examination. Re-taking is not permitted.`);
     }
 
     if (errs.length > 0) {
@@ -2731,7 +2725,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         if (aIdx >= 0) {
           allAttempts[aIdx].tabSwitchCount = 0;
           localStorage.setItem(MCQ_STORAGE_KEYS.ATTEMPTS, JSON.stringify(allAttempts));
-          localStorage.setItem('codedna_mcq_active_attempt_backup', JSON.stringify(allAttempts[aIdx]));
+          sessionStorage.setItem('codedna_mcq_active_attempt_backup', JSON.stringify(allAttempts[aIdx]));
         }
       } catch {}
     }
@@ -3234,11 +3228,6 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         onStart={handleStart}
         startError={attemptStartError}
         onBack={onBack}
-        onViewSubmittedResult={(submittedAttempt) => {
-          setAttempt(submittedAttempt);
-          setSubmitted(true);
-          setGradeResult(gradeAttempt(submittedAttempt));
-        }}
       />
     );
   }

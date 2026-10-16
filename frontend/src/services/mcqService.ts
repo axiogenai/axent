@@ -542,25 +542,41 @@ export function startAttempt(
     throw new Error('Candidate name and roll number are required.');
   }
 
-  // Prevent double-clicks from creating duplicate attempts and resume only the
-  // same candidate's attempt for this exam.
-  const candidateAttempts = getAttemptsForExam(exam.id).filter(
-    (item) => String(item.studentRoll || '').trim().toLocaleLowerCase() === normalizedRoll
-  );
-  const existingActive = candidateAttempts.find((item) => item.status === 'IN_PROGRESS');
-  if (existingActive) {
-    try { sessionStorage.setItem('codedna_mcq_session_attempt', existingActive.id); } catch {}
-    return existingActive;
-  }
+  // 1. Recover in-progress attempt ONLY IF already active in THIS specific browser tab session.
+  // NEVER resurrect or hijack an attempt from another device or candidate!
+  try {
+    const currentSessionAttemptId = sessionStorage.getItem('codedna_mcq_session_attempt');
+    if (currentSessionAttemptId) {
+      const currentSessionAttempt = getAttemptById(currentSessionAttemptId);
+      if (
+        currentSessionAttempt &&
+        currentSessionAttempt.status === 'IN_PROGRESS' &&
+        currentSessionAttempt.examId === exam.id &&
+        String(currentSessionAttempt.studentRoll || '').trim().toLocaleLowerCase() === normalizedRoll
+      ) {
+        return currentSessionAttempt;
+      }
+    }
+  } catch {}
 
   const now = getSynchronizedNow();
   if (exam.status !== 'PUBLISHED') throw new Error('This examination is not published.');
   if (exam.startTime && now < exam.startTime) throw new Error('This examination has not started yet.');
   if (exam.endTime && now >= exam.endTime) throw new Error('The examination submission window has closed.');
   
+  const candidateAttempts = getAttemptsForExam(exam.id).filter(
+    (item) => String(item.studentRoll || '').trim().toLocaleLowerCase() === normalizedRoll
+  );
+
+  // 2. Cross-device guard: If another terminal has an active session for this roll number, block hijacking
+  const activeOnOtherTerminal = candidateAttempts.find((item) => item.status === 'IN_PROGRESS');
+  if (activeOnOtherTerminal) {
+    throw new Error(`An active examination session for Roll Number / USN "${studentRoll}" is already running on another terminal.`);
+  }
+
   const finalizedAttempts = candidateAttempts.filter((a) => a.status === 'SUBMITTED' || a.status === 'TIMED_OUT' || a.status === 'ABANDONED');
   if (finalizedAttempts.length >= Math.max(1, exam.maxAttempts || 1)) {
-    throw new Error('You have reached the maximum number of attempts for this examination.');
+    throw new Error(`Candidate with Roll Number / USN "${studentRoll}" has already submitted this examination. Re-attempting is not permitted.`);
   }
   let assignedIds = Array.isArray(exam.questionIds) && exam.questionIds.length > 0
     ? Array.from(new Set(exam.questionIds))
@@ -720,7 +736,7 @@ export function startAttempt(
 
   saveAttempt(attempt);
   try {
-    localStorage.setItem(MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT, attempt.id);
+    sessionStorage.setItem('codedna_mcq_session_attempt', attempt.id);
   } catch {}
   return attempt;
 }
@@ -738,7 +754,7 @@ export function saveAnswer(attemptId: string, questionId: string, optionId: stri
 
   all[idx] = { ...attempt, answers: { ...attempt.answers, [questionId]: optionId }, lastActivityAt: getSynchronizedNow() };
   save(MCQ_STORAGE_KEYS.ATTEMPTS, all);
-  try { localStorage.setItem('codedna_mcq_active_attempt_backup', JSON.stringify(all[idx])); } catch {}
+  try { sessionStorage.setItem('codedna_mcq_active_attempt_backup', JSON.stringify(all[idx])); } catch {}
   void saveAttemptToCloud(all[idx]);
   return true;
 }
