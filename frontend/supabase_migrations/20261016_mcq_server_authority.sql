@@ -65,8 +65,9 @@ BEGIN
   v_expires := now()+make_interval(hours=>p_ttl_hours);
   INSERT INTO public.mcq_candidate_tickets(token_hash,exam_id,student_name,student_roll,student_dept,student_sem,student_div,expires_at,created_by)
   VALUES(encode(extensions.digest(convert_to(v_token,'UTF8'),'sha256'),'hex'),p_exam_id,trim(p_student_name),trim(p_student_roll),
-    COALESCE(trim(p_student_dept),''),COALESCE(trim(p_student_sem),''),COALESCE(NULLIF(trim(p_student_div),''),'A'),v_expires,auth.uid());
-  RETURN QUERY SELECT v_token,v_expires;
+    COALESCE(trim(p_student_dept),''),COALESCE(trim(p_student_sem),''),COALESCE(NULLIF(trim(p_student_div),''),'A'),v_expires,auth.uid())
+    RETURNING id INTO v_ticket_id;
+  RETURN QUERY SELECT v_ticket_id,v_token,v_expires;
 END $$;
 
 -- Starts/resumes an attempt; answer keys remain only in the server-side assignment.
