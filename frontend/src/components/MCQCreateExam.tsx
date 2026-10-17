@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus, Save, Trash2, ChevronLeft, ChevronRight, CheckSquare,
-  Clock, List, Settings, Eye, AlertCircle, BookOpen, X, Check, GraduationCap, MessageCircle, Copy, RefreshCw, Search
+  Clock, List, Settings, Eye, AlertCircle, BookOpen, X, Check, GraduationCap, MessageCircle, Copy, RefreshCw, Search, Key
 } from 'lucide-react';
 import { MCQExamConfig, MCQExamStatus } from '../types/mcq';
 import { MCQQuestion } from '../types/mcq';
@@ -27,6 +28,7 @@ const STATUS_COLOR: Record<MCQExamStatus, string> = {
 };
 
 const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
+  const navigate = useNavigate();
   const [exams, setExams] = useState<MCQExamConfig[]>(() => getAllExams());
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [publishErrors, setPublishErrors] = useState<Record<string, string[]>>({});
@@ -270,6 +272,21 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
                       >
                         {copiedExamId === exam.id ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
                         <span>{copiedExamId === exam.id ? 'Link Copied!' : 'Copy Student Link'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => navigate(`/admin/mcq-tickets?examId=${encodeURIComponent(exam.id)}`)}
+                        title="Issue or import individual secure tickets for this exam"
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '5px',
+                          background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-sm)', padding: '6px 12px',
+                          cursor: 'pointer', color: 'var(--text-primary)',
+                          fontSize: '12px', fontWeight: 600,
+                        }}
+                      >
+                        <Key size={12} />
+                        <span>Issue Tickets</span>
                       </button>
 
                       <button
