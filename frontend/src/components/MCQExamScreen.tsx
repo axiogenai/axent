@@ -30,6 +30,7 @@ import {
 } from '../services/timeSyncService';
 import katex from 'katex';
 import { ErrorBoundary } from './ErrorBoundary';
+import { getCurrentAuthorityRole, isAuthorityAdmin } from '../services/authService';
 
 // ── Timer hook ────────────────────────────────────────────────────────────────
 function useCountdown(deadline: number, onExpire: () => void) {
@@ -4196,6 +4197,7 @@ const inputStyle: React.CSSProperties = {
 
 // ── Exam Selector (pick which exam to take) ───────────────────────────────────
 export const MCQExamSelector: React.FC = () => {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryExamId = searchParams.get('examId');
 
@@ -4242,6 +4244,29 @@ export const MCQExamSelector: React.FC = () => {
   });
   const [urlTamperNotice, setUrlTamperNotice] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState<number>(() => getSynchronizedNow());
+  const [directExamInput, setDirectExamInput] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const authorityRole = getCurrentAuthorityRole();
+
+  const handleLaunchDirectExam = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const clean = directExamInput.trim();
+    if (!clean) return;
+    playSound('click');
+    setSelectedExamId(clean);
+    setSearchParams({ examId: clean }, { replace: true });
+  };
+
+  const handleManualSync = async () => {
+    setIsRefreshing(true);
+    playSound('click');
+    try {
+      await syncFromSupabase();
+      setExams(loadEligibleExams());
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     const ticker = setInterval(() => setCurrentTime(getSynchronizedNow()), 1000);
@@ -4444,6 +4469,56 @@ export const MCQExamSelector: React.FC = () => {
               Select your assigned examination session to commence or review your past sittings.
             </p>
           </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={handleManualSync}
+              disabled={isRefreshing}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '7px 12px',
+                fontSize: '12px',
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                cursor: isRefreshing ? 'wait' : 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              title="Synchronize examination catalog with Supabase Cloud"
+            >
+              <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
+              <span>{isRefreshing ? 'Syncing...' : 'Sync Cloud'}</span>
+            </button>
+
+            {(authorityRole === 'admin' || authorityRole === 'paper_setter') && (
+              <button
+                type="button"
+                onClick={() => navigate('/paper-setter')}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'var(--accent)',
+                  border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '7px 14px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: '#000',
+                  cursor: 'pointer',
+                  transition: 'opacity 0.15s ease'
+                }}
+              >
+                <FileEdit size={13} />
+                <span>Paper Setter Portal</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {exams.length > 0 && (
@@ -4576,19 +4651,105 @@ export const MCQExamSelector: React.FC = () => {
         <div
           style={{
             textAlign: 'center',
-            padding: '60px 24px',
+            padding: '48px 24px',
             background: 'var(--bg-elevated)',
             border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md)'
+            borderRadius: 'var(--radius-md)',
+            maxWidth: '680px',
+            margin: '0 auto'
           }}
         >
-          <BookOpen size={34} style={{ marginBottom: '14px', opacity: 0.35, color: 'var(--text-muted)' }} />
-          <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 6px' }}>
-            No examinations scheduled
+          <BookOpen size={36} style={{ marginBottom: '14px', opacity: 0.35, color: 'var(--text-muted)' }} />
+          <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px' }}>
+            No Public Examinations Scheduled
+          </h3>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 24px', lineHeight: 1.5 }}>
+            There are currently no open public examinations in the institutional catalog. If you were issued a direct Exam ID or Candidate Ticket by your invigilator, enter it below to commence your sitting.
           </p>
-          <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: 0 }}>
-            Check back closer to your examination time or consult your laboratory invigilator.
-          </p>
+
+          {/* Direct Exam ID / Candidate Access Box */}
+          <form
+            onSubmit={handleLaunchDirectExam}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              maxWidth: '460px',
+              margin: '0 auto 20px',
+              flexWrap: 'wrap'
+            }}
+          >
+            <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+              <KeyRound
+                size={14}
+                style={{
+                  position: 'absolute',
+                  left: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--text-muted)'
+                }}
+              />
+              <input
+                type="text"
+                value={directExamInput}
+                onChange={(e) => setDirectExamInput(e.target.value)}
+                placeholder="Enter Exam ID (e.g. exam_ai_...)"
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-primary)',
+                  padding: '9px 12px 9px 34px',
+                  fontSize: '13px',
+                  outline: 'none'
+                }}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={!directExamInput.trim()}
+              className="btn btn-primary"
+              style={{
+                padding: '9px 16px',
+                fontSize: '13px',
+                fontWeight: 700,
+                borderRadius: 'var(--radius-sm)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <span>Launch</span>
+              <ArrowRight size={14} />
+            </button>
+          </form>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={handleManualSync}
+              disabled={isRefreshing}
+              className="btn btn-secondary btn-sm"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '6px 14px' }}
+            >
+              <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
+              <span>{isRefreshing ? 'Syncing...' : 'Sync Cloud Catalog'}</span>
+            </button>
+            {(authorityRole === 'admin' || authorityRole === 'paper_setter') && (
+              <button
+                type="button"
+                onClick={() => navigate('/paper-setter')}
+                className="btn btn-secondary btn-sm"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '6px 14px' }}
+              >
+                <FileEdit size={12} />
+                <span>Open Paper Setter Portal</span>
+              </button>
+            )}
+          </div>
         </div>
       ) : displayedExams.length === 0 ? (
         <div

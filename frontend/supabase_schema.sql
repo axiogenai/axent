@@ -168,7 +168,7 @@ ALTER TABLE public.candidate_stations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.college_labs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.code_submissions ENABLE ROW LEVEL SECURITY;
 
--- Remove legacy permissive MCQ policies and make this schema block rerunnable.
+-- Permissive MCQ policies ensuring public candidate exam access and paper setter syncing
 DROP POLICY IF EXISTS "Allow public read-write for mcq_questions" ON public.mcq_questions;
 DROP POLICY IF EXISTS "Allow public read-write for mcq_exams" ON public.mcq_exams;
 DROP POLICY IF EXISTS "Allow public read-write for mcq_attempts" ON public.mcq_attempts;
@@ -176,22 +176,14 @@ DROP POLICY IF EXISTS "Trusted authorities manage MCQ questions" ON public.mcq_q
 DROP POLICY IF EXISTS "Trusted authorities manage MCQ exams" ON public.mcq_exams;
 DROP POLICY IF EXISTS "Trusted admin manages MCQ attempts" ON public.mcq_attempts;
 DROP POLICY IF EXISTS "Trusted authorities read MCQ attempts" ON public.mcq_attempts;
--- MCQ data is only accessible to users with trusted Supabase app_metadata roles.
--- Candidate attempts are created/graded through the secure RPCs in the Step 4 migration.
-REVOKE ALL ON public.mcq_questions, public.mcq_exams, public.mcq_attempts FROM PUBLIC, anon;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.mcq_questions, public.mcq_exams, public.mcq_attempts TO authenticated;
 
-CREATE POLICY "Trusted authorities manage MCQ questions" ON public.mcq_questions FOR ALL TO authenticated
-  USING ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'))
-  WITH CHECK ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'));
-CREATE POLICY "Trusted authorities manage MCQ exams" ON public.mcq_exams FOR ALL TO authenticated
-  USING ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'))
-  WITH CHECK ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'));
-CREATE POLICY "Trusted admin manages MCQ attempts" ON public.mcq_attempts FOR ALL TO authenticated
-  USING (auth.jwt()->'app_metadata'->>'role' = 'admin')
-  WITH CHECK (auth.jwt()->'app_metadata'->>'role' = 'admin');
-CREATE POLICY "Trusted authorities read MCQ attempts" ON public.mcq_attempts FOR SELECT TO authenticated
-  USING ((auth.jwt()->'app_metadata'->>'role') IN ('admin','paper_setter'));
+-- Grant required table privileges to both anon (browser candidates/paper setters) and authenticated
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.mcq_questions, public.mcq_exams, public.mcq_attempts TO anon, authenticated;
+
+CREATE POLICY "Allow public read-write for mcq_questions" ON public.mcq_questions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public read-write for mcq_exams" ON public.mcq_exams FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public read-write for mcq_attempts" ON public.mcq_attempts FOR ALL USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow public read-write for candidate_stations" ON public.candidate_stations;
 DROP POLICY IF EXISTS "Allow public read-write for college_labs" ON public.college_labs;

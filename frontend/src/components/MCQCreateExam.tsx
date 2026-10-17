@@ -8,7 +8,7 @@ import { MCQExamConfig, MCQExamStatus } from '../types/mcq';
 import { MCQQuestion } from '../types/mcq';
 import {
   getAllQuestions, getAllExams, createExam, saveExam, deleteExam,
-  publishExam, closeExam, validateExamForPublish, onMcqDataChanged
+  publishExam, closeExam, validateExamForPublish, onMcqDataChanged, onExamsChanged, syncFromSupabase
 } from '../services/mcqService';
 import { AIPaperGeneratorModal } from './AIPaperGeneratorModal';
 import { ConfirmationModal } from './ConfirmationModal';
@@ -61,11 +61,14 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
 
   useEffect(() => {
     const refresh = () => setExams(getAllExams());
-    const unsubscribe = onMcqDataChanged(refresh);
+    const unsubData = onMcqDataChanged(refresh);
+    const unsubExams = onExamsChanged(refresh);
     window.addEventListener('storage', refresh);
     refresh();
+    void syncFromSupabase().then(refresh);
     return () => {
-      unsubscribe();
+      unsubData();
+      unsubExams();
       window.removeEventListener('storage', refresh);
     };
   }, []);
