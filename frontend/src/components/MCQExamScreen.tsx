@@ -4168,6 +4168,7 @@ export const MCQExamSelector: React.FC = () => {
 
   const [exams, setExams] = useState<MCQExamConfig[]>(loadEligibleExams);
   const [filterTab, setFilterTab] = useState<'all' | 'active' | 'concluded'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const refresh = () => {
@@ -4233,24 +4234,37 @@ export const MCQExamSelector: React.FC = () => {
     }
   }, [activeExamId, queryExamId, exams, selectedExamId, setSearchParams]);
 
-  const activeExams = useMemo(() => {
+  const searchedExams = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return exams;
     return exams.filter((e) => {
+      const matchTitle = (e.title || '').toLowerCase().includes(q);
+      const matchSubject = (e.subject || '').toLowerCase().includes(q);
+      const matchTopic = (e.topic || '').toLowerCase().includes(q);
+      const matchCategory = (e.examCategory || '').toLowerCase().includes(q);
+      const matchId = (e.id || '').toLowerCase().includes(q);
+      return matchTitle || matchSubject || matchTopic || matchCategory || matchId;
+    });
+  }, [exams, searchQuery]);
+
+  const activeExams = useMemo(() => {
+    return searchedExams.filter((e) => {
       const isConcluded = e.status === 'CLOSED' || Boolean(e.endTime && currentTime > e.endTime);
       return !isConcluded;
     });
-  }, [exams, currentTime]);
+  }, [searchedExams, currentTime]);
 
   const concludedExams = useMemo(() => {
-    return exams.filter((e) => {
+    return searchedExams.filter((e) => {
       return e.status === 'CLOSED' || Boolean(e.endTime && currentTime > e.endTime);
     });
-  }, [exams, currentTime]);
+  }, [searchedExams, currentTime]);
 
   const displayedExams = useMemo(() => {
     if (filterTab === 'active') return activeExams;
     if (filterTab === 'concluded') return concludedExams;
-    return exams;
-  }, [filterTab, activeExams, concludedExams, exams]);
+    return searchedExams;
+  }, [filterTab, activeExams, concludedExams, searchedExams]);
 
   const effectiveExamId = activeExamId || queryExamId || selectedExamId;
 
@@ -4359,87 +4373,149 @@ export const MCQExamSelector: React.FC = () => {
         </div>
       )}
 
-      {/* Clean Header with Filter Tabs */}
-      <div style={{ marginBottom: '22px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
-        <div>
-          <h2
-            style={{
-              fontSize: '20px',
-              fontWeight: 800,
-              color: 'var(--text-primary)',
-              margin: '0 0 4px',
-              letterSpacing: '-0.02em'
-            }}
-          >
-            Available MCQ Examinations
-          </h2>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-            Select your assigned examination session to commence or review your past sittings.
-          </p>
+      {/* Clean Header with Search & Filter Toolbar */}
+      <div style={{ marginBottom: '22px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px', marginBottom: exams.length > 0 ? '16px' : '0' }}>
+          <div>
+            <h2
+              style={{
+                fontSize: '20px',
+                fontWeight: 800,
+                color: 'var(--text-primary)',
+                margin: '0 0 4px',
+                letterSpacing: '-0.02em'
+              }}
+            >
+              Available MCQ Examinations
+            </h2>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
+              Select your assigned examination session to commence or review your past sittings.
+            </p>
+          </div>
         </div>
 
         {exams.length > 0 && (
-          <div
-            style={{
-              display: 'inline-flex',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-pill)',
-              padding: '3px',
-              gap: '2px'
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setFilterTab('all')}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+            {/* Search Input Box */}
+            <div style={{ position: 'relative', flex: 1, minWidth: 'min(100%, 280px)', maxWidth: '440px' }}>
+              <Search
+                size={14}
+                style={{
+                  position: 'absolute',
+                  left: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--text-muted)',
+                  pointerEvents: 'none'
+                }}
+              />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search examinations by title, topic, subject..."
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-pill)',
+                  color: 'var(--text-primary)',
+                  padding: '7px 32px 7px 34px',
+                  fontSize: '13px',
+                  outline: 'none',
+                  transition: 'border-color 0.15s ease'
+                }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--border-strong)'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--text-muted)',
+                    padding: '2px',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                  title="Clear search"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            {/* Filter Pills */}
+            <div
               style={{
-                background: filterTab === 'all' ? 'var(--bg-elevated)' : 'transparent',
-                color: filterTab === 'all' ? 'var(--text-primary)' : 'var(--text-muted)',
-                fontWeight: filterTab === 'all' ? 700 : 500,
-                fontSize: '12px',
-                padding: '4px 12px',
+                display: 'inline-flex',
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-pill)',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
+                padding: '3px',
+                gap: '2px'
               }}
             >
-              All ({exams.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterTab('active')}
-              style={{
-                background: filterTab === 'active' ? 'var(--bg-elevated)' : 'transparent',
-                color: filterTab === 'active' ? 'var(--text-primary)' : 'var(--text-muted)',
-                fontWeight: filterTab === 'active' ? 700 : 500,
-                fontSize: '12px',
-                padding: '4px 12px',
-                borderRadius: 'var(--radius-pill)',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              Active ({activeExams.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterTab('concluded')}
-              style={{
-                background: filterTab === 'concluded' ? 'var(--bg-elevated)' : 'transparent',
-                color: filterTab === 'concluded' ? 'var(--text-primary)' : 'var(--text-muted)',
-                fontWeight: filterTab === 'concluded' ? 700 : 500,
-                fontSize: '12px',
-                padding: '4px 12px',
-                borderRadius: 'var(--radius-pill)',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              Concluded ({concludedExams.length})
-            </button>
+              <button
+                type="button"
+                onClick={() => setFilterTab('all')}
+                style={{
+                  background: filterTab === 'all' ? 'var(--bg-elevated)' : 'transparent',
+                  color: filterTab === 'all' ? 'var(--text-primary)' : 'var(--text-muted)',
+                  fontWeight: filterTab === 'all' ? 700 : 500,
+                  fontSize: '12px',
+                  padding: '4px 12px',
+                  borderRadius: 'var(--radius-pill)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                All ({exams.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterTab('active')}
+                style={{
+                  background: filterTab === 'active' ? 'var(--bg-elevated)' : 'transparent',
+                  color: filterTab === 'active' ? 'var(--text-primary)' : 'var(--text-muted)',
+                  fontWeight: filterTab === 'active' ? 700 : 500,
+                  fontSize: '12px',
+                  padding: '4px 12px',
+                  borderRadius: 'var(--radius-pill)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                Active ({activeExams.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterTab('concluded')}
+                style={{
+                  background: filterTab === 'concluded' ? 'var(--bg-elevated)' : 'transparent',
+                  color: filterTab === 'concluded' ? 'var(--text-primary)' : 'var(--text-muted)',
+                  fontWeight: filterTab === 'concluded' ? 700 : 500,
+                  fontSize: '12px',
+                  padding: '4px 12px',
+                  borderRadius: 'var(--radius-pill)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                Concluded ({concludedExams.length})
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -4472,16 +4548,27 @@ export const MCQExamSelector: React.FC = () => {
             borderRadius: 'var(--radius-md)'
           }}
         >
-          <Clock size={30} style={{ marginBottom: '12px', opacity: 0.35, color: 'var(--text-muted)' }} />
+          <Search size={30} style={{ marginBottom: '12px', opacity: 0.35, color: 'var(--text-muted)' }} />
           <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 6px' }}>
-            {filterTab === 'active' ? 'No active examinations running right now' : 'No concluded examinations'}
+            {searchQuery.trim() ? 'No examinations found' : filterTab === 'active' ? 'No active examinations running right now' : 'No concluded examinations'}
           </p>
           <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: '0 0 16px' }}>
-            {filterTab === 'active'
+            {searchQuery.trim()
+              ? `No examinations matched "${searchQuery}". Try a different keyword or clear the search query.`
+              : filterTab === 'active'
               ? `There are ${concludedExams.length} concluded examination${concludedExams.length === 1 ? '' : 's'} archived in the system.`
               : 'There are no concluded examination records.'}
           </p>
-          {filterTab === 'active' && concludedExams.length > 0 && (
+          {searchQuery.trim() ? (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setSearchQuery('')}
+              style={{ fontSize: '12px', padding: '6px 16px' }}
+            >
+              Clear Search Query
+            </button>
+          ) : filterTab === 'active' && concludedExams.length > 0 ? (
             <button
               type="button"
               className="btn btn-secondary btn-sm"
@@ -4490,7 +4577,7 @@ export const MCQExamSelector: React.FC = () => {
             >
               View Concluded Sessions ({concludedExams.length})
             </button>
-          )}
+          ) : null}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>

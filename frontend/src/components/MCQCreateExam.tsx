@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Plus, Save, Trash2, ChevronLeft, ChevronRight, CheckSquare,
-  Clock, List, Settings, Eye, AlertCircle, BookOpen, X, Check, GraduationCap, MessageCircle, Copy, RefreshCw
+  Clock, List, Settings, Eye, AlertCircle, BookOpen, X, Check, GraduationCap, MessageCircle, Copy, RefreshCw, Search
 } from 'lucide-react';
 import { MCQExamConfig, MCQExamStatus } from '../types/mcq';
 import { MCQQuestion } from '../types/mcq';
@@ -32,6 +32,7 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
   const [publishErrors, setPublishErrors] = useState<Record<string, string[]>>({});
   const [showAIModal, setShowAIModal] = useState(false);
   const [copiedExamId, setCopiedExamId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const handleCopyLink = (examId: string) => {
     const url = `${window.location.origin}/mcq?examId=${encodeURIComponent(examId)}`;
@@ -40,6 +41,19 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
     playSound('click');
     setTimeout(() => setCopiedExamId(null), 2500);
   };
+
+  const filteredExams = useMemo(() => {
+    if (!searchQuery.trim()) return exams;
+    const q = searchQuery.trim().toLowerCase();
+    return exams.filter((exam) => {
+      const matchTitle = (exam.title || '').toLowerCase().includes(q);
+      const matchSubject = (exam.subject || '').toLowerCase().includes(q);
+      const matchTopic = (exam.topic || '').toLowerCase().includes(q);
+      const matchCategory = (exam.examCategory || '').toLowerCase().includes(q);
+      const matchId = (exam.id || '').toLowerCase().includes(q);
+      return matchTitle || matchSubject || matchTopic || matchCategory || matchId;
+    });
+  }, [exams, searchQuery]);
 
   const reload = () => setExams(getAllExams());
 
@@ -115,15 +129,76 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
         </div>
       </div>
 
+      {/* Search Bar */}
+      {exams.length > 0 && (
+        <div style={{ position: 'relative', marginBottom: '14px', maxWidth: '380px' }}>
+          <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search exams by title, topic, subject..."
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-pill)',
+              color: 'var(--text-primary)',
+              padding: '7px 32px 7px 34px',
+              fontSize: '13px',
+              outline: 'none',
+              transition: 'border-color 0.15s ease'
+            }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--border-strong)'; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              style={{
+                position: 'absolute',
+                right: '10px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-muted)',
+                padding: '2px',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+              title="Clear search"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+      )}
+
       {exams.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 20px' }}>
           <BookOpen size={36} style={{ marginBottom: '12px', opacity: 0.4, color: 'var(--text-muted)' }} />
           <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>No MCQ Exams Yet</p>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Create your first MCQ exam to get started.</p>
         </div>
+      ) : filteredExams.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 20px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
+          <Search size={30} style={{ marginBottom: '10px', opacity: 0.4, color: 'var(--text-muted)' }} />
+          <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>No examinations found</p>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px' }}>No exams match "{searchQuery}".</p>
+          <button
+            onClick={() => setSearchQuery('')}
+            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '6px 14px', fontSize: '12px', color: 'var(--text-primary)', cursor: 'pointer' }}
+          >
+            Clear Search
+          </button>
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {exams.map((exam) => (
+          {filteredExams.map((exam) => (
             <div key={exam.id} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '14px 16px' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 'min(100%, 280px)' }}>
