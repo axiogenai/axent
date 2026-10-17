@@ -32,7 +32,13 @@ import {
   purgePhantomExamLabs,
   isPhantomLab
 } from '../services/adminService';
-import { getAllExams, getAllAttempts, gradeAttempt } from '../services/mcqService';
+import {
+  getAllExams,
+  getAllAttempts,
+  gradeAttempt,
+  auditAndCleanFinishedExamLabs,
+  cleanupExamLabWhenOver
+} from '../services/mcqService';
 import { fetchStationsFromCloud, subscribeToCloudStations } from '../services/supabaseService';
 import { InstituteLabManagerModal } from './InstituteLabManagerModal';
 import { SupabaseMigrationModal } from './SupabaseMigrationModal';
@@ -288,14 +294,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     };
   }, [selectedLabId]);
 
-  // Synchronize and subscribe to college lab inventory from Supabase Cloud
+  // Synchronize and subscribe to college lab inventory & auto-delete finished exam labs
   useEffect(() => {
-    void purgePhantomExamLabs().then((cleanLabs) => {
-      setAllLabs(cleanLabs);
-      void syncCollegeLabsFromCloud().then((labs) => {
-        if (labs && labs.length > 0) setAllLabs(labs.filter((l) => !isPhantomLab(l)));
+    const runAudit = () => {
+      void auditAndCleanFinishedExamLabs().then(() => {
+        void purgePhantomExamLabs().then((cleanLabs) => {
+          setAllLabs(cleanLabs);
+        });
       });
+    };
+
+    runAudit();
+    void syncCollegeLabsFromCloud().then((labs) => {
+      if (labs && labs.length > 0) setAllLabs(labs.filter((l) => !isPhantomLab(l)));
     });
+
+    const auditInterval = setInterval(runAudit, 5000);
 
     const handleLabsChanged = (e: Event) => {
       const custom = e as CustomEvent<CollegeLabInfo[]>;
@@ -311,6 +325,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return () => {
       window.removeEventListener('codedna_labs_changed', handleLabsChanged);
       window.removeEventListener('storage', handleLabsChanged);
+      clearInterval(auditInterval);
     };
   }, []);
 

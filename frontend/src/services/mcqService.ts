@@ -29,10 +29,19 @@ import {
   fetchQuestionsFromCloud,
   fetchExamsFromCloud,
   fetchAttemptsFromCloud,
-  deleteCollegeLabFromCloud
+  deleteCollegeLabFromCloud,
+  clearAllStationsFromCloud,
+  clearAllAttemptsFromCloud
 } from './supabaseService';
 import { getSynchronizedNow } from './timeSyncService';
-import { ensureLabForExam, purgePhantomExamLabs } from './adminService';
+import {
+  ensureLabForExam,
+  purgePhantomExamLabs,
+  deleteCollegeLab,
+  clearAllStations,
+  getAllCollegeLabs,
+  notifyLabsChanged
+} from './adminService';
 
 // ── Persistence helpers ───────────────────────────────────────────────────────
 
@@ -402,22 +411,86 @@ export async function deleteExam(id: string): Promise<boolean> {
     void deleteQuestionsByIdsFromCloud(examToDelete.questionIds);
   }
 
-  // If this exam was bound to a phantom lab, delete it from cloud and purge
+  // When exam is deleted, its lab must delete automatically!
   if (examToDelete?.assignedLabId) {
-    if (
-      examToDelete.assignedLabId === 'LAB-06' ||
-      examToDelete.assignedLabId === 'LAB-721' ||
-      examToDelete.assignedLabName?.toLowerCase().startsWith('exam:')
-    ) {
-      void deleteCollegeLabFromCloud(examToDelete.assignedLabId);
-      void purgePhantomExamLabs();
-    }
+    await cleanupExamLabWhenOver(examToDelete.assignedLabId, examToDelete.id);
   }
 
   const ok = await deleteExamFromCloud(id);
   notifyExamsChanged();
   notifyMcqDataChanged();
   return ok;
+}
+
+/**
+ * MANDATORY: When an examination is concluded, expired, closed, or deleted:
+ * - If the exam had a dedicated/custom or non-canonical lab, that lab MUST DELETE AUTOMATICALLY
+ *   from Supabase cloud and client localStorage!
+ * - All workstations, candidate telemetry, and attempts in that lab are cleaned and freed.
+ * - Broadcasts real-time events to all tabs/windows so the lab dropdown and CCTV grid update instantly.
+ */
+export async function cleanupExamLabWhenOver(labId: string, examId?: string): Promise<void> {
+  if (!labId) return;
+  const canonicalLabs = new Set(['LAB-01', 'LAB-02', 'LAB-03', 'LAB-04', 'LAB-05']);
+  const isCustomOrDedicated = !canonicalLabs.has(labId.toUpperCase());
+
+  try {
+    // 1. If it's a dedicated/custom exam lab, delete the lab entirely from Supabase cloud & local storage
+    if (isCustomOrDedicated) {
+      await deleteCollegeLabFromCloud(labId);
+      await deleteCollegeLab(labId);
+    }
+
+    // 2. Always wipe candidate workstations and attempts for this lab
+    await clearAllStations(labId);
+    await clearAllStationsFromCloud(labId);
+    await clearAllAttemptsFromCloud(labId);
+
+    // 3. Purge phantom labs and broadcast
+    await purgePhantomExamLabs();
+    notifyLabsChanged(getAllCollegeLabs());
+  } catch (err) {
+    console.warn('[cleanupExamLabWhenOver] Error during automatic lab deletion:', err);
+  }
+}
+
+/**
+ * Automatically audits all exams on a regular interval or lifecycle event:
+ * - Detects expired exam time windows (now >= exam.endTime) or CLOSED exams.
+ * - Automatically deletes any associated dedicated/custom exam lab from cloud and local storage.
+ * - Cleans and frees workstations for the next batch.
+ */
+export async function auditAndCleanFinishedExamLabs(): Promise<void> {
+  try {
+    const exams = getAllExams();
+    const now = getSynchronizedNow();
+    let changed = false;
+
+    for (const exam of exams) {
+      const isExpired = Boolean(exam.endTime && exam.endTime > 0 && now >= exam.endTime);
+      const isClosed = exam.status === 'CLOSED';
+
+      if (isClosed || isExpired) {
+        if (isExpired && exam.status !== 'CLOSED') {
+          closeExam(exam.id);
+          changed = true;
+        } else if (exam.assignedLabId) {
+          const canonicalLabs = new Set(['LAB-01', 'LAB-02', 'LAB-03', 'LAB-04', 'LAB-05']);
+          if (!canonicalLabs.has(exam.assignedLabId.toUpperCase())) {
+            await cleanupExamLabWhenOver(exam.assignedLabId, exam.id);
+            changed = true;
+          }
+        }
+      }
+    }
+
+    if (changed) {
+      await purgePhantomExamLabs();
+      notifyLabsChanged(getAllCollegeLabs());
+    }
+  } catch (err) {
+    console.warn('[auditAndCleanFinishedExamLabs] Error during audit:', err);
+  }
 }
 
 export function publishExam(id: string): string[] {
@@ -456,6 +529,11 @@ export function closeExam(id: string): void {
         save(MCQ_STORAGE_KEYS.QUESTIONS, remainingQuestions);
         void deleteQuestionsByIdsFromCloud(questionsToDelete);
       }
+    }
+
+    // MANDATORY: When exam is over, its lab must delete automatically!
+    if (exam.assignedLabId) {
+      void cleanupExamLabWhenOver(exam.assignedLabId, exam.id);
     }
 
     notifyExamsChanged();
