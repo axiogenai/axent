@@ -128,9 +128,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const navigate = useNavigate();
 
-  // Selected Lab: 'all' or specific 'LAB-01' to 'LAB-50'
+  // Selected Lab: 'all' or specific lab ID
   const [allLabs, setAllLabs] = useState<CollegeLabInfo[]>(() => getAllCollegeLabs());
-  const [selectedLabId, setSelectedLabId] = useState<string>(() => getActiveLabId() || 'LAB-01');
+  const [selectedLabId, setSelectedLabId] = useState<string>('all');
   const [stations, setStations] = useState<CandidateStation[]>([]);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [modalTab, setModalTab] = useState<'screen' | 'code' | 'terminal' | 'mcq'>('screen');
@@ -151,17 +151,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [warningMessageInput, setWarningMessageInput] = useState<string>('Maintain your visual focus on the examination screen at all times.');
   const [stationViewMode, setStationViewMode] = useState<Record<string, 'camera' | 'activity'>>({});
 
-  const loadData = async () => {
+  const loadData = () => {
     purgeDemoStations();
     let list: CandidateStation[];
     if (selectedLabId === 'all') {
       list = getLiveStations();
     } else {
       list = getStationsForLab(selectedLabId);
+      // Fallback: If station's exam title matches current lab's title, include it
+      const currentLab = allLabs.find((l) => l.labId === selectedLabId);
+      if (currentLab) {
+        const cleanLabName = currentLab.labName.replace(/^Exam:\s*/i, '').trim().toLowerCase();
+        const all = getLiveStations();
+        const examMatches = all.filter((s) => {
+          const title = (s.student?.assignmentTitle || s.mcqProgress?.examTitle || '').trim().toLowerCase();
+          return title && title === cleanLabName;
+        });
+        const combined = new Map<string, CandidateStation>();
+        list.forEach((s) => combined.set(s.id, s));
+        examMatches.forEach((s) => combined.set(s.id, s));
+        list = Array.from(combined.values());
+      }
     }
 
-    try {
-      const cloudStations = await fetchStationsFromCloud(selectedLabId === 'all' ? undefined : selectedLabId);
+    // Instantly update state with 0ms delay
+    setStations(list);
+    setLastRefreshed(new Date().toLocaleTimeString());
+
+    // Asynchronous non-blocking cloud merge
+    fetchStationsFromCloud(selectedLabId === 'all' ? undefined : selectedLabId).then((cloudStations) => {
       if (cloudStations && cloudStations.length > 0) {
         const stationMap = new Map<string, CandidateStation>();
         list.forEach((s) => stationMap.set(s.id, s));
@@ -171,15 +189,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             stationMap.set(cs.id, cs);
           }
         });
-        list = Array.from(stationMap.values());
-        saveAllStations(list);
+        const merged = Array.from(stationMap.values());
+        setStations(merged);
+        saveAllStations(merged);
       }
-    } catch {
-      // Offline fallback
-    }
-
-    setStations(list);
-    setLastRefreshed(new Date().toLocaleTimeString());
+    }).catch(() => {});
   };
 
   useEffect(() => {
@@ -190,7 +204,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const unsubscribeCloud = subscribeToCloudStations(() => {
       loadData();
     });
-    // Auto-poll live workstation feeds every 2.5 seconds for instant cross-network sync
     const interval = setInterval(() => {
       loadData();
     }, 2500);
@@ -203,16 +216,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Synchronize and subscribe to college lab inventory from Supabase Cloud
   useEffect(() => {
-    // Auto-provision labs for any registered exams so CCTV lab filters are immediately populated
-    try {
-      const exams = getAllExams();
-      exams.forEach((ex) => {
-        if (ex.id && ex.title) {
-          ensureLabForExam(ex);
-        }
-      });
-    } catch {}
-
     void syncCollegeLabsFromCloud().then((labs) => {
       if (labs && labs.length > 0) setAllLabs(labs);
     });
@@ -526,7 +529,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             College Multi-Laboratory Examination Grid
           </h2>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            Monitoring {selectedLabId === 'all' ? 'All 50 Campus Labs' : currentLabInfo?.labName} • Live feed sync every 3s • Last updated: {lastRefreshed}
+            Monitoring {selectedLabId === 'all' ? `All Examination Laboratories (${allLabs.length} Active Labs)` : currentLabInfo?.labName} • Instant Live CCTV Telemetry Sync • Last updated: {lastRefreshed}
           </div>
         </div>
 
@@ -643,11 +646,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               options={[
                 {
                   value: 'all',
-                  label: `All ${allLabs.length} Labs (Campus Overview - ${getLiveStations().length} Active Online)`,
+                  label: `All ${allLabs.length} Labs (Campus Overview - ${stations.length} Active Online)`,
                   badge: 'ALL'
                 },
                 ...allLabs.map((lab) => {
-                  const liveCount = getLiveStations().filter((s) => s.labId === lab.labId).length;
+                  const liveCount = stations.filter((s) => s.labId === lab.labId).length;
                   return {
                     value: lab.labId,
                     label: `${lab.labId}: ${lab.labName} (${lab.department})`,
@@ -1478,7 +1481,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         onClick={() => {
                           const nextLock = !isLocked;
                           sendProctorLockCommand(station.id, nextLock, station.labId);
-                          loadData();
+                          setStations((prev) => prev.map((s) => s.id === station.id ? { ...s, isLockedByProctor: nextLock } : s));
                           playSound('click');
                         }}
                         style={{
@@ -1715,7 +1718,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               onClick={() => {
                                 const nextLock = !stationLocked;
                                 sendProctorLockCommand(station.id, nextLock, station.labId);
-                                loadData();
+                                setStations((prev) => prev.map((s) => s.id === station.id ? { ...s, isLockedByProctor: nextLock } : s));
+                                playSound('click');
                               }}
                               style={{ height: '24px', padding: '0 6px', fontSize: '11px' }}
                               title={stationLocked ? 'Unlock student editor' : 'Freeze student editor remotely'}
@@ -1958,7 +1962,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       onClick={() => {
                         const nextLock = !isStationCurrentlyLocked;
                         sendProctorLockCommand(selectedStation.id, nextLock, selectedStation.labId);
-                        loadData();
+                        setStations((prev) => prev.map((s) => s.id === selectedStation.id ? { ...s, isLockedByProctor: nextLock } : s));
+                        playSound('click');
                       }}
                       style={{ height: '28px', fontSize: '11px', padding: '0 10px' }}
                       title="Remotely freeze/unfreeze candidate Monaco code editor"

@@ -1038,9 +1038,39 @@ input[type=number].no-spin {
   max-width: 1520px;
   margin: 0 auto;
   width: 100%;
-  padding: clamp(12px, 2.5vw, 28px);
-  gap: 24px;
+  padding: clamp(12px, 2vw, 24px);
+  gap: 20px;
   box-sizing: border-box;
+}
+
+/* Edge-to-Edge Fullscreen and Mobile Kiosk Modes */
+:fullscreen,
+::backdrop,
+.codedna-kiosk-mode {
+  background: var(--bg-main) !important;
+}
+
+.codedna-kiosk-mode {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  max-width: 100vw !important;
+  max-height: 100dvh !important;
+  z-index: 99999 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+:fullscreen .mcq-exam-container,
+.codedna-kiosk-mode .mcq-exam-container,
+.mcq-exam-fullscreen .mcq-exam-container {
+  max-width: 100% !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: clamp(12px, 2vw, 24px) !important;
 }
 
 .mcq-exam-sidebar {

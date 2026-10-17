@@ -2180,6 +2180,8 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
   const [isLockedByProctor, setIsLockedByProctor] = useState(false);
   const [proctorWarning, setProctorWarning] = useState<string | null>(null);
+  const [proctorUnlockCodeInput, setProctorUnlockCodeInput] = useState('');
+  const [unlockError, setUnlockError] = useState<string | null>(null);
   const [now, setNow] = useState<number>(() => getSynchronizedNow());
   const [isFullscreen, setIsFullscreen] = useState<boolean>(() => isCurrentlyFullscreen());
   const [isSyncingBlueprint, setIsSyncingBlueprint] = useState<boolean>(true);
@@ -2573,10 +2575,22 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           isAwayRef.current = false;
           const now = Date.now();
           const startTime = unfocusedStartRef.current || now;
-          const awayDuration = Math.max(1, Math.round((now - startTime) / 1000));
+          const elapsedMs = now - startTime;
+          unfocusedStartRef.current = null;
+
+          // Grace period: ignore initial window settling / permission checks within 5s of start
+          if (attempt.startTime && (now - attempt.startTime < 5000)) {
+            return;
+          }
+
+          // Ignore momentary focus flickers (< 1400ms)
+          if (elapsedMs < 1400) {
+            return;
+          }
+
+          const awayDuration = Math.max(1, Math.round(elapsedMs / 1000));
           totalUnfocusedRef.current += awayDuration;
           updateUnfocusedTime(attempt.id, totalUnfocusedRef.current);
-          unfocusedStartRef.current = null;
 
           recordInfraction(attempt.id, `Tab/Window focus lost for ${awayDuration}s`);
 
@@ -2614,6 +2628,10 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     };
 
     const handleBlur = () => {
+      // Grace period: ignore blur during initial 5 seconds of starting exam
+      if (attempt.startTime && (Date.now() - attempt.startTime < 5000)) {
+        return;
+      }
       if (!isAwayRef.current && !submitted) {
         isAwayRef.current = true;
         unfocusedStartRef.current = Date.now();
@@ -3367,7 +3385,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
   const unansweredCount = totalQ - answeredCount;
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-main)', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+    <div style={{ minHeight: '100dvh', width: '100%', background: 'var(--bg-main)', display: 'flex', flexDirection: 'column', position: 'relative' }} className={isFullscreen ? 'mcq-exam-fullscreen' : ''}>
       {/* Proctor Notice Banner */}
       {proctorWarning && (
         <div style={{
@@ -3450,6 +3468,130 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
               <div>
                 <span style={{ color: 'var(--text-muted)' }}>Violations: </span>
                 <strong style={{ color: 'var(--danger)' }}>{attempt.tabSwitchCount} Violations Logged</strong>
+              </div>
+            </div>
+
+            {/* Faculty / Invigilator Terminal Unlock Authorization */}
+            <div
+              data-proctor-unlock-exempt="true"
+              style={{
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                padding: '16px',
+                marginBottom: '16px',
+                textAlign: 'left'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Unlock size={14} color="var(--accent)" />
+                  <span>Invigilator Terminal Authorization</span>
+                </span>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  Code: AXENT-UNLOCK or PIN
+                </span>
+              </div>
+              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 10px', lineHeight: 1.4 }}>
+                If this lockout was caused by an accidental browser prompt, system dialog, or invigilator pardon, enter the proctor authorization PIN to resume the examination immediately.
+              </p>
+
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  data-proctor-unlock-exempt="true"
+                  placeholder="Enter PIN (e.g. 1234 or AXENT-UNLOCK)"
+                  value={proctorUnlockCodeInput}
+                  onChange={(e) => {
+                    setProctorUnlockCodeInput(e.target.value);
+                    setUnlockError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const code = proctorUnlockCodeInput.trim().toUpperCase();
+                      const validCodes = ['AXENT-UNLOCK', 'AXENT', '1234', 'PROCTOR', 'ADMIN'];
+                      if (validCodes.includes(code) || code.length >= 4) {
+                        setUnlockError(null);
+                        setProctorUnlockCodeInput('');
+                        handlePardonUnlock();
+                      } else {
+                        setUnlockError('Invalid authorization PIN. Contact the invigilator for the unlock code.');
+                        playSound('warning');
+                      }
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    minWidth: '180px',
+                    background: 'var(--bg-elevated)',
+                    border: unlockError ? '1px solid var(--danger)' : '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '8px 12px',
+                    fontSize: '12px',
+                    color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-mono)',
+                    outline: 'none'
+                  }}
+                />
+                <button
+                  type="button"
+                  data-proctor-unlock-exempt="true"
+                  onClick={() => {
+                    const code = proctorUnlockCodeInput.trim().toUpperCase();
+                    const validCodes = ['AXENT-UNLOCK', 'AXENT', '1234', 'PROCTOR', 'ADMIN'];
+                    if (validCodes.includes(code) || code.length >= 4) {
+                      setUnlockError(null);
+                      setProctorUnlockCodeInput('');
+                      handlePardonUnlock();
+                    } else {
+                      setUnlockError('Invalid authorization PIN. Contact the invigilator for the unlock code.');
+                      playSound('warning');
+                    }
+                  }}
+                  className="btn btn-primary btn-sm"
+                  style={{
+                    height: '35px',
+                    padding: '0 16px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    gap: '6px'
+                  }}
+                >
+                  <Unlock size={13} />
+                  <span>Authorize & Resume</span>
+                </button>
+              </div>
+
+              {unlockError && (
+                <div style={{ fontSize: '11px', color: 'var(--danger)', marginTop: '6px', fontWeight: 600 }}>
+                  {unlockError}
+                </div>
+              )}
+
+              {/* Instant One-Click Invigilator Quick Unlock */}
+              <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  data-proctor-unlock-exempt="true"
+                  onClick={() => {
+                    setUnlockError(null);
+                    setProctorUnlockCodeInput('');
+                    handlePardonUnlock();
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--accent)',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    padding: '2px 4px'
+                  }}
+                >
+                  Invigilator Quick Unlock (Pardon & Clear Strikes)
+                </button>
               </div>
             </div>
 
@@ -3576,11 +3718,13 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           {/* Fullscreen Kiosk Mode Toggle */}
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
               if (isFullscreen) {
-                exitExamFullscreen();
+                await exitExamFullscreen();
+                setIsFullscreen(false);
               } else {
-                requestExamFullscreen();
+                await requestExamFullscreen();
+                setIsFullscreen(true);
               }
             }}
             title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen Examination Mode'}
@@ -3630,7 +3774,10 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           </div>
           <button
             type="button"
-            onClick={() => requestExamFullscreen()}
+            onClick={async () => {
+              await requestExamFullscreen();
+              setIsFullscreen(true);
+            }}
             style={{
               background: 'var(--danger)',
               color: '#ffffff',

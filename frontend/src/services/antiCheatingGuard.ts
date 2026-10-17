@@ -135,15 +135,29 @@ export function startAntiCheatingShield(config: AntiCheatingConfig): AntiCheatin
 
   extensionScanInterval = setInterval(scanForAiExtensions, 3500);
 
-  // ── 4. ACOUSTIC / MICROPHONE MONITORING (Speech & Voice Assistance Detection) ─
+  // ── 4. ACOUSTIC / MICROPHONE MONITORING (Opt-in only, zero unsolicited focus theft) ─
   const initAudioMonitoring = async () => {
-    if (!isRunning || config.enableAudioMonitoring === false) return;
+    // Strictly opt-in to avoid popping up browser permission modals that steal window focus
+    if (!isRunning || !config.enableAudioMonitoring) return;
     try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        // Query permissions first if supported so we never trigger an unexpected modal during exam
+        if (navigator.permissions && navigator.permissions.query) {
+          try {
+            const permStatus = await navigator.permissions.query({ name: 'microphone' as any });
+            if (permStatus.state !== 'granted') {
+              // Permission not already pre-granted: do NOT trigger modal that causes window blur and strikes!
+              return;
+            }
+          } catch {
+            // Permissions query not supported for microphone on this browser
+          }
+        }
+
         audioStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
-            noiseSuppression: false, // Keep raw background to detect whispers
+            noiseSuppression: false,
             autoGainControl: true
           }
         });
@@ -163,8 +177,6 @@ export function startAntiCheatingShield(config: AntiCheatingConfig): AntiCheatin
           if (!isRunning || !analyserNode) return;
           analyserNode.getByteFrequencyData(dataArray);
 
-          // Focus on human vocal frequency band: ~250 Hz - 3400 Hz
-          // Bin width = sampleRate / fftSize (e.g. 48000 / 512 ~ 93.75 Hz per bin)
           let vocalEnergy = 0;
           let count = 0;
           for (let i = 3; i < 36; i++) {
@@ -174,10 +186,9 @@ export function startAntiCheatingShield(config: AntiCheatingConfig): AntiCheatin
           const averageLevel = count > 0 ? vocalEnergy / count : 0;
           currentAudioLevel = Math.round(averageLevel);
 
-          // Threshold for speech detection (scale 0-255)
-          if (averageLevel > 70) {
+          if (averageLevel > 75) {
             sustainedSpeechCounter++;
-            if (sustainedSpeechCounter >= 3) { // ~1.5s sustained speech
+            if (sustainedSpeechCounter >= 4) { // ~2s sustained speech
               sustainedSpeechCounter = 0;
               playSound('warning');
               config.onWarningBanner('ACOUSTIC SHIELD: Human speech / audio activity detected! Maintain absolute silence.');
@@ -190,11 +201,13 @@ export function startAntiCheatingShield(config: AntiCheatingConfig): AntiCheatin
         }, 500);
       }
     } catch (err) {
-      console.warn('[AntiCheating] Microphone monitoring not permitted or unavailable:', err);
+      // Microphone not permitted or unavailable - silently handle without breaking exam
     }
   };
 
-  void initAudioMonitoring();
+  if (config.enableAudioMonitoring) {
+    void initAudioMonitoring();
+  }
 
   // ── 5. MOBILE & DESKTOP STRICT EVENT INTERCEPTIONS ─────────────────────────
   const preventMobileLongPress = (e: TouchEvent) => {

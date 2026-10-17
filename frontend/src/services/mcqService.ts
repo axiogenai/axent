@@ -280,8 +280,9 @@ export function recordExamDeleted(id: string): void {
 export function getAllExams(): MCQExamConfig[] {
   const deletedIds = getDeletedExamIds();
   const loaded = load<MCQExamConfig[]>(MCQ_STORAGE_KEYS.EXAMS, []);
+  let needsSave = false;
   // Return loaded real exams (clean, zero fake seed fallback, excluding deleted)
-  return (loaded || [])
+  const list = (loaded || [])
     .filter((e): e is MCQExamConfig => 
       Boolean(e && typeof e === 'object' && e.id) &&
       !deletedIds.has(e.id) &&
@@ -295,10 +296,18 @@ export function getAllExams(): MCQExamConfig[] {
           const lab = ensureLabForExam(e);
           e.assignedLabId = lab.labId;
           e.assignedLabName = lab.labName;
+          needsSave = true;
         } catch {}
       }
       return e;
     });
+
+  if (needsSave && typeof window !== 'undefined') {
+    try {
+      save(MCQ_STORAGE_KEYS.EXAMS, list);
+    } catch {}
+  }
+  return list;
 }
 
 export function getExamById(id: string): MCQExamConfig | undefined {

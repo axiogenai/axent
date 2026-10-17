@@ -657,8 +657,15 @@ export const Workspace: React.FC<WorkspaceProps> = ({
       isAwayRef.current = false;
       const now = Date.now();
       const startTime = blurStartTimestampRef.current || now;
-      const awayDuration = Math.max(1, Math.round((now - startTime) / 1000));
+      const elapsedMs = now - startTime;
       blurStartTimestampRef.current = null;
+
+      // Ignore micro-flickers or permission dialog blips (< 1400ms)
+      if (elapsedMs < 1400) {
+        return;
+      }
+
+      const awayDuration = Math.max(1, Math.round(elapsedMs / 1000));
 
       // Check explicit unlock status
       const explicit = typeof window !== 'undefined' ? localStorage.getItem(`${STATION_LOCK_PREFIX}${myStationId}`) : null;

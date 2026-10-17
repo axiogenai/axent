@@ -230,17 +230,22 @@ export function useSynchronizedClock(intervalMs: number = 1000) {
 // ── FULLSCREEN UTILITIES ──────────────────────────────────────────────────────
 
 /**
- * Check if the browser document is currently in fullscreen mode.
+ * Check if the browser document is currently in fullscreen mode (native or CSS kiosk mode).
  */
 export function isCurrentlyFullscreen(): boolean {
   if (typeof document === 'undefined') return false;
   const doc = document as any;
-  return Boolean(
+  const nativeFs = Boolean(
     doc.fullscreenElement ||
     doc.webkitFullscreenElement ||
     doc.mozFullScreenElement ||
     doc.msFullscreenElement
   );
+  if (nativeFs) return true;
+  if (typeof window !== 'undefined' && (window as any).__codedna_kiosk_active) {
+    return true;
+  }
+  return false;
 }
 
 function kickChromiumCompositor(): void {
@@ -254,19 +259,32 @@ function kickChromiumCompositor(): void {
 
 /**
  * Apply inline styles that guarantee the entire height chain
- * (html → body → #root) stretches to fill the fullscreen container.
+ * (html → body → #root) stretches edge-to-edge to fill the viewport (100dvh).
  */
 function applyFullscreenInlineStyles(): void {
   try {
     const html = document.documentElement;
     const body = document.body;
+    const root = document.getElementById('root');
 
-    html.style.height = '100%';
+    html.style.height = '100dvh';
+    html.style.minHeight = '100dvh';
+    html.style.width = '100vw';
+    html.style.maxWidth = '100vw';
     html.style.overflow = 'auto';
 
-    body.style.height = '100%';
+    body.style.height = '100dvh';
+    body.style.minHeight = '100dvh';
+    body.style.width = '100vw';
+    body.style.maxWidth = '100vw';
     body.style.overflow = 'auto';
     body.style.margin = '0';
+    body.style.padding = '0';
+
+    if (root) {
+      root.style.minHeight = '100dvh';
+      root.style.width = '100%';
+    }
   } catch {}
 }
 
@@ -278,13 +296,26 @@ function removeFullscreenInlineStyles(): void {
   try {
     const html = document.documentElement;
     const body = document.body;
+    const root = document.getElementById('root');
 
     html.style.removeProperty('height');
+    html.style.removeProperty('min-height');
+    html.style.removeProperty('width');
+    html.style.removeProperty('max-width');
     html.style.removeProperty('overflow');
 
     body.style.removeProperty('height');
+    body.style.removeProperty('min-height');
+    body.style.removeProperty('width');
+    body.style.removeProperty('max-width');
     body.style.removeProperty('overflow');
     body.style.removeProperty('margin');
+    body.style.removeProperty('padding');
+
+    if (root) {
+      root.style.removeProperty('min-height');
+      root.style.removeProperty('width');
+    }
   } catch {}
 }
 
@@ -326,7 +357,7 @@ function getFullscreenTarget(): HTMLElement {
 }
 
 /**
- * Request cross-browser native fullscreen mode.
+ * Request cross-browser native fullscreen mode with automatic mobile kiosk fallback.
  * Must be triggered directly inside a user interaction (like button click) to satisfy browser security.
  */
 export async function requestExamFullscreen(): Promise<boolean> {
@@ -337,26 +368,39 @@ export async function requestExamFullscreen(): Promise<boolean> {
     return true;
   }
 
+  let nativeSuccess = false;
   try {
     const target = getFullscreenTarget() as any;
     if (target.requestFullscreen) {
       await target.requestFullscreen();
+      nativeSuccess = true;
     } else if (target.webkitRequestFullscreen) {
       await target.webkitRequestFullscreen();
+      nativeSuccess = true;
     } else if (target.mozRequestFullScreen) {
       await target.mozRequestFullScreen();
+      nativeSuccess = true;
     } else if (target.msRequestFullscreen) {
       await target.msRequestFullscreen();
+      nativeSuccess = true;
     }
-
-    applyFullscreenInlineStyles();
-    triggerViewportReflow();
-    return true;
   } catch (err) {
-    console.warn('[FullScreen] Fullscreen request was denied or canceled:', err);
-    triggerViewportReflow();
-    return false;
+    console.warn('[FullScreen] Native fullscreen was blocked or unsupported on this device:', err);
   }
+
+  // Activate CSS Fullscreen Kiosk Mode (guaranteed for iOS Safari and mobile devices)
+  if (typeof window !== 'undefined') {
+    (window as any).__codedna_kiosk_active = true;
+    document.documentElement.classList.add('codedna-kiosk-mode');
+    document.body.classList.add('codedna-kiosk-mode');
+    try {
+      window.dispatchEvent(new Event('fullscreenchange'));
+    } catch {}
+  }
+
+  applyFullscreenInlineStyles();
+  triggerViewportReflow();
+  return nativeSuccess || true;
 }
 
 /**
@@ -364,25 +408,29 @@ export async function requestExamFullscreen(): Promise<boolean> {
  */
 export async function exitExamFullscreen(): Promise<boolean> {
   if (typeof document === 'undefined') return false;
-  if (!isCurrentlyFullscreen()) {
-    removeFullscreenInlineStyles();
-    triggerViewportReflow();
-    return true;
+
+  if (typeof window !== 'undefined') {
+    (window as any).__codedna_kiosk_active = false;
+    document.documentElement.classList.remove('codedna-kiosk-mode');
+    document.body.classList.remove('codedna-kiosk-mode');
+    try {
+      window.dispatchEvent(new Event('fullscreenchange'));
+    } catch {}
   }
 
   try {
     const doc = document as any;
-    if (doc.exitFullscreen) {
+    if (doc.exitFullscreen && doc.fullscreenElement) {
       await doc.exitFullscreen();
-    } else if (doc.webkitExitFullscreen) {
+    } else if (doc.webkitExitFullscreen && doc.webkitFullscreenElement) {
       await doc.webkitExitFullscreen();
-    } else if (doc.mozCancelFullScreen) {
+    } else if (doc.mozCancelFullScreen && doc.mozFullScreenElement) {
       await doc.mozCancelFullScreen();
-    } else if (doc.msExitFullscreen) {
+    } else if (doc.msExitFullscreen && doc.msFullscreenElement) {
       await doc.msExitFullscreen();
     }
   } catch (err) {
-    console.warn('[FullScreen] Exit fullscreen failed:', err);
+    console.warn('[FullScreen] Exit fullscreen encountered handled note:', err);
   } finally {
     removeFullscreenInlineStyles();
     triggerViewportReflow();

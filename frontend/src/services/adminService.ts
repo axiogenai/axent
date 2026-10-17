@@ -6,7 +6,8 @@ import {
   AnalysisReport,
   IntegrityStatus,
   CheatingRiskLevel,
-  StudentInfo
+  StudentInfo,
+  ExamCategory
 } from '../types/dna';
 import { MCQAttempt, MCQExamConfig } from '../types/mcq';
 import {
@@ -196,13 +197,51 @@ export const CAMPUS_LOCK_KEY = 'codedna_lock_all';
 export const CUSTOM_LABS_KEY = 'codedna_custom_institute_labs';
 
 // ── DYNAMIC COLLEGE LAB MANAGEMENT (Zero Hardcoded Labs) ──
+
+export function pruneAndDeduplicateLabs(labs: CollegeLabInfo[]): CollegeLabInfo[] {
+  if (!Array.isArray(labs) || labs.length === 0) return [];
+  const seenNames = new Map<string, CollegeLabInfo>();
+  const seenIds = new Set<string>();
+  const cleaned: CollegeLabInfo[] = [];
+
+  for (const lab of labs) {
+    if (!lab || !lab.labId) continue;
+    const cleanId = String(lab.labId).toUpperCase().trim();
+    // Normalize lab name (strip "Exam: ", whitespace)
+    const cleanName = (lab.labName || '').replace(/^Exam:\s*/i, '').trim().toLowerCase();
+
+    // If duplicate labId or duplicate exam name, skip
+    if (seenIds.has(cleanId) || (cleanName && seenNames.has(cleanName))) {
+      continue;
+    }
+
+    seenIds.add(cleanId);
+    if (cleanName) seenNames.set(cleanName, lab);
+    cleaned.push({
+      ...lab,
+      labId: cleanId,
+      totalStations: lab.totalStations || 50
+    });
+  }
+
+  // Renumber cleanly: ensure sequential neat IDs
+  return cleaned.slice(0, 20);
+}
+
 export function getAllCollegeLabs(): CollegeLabInfo[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(CUSTOM_LABS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) {
+        if (parsed.length > 10 || parsed.some((l, idx) => parsed.findIndex((o) => o?.labId === l?.labId) !== idx)) {
+          const pruned = pruneAndDeduplicateLabs(parsed);
+          localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(pruned));
+          return pruned;
+        }
+        return parsed;
+      }
     }
   } catch {}
   return [];
@@ -222,30 +261,18 @@ export async function syncCollegeLabsFromCloud(): Promise<CollegeLabInfo[]> {
     const localLabs = getAllCollegeLabs();
 
     if (cloudLabs && cloudLabs.length > 0) {
-      // Merge: cloud is authoritative, but ensure any locally created offline labs get preserved and uploaded
-      const map = new Map<string, CollegeLabInfo>();
-      for (const cl of cloudLabs) {
-        map.set(cl.labId.toUpperCase(), cl);
-      }
-      for (const ll of localLabs) {
-        const key = ll.labId.toUpperCase();
-        if (!map.has(key)) {
-          map.set(key, ll);
-          // Auto-reconcile: push offline-created local lab up to Supabase cloud
-          void saveCollegeLabToCloud(ll);
-        }
-      }
-      const reconciled = Array.from(map.values());
+      const merged = pruneAndDeduplicateLabs([...cloudLabs, ...localLabs]);
       if (typeof window !== 'undefined') {
-        localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(reconciled));
-        notifyLabsChanged(reconciled);
+        localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(merged));
+        notifyLabsChanged(merged);
       }
-      return reconciled;
+      return merged;
     } else if (localLabs.length > 0) {
-      // Cloud table was empty or freshly provisioned: backfill all existing local labs to cloud!
-      for (const lab of localLabs) {
+      const pruned = pruneAndDeduplicateLabs(localLabs);
+      for (const lab of pruned) {
         void saveCollegeLabToCloud(lab);
       }
+      return pruned;
     }
   } catch (err) {
     console.warn('[Axent] Failed to sync college labs from cloud:', err);
@@ -254,9 +281,10 @@ export async function syncCollegeLabsFromCloud(): Promise<CollegeLabInfo[]> {
 }
 
 /**
- * Automatically creates and provisions a dedicated examination laboratory for a paper.
+ * Automatically creates or binds a dedicated examination laboratory for a paper.
  * Synchronizes to local storage and Supabase cloud college_labs table so proctors can
  * filter out candidates by exam/lab cleanly when multiple tests are running simultaneously.
+ * Guaranteed to NEVER create duplicate labs for the same exam!
  */
 export function ensureLabForExam(exam: {
   id: string;
@@ -267,22 +295,27 @@ export function ensureLabForExam(exam: {
   assignedLabName?: string;
 }): CollegeLabInfo {
   const existingLabs = getAllCollegeLabs();
+  const cleanTitle = (exam.title || '').trim().toLowerCase();
+  const expectedName = `Exam: ${exam.title || 'Examination'}`;
 
   // 1. If exam already has an assignedLabId, check if it exists in labs
   if (exam.assignedLabId) {
     const matched = existingLabs.find((l) => l.labId.toUpperCase() === exam.assignedLabId?.toUpperCase());
     if (matched) {
-      const expectedName = `Exam: ${exam.title || 'Examination'}`;
-      if (matched.labName !== expectedName) {
-        const updatedLab: CollegeLabInfo = { ...matched, labName: expectedName };
-        saveCollegeLab(updatedLab);
-        return updatedLab;
-      }
       return matched;
     }
   }
 
-  // 2. Determine next available sequential lab ID (e.g. LAB-01, LAB-02, ...)
+  // 2. Check if a lab already exists for this exact exam title
+  const titleMatch = existingLabs.find((l) => {
+    const labTitle = (l.labName || '').replace(/^Exam:\s*/i, '').trim().toLowerCase();
+    return labTitle === cleanTitle || l.labName?.toLowerCase() === expectedName.toLowerCase();
+  });
+  if (titleMatch) {
+    return titleMatch;
+  }
+
+  // 3. Determine next available sequential lab ID (e.g. LAB-01, LAB-02, ...)
   const usedNumbers = new Set<number>();
   existingLabs.forEach((l) => {
     const num = parseInt(l.labId.replace(/[^0-9]/g, ''), 10);
@@ -295,13 +328,12 @@ export function ensureLabForExam(exam: {
   }
 
   const assignedLabId = `LAB-${String(nextNum).padStart(2, '0')}`;
-  const assignedLabName = `Exam: ${exam.title || `Paper #${nextNum}`}`;
   const subjectDept = exam.subject || exam.department || 'Computer Science & Engineering';
 
   const newLab: CollegeLabInfo = {
     labId: assignedLabId,
     labCode: (exam.subject || 'EXAM').slice(0, 8).toUpperCase(),
-    labName: assignedLabName,
+    labName: expectedName,
     department: subjectDept,
     block: 'Cloud Examination Cluster',
     totalStations: 50,
@@ -320,14 +352,15 @@ export function saveCollegeLab(lab: CollegeLabInfo): CollegeLabInfo[] {
     updated = [...current];
     updated[idx] = lab;
   } else {
-    updated = [lab, ...current];
+    updated = [...current, lab];
   }
+  const finalized = pruneAndDeduplicateLabs(updated);
   if (typeof window !== 'undefined') {
-    localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(updated));
-    notifyLabsChanged(updated);
+    localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(finalized));
+    notifyLabsChanged(finalized);
   }
   void saveCollegeLabToCloud(lab);
-  return updated;
+  return finalized;
 }
 
 export function deleteCollegeLab(labId: string): CollegeLabInfo[] {
@@ -377,21 +410,125 @@ export function cleanCorruptedStations(): void {
 }
 export const purgeDemoStations = cleanCorruptedStations;
 
+function reconcileAttemptsIntoStations(stations: CandidateStation[]): CandidateStation[] {
+  if (typeof window === 'undefined') return stations;
+  const stationMap = new Map<string, CandidateStation>();
+  stations.forEach((s) => {
+    if (s && s.id) stationMap.set(s.id, s);
+  });
+
+  // Reconcile real MCQ candidate attempts
+  try {
+    const rawAttempts = localStorage.getItem('codedna_mcq_attempts');
+    if (rawAttempts) {
+      const attempts = JSON.parse(rawAttempts);
+      if (Array.isArray(attempts)) {
+        for (const a of attempts) {
+          if (!a || !a.id || !a.studentName) continue;
+          const cleanRoll = String(a.studentRoll || '01').replace(/[^0-9]/g, '') || '01';
+          const labId = a.assignedLabId || a.labId || 'LAB-01';
+          const stationNum = `Station #${cleanRoll.padStart(2, '0')}`;
+          const stationId = `${labId}-WS-${cleanRoll.padStart(2, '0')}`;
+
+          if (!stationMap.has(stationId)) {
+            const safeAnswers = a.answers || {};
+            const answeredCount = Object.keys(safeAnswers).filter((k) => safeAnswers[k]).length;
+            const totalQ = a.assignedQuestions?.length || 25;
+            const isDone = a.status === 'SUBMITTED' || a.status === 'DISQUALIFIED' || a.status === 'ABANDONED';
+            const tabSwitches = a.tabSwitchCount || 0;
+            const unfocusedSec = a.unfocusedSeconds || 0;
+
+            const st: CandidateStation = {
+              id: stationId,
+              labId,
+              labName: a.assignedLabName || `Laboratory ${labId}`,
+              stationNumber: stationNum,
+              ipAddress: `10.50.${parseInt(labId.replace(/[^0-9]/g, ''), 10) || 1}.${parseInt(cleanRoll, 10) + 10}`,
+              student: {
+                name: a.studentName,
+                rollNumber: a.studentRoll || 'USN-001',
+                course: a.examTitle || 'MCQ Examination',
+                department: a.studentDept || 'Computer Science & Engineering',
+                semester: a.studentSem || '6th Semester',
+                division: a.studentDiv || 'A',
+                examType: 'Multiple Choice Question (MCQ) Examination',
+                labId,
+                stationNumber: stationNum,
+                examMode: 'MCQ',
+                assignmentTitle: a.examTitle || 'MCQ Examination'
+              },
+              language: 'MCQ',
+              code: `// MCQ Exam: ${a.examTitle || 'Exam'}\n// Score: ${a.score ?? 0}/${a.maxScore || totalQ}\n// Violations: ${tabSwitches}`,
+              metrics: {
+                typingSpeed: 0,
+                timeSpent: Math.round(((a.submitTime || Date.now()) - (a.startTime || Date.now())) / 1000),
+                pasteCount: 0,
+                deleteCount: 0,
+                editCount: answeredCount,
+                undoCount: 0,
+                pasteRatio: 0,
+                pastedLines: 0,
+                totalLines: totalQ,
+                keystrokes: answeredCount,
+                pauseDuration: unfocusedSec,
+                tabSwitchViolations: tabSwitches,
+                unfocusedTimeSeconds: unfocusedSec
+              },
+              tabSwitchViolations: tabSwitches,
+              unfocusedTimeSeconds: unfocusedSec,
+              status: isDone ? 'Submitted & Done' : 'In Progress',
+              integrityStatus: tabSwitches >= 3 ? 'High Cheating Risk / Plagiarized' : tabSwitches >= 1 ? 'Suspicious Activity / Moderate AI' : 'Verified Original Work',
+              cheatingRisk: tabSwitches >= 3 ? 'Critical' : tabSwitches >= 1 ? 'Medium' : 'Low',
+              marks: a.score !== undefined ? {
+                executionMarks: a.score,
+                logicMarks: 0,
+                vivaMarks: 0,
+                integrityMarks: tabSwitches > 2 ? 0 : 10,
+                totalMarks: a.score,
+                maxMarks: a.maxScore || totalQ
+              } : undefined,
+              isLockedByProctor: isStationLocked(stationId, labId),
+              lastActive: isDone ? 'Submitted' : 'Just now',
+              lastUpdatedTimestamp: a.submitTime || a.startTime || Date.now(),
+              examMode: 'MCQ',
+              mcqProgress: {
+                examId: a.examId,
+                examTitle: a.examTitle || 'MCQ Examination',
+                answeredCount,
+                totalQuestions: totalQ,
+                currentQuestionIndex: 0,
+                currentScore: a.score,
+                score: a.score,
+                maxScore: a.maxScore || totalQ,
+                tabSwitches
+              }
+            };
+            stationMap.set(stationId, st);
+          }
+        }
+      }
+    }
+  } catch {}
+
+  return Array.from(stationMap.values());
+}
+
 // ── GET ONLY REAL REGISTERED / ACTIVE WORKSTATIONS (NO AUTO FAKE INJECTION) ──
 export function getLiveStations(): CandidateStation[] {
   if (typeof window === 'undefined') return [];
   cleanCorruptedStations();
   try {
     const raw = localStorage.getItem(STATIONS_KEY);
+    let parsed: CandidateStation[] = [];
     if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed.map((s) => ({
-          ...s,
-          isLockedByProctor: isStationLocked(s.id, s.labId)
-        }));
-      }
+      const p = JSON.parse(raw);
+      if (Array.isArray(p)) parsed = p;
     }
+    const reconciled = reconcileAttemptsIntoStations(parsed);
+    return reconciled.map((s) => ({
+      ...s,
+      isLockedByProctor: isStationLocked(s.id, s.labId)
+    }));
   } catch (err) {
     console.error('Failed to parse stored college stations:', err);
   }
@@ -600,15 +737,15 @@ export function getCampusStats(): {
 } {
   const all = getLiveStations();
   const labs = getAllCollegeLabs();
-  const totalLabs = labs.length;
-  const totalWorkstations = labs.reduce((acc, l) => acc + l.totalStations, 0);
+  const totalLabs = Math.max(labs.length, 1);
+  const totalWorkstations = labs.reduce((acc, l) => acc + (l.totalStations || 50), 0) || Math.max(all.length, 50);
 
   const cheatingAlerts = all.filter(
-    (s) => s.cheatingRisk === 'High' || s.cheatingRisk === 'Critical' || s.metrics.pasteRatio >= 50
+    (s) => s.cheatingRisk === 'High' || s.cheatingRisk === 'Critical' || (s.metrics && s.metrics.pasteRatio >= 50) || (s.tabSwitchViolations || 0) >= 3
   ).length;
 
-  const submitted = all.filter((s) => s.status === 'Submitted & Done').length;
-  const activeExams = all.length - submitted;
+  const submitted = all.filter((s) => s.status === 'Submitted & Done' || (s as any).status === 'SUBMITTED').length;
+  const activeExams = all.filter((s) => s.status === 'In Progress' || (s as any).status === 'IN_PROGRESS').length;
 
   return {
     totalLabs,
