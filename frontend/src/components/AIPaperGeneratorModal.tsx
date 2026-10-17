@@ -438,6 +438,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
           examCategory: 'ISE',
           instructions: instructions.trim(),
           durationMinutes,
+          totalQuestions: finalTotal,
           easyCount: finalEasy,
           mediumCount: finalMed,
           hardCount: finalHard,
@@ -452,11 +453,13 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
         const finalTitle = title.trim() || `${sections.map((s) => s.topic.trim()).filter(Boolean).slice(0, 2).join(' & ')} Examination`;
         const finalSubject = subject.trim() || 'General Aptitude & Reasoning';
         const finalTopic = sections.map((s) => s.topic.trim()).filter(Boolean).join(', ');
+        const secTotalCount = sections.reduce((sum, s) => sum + Math.max(1, Number(s.count) || 1), 0);
 
         payload = {
           title: finalTitle,
           subject: finalSubject,
           topic: finalTopic,
+          totalQuestions: secTotalCount,
           sections: sections.map((s) => ({
             id: s.id,
             topic: s.topic.trim(),
@@ -479,10 +482,31 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
         const finalSubject = subject.trim() || 'General Aptitude & Reasoning';
         const finalTopic = topic.trim();
 
-        const finalEasy = Number(easyCount) || 0;
-        const finalMed = Number(mediumCount) || 0;
-        const finalHard = Number(hardCount) || 0;
-        const basePerQ = marksPerQuestion || 1;
+        const reqTotal = Math.max(1, Number(totalQuestions) || 30);
+        let finalEasy = Number(easyCount) || 0;
+        let finalMed = Number(mediumCount) || 0;
+        let finalHard = Number(hardCount) || 0;
+        const basePerQ = Number(marksPerQuestion) || 1;
+
+        if (finalEasy + finalMed + finalHard !== reqTotal) {
+          if (overallSeverity === 'EASY') {
+            finalEasy = reqTotal;
+            finalMed = 0;
+            finalHard = 0;
+          } else if (overallSeverity === 'MEDIUM') {
+            finalEasy = 0;
+            finalMed = reqTotal;
+            finalHard = 0;
+          } else if (overallSeverity === 'HARD') {
+            finalEasy = 0;
+            finalMed = 0;
+            finalHard = reqTotal;
+          } else {
+            finalMed = reqTotal;
+            finalEasy = 0;
+            finalHard = 0;
+          }
+        }
 
         payload = {
           title: finalTitle,
@@ -491,6 +515,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
           examCategory: 'Aptitude',
           instructions: instructions.trim(),
           durationMinutes,
+          totalQuestions: reqTotal,
           easyCount: finalEasy,
           mediumCount: finalMed,
           hardCount: finalHard,
@@ -1528,6 +1553,25 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                             const count = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
                             if (!isNaN(count)) {
                               setTotalQuestions(count);
+                              if (overallSeverity === 'HARD') {
+                                setHardCount(count);
+                                setEasyCount(0);
+                                setMediumCount(0);
+                              } else if (overallSeverity === 'MEDIUM') {
+                                setMediumCount(count);
+                                setEasyCount(0);
+                                setHardCount(0);
+                              } else if (overallSeverity === 'EASY') {
+                                setEasyCount(count);
+                                setMediumCount(0);
+                                setHardCount(0);
+                              } else {
+                                const eCount = Math.floor(count / 3);
+                                const mCount = Math.floor(count / 3);
+                                setEasyCount(eCount);
+                                setMediumCount(mCount);
+                                setHardCount(count - eCount - mCount);
+                              }
                             }
                           }}
                           placeholder="e.g. 30"
@@ -1615,7 +1659,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                               <button
                                 key={sev}
                                 type="button"
-                                onClick={() => setOverallSeverity(sev)}
+                                onClick={() => handleSetSeverity(sev)}
                                 style={{
                                   padding: '8px 4px',
                                   borderRadius: 'var(--radius-sm)',

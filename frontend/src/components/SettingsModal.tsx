@@ -71,18 +71,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setTestMessage('Verifying connection with Reasoning Engine API...');
 
     try {
+      const payload: Record<string, unknown> = {
+        model: selectedModel,
+        messages: [{ role: 'user', content: 'Say "connected" in JSON format {"status":"ok"}' }],
+        temperature: 0.1
+      };
+      if (selectedModel !== 'openai/gpt-oss-20b') {
+        payload.response_format = { type: 'json_object' };
+      }
+
       const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey.trim()}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          model: selectedModel,
-          messages: [{ role: 'user', content: 'Say "connected" in JSON format {"status":"ok"}' }],
-          temperature: 0.1,
-          response_format: { type: 'json_object' }
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!res.ok) {
@@ -312,18 +316,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               onChange={(newModel) => setSelectedModel(newModel)}
               options={[
                 {
-                  value: 'llama-3.3-70b-versatile',
-                  label: 'llama-3.3-70b-versatile — Maximum Reliability & Speed',
-                  badge: 'ROCK-SOLID'
-                },
-                {
                   value: 'openai/gpt-oss-120b',
-                  label: 'openai/gpt-oss-120b — High Accuracy Forensics (Recommended)',
-                  badge: 'REC'
+                  label: 'openai/gpt-oss-120b — Flagship Reasoning & Accuracy (Recommended)',
+                  badge: 'FLAGSHIP'
                 },
                 {
                   value: 'openai/gpt-oss-20b',
-                  label: 'openai/gpt-oss-20b — Ultra Fast, Low Latency',
+                  label: 'openai/gpt-oss-20b — Fast Generation, Low Latency',
                   badge: 'FAST'
                 },
                 {

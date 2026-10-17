@@ -18,7 +18,7 @@ import { saveQuestion, saveExam } from './mcqService';
 
 const DEFAULT_KEY_POOL: string[] = [];
 const PRIMARY_MODEL = 'openai/gpt-oss-120b';
-const FALLBACK_MODELS = ['openai/gpt-oss-20b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'qwen/qwen3.8-27b'];
+const FALLBACK_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b'];
 
 let keyRoundRobinCounter = 0;
 
@@ -85,7 +85,13 @@ export function getStoredModel(): string {
   if (typeof window !== 'undefined') {
     const customModel = localStorage.getItem('codedna_groq_model');
     if (customModel && customModel.trim()) {
-      return customModel.trim();
+      const trimmed = customModel.trim();
+      // Auto-migrate unstable or 404 models to the rock-solid flagship openai/gpt-oss-120b
+      if (trimmed === 'openai/gpt-oss-20b' || trimmed.startsWith('llama-') || trimmed.includes('versatile') || trimmed.includes('instant')) {
+        localStorage.setItem('codedna_groq_model', 'openai/gpt-oss-120b');
+        return 'openai/gpt-oss-120b';
+      }
+      return trimmed;
     }
   }
   return PRIMARY_MODEL;
@@ -147,7 +153,9 @@ async function callGroqChat(
           temperature
         };
 
-        if (jsonMode) {
+        // openai/gpt-oss-20b fails Groq server grammar validator (json_validate_failed) because it outputs reasoning tokens first.
+        // Never pass response_format to gpt-oss-20b; client-side parseQuestionsFromAIOutput extracts the JSON cleanly.
+        if (jsonMode && model !== 'openai/gpt-oss-20b') {
           payload.response_format = { type: 'json_object' };
         }
 
@@ -179,20 +187,29 @@ async function callGroqChat(
           // If Groq's grammar validator failed (json_validate_failed), immediately retry WITHOUT response_format!
           if (jsonMode && (errorBody.includes('json_validate_failed') || res.status === 400)) {
             console.warn(`[Dual-Key AI Engine] Model ${model} failed json_validate_failed on Groq grammar. Retrying with free-form JSON generation...`);
-            const retryPayload = { ...payload };
-            delete retryPayload.response_format;
-            const retryRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${activeKey}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(retryPayload)
-            });
-            if (retryRes.ok) {
-              const retryData = await retryRes.json();
-              const rawContent: string = retryData.choices?.[0]?.message?.content || '';
-              return { content: rawContent.trim(), modelUsed: model };
+            try {
+              const retryPayload = { ...payload };
+              delete retryPayload.response_format;
+              const retryRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${activeKey}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(retryPayload)
+              });
+              if (retryRes.ok) {
+                const retryData = await retryRes.json();
+                const rawContent: string =
+                  retryData.choices?.[0]?.message?.content ||
+                  retryData.choices?.[0]?.message?.reasoning ||
+                  '';
+                if (rawContent.trim()) {
+                  return { content: rawContent.trim(), modelUsed: model };
+                }
+              }
+            } catch (retryErr) {
+              console.warn(`[Dual-Key AI Engine] Immediate fallback without response_format failed on ${model}:`, retryErr);
             }
           }
 
@@ -200,14 +217,17 @@ async function callGroqChat(
         }
 
         const data = await res.json();
-        const rawContent: string = data.choices?.[0]?.message?.content || '';
+        const rawContent: string =
+          data.choices?.[0]?.message?.content ||
+          data.choices?.[0]?.message?.reasoning ||
+          '';
         return { content: rawContent.trim(), modelUsed: model };
       } catch (err: unknown) {
         lastError = err instanceof Error ? err : new Error(String(err));
         console.warn(`[Dual-Key AI Engine] Key ...${activeKey.slice(-6)} on ${model} attempt failed:`, lastError.message);
         // If it's a 400 or 404 error on this model, trying other keys with the same invalid model/payload will only repeat the error.
         // Fast-failover directly to the next fallback model in modelsToTry!
-        if (lastError.message.includes('400 on ') || lastError.message.includes('404 on ')) {
+        if (lastError.message.includes('400 on ') || lastError.message.includes('404 on ') || lastError.message.includes('json_validate_failed')) {
           break;
         }
       }
@@ -1544,6 +1564,7 @@ export interface AIPaperGenerationRequest {
   examCategory?: string;
   instructions?: string;
   durationMinutes: number;
+  totalQuestions?: number;
   easyCount: number;
   mediumCount: number;
   hardCount: number;
@@ -1756,13 +1777,34 @@ export async function generateFullExamPaperWithAI(
   const isSectionBased = Array.isArray(req.sections) && req.sections.length > 0;
   const sections = isSectionBased ? req.sections! : [];
 
-  const easyCount = Math.max(0, req.easyCount || 0);
-  const mediumCount = Math.max(0, req.mediumCount || 0);
-  const hardCount = Math.max(0, req.hardCount || 0);
-  const singleTopicTotal = easyCount + mediumCount + hardCount;
+  let easyCount = Math.max(0, req.easyCount || 0);
+  let mediumCount = Math.max(0, req.mediumCount || 0);
+  let hardCount = Math.max(0, req.hardCount || 0);
+  const singleTopicSum = easyCount + mediumCount + hardCount;
+  const requestedTotal = req.totalQuestions && req.totalQuestions > 0 ? req.totalQuestions : 0;
+
   const totalCount = isSectionBased
     ? sections.reduce((acc, s) => acc + Math.max(0, s.count || 0), 0)
-    : singleTopicTotal;
+    : (requestedTotal > 0 ? requestedTotal : (singleTopicSum > 0 ? singleTopicSum : 30));
+
+  if (!isSectionBased && (easyCount + mediumCount + hardCount !== totalCount)) {
+    if (hardCount > 0 && easyCount === 0 && mediumCount === 0) {
+      hardCount = totalCount;
+    } else if (mediumCount > 0 && easyCount === 0 && hardCount === 0) {
+      mediumCount = totalCount;
+    } else if (easyCount > 0 && mediumCount === 0 && hardCount === 0) {
+      easyCount = totalCount;
+    } else {
+      const currentSum = easyCount + mediumCount + hardCount;
+      if (currentSum > 0) {
+        easyCount = Math.round((easyCount / currentSum) * totalCount);
+        mediumCount = Math.round((mediumCount / currentSum) * totalCount);
+        hardCount = totalCount - easyCount - mediumCount;
+      } else {
+        mediumCount = totalCount;
+      }
+    }
+  }
 
   if (totalCount === 0) {
     throw new Error('Please specify at least 1 question across your topics or difficulty categories.');
@@ -2062,12 +2104,12 @@ export async function generateFullExamPaperWithAI(
   // Trim to exact totalCount if slightly more were accumulated
   let allGenerated = uniqueGenerated.slice(0, totalCount);
 
-  // Strictly enforce uniform marks if specified (e.g. 1 mark per question for single-topic)
-  if (!isSectionBased && req.easyMarks && req.easyMarks === req.mediumMarks && req.mediumMarks === req.hardMarks) {
-    allGenerated.forEach(q => {
-      q.marks = req.easyMarks!;
-    });
-  }
+  // Strictly enforce default 1 mark per question (or user configured marks)
+  allGenerated.forEach((q) => {
+    if (!q.marks || q.marks <= 0) {
+      q.marks = defaultPerQMarks;
+    }
+  });
 
   // ── AUTONOMOUS CROSS-VALIDATION PASS ──
   // Independently verify answer keys, options, and derivations before committing to Question Bank
@@ -2076,7 +2118,9 @@ export async function generateFullExamPaperWithAI(
     { subject: req.subject, topic: req.topic, examCategory: req.examCategory, syllabusText: req.syllabusText },
     onProgress
   );
-  allGenerated = validatedQuestions;
+  if (Array.isArray(validatedQuestions) && validatedQuestions.length === totalCount) {
+    allGenerated = validatedQuestions;
+  }
 
   onProgress?.(`Formatting ${allGenerated.length} certified questions and saving to Question Bank...`);
 
@@ -2097,7 +2141,7 @@ export async function generateFullExamPaperWithAI(
       subject: raw.subject || req.subject,
       topic: raw.topic || req.topic,
       difficulty: raw.difficulty,
-      marks: raw.marks,
+      marks: Number(raw.marks) || defaultPerQMarks,
       negativeMarks: raw.negativeMarks,
       explanation: raw.explanation,
       status: 'PUBLISHED',
