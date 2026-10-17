@@ -4152,13 +4152,26 @@ const inputStyle: React.CSSProperties = {
 export const MCQExamSelector: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryExamId = searchParams.get('examId');
-  const [exams, setExams] = useState<MCQExamConfig[]>(() =>
-    getAllExams().filter((e) => e.status === 'PUBLISHED')
-  );
+
+  const loadEligibleExams = () => {
+    const all = getAllExams();
+    const now = getSynchronizedNow();
+    return all
+      .filter((e) => e.status === 'PUBLISHED' || e.status === 'CLOSED')
+      .sort((a, b) => {
+        const aConcluded = a.status === 'CLOSED' || Boolean(a.endTime && now > a.endTime);
+        const bConcluded = b.status === 'CLOSED' || Boolean(b.endTime && now > b.endTime);
+        if (aConcluded !== bConcluded) return aConcluded ? 1 : -1;
+        return (b.createdAt || 0) - (a.createdAt || 0);
+      });
+  };
+
+  const [exams, setExams] = useState<MCQExamConfig[]>(loadEligibleExams);
+  const [filterTab, setFilterTab] = useState<'all' | 'active' | 'concluded'>('all');
 
   useEffect(() => {
     const refresh = () => {
-      setExams(getAllExams().filter((e) => e.status === 'PUBLISHED'));
+      setExams(loadEligibleExams());
     };
     const unsubData = onMcqDataChanged(refresh);
     const unsubExams = onExamsChanged(refresh);
@@ -4207,7 +4220,7 @@ export const MCQExamSelector: React.FC = () => {
       return;
     }
 
-    // 2. Candidate entered a query parameter: validate against published exams
+    // 2. Candidate entered a query parameter: validate against published or closed registered exams
     if (queryExamId && exams.length > 0) {
       const exists = exams.some((e) => e.id === queryExamId);
       if (!exists) {
@@ -4219,6 +4232,25 @@ export const MCQExamSelector: React.FC = () => {
       }
     }
   }, [activeExamId, queryExamId, exams, selectedExamId, setSearchParams]);
+
+  const activeExams = useMemo(() => {
+    return exams.filter((e) => {
+      const isConcluded = e.status === 'CLOSED' || Boolean(e.endTime && currentTime > e.endTime);
+      return !isConcluded;
+    });
+  }, [exams, currentTime]);
+
+  const concludedExams = useMemo(() => {
+    return exams.filter((e) => {
+      return e.status === 'CLOSED' || Boolean(e.endTime && currentTime > e.endTime);
+    });
+  }, [exams, currentTime]);
+
+  const displayedExams = useMemo(() => {
+    if (filterTab === 'active') return activeExams;
+    if (filterTab === 'concluded') return concludedExams;
+    return exams;
+  }, [filterTab, activeExams, concludedExams, exams]);
 
   const effectiveExamId = activeExamId || queryExamId || selectedExamId;
 
@@ -4327,22 +4359,89 @@ export const MCQExamSelector: React.FC = () => {
         </div>
       )}
 
-      {/* Clean Header */}
-      <div style={{ marginBottom: '22px' }}>
-        <h2
-          style={{
-            fontSize: '20px',
-            fontWeight: 800,
-            color: 'var(--text-primary)',
-            margin: '0 0 4px',
-            letterSpacing: '-0.02em'
-          }}
-        >
-          Available MCQ Examinations
-        </h2>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-          Select your assigned examination session to commence or enter the synchronized waiting room.
-        </p>
+      {/* Clean Header with Filter Tabs */}
+      <div style={{ marginBottom: '22px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
+        <div>
+          <h2
+            style={{
+              fontSize: '20px',
+              fontWeight: 800,
+              color: 'var(--text-primary)',
+              margin: '0 0 4px',
+              letterSpacing: '-0.02em'
+            }}
+          >
+            Available MCQ Examinations
+          </h2>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
+            Select your assigned examination session to commence or review your past sittings.
+          </p>
+        </div>
+
+        {exams.length > 0 && (
+          <div
+            style={{
+              display: 'inline-flex',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-pill)',
+              padding: '3px',
+              gap: '2px'
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setFilterTab('all')}
+              style={{
+                background: filterTab === 'all' ? 'var(--bg-elevated)' : 'transparent',
+                color: filterTab === 'all' ? 'var(--text-primary)' : 'var(--text-muted)',
+                fontWeight: filterTab === 'all' ? 700 : 500,
+                fontSize: '12px',
+                padding: '4px 12px',
+                borderRadius: 'var(--radius-pill)',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              All ({exams.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterTab('active')}
+              style={{
+                background: filterTab === 'active' ? 'var(--bg-elevated)' : 'transparent',
+                color: filterTab === 'active' ? 'var(--text-primary)' : 'var(--text-muted)',
+                fontWeight: filterTab === 'active' ? 700 : 500,
+                fontSize: '12px',
+                padding: '4px 12px',
+                borderRadius: 'var(--radius-pill)',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              Active ({activeExams.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterTab('concluded')}
+              style={{
+                background: filterTab === 'concluded' ? 'var(--bg-elevated)' : 'transparent',
+                color: filterTab === 'concluded' ? 'var(--text-primary)' : 'var(--text-muted)',
+                fontWeight: filterTab === 'concluded' ? 700 : 500,
+                fontSize: '12px',
+                padding: '4px 12px',
+                borderRadius: 'var(--radius-pill)',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              Concluded ({concludedExams.length})
+            </button>
+          </div>
+        )}
       </div>
 
       {exams.length === 0 ? (
@@ -4357,18 +4456,48 @@ export const MCQExamSelector: React.FC = () => {
         >
           <BookOpen size={34} style={{ marginBottom: '14px', opacity: 0.35, color: 'var(--text-muted)' }} />
           <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 6px' }}>
-            No active examinations scheduled
+            No examinations scheduled
           </p>
           <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: 0 }}>
             Check back closer to your examination time or consult your laboratory invigilator.
           </p>
         </div>
+      ) : displayedExams.length === 0 ? (
+        <div
+          style={{
+            textAlign: 'center',
+            padding: '48px 24px',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)'
+          }}
+        >
+          <Clock size={30} style={{ marginBottom: '12px', opacity: 0.35, color: 'var(--text-muted)' }} />
+          <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 6px' }}>
+            {filterTab === 'active' ? 'No active examinations running right now' : 'No concluded examinations'}
+          </p>
+          <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: '0 0 16px' }}>
+            {filterTab === 'active'
+              ? `There are ${concludedExams.length} concluded examination${concludedExams.length === 1 ? '' : 's'} archived in the system.`
+              : 'There are no concluded examination records.'}
+          </p>
+          {filterTab === 'active' && concludedExams.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setFilterTab('concluded')}
+              style={{ fontSize: '12px', padding: '6px 16px' }}
+            >
+              View Concluded Sessions ({concludedExams.length})
+            </button>
+          )}
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
-          {exams.map((exam) => {
-            const isScheduledFuture = Boolean(exam.startTime && currentTime < exam.startTime);
-            const isConcluded = Boolean(exam.endTime && currentTime > exam.endTime);
-            const isLive = !isScheduledFuture && !isConcluded;
+          {displayedExams.map((exam) => {
+            const isScheduledFuture = exam.status === 'PUBLISHED' && Boolean(exam.startTime && currentTime < exam.startTime);
+            const isConcluded = exam.status === 'CLOSED' || Boolean(exam.endTime && currentTime > exam.endTime);
+            const isLive = exam.status === 'PUBLISHED' && !isScheduledFuture && !isConcluded;
 
             let countdownStr = '';
             if (isScheduledFuture && exam.startTime) {
@@ -4387,9 +4516,7 @@ export const MCQExamSelector: React.FC = () => {
               <div
                 key={exam.id}
                 onClick={() => {
-                  if (!isConcluded) {
-                    handleSelectExam(exam.id);
-                  }
+                  handleSelectExam(exam.id);
                 }}
                 className="mcq-horizontal-card"
                 style={{
@@ -4403,21 +4530,15 @@ export const MCQExamSelector: React.FC = () => {
                   boxSizing: 'border-box',
                   width: '100%',
                   gap: '16px',
-                  cursor: isConcluded ? 'not-allowed' : 'pointer',
-                  opacity: isConcluded ? 0.65 : 1,
+                  cursor: 'pointer',
+                  opacity: isConcluded ? 0.8 : 1,
                   transition: 'border-color 0.15s ease, background 0.15s ease'
                 }}
                 onMouseEnter={(e) => {
-                  if (!isConcluded) {
-                    e.currentTarget.style.borderColor = 'var(--border-strong)';
-                    e.currentTarget.style.background = 'var(--bg-surface)';
-                  }
+                  e.currentTarget.style.borderColor = 'var(--border-strong)';
                 }}
                 onMouseLeave={(e) => {
-                  if (!isConcluded) {
-                    e.currentTarget.style.borderColor = 'var(--border)';
-                    e.currentTarget.style.background = isConcluded ? 'var(--bg-surface)' : 'var(--bg-elevated)';
-                  }
+                  e.currentTarget.style.borderColor = 'var(--border)';
                 }}
               >
                 {/* Left Side: Category, Title, Topic & Metric Chips */}

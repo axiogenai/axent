@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Plus, Save, Trash2, ChevronLeft, ChevronRight, CheckSquare,
-  Clock, List, Settings, Eye, AlertCircle, BookOpen, X, Check, GraduationCap, MessageCircle, Copy
+  Clock, List, Settings, Eye, AlertCircle, BookOpen, X, Check, GraduationCap, MessageCircle, Copy, RefreshCw
 } from 'lucide-react';
 import { MCQExamConfig, MCQExamStatus } from '../types/mcq';
 import { MCQQuestion } from '../types/mcq';
@@ -213,6 +213,37 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
                         }}
                       >
                         Close Exam
+                      </button>
+                    </>
+                  )}
+                  {exam.status === 'CLOSED' && (
+                    <>
+                      <button
+                        onClick={() => handleCopyLink(exam.id)}
+                        title="Copy student examination link for this paper"
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '5px',
+                          background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-sm)', padding: '6px 12px',
+                          cursor: 'pointer', color: copiedExamId === exam.id ? 'var(--success)' : 'var(--text-primary)',
+                          fontSize: '12px', fontWeight: 600,
+                        }}
+                      >
+                        {copiedExamId === exam.id ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
+                        <span>{copiedExamId === exam.id ? 'Link Copied!' : 'Copy Student Link'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => onEdit(exam)}
+                        title="Re-open or extend this exam schedule"
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          background: 'var(--success-bg)', border: '1px solid var(--success-border)',
+                          borderRadius: 'var(--radius-sm)', padding: '6px 12px',
+                          cursor: 'pointer', color: 'var(--success)', fontSize: '12px', fontWeight: 600,
+                        }}
+                      >
+                        <RefreshCw size={12} /> Re-open / Reschedule
                       </button>
                     </>
                   )}
