@@ -4452,73 +4452,21 @@ export const MCQExamSelector: React.FC = () => {
 
       {/* Clean Header with Search & Filter Toolbar */}
       <div style={{ marginBottom: '22px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px', marginBottom: exams.length > 0 ? '16px' : '0' }}>
-          <div>
-            <h2
-              style={{
-                fontSize: '20px',
-                fontWeight: 800,
-                color: 'var(--text-primary)',
-                margin: '0 0 4px',
-                letterSpacing: '-0.02em'
-              }}
-            >
-              Available MCQ Examinations
-            </h2>
-            <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-              Select your assigned examination session to commence or review your past sittings.
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={handleManualSync}
-              disabled={isRefreshing}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '7px 12px',
-                fontSize: '12px',
-                fontWeight: 600,
-                color: 'var(--text-secondary)',
-                cursor: isRefreshing ? 'wait' : 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-              title="Synchronize examination catalog with Supabase Cloud"
-            >
-              <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
-              <span>{isRefreshing ? 'Syncing...' : 'Sync Cloud'}</span>
-            </button>
-
-            {(authorityRole === 'admin' || authorityRole === 'paper_setter') && (
-              <button
-                type="button"
-                onClick={() => navigate('/paper-setter')}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  background: 'var(--accent)',
-                  border: 'none',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '7px 14px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  color: '#000',
-                  cursor: 'pointer',
-                  transition: 'opacity 0.15s ease'
-                }}
-              >
-                <FileEdit size={13} />
-                <span>Paper Setter Portal</span>
-              </button>
-            )}
-          </div>
+        <div style={{ marginBottom: exams.length > 0 ? '16px' : '0' }}>
+          <h2
+            style={{
+              fontSize: '20px',
+              fontWeight: 800,
+              color: 'var(--text-primary)',
+              margin: '0 0 4px',
+              letterSpacing: '-0.02em'
+            }}
+          >
+            Available MCQ Examinations
+          </h2>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
+            Select your assigned examination session to commence or review your past sittings.
+          </p>
         </div>
 
         {exams.length > 0 && (
@@ -4736,19 +4684,8 @@ export const MCQExamSelector: React.FC = () => {
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '6px 14px' }}
             >
               <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
-              <span>{isRefreshing ? 'Syncing...' : 'Sync Cloud Catalog'}</span>
+              <span>{isRefreshing ? 'Checking...' : 'Check Again'}</span>
             </button>
-            {(authorityRole === 'admin' || authorityRole === 'paper_setter') && (
-              <button
-                type="button"
-                onClick={() => navigate('/paper-setter')}
-                className="btn btn-secondary btn-sm"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '6px 14px' }}
-              >
-                <FileEdit size={12} />
-                <span>Open Paper Setter Portal</span>
-              </button>
-            )}
           </div>
         </div>
       ) : displayedExams.length === 0 ? (
