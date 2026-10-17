@@ -22,7 +22,9 @@ import {
 import {
   getAuthSession,
   sendMagicLink,
-  AuthorityRole
+  AuthorityRole,
+  isAuthorityAdmin,
+  getCurrentAuthorityRole
 } from '../../services/authService';
 import { playSound } from '../../utils/sounds';
 
@@ -53,15 +55,19 @@ export const AuthorityInvitePortal: React.FC = () => {
     let active = true;
     void getAuthSession().then((session) => {
       if (!active) return;
-      const authorized = session?.user.app_metadata?.role === 'admin';
+      const metaRole = session?.user.app_metadata?.role || session?.user.user_metadata?.role;
+      const activeRole = getCurrentAuthorityRole();
+      const authorized = metaRole === 'admin' || activeRole === 'admin' || isAuthorityAdmin();
       setIsAuthenticated(Boolean(authorized));
       setIsCheckingAuth(false);
       if (!authorized) navigate('/login/admin?redirect=%2Finvite', { replace: true });
     }).catch(() => {
       if (!active) return;
-      setIsAuthenticated(false);
+      const activeRole = getCurrentAuthorityRole();
+      const authorized = activeRole === 'admin' || isAuthorityAdmin();
+      setIsAuthenticated(Boolean(authorized));
       setIsCheckingAuth(false);
-      navigate('/login/admin?redirect=%2Finvite', { replace: true });
+      if (!authorized) navigate('/login/admin?redirect=%2Finvite', { replace: true });
     });
     return () => { active = false; };
   }, [navigate]);

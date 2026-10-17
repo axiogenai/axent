@@ -108,6 +108,8 @@ export interface MCQAttempt {
   lastActivityAt?: number;     // Epoch ms; used to reconcile cross-device sync safely
   submitTime?: number;
   status: MCQAttemptStatus;
+  assignedLabId?: string;
+  assignedLabName?: string;
 
   // The shuffled, immutable assignment for this attempt
   assignedQuestions: MCQAssignedQuestion[];

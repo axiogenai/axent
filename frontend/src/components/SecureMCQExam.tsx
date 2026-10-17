@@ -286,11 +286,11 @@ export const SecureMCQExam: React.FC = () => {
           studentDept: attempt.candidate?.department || '', studentSem: attempt.candidate?.semester || '',
           studentDiv: attempt.candidate?.division || '', startTime: Number(attempt.deadline) - Number(attempt.durationMinutes || 0) * 60000,
           deadline: Number(attempt.deadline), status: attempt.status, assignedQuestions: attempt.assignedQuestions,
-          answers, maxScore: 0, tabSwitchCount, unfocusedSeconds, infractionLog: []
+          answers, maxScore: attempt.assignedQuestions?.reduce((sum, aq) => sum + (aq.snapshot?.marks || 1), 0) || 25, tabSwitchCount, unfocusedSeconds, infractionLog: []
         } as unknown as MCQAttempt;
         const telemetryExam = {
           id: attempt.examId, title: attempt.examTitle, questionCount: attempt.assignedQuestions.length,
-          durationMinutes: attempt.durationMinutes || 0, totalMarks: 0, questionIds: attempt.assignedQuestions.map(q => q.questionId),
+          durationMinutes: attempt.durationMinutes || 0, totalMarks: attempt.assignedQuestions?.reduce((sum, aq) => sum + (aq.snapshot?.marks || 1), 0) || 25, questionIds: attempt.assignedQuestions.map(q => q.questionId),
           status: 'PUBLISHED'
         } as unknown as MCQExamConfig;
         telemetryAttemptRef.current = telemetryAttempt;

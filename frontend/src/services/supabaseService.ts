@@ -361,6 +361,8 @@ export async function fetchAttemptsFromCloud(): Promise<MCQAttempt[] | null> {
       tabSwitchCount: Number(row.tab_switch_count) || 0,
       unfocusedSeconds: Number(row.unfocused_seconds) || 0,
       infractionLog: row.infraction_log || [],
+      assignedLabId: row.assigned_lab_id || undefined,
+      assignedLabName: row.assigned_lab_name || undefined,
     }));
   } catch (err) {
     console.warn('[Supabase] Error in fetchAttemptsFromCloud:', err);
@@ -374,6 +376,8 @@ async function writeAttemptToCloud(a: MCQAttempt): Promise<boolean> {
       id: a.id,
       exam_id: a.examId,
       exam_title: a.examTitle,
+      assigned_lab_id: a.assignedLabId || null,
+      assigned_lab_name: a.assignedLabName || null,
       student_name: a.studentName,
       student_roll: a.studentRoll,
       student_dept: a.studentDept,
@@ -400,10 +404,10 @@ async function writeAttemptToCloud(a: MCQAttempt): Promise<boolean> {
     // Existing deployments may not yet have these optional columns. Retry without
     // the missing fields so a schema upgrade is not required just to save an attempt.
     const payload: Record<string, unknown> = { ...row };
-    for (let retry = 0; retry < 3; retry++) {
+    for (let retry = 0; retry < 4; retry++) {
       const { error } = await supabase.from('mcq_attempts').upsert(payload);
       if (!error) return true;
-      const missingOptionalColumn = ['student_div', 'last_activity_at'].find((column) =>
+      const missingOptionalColumn = ['assigned_lab_id', 'assigned_lab_name', 'student_div', 'last_activity_at'].find((column) =>
         Object.prototype.hasOwnProperty.call(payload, column) && error.message.toLowerCase().includes(column)
       );
       if (missingOptionalColumn) {

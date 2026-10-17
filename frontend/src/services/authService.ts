@@ -58,14 +58,19 @@ export function getStoredAuthorityRole(): AuthorityRole {
 export function getCurrentAuthorityRole(): AuthorityRole | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = sessionStorage.getItem(LOCAL_AUTH_KEY) || localStorage.getItem(LOCAL_AUTH_KEY);
-    if (!raw) return null;
-    const session = JSON.parse(raw);
-    const metaRole = session?.user?.app_metadata?.role || session?.user?.user_metadata?.role;
+    // 1. Check direct authority role storage first
     const storedRole = sessionStorage.getItem(LOCAL_ROLE_KEY) || localStorage.getItem(LOCAL_ROLE_KEY);
-    const effectiveRole = storedRole || metaRole;
-    if (effectiveRole === 'admin' || effectiveRole === 'paper_setter') {
-      return effectiveRole as AuthorityRole;
+    if (storedRole === 'admin' || storedRole === 'paper_setter') {
+      return storedRole as AuthorityRole;
+    }
+    // 2. Check cached authority session
+    const raw = sessionStorage.getItem(LOCAL_AUTH_KEY) || localStorage.getItem(LOCAL_AUTH_KEY);
+    if (raw) {
+      const session = JSON.parse(raw);
+      const metaRole = session?.user?.app_metadata?.role || session?.user?.user_metadata?.role;
+      if (metaRole === 'admin' || metaRole === 'paper_setter') {
+        return metaRole as AuthorityRole;
+      }
     }
   } catch {}
   return null;

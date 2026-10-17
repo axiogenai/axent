@@ -769,10 +769,22 @@ export function startAttempt(
     : personalDeadline;
   const deadline = Math.max(now + 60_000, Math.min(personalDeadline, windowDeadline));
 
+  let assignedLabId = exam.assignedLabId;
+  let assignedLabName = exam.assignedLabName;
+  if (!assignedLabId) {
+    try {
+      const boundLab = ensureLabForExam(exam);
+      assignedLabId = boundLab.labId;
+      assignedLabName = boundLab.labName;
+    } catch {}
+  }
+
   const attempt: MCQAttempt = {
     id: uuid(),
     examId: exam.id,
     examTitle: exam.title,
+    assignedLabId,
+    assignedLabName,
     studentName,
     studentRoll,
     studentDept,

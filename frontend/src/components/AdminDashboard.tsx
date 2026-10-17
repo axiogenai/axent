@@ -94,10 +94,30 @@ import {
 
 export const getEffectiveMaxMarks = (station: CandidateStation): number => {
   if (station.mcqProgress?.maxScore && station.mcqProgress.maxScore > 0) return station.mcqProgress.maxScore;
+
+  // Dynamically resolve exact totalMarks from the authored exam paper configuration
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('codedna_mcq_exams');
+      if (raw) {
+        const exams = JSON.parse(raw);
+        if (Array.isArray(exams)) {
+          const matched = exams.find((e: any) =>
+            (station.student?.mcqExamId && e.id === station.student.mcqExamId) ||
+            (e.title && (e.title === station.student?.course || e.title === station.student?.assignmentTitle))
+          );
+          if (matched?.totalMarks && matched.totalMarks > 0) {
+            return matched.totalMarks;
+          }
+        }
+      }
+    } catch {}
+  }
+
   if (station.marks?.maxMarks && station.marks.maxMarks > 0 && station.marks.maxMarks !== 50) return station.marks.maxMarks;
   if (station.mcqProgress?.totalQuestions && station.mcqProgress.totalQuestions > 0) return station.mcqProgress.totalQuestions;
   if (station.examMode === 'MCQ' || station.language === 'MCQ') {
-    return station.marks?.maxMarks && station.marks.maxMarks > 0 ? station.marks.maxMarks : 25;
+    return station.marks?.maxMarks && station.marks.maxMarks > 0 && station.marks.maxMarks !== 50 ? station.marks.maxMarks : 25;
   }
   return station.marks?.maxMarks || 50;
 };
@@ -194,6 +214,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         saveAllStations(merged);
       }
     }).catch(() => {});
+  };
+
+  const handleToggleLockStation = (targetStation: CandidateStation) => {
+    const isCurrentlyLocked = isStationEffectiveLocked(targetStation);
+    const nextLock = !isCurrentlyLocked;
+    sendProctorLockCommand(targetStation.id, nextLock, targetStation.labId);
+    setStations((prev) =>
+      prev.map((s) => {
+        if (s.id !== targetStation.id) return s;
+        return {
+          ...s,
+          isLockedByProctor: nextLock,
+          tabSwitchViolations: nextLock ? (s.metrics?.tabSwitchViolations || 0) : 0,
+          unfocusedTimeSeconds: nextLock ? (s.metrics?.unfocusedTimeSeconds || 0) : 0,
+          integrityStatus: nextLock ? s.integrityStatus : ('Verified Original Work' as const),
+          cheatingRisk: nextLock ? s.cheatingRisk : ('Low' as const),
+          metrics: {
+            ...s.metrics,
+            tabSwitchViolations: nextLock ? (s.metrics?.tabSwitchViolations || 0) : 0,
+            unfocusedTimeSeconds: nextLock ? (s.metrics?.unfocusedTimeSeconds || 0) : 0
+          },
+          mcqProgress: s.mcqProgress
+            ? {
+                ...s.mcqProgress,
+                tabSwitches: nextLock ? s.mcqProgress.tabSwitches : 0
+              }
+            : undefined
+        };
+      })
+    );
+    playSound('click');
   };
 
   useEffect(() => {
@@ -1478,12 +1529,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {/* Remote Lock / Unlock */}
                       <button
                         type="button"
-                        onClick={() => {
-                          const nextLock = !isLocked;
-                          sendProctorLockCommand(station.id, nextLock, station.labId);
-                          setStations((prev) => prev.map((s) => s.id === station.id ? { ...s, isLockedByProctor: nextLock } : s));
-                          playSound('click');
-                        }}
+                        onClick={() => handleToggleLockStation(station)}
                         style={{
                           background: isLocked ? 'rgba(239, 68, 68, 0.18)' : 'rgba(255, 255, 255, 0.05)',
                           border: isLocked ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(255, 255, 255, 0.14)',
@@ -1715,12 +1761,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           return (
                             <button
                               className={`btn ${stationLocked ? 'btn-danger' : 'btn-ghost'} btn-sm`}
-                              onClick={() => {
-                                const nextLock = !stationLocked;
-                                sendProctorLockCommand(station.id, nextLock, station.labId);
-                                setStations((prev) => prev.map((s) => s.id === station.id ? { ...s, isLockedByProctor: nextLock } : s));
-                                playSound('click');
-                              }}
+                              onClick={() => handleToggleLockStation(station)}
                               style={{ height: '24px', padding: '0 6px', fontSize: '11px' }}
                               title={stationLocked ? 'Unlock student editor' : 'Freeze student editor remotely'}
                             >
@@ -1959,12 +2000,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   return (
                     <button
                       className={`btn btn-sm ${isStationCurrentlyLocked ? 'btn-danger' : 'btn-secondary'}`}
-                      onClick={() => {
-                        const nextLock = !isStationCurrentlyLocked;
-                        sendProctorLockCommand(selectedStation.id, nextLock, selectedStation.labId);
-                        setStations((prev) => prev.map((s) => s.id === selectedStation.id ? { ...s, isLockedByProctor: nextLock } : s));
-                        playSound('click');
-                      }}
+                      onClick={() => handleToggleLockStation(selectedStation)}
                       style={{ height: '28px', fontSize: '11px', padding: '0 10px' }}
                       title="Remotely freeze/unfreeze candidate Monaco code editor"
                     >
