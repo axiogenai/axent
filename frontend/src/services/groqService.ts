@@ -1574,6 +1574,7 @@ export interface AIPaperGenerationRequest {
   negativeMarkingEnabled: boolean;
   negativeMarkPenalty?: number;
   autoPublish?: boolean;
+  isPrivate?: boolean;
 }
 
 export interface CrossValidationAuditItem {
@@ -2181,6 +2182,7 @@ export async function generateFullExamPaperWithAI(
     allowReview: true,
     showExplanationsAfterSubmit: true,
     maxAttempts: 1,
+    isPrivate: Boolean(req.isPrivate),
     status: req.autoPublish === true ? 'PUBLISHED' : 'DRAFT',
     createdAt: now,
     updatedAt: now,

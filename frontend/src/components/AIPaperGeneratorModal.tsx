@@ -30,7 +30,13 @@ import {
   Shuffle,
   Settings,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Lock,
+  Globe,
+  Ticket,
+  Cpu,
+  Terminal,
+  Activity
 } from 'lucide-react';
 import {
   generateFullExamPaperWithAI,
@@ -285,6 +291,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
   const [negativeMarkingEnabled, setNegativeMarkingEnabled] = useState(true);
   const [negativeMarkPenalty, setNegativeMarkPenalty] = useState(0.25);
   const [resultDeclarationMode, setResultDeclarationMode] = useState<MCQResultDeclarationMode>('WHATSAPP_GROUP');
+  const [isPrivate, setIsPrivate] = useState<boolean>(false);
 
   // Scheduling & Delivery settings in Generator
   const [startTime, setStartTime] = useState<number | undefined>(undefined);
@@ -298,6 +305,35 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
   // Progress & Error
   const [progressMsg, setProgressMsg] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Loading Telemetry & Timer
+  const [loadingElapsed, setLoadingElapsed] = useState(0);
+  const [telemetryLogs, setTelemetryLogs] = useState<string[]>([]);
+
+  React.useEffect(() => {
+    if (step !== 'loading') {
+      setLoadingElapsed(0);
+      return;
+    }
+    const timer = setInterval(() => {
+      setLoadingElapsed((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [step]);
+
+  React.useEffect(() => {
+    if (step === 'loading') {
+      const timeStr = `[00:${String(loadingElapsed).padStart(2, '0')}]`;
+      if (progressMsg) {
+        setTelemetryLogs((prev) => {
+          if (prev.length > 0 && prev[prev.length - 1].includes(progressMsg)) return prev;
+          return [...prev.slice(-10), `${timeStr} ${progressMsg}`];
+        });
+      }
+    } else {
+      setTelemetryLogs([]);
+    }
+  }, [progressMsg, step, loadingElapsed]);
 
   // Review Stage State
   const [reviewedExam, setReviewedExam] = useState<MCQExamConfig | null>(null);
@@ -447,6 +483,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
           hardMarks: basePerQ,
           negativeMarkingEnabled,
           negativeMarkPenalty,
+          isPrivate,
           autoPublish: false
         };
       } else if (topicMode === 'sections') {
@@ -475,6 +512,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
           hardCount: 0,
           negativeMarkingEnabled,
           negativeMarkPenalty,
+          isPrivate,
           autoPublish: false // Explicitly DRAFT: Faculty reviews before publishing
         };
       } else {
@@ -524,6 +562,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
           hardMarks: basePerQ,
           negativeMarkingEnabled,
           negativeMarkPenalty,
+          isPrivate,
           autoPublish: false
         };
       }
@@ -532,19 +571,36 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
         setProgressMsg(status);
       });
 
-      setReviewedExam({
+      const initialExam: MCQExamConfig = {
         ...res.exam,
+        isPrivate,
         resultDeclarationMode,
         startTime,
         endTime,
         whatsappGroupName: whatsappGroupName.trim() || undefined,
         whatsappGroupLink: whatsappGroupLink.trim() || undefined,
         instructions: instructions.trim() || res.exam.instructions,
-      });
+        status: 'DRAFT',
+        updatedAt: Date.now()
+      };
+
+      // Persist draft immediately to local & cloud storage so it is never lost
+      saveExam(initialExam);
+      setReviewedExam(initialExam);
       setReviewedQuestions(res.questions);
       setAuditReport(res.auditReport || null);
       // Expand all questions by default for quick review
       setExpandedQIds(new Set(res.questions.map((q) => q.id)));
+
+      // Notify caller (e.g. PaperSetterPortal) immediately so the draft shows in catalog right away
+      onPaperGenerated({
+        exam: initialExam,
+        questions: res.questions,
+        modelUsed: 'Autonomous-AI-Draft',
+        totalMarks: res.questions.reduce((acc, q) => acc + (Number(q.marks) || 0), 0),
+        questionCount: res.questions.length
+      });
+
       setStep('review');
       playSound('success');
     } catch (err: any) {
@@ -727,6 +783,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
 
     const updatedExam: MCQExamConfig = {
       ...reviewedExam,
+      isPrivate: reviewedExam.isPrivate !== undefined ? Boolean(reviewedExam.isPrivate) : isPrivate,
       title: reviewedExam.title.trim() || 'MCQ Exam Draft',
       durationMinutes: Math.max(5, reviewedExam.durationMinutes || 30),
       questionCount: reviewedQuestions.length,
@@ -770,6 +827,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
       // 2. Prepare updated exam config
       const updatedExam: MCQExamConfig = {
         ...reviewedExam,
+        isPrivate: reviewedExam.isPrivate !== undefined ? Boolean(reviewedExam.isPrivate) : isPrivate,
         title: reviewedExam.title.trim() || 'MCQ Examination',
         durationMinutes: Math.max(5, reviewedExam.durationMinutes || 30),
         questionCount: reviewedQuestions.length,
@@ -2273,6 +2331,83 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                 }}
               />
 
+              {/* Privacy & Candidate Access Protocol */}
+              <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '12px 14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                    <Lock size={13} color="var(--accent)" />
+                    <span>Privacy & Candidate Access Protocol</span>
+                  </label>
+                  <span style={{ fontSize: '10.5px', fontWeight: 600, color: isPrivate ? '#f59e0b' : 'var(--accent)' }}>
+                    {isPrivate ? 'PRIVATE [INVITE / TICKET-ONLY]' : 'PUBLIC CATALOG'}
+                  </span>
+                </div>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '0 0 10px', lineHeight: 1.4 }}>
+                  Determine whether this paper is openly visible to all students in the portal catalog (/mcq) or restricted to invigilator-issued candidate tickets and direct links.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsPrivate(false);
+                      playSound('click');
+                    }}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: `1.5px solid ${!isPrivate ? 'var(--accent)' : 'var(--border)'}`,
+                      background: !isPrivate ? 'var(--bg-elevated)' : 'var(--bg-surface)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', fontWeight: 700, color: !isPrivate ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                        <Globe size={13} color={!isPrivate ? 'var(--accent)' : 'var(--text-muted)'} />
+                        <span>Public Catalog Exam</span>
+                      </span>
+                      {!isPrivate && <Check size={13} color="var(--accent)" />}
+                    </div>
+                    <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', lineHeight: 1.3 }}>
+                      Listed publicly in the student /mcq directory. Any registered student can take it during scheduled hours.
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsPrivate(true);
+                      playSound('click');
+                    }}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: `1.5px solid ${isPrivate ? '#f59e0b' : 'var(--border)'}`,
+                      background: isPrivate ? 'var(--bg-elevated)' : 'var(--bg-surface)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', fontWeight: 700, color: isPrivate ? '#f59e0b' : 'var(--text-secondary)' }}>
+                        <Lock size={13} color={isPrivate ? '#f59e0b' : 'var(--text-muted)'} />
+                        <span>Private Exam (Ticket-Only)</span>
+                      </span>
+                      {isPrivate && <Check size={13} color="#f59e0b" />}
+                    </div>
+                    <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', lineHeight: 1.3 }}>
+                      Hidden from public catalog. Invigilator issues unique candidate tickets via Admin portal or sends direct link.
+                    </span>
+                  </button>
+                </div>
+              </div>
+
               {/* Focus Instructions */}
               <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 14px' }}>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
@@ -2355,7 +2490,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
       </div>
     )}
 
-          {/* ── STEP 2: LOADING PROGRESS ── */}
+          {/* ── STEP 2: AUTONOMOUS GENERATION & PSYCHOMETRIC SYNTHESIS (HIGH-TECH ANIMATION) ── */}
           {step === 'loading' && (
             <div
               style={{
@@ -2363,28 +2498,371 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                padding: '60px 20px',
-                textAlign: 'center'
+                padding: '24px 16px',
+                width: '100%',
+                boxSizing: 'border-box'
               }}
             >
-              <RefreshCw size={36} color="var(--accent)" className="spin" style={{ marginBottom: '16px' }} />
-              <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 8px' }}>
-                Generating Complete Exam Paper with Autonomous Engine...
-              </h3>
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)', maxWidth: '460px', margin: '0 0 16px', lineHeight: 1.5 }}>
-                {progressMsg}
-              </p>
+              <style>{`
+                @keyframes codedna-radar-sweep {
+                  from { transform: rotate(0deg); }
+                  to { transform: rotate(360deg); }
+                }
+                @keyframes codedna-terminal-cursor {
+                  0%, 100% { opacity: 1; }
+                  50% { opacity: 0; }
+                }
+              `}</style>
+
+              {/* Main Scanner Container */}
               <div
                 style={{
-                  fontSize: '11px',
-                  color: 'var(--text-secondary)',
+                  width: '100%',
+                  maxWidth: '720px',
                   background: 'var(--bg-surface)',
-                  padding: '6px 12px',
-                  borderRadius: 'var(--radius-pill)',
-                  border: '1px solid var(--border)'
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '24px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '20px'
                 }}
               >
-                Paper will open in interactive review mode once questions are formulated.
+                {/* Header Banner */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'var(--accent)'
+                      }}
+                    >
+                      <Cpu size={16} />
+                    </div>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
+                        Autonomous Paper Synthesis Engine
+                      </h3>
+                      <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                        Neural item formulation, distractor plausibility calibration, and psychometric verification.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Synchronized Stopwatch */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '4px 10px',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-pill)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '11.5px',
+                      color: 'var(--text-secondary)'
+                    }}
+                  >
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
+                    <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                      00:{String(loadingElapsed).padStart(2, '0')}s
+                    </span>
+                    <span style={{ color: 'var(--text-muted)' }}>elapsed</span>
+                  </div>
+                </div>
+
+                {/* Radar Reticle Scanner & Status Columns */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 220px) 1fr', gap: '20px', alignItems: 'center' }}>
+                  {/* Radar Reticle Graphic */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      position: 'relative'
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '180px',
+                        height: '180px',
+                        borderRadius: '50%',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border)',
+                        position: 'relative',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      {/* Inner concentric ring */}
+                      <div
+                        style={{
+                          width: '120px',
+                          height: '120px',
+                          borderRadius: '50%',
+                          border: '1px dashed var(--border)',
+                          position: 'absolute'
+                        }}
+                      />
+                      {/* Core ring */}
+                      <div
+                        style={{
+                          width: '60px',
+                          height: '60px',
+                          borderRadius: '50%',
+                          border: '1px solid var(--border)',
+                          position: 'absolute'
+                        }}
+                      />
+                      {/* Crosshairs */}
+                      <div style={{ position: 'absolute', width: '100%', height: '1px', background: 'var(--border)' }} />
+                      <div style={{ position: 'absolute', height: '100%', width: '1px', background: 'var(--border)' }} />
+
+                      {/* Rotating Scanner Arm */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          width: '100%',
+                          height: '100%',
+                          animation: 'codedna-radar-sweep 3.5s linear infinite',
+                          transformOrigin: 'center center'
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: '50%',
+                            height: '50%',
+                            position: 'absolute',
+                            top: 0,
+                            right: 0,
+                            background: 'conic-gradient(from 180deg at 0% 100%, transparent 0deg, var(--border) 90deg)',
+                            opacity: 0.7
+                          }}
+                        />
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: '50%',
+                            width: '1px',
+                            height: '50%',
+                            background: 'var(--accent)'
+                          }}
+                        />
+                      </div>
+
+                      {/* Center Core Node */}
+                      <div
+                        style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '50%',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          position: 'relative',
+                          zIndex: 2,
+                          color: 'var(--accent)'
+                        }}
+                      >
+                        <Activity size={14} />
+                      </div>
+
+                      {/* Cardinal angle marks */}
+                      <span style={{ position: 'absolute', top: '4px', fontSize: '8px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>000°</span>
+                      <span style={{ position: 'absolute', right: '4px', fontSize: '8px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>090°</span>
+                      <span style={{ position: 'absolute', bottom: '4px', fontSize: '8px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>180°</span>
+                      <span style={{ position: 'absolute', left: '4px', fontSize: '8px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>270°</span>
+                    </div>
+
+                    <div style={{ marginTop: '8px', fontSize: '10.5px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.05em' }}>
+                      INFERENCE ACTIVE // LLaMA 3.3
+                    </div>
+                  </div>
+
+                  {/* 4-Phase Pipeline Status */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {[
+                      {
+                        num: '01',
+                        label: 'Curriculum & Syllabus Parsing',
+                        desc: 'Deconstructing syllabus topics into Bloom cognitive taxonomy targets.',
+                        done: loadingElapsed > 4 || progressMsg.includes('Generating') || progressMsg.includes('questions'),
+                        active: loadingElapsed <= 4 && !progressMsg.includes('Generating')
+                      },
+                      {
+                        num: '02',
+                        label: 'Neural Item Formulation (Groq LLaMA 70B)',
+                        desc: 'Synthesizing rigorous stems, clear questions, and plausible distractors.',
+                        done: loadingElapsed > 14 || progressMsg.includes('Auditing') || progressMsg.includes('Validating'),
+                        active: (loadingElapsed > 4 || progressMsg.includes('Generating')) && !progressMsg.includes('Auditing') && !progressMsg.includes('Validating')
+                      },
+                      {
+                        num: '03',
+                        label: 'Psychometric Distractor & Key Audit',
+                        desc: 'Cross-verifying single-key determinism and eliminative plausibility.',
+                        done: loadingElapsed > 22 || progressMsg.includes('Finalizing'),
+                        active: (loadingElapsed > 14 || progressMsg.includes('Auditing') || progressMsg.includes('Validating')) && !progressMsg.includes('Finalizing')
+                      },
+                      {
+                        num: '04',
+                        label: 'Institutional Blueprint Packaging',
+                        desc: 'Compiling scoring matrices, timing windows, and anti-cheat parameters.',
+                        done: false,
+                        active: loadingElapsed > 22 || progressMsg.includes('Finalizing')
+                      }
+                    ].map((phase) => (
+                      <div
+                        key={phase.num}
+                        style={{
+                          background: phase.active ? 'var(--bg-elevated)' : 'var(--bg-surface)',
+                          border: `1px solid ${phase.active ? 'var(--accent)' : 'var(--border)'}`,
+                          borderRadius: 'var(--radius-sm)',
+                          padding: '8px 12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            background: phase.done ? 'var(--success-bg)' : phase.active ? 'var(--bg-surface)' : 'transparent',
+                            border: `1px solid ${phase.done ? 'var(--success-border)' : phase.active ? 'var(--accent)' : 'var(--border)'}`,
+                            color: phase.done ? 'var(--success)' : phase.active ? 'var(--accent)' : 'var(--text-muted)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '9.5px',
+                            fontWeight: 700,
+                            flexShrink: 0
+                          }}
+                        >
+                          {phase.done ? <Check size={11} /> : phase.num}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                            <span style={{ fontSize: '11.5px', fontWeight: 700, color: phase.active ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                              {phase.label}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: '9px',
+                                fontFamily: 'var(--font-mono)',
+                                textTransform: 'uppercase',
+                                color: phase.done ? 'var(--success)' : phase.active ? 'var(--accent)' : 'var(--text-muted)',
+                                fontWeight: 700
+                              }}
+                            >
+                              {phase.done ? 'COMPLETE' : phase.active ? 'IN-PROGRESS' : 'QUEUED'}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {phase.desc}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Live Telemetry Terminal */}
+                <div
+                  style={{
+                    background: '#09090b',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '12px 14px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '11px',
+                    color: '#e4e4e7',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #27272a', paddingBottom: '6px', marginBottom: '2px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#a1a1aa', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      <Terminal size={12} color="#a1a1aa" />
+                      <span>Live Telemetry Log</span>
+                    </div>
+                    <span style={{ fontSize: '9.5px', color: '#71717a' }}>groq / llama-3.3-70b-versatile</span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '110px', overflowY: 'auto' }}>
+                    <div style={{ color: '#71717a' }}>[00:00] Initializing cognitive test synthesis pipeline...</div>
+                    <div style={{ color: '#71717a' }}>[00:01] Target: {effectiveTotalQuestions} questions · {durationMinutes} mins · {isPrivate ? 'PRIVATE (TICKET-ONLY)' : 'PUBLIC CATALOG'}</div>
+                    {telemetryLogs.map((log, idx) => (
+                      <div key={idx} style={{ color: '#d4d4d8' }}>
+                        {log}
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--accent)' }}>
+                      <span>&gt; {progressMsg || 'Processing inference vectors...'}</span>
+                      <span style={{ animation: 'codedna-terminal-cursor 1s infinite', fontWeight: 700 }}>_</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Blueprint Parameters Dossier Bar */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                    padding: '8px 12px',
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: '11px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      Subject: <strong style={{ color: 'var(--text-primary)' }}>{subject || 'General Aptitude'}</strong>
+                    </span>
+                    <span style={{ color: 'var(--border)' }}>•</span>
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      Items: <strong style={{ color: 'var(--text-primary)' }}>{effectiveTotalQuestions} Qs</strong>
+                    </span>
+                    <span style={{ color: 'var(--border)' }}>•</span>
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      Duration: <strong style={{ color: 'var(--text-primary)' }}>{durationMinutes}m</strong>
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {isPrivate ? (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-pill)', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)', color: '#f59e0b' }}>
+                        <Lock size={10} />
+                        <span>PRIVATE TICKET-ONLY</span>
+                      </span>
+                    ) : (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+                        <Globe size={10} />
+                        <span>PUBLIC CATALOG</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -2791,6 +3269,13 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                         desc: 'Display AI step-by-step rationales when results are declared.',
                         value: reviewedExam.showExplanationsAfterSubmit ?? true,
                         toggle: () => setReviewedExam({ ...reviewedExam, showExplanationsAfterSubmit: !(reviewedExam.showExplanationsAfterSubmit ?? true) })
+                      },
+                      {
+                        key: 'isPrivate',
+                        label: 'Restricted / Private Exam (Ticket-Only)',
+                        desc: 'Unlist from /mcq catalog. Access strictly requires candidate ticket or direct link.',
+                        value: Boolean(reviewedExam.isPrivate),
+                        toggle: () => setReviewedExam({ ...reviewedExam, isPrivate: !reviewedExam.isPrivate })
                       }
                     ].map((item) => (
                       <div
@@ -3546,6 +4031,13 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                   </div>
                 </div>
 
+                {reviewedExam.isPrivate && (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: 'var(--radius-pill)', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.35)', color: '#f59e0b', fontSize: '11px', fontWeight: 700, marginBottom: '12px' }}>
+                    <Lock size={12} />
+                    <span>RESTRICTED / PRIVATE EXAMINATION (TICKET-ONLY)</span>
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <a
                     href={reviewedExam?.id ? `/mcq?examId=${encodeURIComponent(reviewedExam.id)}` : '/mcq'}
@@ -3568,6 +4060,30 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     <ArrowRight size={13} />
                   </a>
 
+                  {reviewedExam.isPrivate && (
+                    <a
+                      href={`/admin?examId=${encodeURIComponent(reviewedExam.id)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        background: 'rgba(245, 158, 11, 0.1)',
+                        border: '1px solid rgba(245, 158, 11, 0.35)',
+                        color: '#f59e0b',
+                        padding: '8px 14px',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        textDecoration: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <Ticket size={13} />
+                      <span>Issue Candidate Tickets</span>
+                    </a>
+                  )}
+
                   <button
                     onClick={handleCopyStudentLink}
                     style={{
@@ -3586,6 +4102,29 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                   >
                     {copiedLink ? <Check size={13} /> : <Copy size={13} />}
                     <span>{copiedLink ? 'Copied Student Link!' : 'Copy Student Link'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      onClose();
+                      window.location.href = '/paper-setter';
+                    }}
+                    style={{
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border)',
+                      padding: '8px 14px',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Layers size={13} />
+                    <span>View in Paper Setter Portal</span>
                   </button>
 
                   <button

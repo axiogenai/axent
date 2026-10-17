@@ -4,13 +4,13 @@ import {
   Clock, ChevronLeft, ChevronRight, CheckCircle, CheckCircle2, Circle, AlertTriangle,
   Send, BookOpen, RotateCcw, Award, X, Eye, EyeOff, BarChart2, KeyRound,
   Copy, Check, Lock, Unlock, Code2, ArrowRight, ShieldAlert, Shield, Monitor, Download, CheckSquare, FileCheck, LogOut, MessageCircle, Calendar,
-  Maximize2, Minimize2, Video, VideoOff, Loader2, AlertCircle, UserPlus, Search, Wifi, RefreshCw, User, Terminal, Shuffle, Ban, CopyX
+  Maximize2, Minimize2, Video, VideoOff, Loader2, AlertCircle, UserPlus, Search, Wifi, RefreshCw, User, Terminal, Shuffle, Ban, CopyX, FileEdit
 } from 'lucide-react';
 import { MCQAttempt, MCQExamConfig, MCQGradeResult, MCQ_STORAGE_KEYS } from '../types/mcq';
 import {
   getAllExams, getActiveAttempt, getAllAttempts, getAttemptsForExam, startAttempt, saveAnswer,
   submitAttempt, gradeAttempt, getRecentSessionAttempt, recordInfraction, updateUnfocusedTime,
-  pardonInfractions, onMcqDataChanged, onExamsChanged, syncFromSupabase, persistAttemptToCloud
+  pardonInfractions, onMcqDataChanged, onExamsChanged, syncFromSupabase, persistAttemptToCloud, publishExam
 } from '../services/mcqService';
 import { playSound } from '../utils/sounds';
 import { parseExamToken } from '../utils/tokenParser';
@@ -3124,6 +3124,52 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
   }
 
   if (exam.status !== 'PUBLISHED') {
+    if (exam.status === 'DRAFT') {
+      return (
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)', padding: '24px' }}>
+          <div style={{ textAlign: 'center', maxWidth: '480px', width: '100%', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '32px 24px' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: 'var(--radius-pill)', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', color: 'var(--warning)', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', marginBottom: '14px' }}>
+              <FileEdit size={12} />
+              <span>Draft Status Notice</span>
+            </div>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>
+              {exam.title}
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 20px', lineHeight: 1.5 }}>
+              This examination paper is currently saved as a <strong>DRAFT</strong>. To accept candidate submissions, publish it from the Paper Setter Portal.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  publishExam(exam.id);
+                  setExam((prev) => prev ? { ...prev, status: 'PUBLISHED' } : null);
+                  playSound('success');
+                }}
+              >
+                Publish Exam Now
+              </button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => {
+                  window.location.href = '/paper-setter';
+                }}
+              >
+                Open Paper Setter
+              </button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => {
+                  setExam((prev) => prev ? { ...prev, status: 'PUBLISHED' } : null);
+                }}
+              >
+                Preview Registration Screen
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)', padding: '24px' }}>
         <div style={{ textAlign: 'center', maxWidth: '440px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '32px 24px' }}>
@@ -4221,25 +4267,21 @@ export const MCQExamSelector: React.FC = () => {
       return;
     }
 
-    // 2. Candidate entered a query parameter: validate against published or closed registered exams
+    // 2. Candidate or authority entered a query parameter: validate against exam registry
     if (queryExamId) {
       const allExams = getAllExams();
       const targetExam = allExams.find((e) => e.id === queryExamId);
-      if (targetExam?.isPrivate) {
-        setSearchParams({}, { replace: true });
-        setSelectedExamId(null);
-        setUrlTamperNotice(`Private Examination: "${targetExam.title}" is restricted. Access requires an authorized candidate ticket link issued by your invigilator.`);
-        return;
-      }
-      if (exams.length > 0) {
-        const exists = exams.some((e) => e.id === queryExamId);
-        if (!exists) {
-          setSearchParams({}, { replace: true });
-          setSelectedExamId(null);
-          setUrlTamperNotice(`Link Integrity Guard: The requested examination link "${queryExamId}" does not exist in the institutional registry.`);
-        } else if (selectedExamId !== queryExamId) {
+
+      if (targetExam) {
+        // Target exam exists in local or cloud registry!
+        if (selectedExamId !== queryExamId) {
           setSelectedExamId(queryExamId);
         }
+      } else if (allExams.length > 0) {
+        // Only strip if target exam truly does not exist in the institutional database
+        setSearchParams({}, { replace: true });
+        setSelectedExamId(null);
+        setUrlTamperNotice(`Link Integrity Guard: The requested examination link "${queryExamId}" does not exist in the institutional registry.`);
       }
     }
   }, [activeExamId, queryExamId, exams, selectedExamId, setSearchParams]);

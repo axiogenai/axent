@@ -361,6 +361,8 @@ export function createExam(partial: Omit<MCQExamConfig, 'id' | 'createdAt' | 'up
   all.push(exam);
   save(MCQ_STORAGE_KEYS.EXAMS, all);
   saveExamToCloud(exam);
+  notifyExamsChanged();
+  notifyMcqDataChanged();
   return exam;
 }
 
@@ -394,6 +396,8 @@ export function saveExam(exam: MCQExamConfig): MCQExamConfig {
   }
   save(MCQ_STORAGE_KEYS.EXAMS, all);
   saveExamToCloud(updated);
+  notifyExamsChanged();
+  notifyMcqDataChanged();
   return updated;
 }
 
@@ -521,6 +525,8 @@ export function publishExam(id: string): string[] {
   all[idx] = { ...all[idx], status: 'PUBLISHED', publishedAt: Date.now(), updatedAt: Date.now() };
   save(MCQ_STORAGE_KEYS.EXAMS, all);
   saveExamToCloud(all[idx]);
+  notifyExamsChanged();
+  notifyMcqDataChanged();
   return [];
 }
 
@@ -1273,13 +1279,22 @@ export async function syncFromSupabase(): Promise<void> {
       fetchQuestionsFromCloud(), fetchExamsFromCloud(), fetchAttemptsFromCloud()
     ]);
 
-    // 1. Reconcile Questions: Supabase cloud is authoritative
+    // 1. Reconcile Questions: Intelligently merge so local unsynced questions are never lost
     if (cloudQ !== null) {
-      save(MCQ_STORAGE_KEYS.QUESTIONS, cloudQ);
+      const localQ = load<MCQQuestion[]>(MCQ_STORAGE_KEYS.QUESTIONS, []);
+      const mergedQMap = new Map<string, MCQQuestion>();
+      cloudQ.forEach((q) => mergedQMap.set(q.id, q));
+      localQ.forEach((q) => {
+        if (!mergedQMap.has(q.id)) {
+          mergedQMap.set(q.id, q);
+          void saveQuestionToCloud(q);
+        }
+      });
+      save(MCQ_STORAGE_KEYS.QUESTIONS, Array.from(mergedQMap.values()));
       notifyMcqDataChanged();
     }
 
-    // 2. Reconcile Exams: Supabase cloud is authoritative
+    // 2. Reconcile Exams: Intelligently merge so local unsynced exams are never lost
     if (cloudE !== null) {
       const deletedIds = getDeletedExamIds();
 
@@ -1290,10 +1305,20 @@ export async function syncFromSupabase(): Promise<void> {
         }
       }
 
-      // Filter out deleted IDs and save directly as authoritative
+      // Filter out deleted IDs and merge with locally created active exams
       const activeExams = cloudE.filter((e) => !deletedIds.has(e.id));
-      save(MCQ_STORAGE_KEYS.EXAMS, activeExams);
+      const localExams = load<MCQExamConfig[]>(MCQ_STORAGE_KEYS.EXAMS, []);
+      const mergedExamMap = new Map<string, MCQExamConfig>();
+      activeExams.forEach((e) => mergedExamMap.set(e.id, e));
+      localExams.forEach((e) => {
+        if (!deletedIds.has(e.id) && !mergedExamMap.has(e.id)) {
+          mergedExamMap.set(e.id, e);
+          void saveExamToCloud(e);
+        }
+      });
+      save(MCQ_STORAGE_KEYS.EXAMS, Array.from(mergedExamMap.values()));
       notifyExamsChanged();
+      notifyMcqDataChanged();
     }
 
     // 3. Reconcile Attempts: Supabase cloud is authoritative (2-day retention window)
