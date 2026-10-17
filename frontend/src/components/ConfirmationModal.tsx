@@ -101,7 +101,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           badgeBg: 'var(--danger-bg)',
           badgeBorder: 'var(--danger-border)',
           accentColor: 'var(--danger)',
-          defaultBadge: 'Institutional Proctor Violation',
+          defaultBadge: 'Administrative Action Required',
         };
       case 'warning':
         return {

@@ -539,11 +539,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     (s) => s.cheatingRisk === 'High' || s.cheatingRisk === 'Critical' || s.metrics.pasteRatio >= 50
   ).length;
 
-  const handleClearSubmitted = async () => {
-    await clearSubmittedStations(selectedLabId);
-    loadData();
-    playSound('click');
+  const handleClearSubmitted = () => {
     setShowClearSubmittedConfirm(false);
+    playSound('click');
+    setStations((prev) => prev.filter((s) => s.status !== 'Submitted & Done'));
+    void clearSubmittedStations(selectedLabId).then(() => {
+      loadData();
+    });
   };
 
   const handleRemoveSingleStation = (stationId: string) => {
@@ -1125,13 +1127,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               <button
                 className="btn btn-ghost btn-sm"
-                onClick={async () => {
-                  await clearAllStations();
-                  const cleanLabs = await purgePhantomExamLabs();
-                  setAllLabs(cleanLabs);
-                  setSelectedLabId('all');
-                  loadData();
+                onClick={() => {
                   playSound('click');
+                  setStations([]);
+                  setSelectedStationId(null);
+                  setSelectedLabId('all');
+                  void (async () => {
+                    await clearAllStations();
+                    const cleanLabs = await purgePhantomExamLabs();
+                    setAllLabs(cleanLabs);
+                    loadData();
+                  })();
                 }}
                 style={{ padding: '7px 16px', gap: '6px', color: 'var(--danger)' }}
                 title="Wipe stored workstations and reset to live listening mode"
@@ -2724,14 +2730,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         cancelText="Cancel"
         tone="danger"
         icon="danger"
-        onConfirm={async () => {
-          await clearAllStations(selectedLabId);
-          const cleanLabs = await purgePhantomExamLabs();
-          setAllLabs(cleanLabs);
-          setSelectedLabId('all');
-          loadData();
-          playSound('click');
+        badgeText="Room Reset & Hardware Clearance"
+        onConfirm={() => {
           setShowResetRoomConfirm(false);
+          playSound('click');
+          setStations([]);
+          setSelectedStationId(null);
+          setSelectedLabId('all');
+          void (async () => {
+            await clearAllStations(selectedLabId);
+            const cleanLabs = await purgePhantomExamLabs();
+            setAllLabs(cleanLabs);
+            loadData();
+          })();
         }}
         onCancel={() => setShowResetRoomConfirm(false)}
       />
@@ -2745,6 +2756,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         cancelText="Cancel"
         tone="warning"
         icon="warning"
+        badgeText="Batch Turnover & Workstation Release"
         onConfirm={handleClearSubmitted}
         onCancel={() => setShowClearSubmittedConfirm(false)}
       />

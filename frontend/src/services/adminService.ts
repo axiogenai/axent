@@ -391,22 +391,7 @@ export function notifyLabsChanged(labs: CollegeLabInfo[]): void {
 export async function purgePhantomExamLabs(): Promise<CollegeLabInfo[]> {
   const deletedIds = getDeletedLabIds();
 
-  // 1. Scan and delete any phantom or tombstoned labs in Supabase cloud
-  try {
-    const cloudLabs = await fetchCollegeLabsFromCloud();
-    if (cloudLabs && cloudLabs.length > 0) {
-      for (const cl of cloudLabs) {
-        const cleanId = String(cl.labId).toUpperCase().trim();
-        if (isPhantomLab(cl) || deletedIds.has(cleanId)) {
-          await deleteCollegeLabFromCloud(cl.labId);
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('[Purge] Failed to clean cloud phantom labs:', err);
-  }
-
-  // 2. Clean local storage
+  // 1. Clean local storage immediately (0ms)
   const current = getAllCollegeLabs();
   const cleaned = current.filter(
     (l) => !isPhantomLab(l) && !deletedIds.has(String(l.labId).toUpperCase().trim())
@@ -416,6 +401,24 @@ export async function purgePhantomExamLabs(): Promise<CollegeLabInfo[]> {
     localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(cleaned));
     notifyLabsChanged(cleaned);
   }
+
+  // 2. Scan and delete any phantom or tombstoned labs in Supabase cloud in parallel (non-blocking)
+  void (async () => {
+    try {
+      const cloudLabs = await fetchCollegeLabsFromCloud();
+      if (cloudLabs && cloudLabs.length > 0) {
+        const toDelete = cloudLabs.filter((cl) => {
+          const cleanId = String(cl.labId).toUpperCase().trim();
+          return isPhantomLab(cl) || deletedIds.has(cleanId);
+        });
+        if (toDelete.length > 0) {
+          await Promise.allSettled(toDelete.map((cl) => deleteCollegeLabFromCloud(cl.labId)));
+        }
+      }
+    } catch (err) {
+      console.warn('[Purge] Failed to clean cloud phantom labs:', err);
+    }
+  })();
 
   return cleaned;
 }
@@ -597,7 +600,7 @@ export async function deleteCollegeLab(labId: string): Promise<CollegeLabInfo[]>
   // 1. Immediately record in persistent tombstone registry so neither cloud sync nor polling can EVER resurrect it
   recordLabDeleted(cleanId);
 
-  // 2. Remove from local labs list
+  // 2. Remove from local labs list immediately (0ms)
   const current = getAllCollegeLabs();
   const updated = current.filter((l) => l.labId.toUpperCase().trim() !== cleanId);
   if (typeof window !== 'undefined') {
@@ -605,14 +608,44 @@ export async function deleteCollegeLab(labId: string): Promise<CollegeLabInfo[]>
     notifyLabsChanged(updated);
   }
 
-  // 3. Delete from Supabase cloud (exact & case-insensitive)
-  await deleteCollegeLabFromCloud(cleanId);
-
-  // 4. Wipe all stations & attempts belonging to this lab
-  await clearAllStations(cleanId);
-
-  // 5. Clean any exams referencing this deleted lab
+  // 3. Clean any exams referencing this deleted lab immediately
   cleanExamsReferencingLab(cleanId);
+
+  // 4. Wipe local stations & attempts belonging to this lab immediately (0ms)
+  if (typeof window !== 'undefined') {
+    const currentStations = getLiveStations();
+    const keptStations = currentStations.filter(
+      (s) => String(s.labId || '').toUpperCase().trim() !== cleanId
+    );
+    saveAllStations(keptStations);
+
+    try {
+      const raw = localStorage.getItem('codedna_mcq_attempts');
+      if (raw) {
+        const attempts = JSON.parse(raw);
+        if (Array.isArray(attempts)) {
+          const keptAttempts = attempts.filter((a) => {
+            const aLab = String(a.assignedLabId || a.labId || '').toUpperCase().trim();
+            return aLab !== cleanId;
+          });
+          localStorage.setItem('codedna_mcq_attempts', JSON.stringify(keptAttempts));
+        }
+      }
+    } catch {}
+
+    localStorage.removeItem(`${LAB_LOCK_PREFIX}${cleanId}`);
+    localStorage.removeItem(`${LAB_LOCK_PREFIX}${labId}`);
+  }
+
+  // 5. Broadcast reset event immediately (0ms)
+  broadcastCctvMessage({ type: 'RESET_ALL', labId: cleanId });
+
+  // 6. Delete from Supabase cloud in parallel (non-blocking)
+  void Promise.allSettled([
+    deleteCollegeLabFromCloud(cleanId),
+    clearAllStationsFromCloud(cleanId),
+    clearAllAttemptsFromCloud(cleanId)
+  ]);
 
   return updated;
 }
@@ -621,21 +654,37 @@ export async function resetCollegeLabs(): Promise<CollegeLabInfo[]> {
   // 1. Clear the tombstone registry so default template labs are fully restored
   resetDeletedLabsRegistry();
 
-  // 2. Purge any phantom labs from cloud
-  await purgePhantomExamLabs();
-
+  // 2. Update local storage and notify immediately (0ms)
   if (typeof window !== 'undefined') {
     localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(DEFAULT_INSTITUTE_LABS));
     notifyLabsChanged(DEFAULT_INSTITUTE_LABS);
+
+    // Clear local station keys
+    localStorage.removeItem(STATIONS_KEY);
+    localStorage.removeItem('codedna_mcq_attempts');
+    localStorage.removeItem('codedna_mcq_answers');
+    localStorage.removeItem('codedna_cctv_heartbeat_tick');
+    localStorage.removeItem(CAMPUS_LOCK_KEY);
+    DEFAULT_INSTITUTE_LABS.forEach((l) => {
+      localStorage.removeItem(`${LAB_LOCK_PREFIX}${l.labId}`);
+    });
   }
 
-  // 3. Clear all existing lab records and re-seed default 5 physical labs in Supabase
-  await clearAllCollegeLabsFromCloud();
-  for (const lab of DEFAULT_INSTITUTE_LABS) {
-    await saveCollegeLabToCloud(lab);
-  }
+  broadcastCctvMessage({ type: 'RESET_ALL' });
 
-  await clearAllStations();
+  // 3. Clear cloud records and re-seed in background via parallel requests (non-blocking)
+  void (async () => {
+    try {
+      await clearAllCollegeLabsFromCloud();
+      await Promise.allSettled(DEFAULT_INSTITUTE_LABS.map((lab) => saveCollegeLabToCloud(lab)));
+      await clearAllStationsFromCloud();
+      await clearAllAttemptsFromCloud();
+      await purgePhantomExamLabs();
+    } catch (err) {
+      console.warn('[resetCollegeLabs] Background cloud reset warning:', err);
+    }
+  })();
+
   return [...DEFAULT_INSTITUTE_LABS];
 }
 
@@ -943,14 +992,17 @@ export async function clearAllStations(labId?: string): Promise<void> {
 
       localStorage.removeItem(`${LAB_LOCK_PREFIX}${labId}`);
       localStorage.removeItem(`${LAB_LOCK_PREFIX}${cleanLabId}`);
-      if (cleanLabId === 'LAB-06' || cleanLabId === 'LAB-721') {
-        await purgePhantomExamLabs();
-      }
     }
 
-    await clearAllStationsFromCloud(labId);
-    await clearAllAttemptsFromCloud(labId);
+    // Dispatch broadcast event immediately (0ms) so all proctor tabs update instantly
     broadcastCctvMessage({ type: 'RESET_ALL', labId });
+
+    // Cloud database operations run in parallel without blocking the UI
+    void Promise.allSettled([
+      clearAllStationsFromCloud(labId),
+      clearAllAttemptsFromCloud(labId),
+      purgePhantomExamLabs()
+    ]);
   } catch (err) {
     console.error('Failed to clear stations:', err);
   }
@@ -987,9 +1039,14 @@ export async function clearSubmittedStations(labId?: string): Promise<void> {
       }
     } catch {}
 
-    await clearSubmittedStationsFromCloud(labId);
-    await clearSubmittedAttemptsFromCloud(labId);
+    // Dispatch broadcast event immediately (0ms)
     broadcastCctvMessage({ type: 'STATION_UPDATE', labId });
+
+    // Cloud database operations run in parallel without blocking the UI
+    void Promise.allSettled([
+      clearSubmittedStationsFromCloud(labId),
+      clearSubmittedAttemptsFromCloud(labId)
+    ]);
   } catch (err) {
     console.error('Failed to clear submitted stations:', err);
   }

@@ -25,7 +25,8 @@ import {
   resetCollegeLabs,
   syncCollegeLabsFromCloud,
   purgePhantomExamLabs,
-  isPhantomLab
+  isPhantomLab,
+  DEFAULT_INSTITUTE_LABS
 } from '../services/adminService';
 import { playSound } from '../utils/sounds';
 import { ConfirmationModal } from './ConfirmationModal';
@@ -923,13 +924,22 @@ exit
         cancelText="Cancel"
         tone="danger"
         icon="danger"
-        onConfirm={async () => {
+        badgeText="Laboratory Deletion"
+        onConfirm={() => {
           if (labToDelete) {
-            const updated = await deleteCollegeLab(labToDelete);
-            setLabs(updated);
-            onLabsUpdated();
-            playSound('click');
+            const targetId = labToDelete;
+            // 1. Immediately dismiss modal and play audio (0ms)
             setLabToDelete(null);
+            playSound('click');
+
+            // 2. Optimistically remove from UI list immediately (0ms)
+            setLabs((prev) => prev.filter((l) => l.labId.toUpperCase().trim() !== targetId.toUpperCase().trim()));
+
+            // 3. Perform local delete and trigger background cloud purge
+            void deleteCollegeLab(targetId).then((fresh) => {
+              setLabs(fresh);
+              onLabsUpdated();
+            });
           }
         }}
         onCancel={() => setLabToDelete(null)}
@@ -944,12 +954,20 @@ exit
         cancelText="Cancel"
         tone="warning"
         icon="warning"
-        onConfirm={async () => {
-          const reset = await resetCollegeLabs();
-          setLabs(reset);
-          onLabsUpdated();
-          playSound('warning');
+        badgeText="Restore Official Templates"
+        onConfirm={() => {
+          // 1. Immediately dismiss modal (0ms)
           setShowResetDefaultsConfirm(false);
+          playSound('warning');
+
+          // 2. Optimistically restore defaults immediately (0ms)
+          setLabs(DEFAULT_INSTITUTE_LABS);
+
+          // 3. Background reset and notify parent
+          void resetCollegeLabs().then((reset) => {
+            setLabs(reset);
+            onLabsUpdated();
+          });
         }}
         onCancel={() => setShowResetDefaultsConfirm(false)}
       />

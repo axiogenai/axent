@@ -240,18 +240,19 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
       <ConfirmationModal
         isOpen={confirmDelete !== null}
         title="Delete Examination?"
+        badgeText="Examination Deletion"
         message="This will permanently delete this examination paper, erase all its questions from the central cloud database, and purge all attached sessions immediately."
         confirmText="Yes, Delete Examination"
         cancelText="Cancel"
         tone="danger"
         icon="danger"
-        onConfirm={async () => {
+        onConfirm={() => {
           if (confirmDelete) {
             const idToDelete = confirmDelete;
             setConfirmDelete(null);
-            await deleteExam(idToDelete);
-            reload();
             playSound('trash');
+            void deleteExam(idToDelete);
+            reload();
           }
         }}
         onCancel={() => setConfirmDelete(null)}

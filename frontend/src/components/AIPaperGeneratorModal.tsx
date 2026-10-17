@@ -813,14 +813,17 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
     setShowDiscardConfirm(true);
   };
 
-  const confirmDiscardDraft = async () => {
-    if (reviewedExam) {
-      await deleteExam(reviewedExam.id);
-      await Promise.all(reviewedQuestions.map((q) => deleteQuestion(q.id)));
-    }
+  const confirmDiscardDraft = () => {
+    const examToDelete = reviewedExam;
+    const questionsToDelete = reviewedQuestions;
     playSound('click');
     setShowDiscardConfirm(false);
     onClose();
+
+    if (examToDelete) {
+      void deleteExam(examToDelete.id);
+      void Promise.allSettled(questionsToDelete.map((q) => deleteQuestion(q.id)));
+    }
   };
 
   const handleCopyStudentLink = () => {

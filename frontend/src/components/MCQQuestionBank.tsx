@@ -1086,11 +1086,12 @@ export const MCQQuestionBank: React.FC = () => {
         cancelText="Cancel"
         tone="danger"
         icon="danger"
+        badgeText="Question Repository Clearance"
         onConfirm={() => {
-          clearAllQuestions();
-          reload();
           setIsClearBankModalOpen(false);
           playSound('trash');
+          clearAllQuestions();
+          reload();
         }}
         onCancel={() => setIsClearBankModalOpen(false)}
       />
@@ -1104,8 +1105,13 @@ export const MCQQuestionBank: React.FC = () => {
         cancelText="Cancel"
         tone="danger"
         icon="danger"
+        badgeText="Question Deletion"
         onConfirm={() => {
-          if (confirmDelete) handleDelete(confirmDelete);
+          if (confirmDelete) {
+            const targetId = confirmDelete;
+            setConfirmDelete(null);
+            handleDelete(targetId);
+          }
         }}
         onCancel={() => setConfirmDelete(null)}
       />

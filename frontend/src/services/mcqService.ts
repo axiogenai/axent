@@ -195,7 +195,8 @@ export function createQuestion(
 export function deleteQuestion(id: string): void {
   const all = getAllQuestions().filter((q) => q.id !== id);
   save(MCQ_STORAGE_KEYS.QUESTIONS, all);
-  deleteQuestionFromCloud(id);
+  notifyMcqDataChanged();
+  void deleteQuestionFromCloud(id);
 }
 
 export function clearAllQuestions(): void {
@@ -414,15 +415,27 @@ export async function deleteExam(id: string): Promise<boolean> {
     void deleteQuestionsByIdsFromCloud(examToDelete.questionIds);
   }
 
-  // When exam is deleted, its lab must delete automatically!
-  if (examToDelete?.assignedLabId) {
-    await cleanupExamLabWhenOver(examToDelete.assignedLabId, examToDelete.id);
-  }
-
-  const ok = await deleteExamFromCloud(id);
+  // Notify UI immediately (0ms)
   notifyExamsChanged();
   notifyMcqDataChanged();
-  return ok;
+
+  // Background cloud and lab cascade deletion (parallel)
+  void (async () => {
+    try {
+      const tasks: Promise<any>[] = [deleteExamFromCloud(id)];
+      if (examToDelete?.questionIds && examToDelete.questionIds.length > 0) {
+        tasks.push(deleteQuestionsByIdsFromCloud(examToDelete.questionIds));
+      }
+      if (examToDelete?.assignedLabId) {
+        tasks.push(cleanupExamLabWhenOver(examToDelete.assignedLabId, examToDelete.id));
+      }
+      await Promise.allSettled(tasks);
+    } catch (err) {
+      console.warn('[deleteExam] Background cloud sync warning:', err);
+    }
+  })();
+
+  return true;
 }
 
 /**
