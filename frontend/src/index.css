@@ -1676,3 +1676,44 @@ button, [role="button"], input[type="button"], input[type="submit"], input[type=
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* Keep the persistent application header usable at narrow viewport widths. */
+@media (max-width: 768px) {
+  .no-print:has(img[alt="Axent"]) {
+    padding-inline: 10px !important;
+    gap: 8px;
+    height: auto !important;
+    min-height: 52px !important;
+    flex-wrap: wrap;
+  }
+
+  .no-print:has(img[alt="Axent"]) > div:first-child img {
+    max-width: 112px;
+  }
+
+  .no-print:has(img[alt="Axent"]) > div:last-child {
+    gap: 5px !important;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .no-print:has(img[alt="Axent"]) .btn {
+    min-height: 36px;
+  }
+}
+
+@media (max-width: 420px) {
+  .no-print:has(img[alt="Axent"]) {
+    padding-inline: 8px !important;
+  }
+
+  .no-print:has(img[alt="Axent"]) > div:first-child img {
+    max-width: 88px;
+    height: auto !important;
+  }
+
+  .no-print:has(img[alt="Axent"]) > div:last-child > button span {
+    display: none;
+  }
+}
