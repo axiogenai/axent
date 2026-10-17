@@ -306,7 +306,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     runAudit();
     void syncCollegeLabsFromCloud().then((labs) => {
-      if (labs && labs.length > 0) setAllLabs(labs.filter((l) => !isPhantomLab(l)));
+      if (labs) setAllLabs(labs.filter((l) => !isPhantomLab(l)));
     });
 
     const auditInterval = setInterval(runAudit, 5000);

@@ -245,6 +245,47 @@ export const LAB_LOCK_PREFIX = 'codedna_lock_lab_';
 export const STATION_LOCK_PREFIX = 'codedna_lock_station_';
 export const CAMPUS_LOCK_KEY = 'codedna_lock_all';
 export const CUSTOM_LABS_KEY = 'codedna_custom_institute_labs';
+export const DELETED_LABS_KEY = 'codedna_deleted_college_lab_ids';
+
+// ── PERSISTENT LAB TOMBSTONE REGISTRY (Guarantees deleted labs NEVER resurrect) ──
+export function getDeletedLabIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(DELETED_LABS_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed.map((id: string) => String(id).toUpperCase().trim()) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function recordLabDeleted(labId: string): void {
+  if (!labId || typeof window === 'undefined') return;
+  try {
+    const clean = String(labId).toUpperCase().trim();
+    const set = getDeletedLabIds();
+    set.add(clean);
+    localStorage.setItem(DELETED_LABS_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
+export function clearLabDeleted(labId: string): void {
+  if (!labId || typeof window === 'undefined') return;
+  try {
+    const clean = String(labId).toUpperCase().trim();
+    const set = getDeletedLabIds();
+    set.delete(clean);
+    localStorage.setItem(DELETED_LABS_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
+export function resetDeletedLabsRegistry(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(DELETED_LABS_KEY);
+  } catch {}
+}
 
 // ── PHANTOM LAB DETECTOR ──
 export function isPhantomLab(lab: Partial<CollegeLabInfo> | null | undefined): boolean {
@@ -263,20 +304,23 @@ export function isPhantomLab(lab: Partial<CollegeLabInfo> | null | undefined): b
 // ── DYNAMIC COLLEGE LAB MANAGEMENT (Zero Hardcoded Labs) ──
 
 export function pruneAndDeduplicateLabs(labs: CollegeLabInfo[]): CollegeLabInfo[] {
-  if (!Array.isArray(labs) || labs.length === 0) return [...DEFAULT_INSTITUTE_LABS];
+  const deletedIds = getDeletedLabIds();
+  const defaultAvailable = DEFAULT_INSTITUTE_LABS.filter((l) => !deletedIds.has(l.labId.toUpperCase().trim()));
+
+  if (!Array.isArray(labs) || labs.length === 0) return defaultAvailable;
   const seenIds = new Set<string>();
   const cleaned: CollegeLabInfo[] = [];
 
   for (const lab of labs) {
     if (!lab || !lab.labId) continue;
+    const cleanId = String(lab.labId).toUpperCase().trim();
 
-    // Strictly filter out and delete any phantom exam labs
-    if (isPhantomLab(lab)) {
+    // Strictly filter out and delete any phantom exam labs or user-deleted labs
+    if (isPhantomLab(lab) || deletedIds.has(cleanId)) {
       void deleteCollegeLabFromCloud(lab.labId);
       continue;
     }
 
-    const cleanId = String(lab.labId).toUpperCase().trim();
     if (seenIds.has(cleanId)) continue;
     seenIds.add(cleanId);
 
@@ -287,37 +331,49 @@ export function pruneAndDeduplicateLabs(labs: CollegeLabInfo[]): CollegeLabInfo[
     });
   }
 
-  if (cleaned.length === 0) {
-    return [...DEFAULT_INSTITUTE_LABS];
-  }
-
   return cleaned.slice(0, 50);
 }
 
 export function getAllCollegeLabs(): CollegeLabInfo[] {
-  if (typeof window === 'undefined') return [...DEFAULT_INSTITUTE_LABS];
+  const deletedIds = getDeletedLabIds();
+  const defaultAvailable = DEFAULT_INSTITUTE_LABS.filter((l) => !deletedIds.has(l.labId.toUpperCase().trim()));
+
+  if (typeof window === 'undefined') return defaultAvailable;
   try {
     const raw = localStorage.getItem(CUSTOM_LABS_KEY);
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        // If phantom labs are detected, prune immediately
-        if (parsed.some((l) => isPhantomLab(l))) {
-          const pruned = pruneAndDeduplicateLabs(parsed);
-          localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(pruned));
-          notifyLabsChanged(pruned);
-          return pruned;
+      if (Array.isArray(parsed)) {
+        // Filter out phantom labs and deleted labs
+        const valid = parsed
+          .filter((l): l is CollegeLabInfo =>
+            Boolean(l && l.labId && !isPhantomLab(l) && !deletedIds.has(String(l.labId).toUpperCase().trim()))
+          )
+          .map((l) => ({ ...l, labId: String(l.labId).toUpperCase().trim() }));
+
+        const seen = new Set<string>();
+        const deduped: CollegeLabInfo[] = [];
+        for (const l of valid) {
+          if (!seen.has(l.labId)) {
+            seen.add(l.labId);
+            deduped.push(l);
+          }
         }
-        return parsed;
+
+        if (deduped.length !== parsed.length) {
+          localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(deduped));
+          notifyLabsChanged(deduped);
+        }
+        return deduped;
       }
     }
   } catch {}
 
-  // Initialize with standard institute laboratories
+  // Initialize with non-deleted standard institute laboratories
   if (typeof window !== 'undefined') {
-    localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(DEFAULT_INSTITUTE_LABS));
+    localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(defaultAvailable));
   }
-  return [...DEFAULT_INSTITUTE_LABS];
+  return defaultAvailable;
 }
 
 export function notifyLabsChanged(labs: CollegeLabInfo[]): void {
@@ -329,16 +385,19 @@ export function notifyLabsChanged(labs: CollegeLabInfo[]): void {
 }
 
 /**
- * Permanently purges phantom / exam-generated laboratories (e.g. LAB-06, LAB-721)
+ * Permanently purges phantom / exam-generated laboratories and deleted labs
  * from both Supabase cloud database and client localStorage.
  */
 export async function purgePhantomExamLabs(): Promise<CollegeLabInfo[]> {
-  // 1. Scan and delete any phantom labs in Supabase cloud
+  const deletedIds = getDeletedLabIds();
+
+  // 1. Scan and delete any phantom or tombstoned labs in Supabase cloud
   try {
     const cloudLabs = await fetchCollegeLabsFromCloud();
     if (cloudLabs && cloudLabs.length > 0) {
       for (const cl of cloudLabs) {
-        if (isPhantomLab(cl)) {
+        const cleanId = String(cl.labId).toUpperCase().trim();
+        if (isPhantomLab(cl) || deletedIds.has(cleanId)) {
           await deleteCollegeLabFromCloud(cl.labId);
         }
       }
@@ -349,49 +408,57 @@ export async function purgePhantomExamLabs(): Promise<CollegeLabInfo[]> {
 
   // 2. Clean local storage
   const current = getAllCollegeLabs();
-  const cleaned = current.filter((l) => !isPhantomLab(l));
-  const finalized = cleaned.length > 0 ? cleaned : [...DEFAULT_INSTITUTE_LABS];
+  const cleaned = current.filter(
+    (l) => !isPhantomLab(l) && !deletedIds.has(String(l.labId).toUpperCase().trim())
+  );
 
   if (typeof window !== 'undefined') {
-    localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(finalized));
-    notifyLabsChanged(finalized);
+    localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(cleaned));
+    notifyLabsChanged(cleaned);
   }
 
-  return finalized;
+  return cleaned;
 }
 
 export async function syncCollegeLabsFromCloud(): Promise<CollegeLabInfo[]> {
   try {
+    const deletedIds = getDeletedLabIds();
     const cloudLabs = await fetchCollegeLabsFromCloud();
     const localLabs = getAllCollegeLabs();
 
-    // Purge any phantom labs that exist in cloud
+    // Purge any phantom or deleted labs that exist in cloud
     if (cloudLabs) {
       for (const cl of cloudLabs) {
-        if (isPhantomLab(cl)) {
+        const cleanId = String(cl.labId).toUpperCase().trim();
+        if (isPhantomLab(cl) || deletedIds.has(cleanId)) {
           void deleteCollegeLabFromCloud(cl.labId);
         }
       }
     }
 
-    if (cloudLabs && cloudLabs.length > 0) {
-      const merged = pruneAndDeduplicateLabs([...cloudLabs, ...localLabs]);
+    const filteredCloud = (cloudLabs || []).filter(
+      (cl) => !isPhantomLab(cl) && !deletedIds.has(String(cl.labId).toUpperCase().trim())
+    );
+    const filteredLocal = localLabs.filter(
+      (ll) => !isPhantomLab(ll) && !deletedIds.has(String(ll.labId).toUpperCase().trim())
+    );
+
+    if (filteredCloud.length > 0 || filteredLocal.length > 0) {
+      const merged = pruneAndDeduplicateLabs([...filteredCloud, ...filteredLocal]);
       if (typeof window !== 'undefined') {
         localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(merged));
         notifyLabsChanged(merged);
       }
       return merged;
-    } else if (localLabs.length > 0) {
-      const pruned = pruneAndDeduplicateLabs(localLabs);
-      for (const lab of pruned) {
-        void saveCollegeLabToCloud(lab);
-      }
-      return pruned;
+    } else if (typeof window !== 'undefined' && localStorage.getItem(CUSTOM_LABS_KEY) !== null) {
+      // User explicitly deleted all labs, keep it empty!
+      return [];
     } else {
-      for (const lab of DEFAULT_INSTITUTE_LABS) {
+      const defaultAvailable = DEFAULT_INSTITUTE_LABS.filter((l) => !deletedIds.has(l.labId.toUpperCase().trim()));
+      for (const lab of defaultAvailable) {
         void saveCollegeLabToCloud(lab);
       }
-      return [...DEFAULT_INSTITUTE_LABS];
+      return defaultAvailable;
     }
   } catch (err) {
     console.warn('[Axent] Failed to sync college labs from cloud:', err);
@@ -413,13 +480,18 @@ export function ensureLabForExam(exam: {
   assignedLabName?: string;
 }): CollegeLabInfo {
   const existingLabs = getAllCollegeLabs();
-  const availableLabs = existingLabs.length > 0 ? existingLabs : DEFAULT_INSTITUTE_LABS;
+  const deletedIds = getDeletedLabIds();
+  const availableLabs = (existingLabs.length > 0 ? existingLabs : DEFAULT_INSTITUTE_LABS)
+    .filter((l) => !deletedIds.has(l.labId.toUpperCase().trim()));
 
-  // 1. If exam already has an assignedLabId, check if it matches an existing physical lab
+  // 1. If exam already has an assignedLabId, check if it matches an existing physical non-deleted lab
   if (exam.assignedLabId) {
-    const matched = availableLabs.find((l) => l.labId.toUpperCase() === exam.assignedLabId?.toUpperCase());
-    if (matched && !isPhantomLab(matched)) {
-      return matched;
+    const cleanExamLabId = exam.assignedLabId.toUpperCase().trim();
+    if (!deletedIds.has(cleanExamLabId)) {
+      const matched = availableLabs.find((l) => l.labId.toUpperCase() === cleanExamLabId);
+      if (matched && !isPhantomLab(matched)) {
+        return matched;
+      }
     }
   }
 
@@ -442,46 +514,114 @@ export function ensureLabForExam(exam: {
     if (genLab) return genLab;
   }
 
-  // 3. Default to LAB-01 or the first physical lab.
-  return availableLabs[0] || DEFAULT_INSTITUTE_LABS[0];
+  // 3. Default to the first available non-deleted physical lab
+  if (availableLabs.length > 0) {
+    return availableLabs[0];
+  }
+
+  // 4. Safe fallback if all labs were cleared
+  return {
+    labId: 'LAB-01',
+    labCode: 'CSE-101',
+    labName: 'Central Computing Lab',
+    department: 'Computer Science & Engineering',
+    block: 'Main Academic Block',
+    totalStations: 50,
+    invigilatorName: 'Senior Lab Proctor'
+  };
 }
 
 export function saveCollegeLab(lab: CollegeLabInfo): CollegeLabInfo[] {
   if (isPhantomLab(lab)) {
     return getAllCollegeLabs();
   }
+  const cleanId = String(lab.labId).toUpperCase().trim();
+  // Clear any tombstone so this lab is officially active
+  clearLabDeleted(cleanId);
+
   const current = getAllCollegeLabs();
-  const idx = current.findIndex((l) => l.labId.toUpperCase() === lab.labId.toUpperCase());
+  const idx = current.findIndex((l) => l.labId.toUpperCase() === cleanId);
+  const normalizedLab: CollegeLabInfo = {
+    ...lab,
+    labId: cleanId
+  };
   let updated: CollegeLabInfo[];
   if (idx >= 0) {
     updated = [...current];
-    updated[idx] = lab;
+    updated[idx] = normalizedLab;
   } else {
-    updated = [...current, lab];
+    updated = [...current, normalizedLab];
   }
   const finalized = pruneAndDeduplicateLabs(updated);
   if (typeof window !== 'undefined') {
     localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(finalized));
     notifyLabsChanged(finalized);
   }
-  void saveCollegeLabToCloud(lab);
+  void saveCollegeLabToCloud(normalizedLab);
   return finalized;
 }
 
+export function cleanExamsReferencingLab(deletedLabId: string): void {
+  if (typeof window === 'undefined' || !deletedLabId) return;
+  const cleanId = String(deletedLabId).toUpperCase().trim();
+  try {
+    const raw = localStorage.getItem('codedna_mcq_exams');
+    if (!raw) return;
+    const exams = JSON.parse(raw);
+    if (!Array.isArray(exams)) return;
+    const availableLabs = getAllCollegeLabs().filter((l) => l.labId.toUpperCase().trim() !== cleanId);
+    const fallbackLab = availableLabs[0] || null;
+    let modified = false;
+    for (const e of exams) {
+      if (e.assignedLabId && String(e.assignedLabId).toUpperCase().trim() === cleanId) {
+        if (fallbackLab) {
+          e.assignedLabId = fallbackLab.labId;
+          e.assignedLabName = fallbackLab.labName;
+        } else {
+          delete e.assignedLabId;
+          delete e.assignedLabName;
+        }
+        modified = true;
+      }
+    }
+    if (modified) {
+      localStorage.setItem('codedna_mcq_exams', JSON.stringify(exams));
+    }
+  } catch {}
+}
+
 export async function deleteCollegeLab(labId: string): Promise<CollegeLabInfo[]> {
+  if (!labId) return getAllCollegeLabs();
+  const cleanId = String(labId).toUpperCase().trim();
+
+  // 1. Immediately record in persistent tombstone registry so neither cloud sync nor polling can EVER resurrect it
+  recordLabDeleted(cleanId);
+
+  // 2. Remove from local labs list
   const current = getAllCollegeLabs();
-  const updated = current.filter((l) => l.labId.toUpperCase() !== labId.toUpperCase());
+  const updated = current.filter((l) => l.labId.toUpperCase().trim() !== cleanId);
   if (typeof window !== 'undefined') {
-    localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(updated.length > 0 ? updated : DEFAULT_INSTITUTE_LABS));
-    notifyLabsChanged(updated.length > 0 ? updated : DEFAULT_INSTITUTE_LABS);
+    localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(updated));
+    notifyLabsChanged(updated);
   }
-  await deleteCollegeLabFromCloud(labId);
-  await clearAllStations(labId);
-  return updated.length > 0 ? updated : [...DEFAULT_INSTITUTE_LABS];
+
+  // 3. Delete from Supabase cloud (exact & case-insensitive)
+  await deleteCollegeLabFromCloud(cleanId);
+
+  // 4. Wipe all stations & attempts belonging to this lab
+  await clearAllStations(cleanId);
+
+  // 5. Clean any exams referencing this deleted lab
+  cleanExamsReferencingLab(cleanId);
+
+  return updated;
 }
 
 export async function resetCollegeLabs(): Promise<CollegeLabInfo[]> {
-  // Purge any phantom labs from cloud first
+  // 1. Clear the tombstone registry so default template labs are fully restored
+  resetDeletedLabsRegistry();
+
+  // 2. Purge any phantom labs from cloud
   await purgePhantomExamLabs();
 
   if (typeof window !== 'undefined') {
@@ -489,7 +629,7 @@ export async function resetCollegeLabs(): Promise<CollegeLabInfo[]> {
     notifyLabsChanged(DEFAULT_INSTITUTE_LABS);
   }
 
-  // Clear all existing lab records and re-seed default 5 physical labs in Supabase
+  // 3. Clear all existing lab records and re-seed default 5 physical labs in Supabase
   await clearAllCollegeLabsFromCloud();
   for (const lab of DEFAULT_INSTITUTE_LABS) {
     await saveCollegeLabToCloud(lab);
@@ -531,9 +671,12 @@ export const purgeDemoStations = cleanCorruptedStations;
 
 function reconcileAttemptsIntoStations(stations: CandidateStation[]): CandidateStation[] {
   if (typeof window === 'undefined') return stations;
+  const deletedIds = getDeletedLabIds();
   const stationMap = new Map<string, CandidateStation>();
   stations.forEach((s) => {
-    if (s && s.id) stationMap.set(s.id, s);
+    if (s && s.id && !deletedIds.has(String(s.labId || '').toUpperCase().trim())) {
+      stationMap.set(s.id, s);
+    }
   });
 
   // Reconcile real MCQ candidate attempts
@@ -546,6 +689,7 @@ function reconcileAttemptsIntoStations(stations: CandidateStation[]): CandidateS
           if (!a || !a.id || !a.studentName) continue;
           const cleanRoll = String(a.studentRoll || '01').replace(/[^0-9]/g, '') || '01';
           const labId = a.assignedLabId || a.labId || 'LAB-01';
+          if (deletedIds.has(String(labId).toUpperCase().trim())) continue;
           const stationNum = `Station #${cleanRoll.padStart(2, '0')}`;
           const stationId = `${labId}-WS-${cleanRoll.padStart(2, '0')}`;
 
@@ -636,6 +780,7 @@ function reconcileAttemptsIntoStations(stations: CandidateStation[]): CandidateS
 export function getLiveStations(): CandidateStation[] {
   if (typeof window === 'undefined') return [];
   cleanCorruptedStations();
+  const deletedIds = getDeletedLabIds();
   try {
     const raw = localStorage.getItem(STATIONS_KEY);
     let parsed: CandidateStation[] = [];
@@ -643,7 +788,8 @@ export function getLiveStations(): CandidateStation[] {
       const p = JSON.parse(raw);
       if (Array.isArray(p)) parsed = p;
     }
-    const reconciled = reconcileAttemptsIntoStations(parsed);
+    const filtered = parsed.filter((s) => !deletedIds.has(String(s.labId || '').toUpperCase().trim()));
+    const reconciled = reconcileAttemptsIntoStations(filtered);
     return reconciled.map((s) => ({
       ...s,
       isLockedByProctor: isStationLocked(s.id, s.labId)
@@ -772,9 +918,12 @@ export async function clearAllStations(labId?: string): Promise<void> {
       // Purge any lingering phantom exam labs
       await purgePhantomExamLabs();
     } else {
-      // Clear only this specific lab
+      // Clear only this specific lab (case-insensitive)
+      const cleanLabId = labId.toUpperCase().trim();
       const currentStations = getLiveStations();
-      const keptStations = currentStations.filter((s) => s.labId !== labId);
+      const keptStations = currentStations.filter(
+        (s) => String(s.labId || '').toUpperCase().trim() !== cleanLabId
+      );
       saveAllStations(keptStations);
 
       // Filter MCQ attempts
@@ -783,14 +932,18 @@ export async function clearAllStations(labId?: string): Promise<void> {
         if (raw) {
           const attempts = JSON.parse(raw);
           if (Array.isArray(attempts)) {
-            const keptAttempts = attempts.filter((a) => (a.assignedLabId || a.labId) !== labId);
+            const keptAttempts = attempts.filter((a) => {
+              const aLab = String(a.assignedLabId || a.labId || '').toUpperCase().trim();
+              return aLab !== cleanLabId;
+            });
             localStorage.setItem('codedna_mcq_attempts', JSON.stringify(keptAttempts));
           }
         }
       } catch {}
 
       localStorage.removeItem(`${LAB_LOCK_PREFIX}${labId}`);
-      if (labId && (labId === 'LAB-06' || labId === 'LAB-721')) {
+      localStorage.removeItem(`${LAB_LOCK_PREFIX}${cleanLabId}`);
+      if (cleanLabId === 'LAB-06' || cleanLabId === 'LAB-721') {
         await purgePhantomExamLabs();
       }
     }

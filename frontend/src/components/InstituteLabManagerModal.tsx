@@ -53,7 +53,7 @@ export const InstituteLabManagerModal: React.FC<InstituteLabManagerModalProps> =
       void purgePhantomExamLabs().then((cleanLabs) => {
         setLabs(cleanLabs);
         void syncCollegeLabsFromCloud().then((fresh) => {
-          if (fresh && fresh.length > 0) setLabs(fresh.filter((l) => !isPhantomLab(l)));
+          if (fresh) setLabs(fresh.filter((l) => !isPhantomLab(l)));
         });
       });
     }

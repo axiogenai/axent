@@ -829,9 +829,12 @@ export async function saveCollegeLabToCloud(lab: CollegeLabInfo): Promise<boolea
 }
 
 export async function deleteCollegeLabFromCloud(labId: string): Promise<boolean> {
+  if (!labId) return true;
   try {
-    const { error } = await supabase.from('college_labs').delete().eq('lab_id', labId);
-    return !error;
+    const clean = labId.trim();
+    const { error: err1 } = await supabase.from('college_labs').delete().eq('lab_id', clean);
+    const { error: err2 } = await supabase.from('college_labs').delete().ilike('lab_id', clean);
+    return !err1 || !err2;
   } catch {
     return false;
   }

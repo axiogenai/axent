@@ -40,7 +40,8 @@ import {
   deleteCollegeLab,
   clearAllStations,
   getAllCollegeLabs,
-  notifyLabsChanged
+  notifyLabsChanged,
+  getDeletedLabIds
 } from './adminService';
 
 // ── Persistence helpers ───────────────────────────────────────────────────────
@@ -301,13 +302,15 @@ export function getAllExams(): MCQExamConfig[] {
       !String(e.id || '').startsWith('seed-')
     )
     .map((e) => {
-      const isPhantom =
+      const deletedLabs = getDeletedLabIds();
+      const isPhantomOrDeleted =
         !e.assignedLabId ||
         e.assignedLabId === 'LAB-06' ||
         e.assignedLabId === 'LAB-721' ||
-        e.assignedLabName?.toLowerCase().startsWith('exam:');
+        e.assignedLabName?.toLowerCase().startsWith('exam:') ||
+        deletedLabs.has(String(e.assignedLabId).toUpperCase().trim());
 
-      if (isPhantom && e.id && e.title) {
+      if (isPhantomOrDeleted && e.id && e.title) {
         try {
           const lab = ensureLabForExam(e);
           e.assignedLabId = lab.labId;
