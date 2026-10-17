@@ -18,7 +18,7 @@ import { saveQuestion, saveExam } from './mcqService';
 
 const DEFAULT_KEY_POOL: string[] = [];
 const PRIMARY_MODEL = 'openai/gpt-oss-120b';
-const FALLBACK_MODELS = ['openai/gpt-oss-20b', 'qwen/qwen3.8-27b'];
+const FALLBACK_MODELS = ['openai/gpt-oss-20b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'qwen/qwen3.8-27b'];
 
 let keyRoundRobinCounter = 0;
 
@@ -175,6 +175,27 @@ async function callGroqChat(
               continue;
             }
           }
+
+          // If Groq's grammar validator failed (json_validate_failed), immediately retry WITHOUT response_format!
+          if (jsonMode && (errorBody.includes('json_validate_failed') || res.status === 400)) {
+            console.warn(`[Dual-Key AI Engine] Model ${model} failed json_validate_failed on Groq grammar. Retrying with free-form JSON generation...`);
+            const retryPayload = { ...payload };
+            delete retryPayload.response_format;
+            const retryRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${activeKey}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(retryPayload)
+            });
+            if (retryRes.ok) {
+              const retryData = await retryRes.json();
+              const rawContent: string = retryData.choices?.[0]?.message?.content || '';
+              return { content: rawContent.trim(), modelUsed: model };
+            }
+          }
+
           throw new Error(`Reasoning Engine Error (${res.status} on ${model}): ${errorBody}`);
         }
 
@@ -184,7 +205,11 @@ async function callGroqChat(
       } catch (err: unknown) {
         lastError = err instanceof Error ? err : new Error(String(err));
         console.warn(`[Dual-Key AI Engine] Key ...${activeKey.slice(-6)} on ${model} attempt failed:`, lastError.message);
-        // Continue to try next key in pool
+        // If it's a 400 or 404 error on this model, trying other keys with the same invalid model/payload will only repeat the error.
+        // Fast-failover directly to the next fallback model in modelsToTry!
+        if (lastError.message.includes('400 on ') || lastError.message.includes('404 on ')) {
+          break;
+        }
       }
     }
   }

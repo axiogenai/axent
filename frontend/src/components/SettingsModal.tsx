@@ -312,6 +312,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               onChange={(newModel) => setSelectedModel(newModel)}
               options={[
                 {
+                  value: 'llama-3.3-70b-versatile',
+                  label: 'llama-3.3-70b-versatile — Maximum Reliability & Speed',
+                  badge: 'ROCK-SOLID'
+                },
+                {
                   value: 'openai/gpt-oss-120b',
                   label: 'openai/gpt-oss-120b — High Accuracy Forensics (Recommended)',
                   badge: 'REC'
