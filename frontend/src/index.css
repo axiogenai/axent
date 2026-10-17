@@ -1333,3 +1333,346 @@ body.codedna-kiosk-mode {
     margin: 8px auto !important;
   }
 }
+
+
+/* ==========================================================================
+   AXENT RESPONSIVE SYSTEM — shared by every portal and reusable UI component
+   Built as a final override layer so existing component styling stays intact.
+   ========================================================================== */
+
+:root {
+  --axent-safe-x: clamp(12px, 3.5vw, 28px);
+  --axent-content-max: 1440px;
+  --axent-touch-target: 42px;
+}
+
+html {
+  width: 100%;
+  min-width: 320px;
+  overflow-x: clip;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-top: 64px;
+}
+
+body, #root {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+body {
+  overflow-x: clip;
+}
+
+img, video, canvas, svg {
+  max-width: 100%;
+}
+
+img, video {
+  height: auto;
+}
+
+pre, code, kbd, samp {
+  overflow-wrap: anywhere;
+}
+
+pre {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+button, input, textarea, select {
+  max-width: 100%;
+  min-width: 0;
+}
+
+button, [role="button"], input[type="button"], input[type="submit"] {
+  touch-action: manipulation;
+}
+
+button, [role="button"], input[type="button"], input[type="submit"], input[type="checkbox"], input[type="radio"] {
+  accent-color: var(--accent);
+}
+
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-height: 40px;
+}
+
+:where(table) {
+  max-width: 100%;
+}
+
+:where(th, td) {
+  overflow-wrap: anywhere;
+}
+
+:where(dialog, [role="dialog"], .modal, .modal-content, .modal-dialog) {
+  max-width: min(96vw, 100%);
+}
+
+:where(.page-container, .page-content, .content-container, .dashboard-container, .portal-container, .workspace-container) {
+  width: 100%;
+  max-width: var(--axent-content-max);
+  min-width: 0;
+  margin-inline: auto;
+}
+
+:where(.flex, [class*="flex-"]) > *,
+:where(.grid, [class*="grid-"]) > * {
+  min-width: 0;
+}
+
+/* Data-dense interfaces can retain their table layout without pushing the page. */
+:where(.table-responsive, .table-container, .ledger-table-container, .overflow-x-auto, [data-scroll-table]) {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 1024px) {
+  :root {
+    --axent-safe-x: 20px;
+  }
+
+  :where(.dashboard-grid, .stats-grid, .analytics-grid, .kpi-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  :where(.sidebar, .dashboard-sidebar, .settings-sidebar, .mcq-results-sidebar) {
+    position: static !important;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  :where(.main-content, .dashboard-content, .portal-content, .workspace-content) {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --axent-safe-x: 14px;
+    --axent-touch-target: 44px;
+  }
+
+  html, body {
+    font-size: 14px;
+  }
+
+  main, [role="main"] {
+    min-width: 0;
+    max-width: 100vw;
+  }
+
+  :where(.container, .content, .page-container, .page-content, .dashboard-container, .portal-container) {
+    padding-inline: var(--axent-safe-x);
+  }
+
+  /* Shared headers/toolbars wrap rather than force horizontal scrolling. */
+  :where(.page-header, .section-header, .dashboard-header, .panel-header, .toolbar, .action-toolbar) {
+    flex-wrap: wrap !important;
+    gap: 10px;
+  }
+
+  :where(.page-header, .section-header, .dashboard-header) > :where(h1, h2, .title, .heading) {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  :where(.stats-grid, .dashboard-grid, .analytics-grid, .kpi-grid, .form-grid, .two-column-layout, .three-column-layout) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  :where(.card, .card-elevated, .panel, .modal-content, .mcq-question-card) {
+    min-width: 0;
+    padding: clamp(12px, 3.8vw, 20px);
+  }
+
+  :where(.modal, .modal-dialog, [role="dialog"]) {
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 16px);
+    margin: 8px auto !important;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  :where(.modal-actions, .modal-footer, .dialog-actions, .mcq-modal-actions) {
+    flex-wrap: wrap;
+  }
+
+  :where(.modal-actions, .modal-footer, .dialog-actions, .mcq-modal-actions) > button {
+    min-height: var(--axent-touch-target);
+  }
+
+  :where(button, .btn, [role="button"]) {
+    min-height: 38px;
+  }
+
+  :where(.btn, button) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  :where(input, select, textarea, .form-control, .form-select) {
+    width: 100%;
+    font-size: 16px !important;
+  }
+
+  :where(.ledger-table, table) {
+    font-size: 12px;
+  }
+
+  :where(.ledger-table th, .ledger-table td, table th, table td) {
+    padding: 8px 10px;
+  }
+
+  :where(.mcq-ledger-header) {
+    display: none !important;
+  }
+
+  :where(.mcq-attempt-grid) {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px;
+  }
+
+  :where(.mcq-exam-container) {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding-inline: var(--axent-safe-x);
+    gap: 12px;
+  }
+
+  :where(.mcq-exam-sidebar, .mcq-exam-main) {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  :where(.mcq-results-layout) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  :where(.mcq-results-wrapper) {
+    padding: var(--axent-safe-x);
+  }
+
+  /* Coding editor panes stack, while each code/terminal area scrolls internally. */
+  :where(.workspace-split-container) {
+    min-width: 0;
+    max-width: 100%;
+    overflow: auto;
+  }
+
+  :where(.workspace-editor-pane, .workspace-right-pane, .workspace-panel, .terminal-panel) {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  :where(.workspace-editor-pane, .workspace-right-pane) {
+    flex-basis: auto !important;
+  }
+
+  :where(.monaco-editor, .monaco-editor .overflow-guard, .vscode-container, .terminal-container) {
+    max-width: 100%;
+  }
+
+  :where(.mcq-exam-footer, .mcq-exam-footer-right, .toolbar-actions, .button-group) {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 520px) {
+  :root {
+    --axent-safe-x: 12px;
+  }
+
+  :where(.page-header, .section-header, .dashboard-header, .panel-header) {
+    align-items: stretch !important;
+  }
+
+  :where(.page-header) > button,
+  :where(.section-header) > button,
+  :where(.toolbar-actions) > button,
+  :where(.button-group) > button {
+    flex: 1 1 auto;
+  }
+
+  :where(.grid-cols-2, .grid-cols-3, .grid-cols-4) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  :where(.mcq-palette-grid) {
+    grid-template-columns: repeat(auto-fill, minmax(34px, 1fr)) !important;
+  }
+
+  :where(.mcq-exam-footer) {
+    align-items: stretch;
+  }
+
+  :where(.mcq-exam-footer, .mcq-exam-footer-right) > button {
+    width: 100%;
+  }
+
+  :where(.ledger-table-container, .table-responsive, .table-container) {
+    border-radius: 8px;
+  }
+
+  /* On phones, tables scroll inside their own frame instead of widening the page. */
+  :where(.ledger-table, table) {
+    min-width: 520px;
+  }
+
+  :where(.mcq-results-scoreboard) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  :where(.mcq-results-header) {
+    align-items: stretch;
+  }
+
+  :where(.mcq-modal-actions) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  :where(.mcq-modal-actions) > button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 360px) {
+  :root {
+    --axent-safe-x: 10px;
+  }
+
+  :where(.mcq-results-scoreboard) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  :where(.btn, button) {
+    padding-inline: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
