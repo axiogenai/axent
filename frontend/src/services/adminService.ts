@@ -963,9 +963,10 @@ export async function clearAllStations(labId?: string): Promise<void> {
 export async function clearSubmittedStations(labId?: string): Promise<void> {
   if (typeof window === 'undefined') return;
   try {
+    const cleanLabId = labId ? labId.toUpperCase().trim() : '';
     const all = getLiveStations();
     const remaining = all.filter((s) => {
-      if (labId && labId !== 'all' && s.labId !== labId) return true; // keep other labs
+      if (cleanLabId && cleanLabId !== 'ALL' && String(s.labId || '').toUpperCase().trim() !== cleanLabId) return true; // keep other labs
       return s.status !== 'Submitted & Done';
     });
     saveAllStations(remaining);
@@ -977,7 +978,7 @@ export async function clearSubmittedStations(labId?: string): Promise<void> {
         const attempts = JSON.parse(rawAttempts);
         if (Array.isArray(attempts)) {
           const remainingAttempts = attempts.filter((a) => {
-            if (labId && labId !== 'all' && (a.assignedLabId || a.labId) !== labId) return true;
+            if (cleanLabId && cleanLabId !== 'ALL' && String(a.assignedLabId || a.labId || '').toUpperCase().trim() !== cleanLabId) return true;
             const isDone = a.status === 'SUBMITTED' || a.status === 'DISQUALIFIED' || a.status === 'ABANDONED';
             return !isDone;
           });

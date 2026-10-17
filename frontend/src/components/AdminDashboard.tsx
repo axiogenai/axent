@@ -1944,9 +1944,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span>{selectedStation.stationNumber}</span>
                   </span>
                   <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
-                    {modalTab === 'submission' || selectedStation.status === 'Submitted & Done'
-                      ? `Candidate Exam Submission: ${selectedStation.student.name || selectedStation.stationNumber}`
-                      : `CCTV Surveillance Feed: ${selectedStation.stationNumber}`}
+                    {modalTab === 'submission'
+                      ? `Evaluated Exam Submission: ${selectedStation.student.name || selectedStation.stationNumber}`
+                      : `Surveillance & Telemetry Audit: ${selectedStation.stationNumber} • ${selectedStation.student.name || 'Candidate'}`}
                   </h3>
                   {selectedStation.screenImageData ? (
                     <span className="badge badge-danger" style={{ fontSize: '10px', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
