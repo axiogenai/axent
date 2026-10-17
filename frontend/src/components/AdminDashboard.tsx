@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CandidateStation,
@@ -31,7 +31,7 @@ import {
   sendProctorConcludeAndFreeCommand,
   ensureLabForExam
 } from '../services/adminService';
-import { getAllExams } from '../services/mcqService';
+import { getAllExams, getAllAttempts, gradeAttempt } from '../services/mcqService';
 import { fetchStationsFromCloud, subscribeToCloudStations } from '../services/supabaseService';
 import { InstituteLabManagerModal } from './InstituteLabManagerModal';
 import { SupabaseMigrationModal } from './SupabaseMigrationModal';
@@ -42,6 +42,7 @@ import {
   Eye,
   FileText,
   Download,
+  Check,
   RefreshCw,
   Monitor,
   Video,
@@ -153,8 +154,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedLabId, setSelectedLabId] = useState<string>('all');
   const [stations, setStations] = useState<CandidateStation[]>([]);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
-  const [modalTab, setModalTab] = useState<'screen' | 'code' | 'terminal' | 'mcq'>('screen');
+  const [modalTab, setModalTab] = useState<'screen' | 'code' | 'terminal' | 'mcq' | 'submission'>('screen');
   const selectedStation = stations.find((s) => s.id === selectedStationId) || null;
+
+  // Retrieve matching evaluated attempt for submission review
+  const matchingAttempt = useMemo(() => {
+    if (!selectedStation) return null;
+    const allAttempts = getAllAttempts();
+    const cleanRoll = String(selectedStation.student?.rollNumber || '').trim().toLowerCase();
+    const studentName = String(selectedStation.student?.name || '').trim().toLowerCase();
+    return (
+      allAttempts.find((a) => {
+        const aRoll = String(a.studentRoll || '').trim().toLowerCase();
+        const aName = String(a.studentName || '').trim().toLowerCase();
+        return (cleanRoll && aRoll === cleanRoll) || (studentName && aName === studentName);
+      }) || null
+    );
+  }, [selectedStation]);
+
+  const gradedResult = useMemo(() => {
+    if (!matchingAttempt) return null;
+    return gradeAttempt(matchingAttempt);
+  }, [matchingAttempt]);
+
   const [filter, setFilter] = useState<'all' | 'cheating' | 'submitted' | 'active'>('all');
   const [viewMode, setViewMode] = useState<'cctv' | 'ledger'>('cctv');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -491,8 +513,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     (s) => s.cheatingRisk === 'High' || s.cheatingRisk === 'Critical' || s.metrics.pasteRatio >= 50
   ).length;
 
-  const handleClearSubmitted = () => {
-    clearSubmittedStations(selectedLabId);
+  const handleClearSubmitted = async () => {
+    await clearSubmittedStations(selectedLabId);
     loadData();
     playSound('click');
     setShowClearSubmittedConfirm(false);
@@ -1478,19 +1500,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* ── PRIMARY ACTION BUTTON (Matching Screenshot - Pure White Text) ── */}
+                  {/* ── PRIMARY ACTION BUTTON (Differentiated: View submission vs Inspect audit) ── */}
                   <button
                     type="button"
                     onClick={() => {
                       setSelectedStationId(station.id);
-                      setModalTab(station.screenImageData ? 'screen' : 'code');
+                      if (isSubmitted) {
+                        setModalTab('submission');
+                      } else {
+                        setModalTab(station.screenImageData ? 'screen' : (station.examMode === 'MCQ' ? 'mcq' : 'code'));
+                      }
                     }}
                     style={{
                       width: '100%',
                       padding: '10px 16px',
                       borderRadius: '24px',
                       border: '1px solid rgba(255, 255, 255, 0.22)',
-                      background: 'rgba(255, 255, 255, 0.04)',
+                      background: isSubmitted ? 'rgba(34, 197, 94, 0.08)' : 'rgba(255, 255, 255, 0.04)',
                       color: '#ffffff',
                       fontSize: '13px',
                       fontWeight: 600,
@@ -1498,17 +1524,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      gap: '6px',
                       transition: 'all 0.15s ease'
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                      e.currentTarget.style.background = isSubmitted ? 'rgba(34, 197, 94, 0.16)' : 'rgba(255, 255, 255, 0.1)';
                       e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.35)';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                      e.currentTarget.style.background = isSubmitted ? 'rgba(34, 197, 94, 0.08)' : 'rgba(255, 255, 255, 0.04)';
                       e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.22)';
                     }}
                   >
+                    {isSubmitted ? <FileText size={13} style={{ color: '#4ade80' }} /> : <Eye size={13} />}
                     <span>{isSubmitted ? 'View submission' : 'Inspect audit'}</span>
                   </button>
 
@@ -1810,13 +1838,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           className="btn btn-ghost btn-sm"
                           onClick={() => {
                             setSelectedStationId(station.id);
-                            setModalTab(station.screenImageData ? 'screen' : 'code');
+                            if (station.status === 'Submitted & Done') {
+                              setModalTab('submission');
+                            } else {
+                              setModalTab(station.screenImageData ? 'screen' : (station.examMode === 'MCQ' ? 'mcq' : 'code'));
+                            }
                           }}
                           style={{ height: '24px', padding: '0 6px', fontSize: '11px' }}
-                          title="Inspect live feed"
+                          title={station.status === 'Submitted & Done' ? 'View evaluated submission' : 'Inspect live feed'}
                         >
-                          <Eye size={12} />
-                          <span>Inspect</span>
+                          {station.status === 'Submitted & Done' ? <FileText size={12} /> : <Eye size={12} />}
+                          <span>{station.status === 'Submitted & Done' ? 'Submission' : 'Inspect'}</span>
                         </button>
                         <button
                           className="btn btn-secondary btn-sm"
@@ -1883,7 +1915,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span>{selectedStation.stationNumber}</span>
                   </span>
                   <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
-                    CCTV Surveillance Feed: {selectedStation.stationNumber}
+                    {modalTab === 'submission' || selectedStation.status === 'Submitted & Done'
+                      ? `Candidate Exam Submission: ${selectedStation.student.name || selectedStation.stationNumber}`
+                      : `CCTV Surveillance Feed: ${selectedStation.stationNumber}`}
                   </h3>
                   {selectedStation.screenImageData ? (
                     <span className="badge badge-danger" style={{ fontSize: '10px', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -1948,6 +1982,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             >
               {/* Tab Selector */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {(selectedStation.status === 'Submitted & Done' || Boolean(matchingAttempt) || selectedStation.marks || selectedStation.mcqProgress?.score !== undefined) && (
+                  <button
+                    className={`btn btn-sm ${modalTab === 'submission' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setModalTab('submission')}
+                    style={{ height: '28px', fontSize: '11px', padding: '0 10px', gap: '5px' }}
+                  >
+                    <FileText size={12} />
+                    <span>Evaluated Submission</span>
+                    {selectedStation.status === 'Submitted & Done' && (
+                      <span className="badge badge-sm badge-success" style={{ fontSize: '9px', padding: '0 4px', height: '14px' }}>
+                        Done
+                      </span>
+                    )}
+                  </button>
+                )}
                 <button
                   className={`btn btn-sm ${modalTab === 'screen' ? 'btn-primary' : 'btn-ghost'}`}
                   onClick={() => setModalTab('screen')}
@@ -2053,7 +2102,208 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             {/* Main Inspection Viewport Area */}
-            {modalTab === 'screen' ? (
+            {modalTab === 'submission' ? (
+              /* Evaluated Candidate Submission & Answer Sheet */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* Evaluation Summary Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
+                  <div className="card" style={{ padding: '12px', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Total Score</div>
+                    <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--accent)', marginTop: '4px' }}>
+                      {gradedResult ? `${gradedResult.score} / ${gradedResult.maxScore}` : selectedStation.marks ? `${selectedStation.marks.totalMarks} / ${getEffectiveMaxMarks(selectedStation)}` : selectedStation.mcqProgress?.score !== undefined ? `${selectedStation.mcqProgress.score} / ${getEffectiveMaxMarks(selectedStation)}` : '0'}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      {gradedResult ? `${gradedResult.percentageScore}% Aggregate` : `${Math.round(((selectedStation.marks?.totalMarks || selectedStation.mcqProgress?.score || 0) / Math.max(1, getEffectiveMaxMarks(selectedStation))) * 100)}% Aggregate`}
+                    </div>
+                  </div>
+
+                  <div className="card" style={{ padding: '12px', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Accuracy Breakdown</div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                        <Check size={12} /> {gradedResult ? gradedResult.correctCount : (selectedStation.marks?.executionMarks || 0)} Correct
+                      </span>
+                      <span style={{ color: 'var(--danger)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                        <X size={12} /> {gradedResult ? gradedResult.wrongCount : 0} Wrong
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      {gradedResult ? `${gradedResult.unansweredCount} Unanswered` : 'Auto-graded evaluation'}
+                    </div>
+                  </div>
+
+                  <div className="card" style={{ padding: '12px', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Proctoring Telemetry</div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, marginTop: '6px', color: (selectedStation.metrics.tabSwitchViolations || 0) > 0 ? 'var(--warning)' : 'var(--success)' }}>
+                      {selectedStation.metrics.tabSwitchViolations || 0} Tab Swaps
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      {selectedStation.metrics.unfocusedTimeSeconds || 0}s off-focus time
+                    </div>
+                  </div>
+
+                  <div className="card" style={{ padding: '12px', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Submission Status</div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, marginTop: '6px', color: 'var(--text-primary)' }}>
+                      {selectedStation.status.toUpperCase()}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      {selectedStation.integrityStatus || 'Verified Integrity'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Question-by-Question Answer Sheet */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <ListChecks size={15} color="var(--accent)" />
+                      <span>Candidate Question-by-Question Evaluation Sheet</span>
+                    </div>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      {gradedResult?.perQuestion ? `${gradedResult.perQuestion.length} questions evaluated` : 'Evaluation record'}
+                    </span>
+                  </div>
+
+                  {gradedResult && gradedResult.perQuestion.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '420px', overflowY: 'auto', paddingRight: '4px' }}>
+                      {gradedResult.perQuestion.map((pq, idx) => {
+                        const isUnanswered = !pq.selectedOptionId;
+                        return (
+                          <div
+                            key={pq.questionId || idx}
+                            style={{
+                              background: 'var(--bg-surface)',
+                              border: `1px solid ${pq.isCorrect ? 'var(--success-border, rgba(34, 197, 94, 0.3))' : isUnanswered ? 'var(--border)' : 'var(--danger-border, rgba(239, 68, 68, 0.3))'}`,
+                              borderRadius: 'var(--radius-sm)',
+                              padding: '12px 14px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '8px'
+                            }}
+                          >
+                            {/* Question item header */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontWeight: 800, fontSize: '12px', color: 'var(--text-primary)' }}>
+                                  Question {idx + 1}
+                                </span>
+                                <span
+                                  style={{
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    fontFamily: 'var(--font-mono)',
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    background: pq.isCorrect ? 'rgba(34, 197, 94, 0.15)' : isUnanswered ? 'rgba(255, 255, 255, 0.05)' : 'rgba(239, 68, 68, 0.15)',
+                                    color: pq.isCorrect ? 'var(--success)' : isUnanswered ? 'var(--text-muted)' : 'var(--danger)'
+                                  }}
+                                >
+                                  {pq.marksAwarded > 0 ? `+${pq.marksAwarded}` : pq.marksAwarded} Marks
+                                </span>
+                              </div>
+                              <span
+                                className={`badge badge-sm ${pq.isCorrect ? 'badge-success' : isUnanswered ? 'badge-neutral' : 'badge-danger'}`}
+                                style={{ fontSize: '10px' }}
+                              >
+                                {pq.isCorrect ? 'CORRECT' : isUnanswered ? 'UNANSWERED' : 'INCORRECT'}
+                              </span>
+                            </div>
+
+                            {/* Question Text */}
+                            <div style={{ fontSize: '12.5px', color: 'var(--text-primary)', lineHeight: 1.5, fontWeight: 500 }}>
+                              {pq.question}
+                            </div>
+
+                            {/* Candidate Selection & Correct Answer Comparison */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px', marginTop: '2px' }}>
+                              <div
+                                style={{
+                                  padding: '8px 10px',
+                                  borderRadius: 'var(--radius-xs)',
+                                  background: pq.isCorrect ? 'rgba(34, 197, 94, 0.08)' : isUnanswered ? 'rgba(255, 255, 255, 0.03)' : 'rgba(239, 68, 68, 0.08)',
+                                  border: `1px solid ${pq.isCorrect ? 'rgba(34, 197, 94, 0.25)' : isUnanswered ? 'var(--border)' : 'rgba(239, 68, 68, 0.25)'}`,
+                                  fontSize: '11.5px'
+                                }}
+                              >
+                                <span style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>
+                                  Candidate Selection
+                                </span>
+                                <strong style={{ color: pq.isCorrect ? 'var(--success)' : isUnanswered ? 'var(--text-muted)' : 'var(--danger)', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                                  {pq.isCorrect ? <Check size={12} /> : isUnanswered ? null : <X size={12} />}
+                                  {pq.selectedText || '(No selection)'}
+                                </strong>
+                              </div>
+
+                              <div
+                                style={{
+                                  padding: '8px 10px',
+                                  borderRadius: 'var(--radius-xs)',
+                                  background: 'rgba(34, 197, 94, 0.08)',
+                                  border: '1px solid rgba(34, 197, 94, 0.25)',
+                                  fontSize: '11.5px'
+                                }}
+                              >
+                                <span style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>
+                                  Official Correct Answer
+                                </span>
+                                <strong style={{ color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                                  <Check size={12} />
+                                  {pq.correctText || 'Pending'}
+                                </strong>
+                              </div>
+                            </div>
+
+                            {/* Explanation / Derivation */}
+                            {pq.explanation && (
+                              <div
+                                style={{
+                                  marginTop: '4px',
+                                  padding: '6px 10px',
+                                  background: 'rgba(255, 255, 255, 0.03)',
+                                  borderRadius: 'var(--radius-xs)',
+                                  borderLeft: '2px solid var(--accent)',
+                                  fontSize: '11px',
+                                  color: 'var(--text-secondary)',
+                                  lineHeight: 1.4
+                                }}
+                              >
+                                <strong style={{ color: 'var(--text-primary)' }}>Explanation: </strong>
+                                {pq.explanation}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    /* Fallback for coding or un-synced attempts: Show code & execution record */
+                    <div style={{ background: '#0a0a0a', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '14px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                        Submitted Solution & Execution Log ({selectedStation.language})
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: '12px',
+                          lineHeight: 1.6,
+                          color: '#e2e8f0',
+                          maxHeight: '260px',
+                          overflowY: 'auto',
+                          whiteSpace: 'pre-wrap',
+                          background: '#050505',
+                          padding: '10px',
+                          borderRadius: 'var(--radius-xs)',
+                          border: '1px solid var(--border)'
+                        }}
+                      >
+                        {selectedStation.code || '// Examination completed. Official evaluation recorded.'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : modalTab === 'screen' ? (
               selectedStation.screenImageData ? (
                 /* Actual Live Desktop Screen Capture */
                 <div
@@ -2445,8 +2695,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         cancelText="Cancel"
         tone="danger"
         icon="danger"
-        onConfirm={() => {
-          clearAllStations();
+        onConfirm={async () => {
+          await clearAllStations(selectedLabId);
           loadData();
           playSound('click');
           setShowResetRoomConfirm(false);

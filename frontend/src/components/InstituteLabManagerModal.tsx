@@ -912,9 +912,9 @@ exit
         cancelText="Cancel"
         tone="danger"
         icon="danger"
-        onConfirm={() => {
+        onConfirm={async () => {
           if (labToDelete) {
-            const updated = deleteCollegeLab(labToDelete);
+            const updated = await deleteCollegeLab(labToDelete);
             setLabs(updated);
             onLabsUpdated();
             playSound('click');
@@ -928,13 +928,13 @@ exit
       <ConfirmationModal
         isOpen={showResetDefaultsConfirm}
         title="Restore Default Laboratories?"
-        message="Reset all custom laboratories and restore the official 50 college template labs? Any custom laboratories authored in this browser will be replaced."
+        message="Reset all custom laboratories and restore the official college template labs? Any custom laboratories authored in this browser will be replaced."
         confirmText="Restore Templates"
         cancelText="Cancel"
         tone="warning"
         icon="warning"
-        onConfirm={() => {
-          const reset = resetCollegeLabs();
+        onConfirm={async () => {
+          const reset = await resetCollegeLabs();
           setLabs(reset);
           onLabsUpdated();
           playSound('warning');

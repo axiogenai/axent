@@ -19,7 +19,10 @@ import {
   fetchCollegeLabsFromCloud,
   deleteStationFromCloud,
   clearSubmittedStationsFromCloud,
-  clearAllStationsFromCloud
+  clearAllStationsFromCloud,
+  clearAllAttemptsFromCloud,
+  clearSubmittedAttemptsFromCloud,
+  clearAllCollegeLabsFromCloud
 } from './supabaseService';
 
 
@@ -315,7 +318,12 @@ export function ensureLabForExam(exam: {
     return titleMatch;
   }
 
-  // 3. Determine next available sequential lab ID (e.g. LAB-01, LAB-02, ...)
+  // 3. If there are already at least 5 labs, bind to one of the existing labs instead of creating infinite labs
+  if (existingLabs.length >= 5) {
+    return existingLabs[0];
+  }
+
+  // 4. Determine next available sequential lab ID (e.g. LAB-01, LAB-02, ...)
   const usedNumbers = new Set<number>();
   existingLabs.forEach((l) => {
     const num = parseInt(l.labId.replace(/[^0-9]/g, ''), 10);
@@ -363,22 +371,25 @@ export function saveCollegeLab(lab: CollegeLabInfo): CollegeLabInfo[] {
   return finalized;
 }
 
-export function deleteCollegeLab(labId: string): CollegeLabInfo[] {
+export async function deleteCollegeLab(labId: string): Promise<CollegeLabInfo[]> {
   const current = getAllCollegeLabs();
   const updated = current.filter((l) => l.labId.toUpperCase() !== labId.toUpperCase());
   if (typeof window !== 'undefined') {
     localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(updated));
     notifyLabsChanged(updated);
   }
-  void deleteCollegeLabFromCloud(labId);
+  await deleteCollegeLabFromCloud(labId);
+  await clearAllStations(labId);
   return updated;
 }
 
-export function resetCollegeLabs(): CollegeLabInfo[] {
+export async function resetCollegeLabs(): Promise<CollegeLabInfo[]> {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(CUSTOM_LABS_KEY);
     notifyLabsChanged([]);
   }
+  await clearAllCollegeLabsFromCloud();
+  await clearAllStations();
   return [];
 }
 
@@ -628,26 +639,52 @@ export function setLabLock(labId: string, isLocked: boolean): void {
 }
 
 // ── FLUSH & RESET CONTROL ROOM (WIPES ALL DATA CLEANLY) ──
-export function clearAllStations(): void {
+export async function clearAllStations(labId?: string): Promise<void> {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.removeItem(STATIONS_KEY);
-    localStorage.removeItem('codedna_cctv_heartbeat_tick');
-    localStorage.removeItem(CAMPUS_LOCK_KEY);
-    getAllCollegeLabs().forEach((l) => {
-      localStorage.removeItem(`${LAB_LOCK_PREFIX}${l.labId}`);
-    });
-    // Remove all station lock keys
-    const keysToRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith(STATION_LOCK_PREFIX)) {
-        keysToRemove.push(key);
+    const isAll = !labId || labId === 'all';
+    if (isAll) {
+      localStorage.removeItem(STATIONS_KEY);
+      localStorage.removeItem('codedna_mcq_attempts');
+      localStorage.removeItem('codedna_mcq_answers');
+      localStorage.removeItem('codedna_cctv_heartbeat_tick');
+      localStorage.removeItem(CAMPUS_LOCK_KEY);
+      getAllCollegeLabs().forEach((l) => {
+        localStorage.removeItem(`${LAB_LOCK_PREFIX}${l.labId}`);
+      });
+      // Remove all station lock keys
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(STATION_LOCK_PREFIX)) {
+          keysToRemove.push(key);
+        }
       }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    } else {
+      // Clear only this specific lab
+      const currentStations = getLiveStations();
+      const keptStations = currentStations.filter((s) => s.labId !== labId);
+      saveAllStations(keptStations);
+
+      // Filter MCQ attempts
+      try {
+        const raw = localStorage.getItem('codedna_mcq_attempts');
+        if (raw) {
+          const attempts = JSON.parse(raw);
+          if (Array.isArray(attempts)) {
+            const keptAttempts = attempts.filter((a) => (a.assignedLabId || a.labId) !== labId);
+            localStorage.setItem('codedna_mcq_attempts', JSON.stringify(keptAttempts));
+          }
+        }
+      } catch {}
+
+      localStorage.removeItem(`${LAB_LOCK_PREFIX}${labId}`);
     }
-    keysToRemove.forEach((k) => localStorage.removeItem(k));
-    clearAllStationsFromCloud().catch(() => {});
-    broadcastCctvMessage({ type: 'RESET_ALL' });
+
+    await clearAllStationsFromCloud(labId);
+    await clearAllAttemptsFromCloud(labId);
+    broadcastCctvMessage({ type: 'RESET_ALL', labId });
   } catch (err) {
     console.error('Failed to clear stations:', err);
   }
@@ -657,7 +694,7 @@ export function clearAllStations(): void {
  * Removes submitted/completed candidate workstations from the live proctoring registry.
  * Active in-progress candidates are preserved untouched.
  */
-export function clearSubmittedStations(labId?: string): void {
+export async function clearSubmittedStations(labId?: string): Promise<void> {
   if (typeof window === 'undefined') return;
   try {
     const all = getLiveStations();
@@ -666,8 +703,26 @@ export function clearSubmittedStations(labId?: string): void {
       return s.status !== 'Submitted & Done';
     });
     saveAllStations(remaining);
-    clearSubmittedStationsFromCloud(labId).catch(() => {});
-    broadcastCctvMessage({ type: 'STATION_UPDATE' });
+
+    // Also filter submitted MCQ attempts from localStorage
+    try {
+      const rawAttempts = localStorage.getItem('codedna_mcq_attempts');
+      if (rawAttempts) {
+        const attempts = JSON.parse(rawAttempts);
+        if (Array.isArray(attempts)) {
+          const remainingAttempts = attempts.filter((a) => {
+            if (labId && labId !== 'all' && (a.assignedLabId || a.labId) !== labId) return true;
+            const isDone = a.status === 'SUBMITTED' || a.status === 'DISQUALIFIED' || a.status === 'ABANDONED';
+            return !isDone;
+          });
+          localStorage.setItem('codedna_mcq_attempts', JSON.stringify(remainingAttempts));
+        }
+      }
+    } catch {}
+
+    await clearSubmittedStationsFromCloud(labId);
+    await clearSubmittedAttemptsFromCloud(labId);
+    broadcastCctvMessage({ type: 'STATION_UPDATE', labId });
   } catch (err) {
     console.error('Failed to clear submitted stations:', err);
   }

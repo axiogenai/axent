@@ -702,6 +702,36 @@ export async function clearAllStationsFromCloud(labId?: string): Promise<boolean
   }
 }
 
+export async function clearAllAttemptsFromCloud(labId?: string): Promise<boolean> {
+  try {
+    let query = supabase.from('mcq_attempts').delete();
+    if (labId && labId !== 'all') {
+      query = query.eq('assigned_lab_id', labId);
+    } else {
+      query = query.neq('id', '');
+    }
+    const { error } = await query;
+    return !error;
+  } catch (err) {
+    console.warn('[Supabase] Failed to clear attempts from cloud:', err);
+    return false;
+  }
+}
+
+export async function clearSubmittedAttemptsFromCloud(labId?: string): Promise<boolean> {
+  try {
+    let query = supabase.from('mcq_attempts').delete().in('status', ['SUBMITTED', 'DISQUALIFIED', 'ABANDONED']);
+    if (labId && labId !== 'all') {
+      query = query.eq('assigned_lab_id', labId);
+    }
+    const { error } = await query;
+    return !error;
+  } catch (err) {
+    console.warn('[Supabase] Failed to clear submitted attempts from cloud:', err);
+    return false;
+  }
+}
+
 
 export function subscribeToCloudExams(onExamChange: (payload: any) => void): () => void {
   try {
@@ -803,6 +833,16 @@ export async function deleteCollegeLabFromCloud(labId: string): Promise<boolean>
     const { error } = await supabase.from('college_labs').delete().eq('lab_id', labId);
     return !error;
   } catch {
+    return false;
+  }
+}
+
+export async function clearAllCollegeLabsFromCloud(): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('college_labs').delete().neq('lab_id', '');
+    return !error;
+  } catch (err) {
+    console.warn('[Supabase] Failed to clear all college labs from cloud:', err);
     return false;
   }
 }
