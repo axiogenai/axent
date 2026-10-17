@@ -1007,6 +1007,35 @@ export function sendProctorLockCommand(stationId: string, isLocked: boolean, lab
         localStorage.setItem(`${LAB_LOCK_PREFIX}${labId}`, 'false');
       }
       localStorage.setItem(CAMPUS_LOCK_KEY, 'false');
+
+      // CRITICAL: Also pardon and reset tabSwitchCount in codedna_mcq_attempts so reconcileAttemptsIntoStations doesn't restore old strikes!
+      try {
+        const rawAttempts = localStorage.getItem('codedna_mcq_attempts');
+        if (rawAttempts) {
+          const attempts = JSON.parse(rawAttempts);
+          if (Array.isArray(attempts)) {
+            const currentStationsList = getLiveStations();
+            const targetStationObj = currentStationsList.find((st) => st.id === stationId);
+            const rollToMatch = targetStationObj?.student?.rollNumber?.toLowerCase()?.trim();
+            const nameToMatch = targetStationObj?.student?.name?.toLowerCase()?.trim();
+            let changed = false;
+            attempts.forEach((a: any) => {
+              const aRoll = (a.studentRoll || '').toLowerCase().trim();
+              const aName = (a.studentName || '').toLowerCase().trim();
+              if ((rollToMatch && aRoll === rollToMatch) || (nameToMatch && aName === nameToMatch) || a.assignedStationId === stationId) {
+                a.tabSwitchCount = 0;
+                a.unfocusedSeconds = 0;
+                changed = true;
+              }
+            });
+            if (changed) {
+              localStorage.setItem('codedna_mcq_attempts', JSON.stringify(attempts));
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Could not reset attempt infractions on unlock:', err);
+      }
     }
   }
 

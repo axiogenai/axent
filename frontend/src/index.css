@@ -1046,18 +1046,17 @@ input[type=number].no-spin {
 /* Edge-to-Edge Fullscreen and Mobile Kiosk Modes */
 :fullscreen,
 ::backdrop,
-.codedna-kiosk-mode {
+html.codedna-kiosk-mode,
+body.codedna-kiosk-mode {
   background: var(--bg-main) !important;
 }
 
-.codedna-kiosk-mode {
-  position: fixed !important;
-  inset: 0 !important;
+html.codedna-kiosk-mode,
+body.codedna-kiosk-mode {
   width: 100vw !important;
   height: 100dvh !important;
+  min-height: 100dvh !important;
   max-width: 100vw !important;
-  max-height: 100dvh !important;
-  z-index: 99999 !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
   margin: 0 !important;

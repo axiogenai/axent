@@ -41,6 +41,8 @@ export function startAntiCheatingShield(config: AntiCheatingConfig): AntiCheatin
   let extensionScanInterval: any = null;
   let wakeLockSentinel: any = null;
   let currentAudioLevel = 0;
+  const shieldStartTime = Date.now();
+  const STARTUP_GRACE_PERIOD_MS = 20000;
 
   // ── 1. SCREEN WAKE LOCK (Prevents Mobile Device Sleep) ─────────────────────
   const initWakeLock = async () => {
@@ -63,16 +65,18 @@ export function startAntiCheatingShield(config: AntiCheatingConfig): AntiCheatin
   // ── 2. CURSOR DEPARTURE & FLOATING AI DETECTION (Desktop & Tablets) ─────────
   const handleMouseLeave = (e: MouseEvent) => {
     if (!isRunning || config.enableCursorDepartureGuard === false) return;
+    if (Date.now() - shieldStartTime < STARTUP_GRACE_PERIOD_MS) return;
     // Check if mouse genuinely left the client window viewport
     if (e.clientY <= 0 || e.clientX <= 0 || (e.clientX >= window.innerWidth || e.clientY >= window.innerHeight)) {
       if (cursorDepartureTimeout) clearTimeout(cursorDepartureTimeout);
       cursorDepartureTimeout = setTimeout(() => {
         if (!isRunning) return;
+        if (Date.now() - shieldStartTime < STARTUP_GRACE_PERIOD_MS) return;
         playSound('warning');
         config.onWarningBanner('AI GUARD: Cursor departed exam window. External AI assistant or secondary panel interaction detected.');
         config.onInfraction('Cursor departed exam viewport towards external application / AI assistant');
         if (config.onAiAlert) config.onAiAlert('Cursor departure outside viewport');
-      }, 2000);
+      }, 7000);
     }
   };
 
@@ -117,12 +121,12 @@ export function startAntiCheatingShield(config: AntiCheatingConfig): AntiCheatin
       }
 
       // Check for mobile / split-screen viewport anomalies
-      if (window.visualViewport) {
+      if (window.visualViewport && (Date.now() - shieldStartTime >= STARTUP_GRACE_PERIOD_MS)) {
         const heightRatio = window.visualViewport.height / window.innerHeight;
-        // On mobile, if height shrinks under 65% without focused text input, user entered split-screen multitasking!
+        // On mobile, if height shrinks under 50% without focused text input, user entered split-screen multitasking!
         const activeTag = document.activeElement?.tagName?.toLowerCase();
         const isTyping = activeTag === 'input' || activeTag === 'textarea';
-        if (!isTyping && heightRatio < 0.65 && window.innerWidth <= 768) {
+        if (!isTyping && heightRatio < 0.50 && window.innerWidth <= 768) {
           playSound('warning');
           config.onWarningBanner('MOBILE SHIELD: Split-screen multitasking detected! Close secondary floating applications.');
           config.onInfraction('Split-screen multitasking / floating app detected');
@@ -138,7 +142,7 @@ export function startAntiCheatingShield(config: AntiCheatingConfig): AntiCheatin
   // ── 4. ACOUSTIC / MICROPHONE MONITORING (Opt-in only, zero unsolicited focus theft) ─
   const initAudioMonitoring = async () => {
     // Strictly opt-in to avoid popping up browser permission modals that steal window focus
-    if (!isRunning || !config.enableAudioMonitoring) return;
+    if (!isRunning || config.enableAudioMonitoring !== true) return;
     try {
       if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         // Query permissions first if supported so we never trigger an unexpected modal during exam
