@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, Save, Trash2, ChevronLeft, ChevronRight, CheckSquare,
-  Clock, List, Settings, Eye, AlertCircle, BookOpen, X, Check, GraduationCap, MessageCircle, Copy, RefreshCw, Search, Key
+  Clock, List, Settings, Eye, AlertCircle, BookOpen, X, Check, GraduationCap, MessageCircle, Copy, RefreshCw, Search, Key, Lock, Globe, Shield
 } from 'lucide-react';
 import { MCQExamConfig, MCQExamStatus } from '../types/mcq';
 import { MCQQuestion } from '../types/mcq';
@@ -207,6 +207,15 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{exam.title}</span>
                     <span style={{ fontSize: '11px', fontWeight: 700, color: STATUS_COLOR[exam.status], textTransform: 'uppercase', letterSpacing: '0.05em' }}>{exam.status}</span>
+                    {exam.isPrivate ? (
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#f59e0b', background: 'rgba(245,158,11,0.1)', borderRadius: 'var(--radius-pill)', padding: '2px 8px', border: '1px solid rgba(245,158,11,0.25)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                        <Lock size={11} /> Private · Ticket Only
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', background: 'var(--bg-surface)', borderRadius: 'var(--radius-pill)', padding: '2px 8px', border: '1px solid var(--border)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                        <Globe size={11} /> Public
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{exam.questionCount} questions</span>
@@ -497,6 +506,7 @@ const DEFAULT_EXAM: Omit<MCQExamConfig, 'id' | 'createdAt' | 'updatedAt'> = {
   allowReview: true,
   showExplanationsAfterSubmit: true,
   maxAttempts: 1,
+  isPrivate: false,
   resultDeclarationMode: 'WHATSAPP_GROUP',
   status: 'DRAFT',
   createdBy: 'admin',
@@ -718,6 +728,73 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ initial, onSave, onBack }) => {
       {/* Step: Settings */}
       {step === 'settings' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Privacy & Access Mode Option */}
+          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              <Shield size={15} color="var(--accent)" />
+              <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                Examination Privacy & Access Control
+              </label>
+            </div>
+            <p style={{ margin: '0 0 14px', fontSize: '12px', color: 'var(--text-muted)' }}>
+              Choose whether this examination is open to the public catalog or strictly private and ticket-restricted.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
+              {/* Option A: Public */}
+              <div
+                onClick={() => set('isPrivate', false)}
+                style={{
+                  padding: '14px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: `1.5px solid ${!form.isPrivate ? 'var(--accent)' : 'var(--border)'}`,
+                  background: !form.isPrivate ? 'var(--bg-elevated)' : 'transparent',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Globe size={14} color={!form.isPrivate ? 'var(--accent)' : 'var(--text-muted)'} />
+                    Public (Open Institutional Access)
+                  </span>
+                  {!form.isPrivate && (
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)' }} />
+                  )}
+                </div>
+                <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                  Listed openly on the public /mcq exam portal. Any enrolled candidate can select and attempt this paper.
+                </p>
+              </div>
+
+              {/* Option B: Private (Ticket-Only) */}
+              <div
+                onClick={() => set('isPrivate', true)}
+                style={{
+                  padding: '14px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: `1.5px solid ${form.isPrivate ? '#f59e0b' : 'var(--border)'}`,
+                  background: form.isPrivate ? 'var(--bg-elevated)' : 'transparent',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: form.isPrivate ? '#f59e0b' : 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Lock size={14} color={form.isPrivate ? '#f59e0b' : 'var(--text-muted)'} />
+                    Private (Invite & Ticket-Only)
+                  </span>
+                  {form.isPrivate && (
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f59e0b' }} />
+                  )}
+                </div>
+                <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                  Completely hidden from the public /mcq directory. Only candidates issued an authoritative cryptographic ticket (/mcq#ticket=...) by the invigilator can access and attempt this paper.
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Result Declaration Option */}
           <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>

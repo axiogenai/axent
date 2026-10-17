@@ -4157,7 +4157,7 @@ export const MCQExamSelector: React.FC = () => {
     const all = getAllExams();
     const now = getSynchronizedNow();
     return all
-      .filter((e) => e.status === 'PUBLISHED' || e.status === 'CLOSED')
+      .filter((e) => (e.status === 'PUBLISHED' || e.status === 'CLOSED') && !e.isPrivate)
       .sort((a, b) => {
         const aConcluded = a.status === 'CLOSED' || Boolean(a.endTime && now > a.endTime);
         const bConcluded = b.status === 'CLOSED' || Boolean(b.endTime && now > b.endTime);
@@ -4222,14 +4222,24 @@ export const MCQExamSelector: React.FC = () => {
     }
 
     // 2. Candidate entered a query parameter: validate against published or closed registered exams
-    if (queryExamId && exams.length > 0) {
-      const exists = exams.some((e) => e.id === queryExamId);
-      if (!exists) {
+    if (queryExamId) {
+      const allExams = getAllExams();
+      const targetExam = allExams.find((e) => e.id === queryExamId);
+      if (targetExam?.isPrivate) {
         setSearchParams({}, { replace: true });
         setSelectedExamId(null);
-        setUrlTamperNotice(`Link Integrity Guard: The requested examination link "${queryExamId}" does not exist in the institutional registry.`);
-      } else if (selectedExamId !== queryExamId) {
-        setSelectedExamId(queryExamId);
+        setUrlTamperNotice(`Private Examination: "${targetExam.title}" is restricted. Access requires an authorized candidate ticket link issued by your invigilator.`);
+        return;
+      }
+      if (exams.length > 0) {
+        const exists = exams.some((e) => e.id === queryExamId);
+        if (!exists) {
+          setSearchParams({}, { replace: true });
+          setSelectedExamId(null);
+          setUrlTamperNotice(`Link Integrity Guard: The requested examination link "${queryExamId}" does not exist in the institutional registry.`);
+        } else if (selectedExamId !== queryExamId) {
+          setSelectedExamId(queryExamId);
+        }
       }
     }
   }, [activeExamId, queryExamId, exams, selectedExamId, setSearchParams]);

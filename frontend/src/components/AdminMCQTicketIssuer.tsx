@@ -23,7 +23,9 @@ import {
   Users,
   CheckCircle2,
   XCircle,
-  GraduationCap
+  GraduationCap,
+  Lock,
+  Globe
 } from 'lucide-react';
 import { supabase, fetchExamsFromCloud } from '../services/supabaseService';
 import { getAllExams } from '../services/mcqService';
@@ -672,7 +674,13 @@ export const AdminMCQTicketIssuer: React.FC = () => {
 
             {selectedExam && (
               <div className="self-start sm:self-center px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-main)] text-right">
-                <div className="text-[10px] uppercase font-bold text-[var(--text-secondary)]">Active Exam</div>
+                <div className="text-[10px] uppercase font-bold flex items-center justify-end gap-1">
+                  {selectedExam.isPrivate ? (
+                    <span className="text-amber-500 flex items-center gap-1"><Lock size={10} /> Private · Ticket-Only</span>
+                  ) : (
+                    <span className="text-[var(--text-secondary)] flex items-center gap-1"><Globe size={10} /> Public Exam</span>
+                  )}
+                </div>
                 <div className="text-xs font-semibold text-[var(--text-primary)] truncate max-w-[200px]">{selectedExam.title}</div>
               </div>
             )}
@@ -703,23 +711,34 @@ export const AdminMCQTicketIssuer: React.FC = () => {
                 </button>
               </div>
             ) : (
-              <select
-                value={examId}
-                onChange={(e) => {
-                  setExamId(e.target.value);
-                  setTicketUrl('');
-                  setTicketToken('');
-                  setActiveTicketId('');
-                  setBatchResults(null);
-                }}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-main)] text-sm text-[var(--text-primary)] font-medium focus:outline-none focus:border-[var(--text-primary)] transition-colors"
-              >
-                {exams.map((exam) => (
-                  <option key={exam.id} value={exam.id}>
-                    {exam.title} ({exam.durationMinutes}m · {exam.questionCount} Questions)
-                  </option>
-                ))}
-              </select>
+              <>
+                <select
+                  value={examId}
+                  onChange={(e) => {
+                    setExamId(e.target.value);
+                    setTicketUrl('');
+                    setTicketToken('');
+                    setActiveTicketId('');
+                    setBatchResults(null);
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-main)] text-sm text-[var(--text-primary)] font-medium focus:outline-none focus:border-[var(--text-primary)] transition-colors"
+                >
+                  {exams.map((exam) => (
+                    <option key={exam.id} value={exam.id}>
+                      {exam.isPrivate ? '🔒 [PRIVATE] ' : '🌐 [PUBLIC] '}{exam.title} ({exam.durationMinutes}m · {exam.questionCount} Questions)
+                    </option>
+                  ))}
+                </select>
+
+                {selectedExam?.isPrivate && (
+                  <div className="mt-2.5 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                    <Lock size={13} className="shrink-0" />
+                    <span>
+                      <strong>Private Examination:</strong> This paper is completely hidden from the public <code>/mcq</code> directory. Candidates can strictly only access it via the single-use ticket links issued here.
+                    </span>
+                  </div>
+                )}
+              </>
             )}
           </div>
 

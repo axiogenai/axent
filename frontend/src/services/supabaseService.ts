@@ -140,6 +140,7 @@ export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
       let waGroupLink = '';
       let assignedLabId = '';
       let assignedLabName = '';
+      let isPrivate = false;
       let cleanInstr = row.instructions || '';
 
       // Extract AXENT_META payload from instructions if present
@@ -154,6 +155,7 @@ export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
           if (parsed.whatsappGroupLink) waGroupLink = parsed.whatsappGroupLink;
           if (parsed.assignedLabId) assignedLabId = parsed.assignedLabId;
           if (parsed.assignedLabName) assignedLabName = parsed.assignedLabName;
+          if (parsed.isPrivate !== undefined) isPrivate = Boolean(parsed.isPrivate);
         } catch {}
         cleanInstr = cleanInstr.replace(/<!--AXENT_META:[\s\S]*?-->/g, '').trim();
       }
@@ -166,6 +168,9 @@ export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
       }
       if (row.whatsapp_group_link) {
         waGroupLink = row.whatsapp_group_link;
+      }
+      if (row.is_private !== undefined) {
+        isPrivate = Boolean(row.is_private);
       }
 
       return {
@@ -194,6 +199,7 @@ export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
         whatsappGroupLink: waGroupLink,
         assignedLabId: assignedLabId || undefined,
         assignedLabName: assignedLabName || undefined,
+        isPrivate,
         maxAttempts: Number(row.max_attempts) || 1,
         status: row.status,
         createdAt: Number(row.created_at),
@@ -215,7 +221,8 @@ async function writeExamToCloud(e: MCQExamConfig): Promise<boolean> {
       whatsappGroupName: e.whatsappGroupName || '',
       whatsappGroupLink: e.whatsappGroupLink || '',
       assignedLabId: e.assignedLabId || '',
-      assignedLabName: e.assignedLabName || ''
+      assignedLabName: e.assignedLabName || '',
+      isPrivate: Boolean(e.isPrivate)
     })}-->`;
 
     const cleanInstructions = (e.instructions || '').replace(/<!--AXENT_META:[\s\S]*?-->/g, '').trim();

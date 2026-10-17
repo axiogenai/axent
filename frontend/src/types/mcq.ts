@@ -78,6 +78,7 @@ export interface MCQExamConfig {
   allowReview: boolean;       // Can revisit previous questions
   showExplanationsAfterSubmit: boolean;
   maxAttempts: number;
+  isPrivate?: boolean;        // If true, hidden from public /mcq catalog; requires candidate ticket
   resultDeclarationMode?: MCQResultDeclarationMode; // 'IMMEDIATE' (default) or 'WHATSAPP_GROUP'
   whatsappGroupName?: string;                       // e.g. "TE Computer Div A - 2026 Batch"
   whatsappGroupLink?: string;                       // e.g. "https://chat.whatsapp.com/..."
