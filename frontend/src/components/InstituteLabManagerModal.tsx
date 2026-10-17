@@ -18,7 +18,15 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { CollegeLabInfo } from '../types/dna';
-import { getAllCollegeLabs, saveCollegeLab, deleteCollegeLab, resetCollegeLabs, syncCollegeLabsFromCloud } from '../services/adminService';
+import {
+  getAllCollegeLabs,
+  saveCollegeLab,
+  deleteCollegeLab,
+  resetCollegeLabs,
+  syncCollegeLabsFromCloud,
+  purgePhantomExamLabs,
+  isPhantomLab
+} from '../services/adminService';
 import { playSound } from '../utils/sounds';
 import { ConfirmationModal } from './ConfirmationModal';
 
@@ -36,14 +44,17 @@ export const InstituteLabManagerModal: React.FC<InstituteLabManagerModalProps> =
   activeLabId
 }) => {
   const [activeTab, setActiveTab] = useState<'inventory' | 'kiosk' | 'tokens'>('inventory');
-  const [labs, setLabs] = useState<CollegeLabInfo[]>(() => getAllCollegeLabs());
+  const [labs, setLabs] = useState<CollegeLabInfo[]>(() => getAllCollegeLabs().filter((l) => !isPhantomLab(l)));
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      void syncCollegeLabsFromCloud().then((fresh) => {
-        if (fresh && fresh.length > 0) setLabs(fresh);
+      void purgePhantomExamLabs().then((cleanLabs) => {
+        setLabs(cleanLabs);
+        void syncCollegeLabsFromCloud().then((fresh) => {
+          if (fresh && fresh.length > 0) setLabs(fresh.filter((l) => !isPhantomLab(l)));
+        });
       });
     }
   }, [isOpen]);
@@ -475,7 +486,7 @@ exit
                     }}
                   >
                     <RotateCcw size={11} />
-                    <span>Restore 50 Default College Labs</span>
+                    <span>Restore Default College Labs</span>
                   </button>
                 </div>
 

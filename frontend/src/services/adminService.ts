@@ -190,36 +190,96 @@ export function subscribeToCctvBroadcast(
 }
 
 // ── REAL INSTITUTE LABORATORIES ──
-// Configurable dynamically by faculty and synchronized to Supabase Cloud
-export const DEFAULT_INSTITUTE_LABS: CollegeLabInfo[] = [];
-export const COLLEGE_LABS: CollegeLabInfo[] = [];
+// Canonical 5 physical college laboratories
+export const DEFAULT_INSTITUTE_LABS: CollegeLabInfo[] = [
+  {
+    labId: 'LAB-01',
+    labCode: 'CSE-101',
+    labName: 'Turing Advanced Computing Lab',
+    department: 'Computer Science & Engineering',
+    block: 'Dr. A.P.J. Abdul Kalam Computing Complex (Block A, 3rd Floor)',
+    totalStations: 50,
+    invigilatorName: 'Prof. Alan Turing / Senior Lab Proctor'
+  },
+  {
+    labId: 'LAB-02',
+    labCode: 'ISE-201',
+    labName: 'Lovelace Systems Architecture Lab',
+    department: 'Information Science & Engineering',
+    block: 'Ada Lovelace Tech Wing (Block B, 2nd Floor)',
+    totalStations: 50,
+    invigilatorName: 'Dr. Ada Lovelace / Dept Invigilator'
+  },
+  {
+    labId: 'LAB-03',
+    labCode: 'ECE-301',
+    labName: 'Shannon Embedded Systems Lab',
+    department: 'Electronics & Communication Engineering',
+    block: 'Claude Shannon Electronics Hub (Block C, Ground Floor)',
+    totalStations: 50,
+    invigilatorName: 'Prof. Claude Shannon / System Admin'
+  },
+  {
+    labId: 'LAB-04',
+    labCode: 'AI-401',
+    labName: 'von Neumann Cognitive Computing Lab',
+    department: 'Artificial Intelligence & Machine Learning',
+    block: 'John von Neumann AI Tower (Block D, 4th Floor)',
+    totalStations: 50,
+    invigilatorName: 'Dr. John von Neumann / AI Faculty'
+  },
+  {
+    labId: 'LAB-05',
+    labCode: 'GEN-501',
+    labName: 'Central Placement Examination Hub',
+    department: 'Training & Placement Cell',
+    block: 'Central Convention & Examination Pavilion',
+    totalStations: 50,
+    invigilatorName: 'Director of Placements / University Invigilator'
+  }
+];
+
+export const COLLEGE_LABS: CollegeLabInfo[] = DEFAULT_INSTITUTE_LABS;
 
 export const LAB_LOCK_PREFIX = 'codedna_lock_lab_';
 export const STATION_LOCK_PREFIX = 'codedna_lock_station_';
 export const CAMPUS_LOCK_KEY = 'codedna_lock_all';
 export const CUSTOM_LABS_KEY = 'codedna_custom_institute_labs';
 
+// ── PHANTOM LAB DETECTOR ──
+export function isPhantomLab(lab: Partial<CollegeLabInfo> | null | undefined): boolean {
+  if (!lab || !lab.labId) return false;
+  const name = (lab.labName || '').trim().toLowerCase();
+  const block = (lab.block || '').trim().toLowerCase();
+  const id = String(lab.labId).toUpperCase().trim();
+  // Any exam-generated or orphan test lab is a phantom lab
+  if (name.startsWith('exam:')) return true;
+  if (block === 'cloud examination cluster') return true;
+  if (id === 'LAB-06' && (name.includes('general aptitude') || name.includes('exam'))) return true;
+  if (id === 'LAB-721') return true;
+  return false;
+}
+
 // ── DYNAMIC COLLEGE LAB MANAGEMENT (Zero Hardcoded Labs) ──
 
 export function pruneAndDeduplicateLabs(labs: CollegeLabInfo[]): CollegeLabInfo[] {
-  if (!Array.isArray(labs) || labs.length === 0) return [];
-  const seenNames = new Map<string, CollegeLabInfo>();
+  if (!Array.isArray(labs) || labs.length === 0) return [...DEFAULT_INSTITUTE_LABS];
   const seenIds = new Set<string>();
   const cleaned: CollegeLabInfo[] = [];
 
   for (const lab of labs) {
     if (!lab || !lab.labId) continue;
-    const cleanId = String(lab.labId).toUpperCase().trim();
-    // Normalize lab name (strip "Exam: ", whitespace)
-    const cleanName = (lab.labName || '').replace(/^Exam:\s*/i, '').trim().toLowerCase();
 
-    // If duplicate labId or duplicate exam name, skip
-    if (seenIds.has(cleanId) || (cleanName && seenNames.has(cleanName))) {
+    // Strictly filter out and delete any phantom exam labs
+    if (isPhantomLab(lab)) {
+      void deleteCollegeLabFromCloud(lab.labId);
       continue;
     }
 
+    const cleanId = String(lab.labId).toUpperCase().trim();
+    if (seenIds.has(cleanId)) continue;
     seenIds.add(cleanId);
-    if (cleanName) seenNames.set(cleanName, lab);
+
     cleaned.push({
       ...lab,
       labId: cleanId,
@@ -227,27 +287,37 @@ export function pruneAndDeduplicateLabs(labs: CollegeLabInfo[]): CollegeLabInfo[
     });
   }
 
-  // Renumber cleanly: ensure sequential neat IDs
-  return cleaned.slice(0, 20);
+  if (cleaned.length === 0) {
+    return [...DEFAULT_INSTITUTE_LABS];
+  }
+
+  return cleaned.slice(0, 50);
 }
 
 export function getAllCollegeLabs(): CollegeLabInfo[] {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined') return [...DEFAULT_INSTITUTE_LABS];
   try {
     const raw = localStorage.getItem(CUSTOM_LABS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        if (parsed.length > 10 || parsed.some((l, idx) => parsed.findIndex((o) => o?.labId === l?.labId) !== idx)) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // If phantom labs are detected, prune immediately
+        if (parsed.some((l) => isPhantomLab(l))) {
           const pruned = pruneAndDeduplicateLabs(parsed);
           localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(pruned));
+          notifyLabsChanged(pruned);
           return pruned;
         }
         return parsed;
       }
     }
   } catch {}
-  return [];
+
+  // Initialize with standard institute laboratories
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(DEFAULT_INSTITUTE_LABS));
+  }
+  return [...DEFAULT_INSTITUTE_LABS];
 }
 
 export function notifyLabsChanged(labs: CollegeLabInfo[]): void {
@@ -258,10 +328,51 @@ export function notifyLabsChanged(labs: CollegeLabInfo[]): void {
   } catch {}
 }
 
+/**
+ * Permanently purges phantom / exam-generated laboratories (e.g. LAB-06, LAB-721)
+ * from both Supabase cloud database and client localStorage.
+ */
+export async function purgePhantomExamLabs(): Promise<CollegeLabInfo[]> {
+  // 1. Scan and delete any phantom labs in Supabase cloud
+  try {
+    const cloudLabs = await fetchCollegeLabsFromCloud();
+    if (cloudLabs && cloudLabs.length > 0) {
+      for (const cl of cloudLabs) {
+        if (isPhantomLab(cl)) {
+          await deleteCollegeLabFromCloud(cl.labId);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[Purge] Failed to clean cloud phantom labs:', err);
+  }
+
+  // 2. Clean local storage
+  const current = getAllCollegeLabs();
+  const cleaned = current.filter((l) => !isPhantomLab(l));
+  const finalized = cleaned.length > 0 ? cleaned : [...DEFAULT_INSTITUTE_LABS];
+
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(finalized));
+    notifyLabsChanged(finalized);
+  }
+
+  return finalized;
+}
+
 export async function syncCollegeLabsFromCloud(): Promise<CollegeLabInfo[]> {
   try {
     const cloudLabs = await fetchCollegeLabsFromCloud();
     const localLabs = getAllCollegeLabs();
+
+    // Purge any phantom labs that exist in cloud
+    if (cloudLabs) {
+      for (const cl of cloudLabs) {
+        if (isPhantomLab(cl)) {
+          void deleteCollegeLabFromCloud(cl.labId);
+        }
+      }
+    }
 
     if (cloudLabs && cloudLabs.length > 0) {
       const merged = pruneAndDeduplicateLabs([...cloudLabs, ...localLabs]);
@@ -276,6 +387,11 @@ export async function syncCollegeLabsFromCloud(): Promise<CollegeLabInfo[]> {
         void saveCollegeLabToCloud(lab);
       }
       return pruned;
+    } else {
+      for (const lab of DEFAULT_INSTITUTE_LABS) {
+        void saveCollegeLabToCloud(lab);
+      }
+      return [...DEFAULT_INSTITUTE_LABS];
     }
   } catch (err) {
     console.warn('[Axent] Failed to sync college labs from cloud:', err);
@@ -284,10 +400,9 @@ export async function syncCollegeLabsFromCloud(): Promise<CollegeLabInfo[]> {
 }
 
 /**
- * Automatically creates or binds a dedicated examination laboratory for a paper.
- * Synchronizes to local storage and Supabase cloud college_labs table so proctors can
- * filter out candidates by exam/lab cleanly when multiple tests are running simultaneously.
- * Guaranteed to NEVER create duplicate labs for the same exam!
+ * Binds an examination paper to an existing physical college laboratory.
+ * GUARANTEE: Never creates phantom lab records in college_labs or localStorage!
+ * An exam is a test paper, not a physical room.
  */
 export function ensureLabForExam(exam: {
   id: string;
@@ -298,61 +413,43 @@ export function ensureLabForExam(exam: {
   assignedLabName?: string;
 }): CollegeLabInfo {
   const existingLabs = getAllCollegeLabs();
-  const cleanTitle = (exam.title || '').trim().toLowerCase();
-  const expectedName = `Exam: ${exam.title || 'Examination'}`;
+  const availableLabs = existingLabs.length > 0 ? existingLabs : DEFAULT_INSTITUTE_LABS;
 
-  // 1. If exam already has an assignedLabId, check if it exists in labs
+  // 1. If exam already has an assignedLabId, check if it matches an existing physical lab
   if (exam.assignedLabId) {
-    const matched = existingLabs.find((l) => l.labId.toUpperCase() === exam.assignedLabId?.toUpperCase());
-    if (matched) {
+    const matched = availableLabs.find((l) => l.labId.toUpperCase() === exam.assignedLabId?.toUpperCase());
+    if (matched && !isPhantomLab(matched)) {
       return matched;
     }
   }
 
-  // 2. Check if a lab already exists for this exact exam title
-  const titleMatch = existingLabs.find((l) => {
-    const labTitle = (l.labName || '').replace(/^Exam:\s*/i, '').trim().toLowerCase();
-    return labTitle === cleanTitle || l.labName?.toLowerCase() === expectedName.toLowerCase();
-  });
-  if (titleMatch) {
-    return titleMatch;
+  // 2. Department or subject matching: bind to the appropriate existing physical lab
+  const query = `${exam.department || ''} ${exam.subject || ''} ${exam.title || ''}`.toLowerCase();
+  if (query.includes('info') || query.includes('ise') || query.includes('information')) {
+    const iseLab = availableLabs.find((l) => l.labId === 'LAB-02' || l.department.toLowerCase().includes('information'));
+    if (iseLab) return iseLab;
+  }
+  if (query.includes('ece') || query.includes('electronics') || query.includes('embedded')) {
+    const eceLab = availableLabs.find((l) => l.labId === 'LAB-03' || l.department.toLowerCase().includes('electronics'));
+    if (eceLab) return eceLab;
+  }
+  if (query.includes('ai') || query.includes('artificial') || query.includes('machine learning') || query.includes('aiml')) {
+    const aiLab = availableLabs.find((l) => l.labId === 'LAB-04' || l.department.toLowerCase().includes('artificial'));
+    if (aiLab) return aiLab;
+  }
+  if (query.includes('placement') || query.includes('aptitude') || query.includes('reasoning') || query.includes('training')) {
+    const genLab = availableLabs.find((l) => l.labId === 'LAB-05' || l.department.toLowerCase().includes('placement'));
+    if (genLab) return genLab;
   }
 
-  // 3. If there are already at least 5 labs, bind to one of the existing labs instead of creating infinite labs
-  if (existingLabs.length >= 5) {
-    return existingLabs[0];
-  }
-
-  // 4. Determine next available sequential lab ID (e.g. LAB-01, LAB-02, ...)
-  const usedNumbers = new Set<number>();
-  existingLabs.forEach((l) => {
-    const num = parseInt(l.labId.replace(/[^0-9]/g, ''), 10);
-    if (!isNaN(num) && num > 0) usedNumbers.add(num);
-  });
-
-  let nextNum = 1;
-  while (usedNumbers.has(nextNum)) {
-    nextNum++;
-  }
-
-  const assignedLabId = `LAB-${String(nextNum).padStart(2, '0')}`;
-  const subjectDept = exam.subject || exam.department || 'Computer Science & Engineering';
-
-  const newLab: CollegeLabInfo = {
-    labId: assignedLabId,
-    labCode: (exam.subject || 'EXAM').slice(0, 8).toUpperCase(),
-    labName: expectedName,
-    department: subjectDept,
-    block: 'Cloud Examination Cluster',
-    totalStations: 50,
-    invigilatorName: 'Central Autonomous Proctor'
-  };
-
-  saveCollegeLab(newLab);
-  return newLab;
+  // 3. Default to LAB-01 or the first physical lab.
+  return availableLabs[0] || DEFAULT_INSTITUTE_LABS[0];
 }
 
 export function saveCollegeLab(lab: CollegeLabInfo): CollegeLabInfo[] {
+  if (isPhantomLab(lab)) {
+    return getAllCollegeLabs();
+  }
   const current = getAllCollegeLabs();
   const idx = current.findIndex((l) => l.labId.toUpperCase() === lab.labId.toUpperCase());
   let updated: CollegeLabInfo[];
@@ -375,27 +472,38 @@ export async function deleteCollegeLab(labId: string): Promise<CollegeLabInfo[]>
   const current = getAllCollegeLabs();
   const updated = current.filter((l) => l.labId.toUpperCase() !== labId.toUpperCase());
   if (typeof window !== 'undefined') {
-    localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(updated));
-    notifyLabsChanged(updated);
+    localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(updated.length > 0 ? updated : DEFAULT_INSTITUTE_LABS));
+    notifyLabsChanged(updated.length > 0 ? updated : DEFAULT_INSTITUTE_LABS);
   }
   await deleteCollegeLabFromCloud(labId);
   await clearAllStations(labId);
-  return updated;
+  return updated.length > 0 ? updated : [...DEFAULT_INSTITUTE_LABS];
 }
 
 export async function resetCollegeLabs(): Promise<CollegeLabInfo[]> {
+  // Purge any phantom labs from cloud first
+  await purgePhantomExamLabs();
+
   if (typeof window !== 'undefined') {
-    localStorage.removeItem(CUSTOM_LABS_KEY);
-    notifyLabsChanged([]);
+    localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(DEFAULT_INSTITUTE_LABS));
+    notifyLabsChanged(DEFAULT_INSTITUTE_LABS);
   }
+
+  // Clear all existing lab records and re-seed default 5 physical labs in Supabase
   await clearAllCollegeLabsFromCloud();
+  for (const lab of DEFAULT_INSTITUTE_LABS) {
+    await saveCollegeLabToCloud(lab);
+  }
+
   await clearAllStations();
-  return [];
+  return [...DEFAULT_INSTITUTE_LABS];
 }
 
-// Automatically sync college labs on load
+// Automatically purge phantom labs and sync college labs on load
 if (typeof window !== 'undefined') {
-  void syncCollegeLabsFromCloud();
+  void purgePhantomExamLabs().then(() => {
+    void syncCollegeLabsFromCloud();
+  });
 }
 
 // ── PURGE CORRUPTED / LEGACY ENTRIES FROM LOCAL STORAGE ──
@@ -661,6 +769,8 @@ export async function clearAllStations(labId?: string): Promise<void> {
         }
       }
       keysToRemove.forEach((k) => localStorage.removeItem(k));
+      // Purge any lingering phantom exam labs
+      await purgePhantomExamLabs();
     } else {
       // Clear only this specific lab
       const currentStations = getLiveStations();
@@ -680,6 +790,9 @@ export async function clearAllStations(labId?: string): Promise<void> {
       } catch {}
 
       localStorage.removeItem(`${LAB_LOCK_PREFIX}${labId}`);
+      if (labId && (labId === 'LAB-06' || labId === 'LAB-721')) {
+        await purgePhantomExamLabs();
+      }
     }
 
     await clearAllStationsFromCloud(labId);

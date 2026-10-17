@@ -29,7 +29,8 @@ import {
   clearSubmittedStations,
   removeSingleStation,
   sendProctorConcludeAndFreeCommand,
-  ensureLabForExam
+  purgePhantomExamLabs,
+  isPhantomLab
 } from '../services/adminService';
 import { getAllExams, getAllAttempts, gradeAttempt } from '../services/mcqService';
 import { fetchStationsFromCloud, subscribeToCloudStations } from '../services/supabaseService';
@@ -289,16 +290,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Synchronize and subscribe to college lab inventory from Supabase Cloud
   useEffect(() => {
-    void syncCollegeLabsFromCloud().then((labs) => {
-      if (labs && labs.length > 0) setAllLabs(labs);
+    void purgePhantomExamLabs().then((cleanLabs) => {
+      setAllLabs(cleanLabs);
+      void syncCollegeLabsFromCloud().then((labs) => {
+        if (labs && labs.length > 0) setAllLabs(labs.filter((l) => !isPhantomLab(l)));
+      });
     });
 
     const handleLabsChanged = (e: Event) => {
       const custom = e as CustomEvent<CollegeLabInfo[]>;
       if (custom?.detail && Array.isArray(custom.detail)) {
-        setAllLabs(custom.detail);
+        setAllLabs(custom.detail.filter((l) => !isPhantomLab(l)));
       } else {
-        setAllLabs(getAllCollegeLabs());
+        setAllLabs(getAllCollegeLabs().filter((l) => !isPhantomLab(l)));
       }
     };
 
@@ -309,6 +313,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       window.removeEventListener('storage', handleLabsChanged);
     };
   }, []);
+
+  // Ensure selectedLabId doesn't point to a purged phantom lab
+  useEffect(() => {
+    if (selectedLabId !== 'all' && !allLabs.some((l) => l.labId === selectedLabId)) {
+      setSelectedLabId('all');
+    }
+  }, [allLabs, selectedLabId]);
 
   const campusStats = getCampusStats();
   const currentLabInfo = allLabs.find((l) => l.labId === selectedLabId) || allLabs[0];
@@ -1099,8 +1110,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               <button
                 className="btn btn-ghost btn-sm"
-                onClick={() => {
-                  clearAllStations();
+                onClick={async () => {
+                  await clearAllStations();
+                  const cleanLabs = await purgePhantomExamLabs();
+                  setAllLabs(cleanLabs);
+                  setSelectedLabId('all');
                   loadData();
                   playSound('click');
                 }}
@@ -2690,13 +2704,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <ConfirmationModal
         isOpen={showResetRoomConfirm}
         title="Reset Proctoring Room?"
-        message="This will clear all candidate workstations and reset the live invigilation control room. Active streaming stations will be re-detected on their next telemetry ping."
+        message="This will clear all candidate workstations, reset the live invigilation control room, and purge any temporary exam testing labs."
         confirmText="Yes, Reset Room"
         cancelText="Cancel"
         tone="danger"
         icon="danger"
         onConfirm={async () => {
           await clearAllStations(selectedLabId);
+          const cleanLabs = await purgePhantomExamLabs();
+          setAllLabs(cleanLabs);
+          setSelectedLabId('all');
           loadData();
           playSound('click');
           setShowResetRoomConfirm(false);

@@ -28,10 +28,11 @@ import {
   subscribeToMcqCloudChanges,
   fetchQuestionsFromCloud,
   fetchExamsFromCloud,
-  fetchAttemptsFromCloud
+  fetchAttemptsFromCloud,
+  deleteCollegeLabFromCloud
 } from './supabaseService';
 import { getSynchronizedNow } from './timeSyncService';
-import { ensureLabForExam } from './adminService';
+import { ensureLabForExam, purgePhantomExamLabs } from './adminService';
 
 // ── Persistence helpers ───────────────────────────────────────────────────────
 
@@ -291,7 +292,13 @@ export function getAllExams(): MCQExamConfig[] {
       !String(e.id || '').startsWith('seed-')
     )
     .map((e) => {
-      if (!e.assignedLabId && e.id && e.title) {
+      const isPhantom =
+        !e.assignedLabId ||
+        e.assignedLabId === 'LAB-06' ||
+        e.assignedLabId === 'LAB-721' ||
+        e.assignedLabName?.toLowerCase().startsWith('exam:');
+
+      if (isPhantom && e.id && e.title) {
         try {
           const lab = ensureLabForExam(e);
           e.assignedLabId = lab.labId;
@@ -393,6 +400,18 @@ export async function deleteExam(id: string): Promise<boolean> {
     const remainingQuestions = getAllQuestions().filter((q) => !qSet.has(q.id));
     save(MCQ_STORAGE_KEYS.QUESTIONS, remainingQuestions);
     void deleteQuestionsByIdsFromCloud(examToDelete.questionIds);
+  }
+
+  // If this exam was bound to a phantom lab, delete it from cloud and purge
+  if (examToDelete?.assignedLabId) {
+    if (
+      examToDelete.assignedLabId === 'LAB-06' ||
+      examToDelete.assignedLabId === 'LAB-721' ||
+      examToDelete.assignedLabName?.toLowerCase().startsWith('exam:')
+    ) {
+      void deleteCollegeLabFromCloud(examToDelete.assignedLabId);
+      void purgePhantomExamLabs();
+    }
   }
 
   const ok = await deleteExamFromCloud(id);
