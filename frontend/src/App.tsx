@@ -11,6 +11,7 @@ import { AuthorityLogin, PaperSetterLogin, AdminLogin } from './components/auth/
 import { AuthorityInvitePortal } from './components/auth/AuthorityInvitePortal';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { LandingPage } from './components/LandingPage';
+import { LaunchFilmPlayer } from './components/LaunchFilmPlayer';
 import {
   CodeSubmission,
   AnalysisReport,
@@ -347,7 +348,7 @@ export const App: React.FC = () => {
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }} id="app-root">
       <ScrollToTop />
 
-      {location.pathname !== '/' && (
+      {location.pathname !== '/' && location.pathname !== '/launch' && (
         <Navbar
           theme={theme}
           onToggleTheme={toggleTheme}
@@ -489,6 +490,7 @@ export const App: React.FC = () => {
               </ProtectedRoute>
             }
           />
+          <Route path="/launch" element={<LaunchFilmPlayer />} />
           {/* Catch-all fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

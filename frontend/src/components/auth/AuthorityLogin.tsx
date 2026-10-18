@@ -48,7 +48,6 @@ import {
   sendMagicLink,
   updateUserPassword,
   getAuthSession,
-  loginWithInviteToken,
   AuthorityRole,
   setStoredAuthorityRole
 } from '../../services/authService';
@@ -117,15 +116,9 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
     const hasProviderCallback = hash.includes('access_token=') ||
       hash.includes('type=recovery') || hash.includes('type=invite');
 
-    if (typeParam === 'invite' || tokenParam) {
-      const activeEmail = emailParam || email || (role === 'admin' ? 'admin@axent.edu' : 'setter@axent.edu');
-      if (emailParam && !email) setEmail(activeEmail);
-      loginWithInviteToken(tokenParam || 'direct-token', activeEmail, role);
+    if (hasProviderCallback) {
       setActiveTab('set_password');
-      setSuccessMessage(`Authority invitation confirmed for ${activeEmail}. You are authenticated as ${role === 'admin' ? 'Chief Proctor' : 'Paper Setter'}.`);
-    } else if (hasProviderCallback) {
-      setActiveTab('set_password');
-      setSuccessMessage('Authentication callback detected. Please configure your institutional password below.');
+      setSuccessMessage('Authentication callback verified. Please configure your institutional password below.');
     }
   }, [typeParam, searchParams, role]);
 
@@ -146,14 +139,13 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
 
     const trimmedEmail = email.trim().toLowerCase();
     if (!trimmedEmail) {
-      setErrorMessage('Institutional Authority ID or email address is required.');
+      setErrorMessage('Institutional email address is required.');
       playSound('warning');
       return;
     }
-    const isMasterAuth = trimmedEmail === 'teamaxiogen' || trimmedEmail === 'teamaxiogen@axent.edu' || trimmedEmail === 'teamaxiogen@axent.in';
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!isMasterAuth && !emailRegex.test(trimmedEmail)) {
-      setErrorMessage('Please provide a valid institutional email or Authority ID (e.g. Teamaxiogen).');
+    if (!emailRegex.test(trimmedEmail)) {
+      setErrorMessage('Please provide a valid institutional email address.');
       playSound('warning');
       return;
     }
@@ -665,14 +657,14 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
             <form onSubmit={handlePasswordLogin} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', marginBottom: '5px' }}>
-                  Institutional Email or Authority ID
+                  Institutional Email
                 </label>
                 <div style={{ position: 'relative' }}>
                   <Mail size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
                   <input
-                    type="text"
+                    type="email"
                     required
-                    placeholder="teamaxiogen or professor@institution.edu"
+                    placeholder="professor@institution.edu"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     autoCapitalize="none"

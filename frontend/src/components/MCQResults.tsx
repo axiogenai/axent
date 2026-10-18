@@ -116,7 +116,7 @@ const AttemptRow: React.FC<{ attempt: MCQAttempt }> = ({ attempt }) => {
             <span style={{ textOverflow: 'ellipsis', overflow: 'hidden' }}>{attempt.examTitle || 'MCQ Exam'}</span>
           </div>
           <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-            Exam ID: <span style={{ fontFamily: 'var(--font-mono)' }}>{attempt.examId.slice(0, 10)}</span>
+            Exam ID: <span style={{ fontFamily: 'var(--font-mono)' }}>{attempt.examId}</span>
           </div>
         </div>
 

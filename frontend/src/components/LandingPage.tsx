@@ -36,6 +36,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         }
         navLinks={[
           { label: 'Examination Hall', href: '/mcq', active: true },
+          { label: '25s Launch Film', href: '/launch' }
         ]}
         headline={
           <>
@@ -46,9 +47,12 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         }
         ctaLabel="Enter Student Examination Hall"
         ctaHref="/mcq"
+        secondaryCtaLabel="Watch 25s Launch Film"
+        secondaryCtaHref="/launch"
         description={'Enterprise-grade academic assessment, real-time dual-stream invigilation,\nand zero-tamper cryptographic examination ledgers.'}
         socialLinks={[
           { label: 'team.axiogen.in', href: 'https://team.axiogen.in' },
+          { label: 'Launch Film (4K)', href: '/launch' }
         ]}
         onNavLinkClick={(link) => handleNav(link.href)}
       />

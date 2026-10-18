@@ -4,12 +4,8 @@ import { CandidateStation, CollegeLabInfo } from '../types/dna';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://jswcwixeoilxuhbzojee.supabase.co';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impzd2N3aXhlb2lseHVoYnpvamVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5NTU0OTMsImV4cCI6MjEwNzUzMTQ5M30.A73oIpxR0FdrK5GOb6zeEh-xH0NY3RuJoQY5hngOrew';
-const SUPABASE_SERVICE_ROLE_KEY = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impzd2N3aXhlb2lseHVoYnpvamVlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MTk1NTQ5MywiZXhwIjoyMTA3NTMxNDkzfQ.FgGhbuOL-aQxEpDKp3tDNFZmnfZym-VnWw7eBAWvBZs';
 
-// Resilient Cloud Access: Fallback to Service Role key when anon RLS is restrictive
-const keyToUse = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
-
-export const supabase: SupabaseClient = createClient(SUPABASE_URL, keyToUse, {
+export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
@@ -890,7 +886,7 @@ export async function checkSupabaseHealth(): Promise<SupabaseHealthReport> {
     lastChecked: Date.now(),
   };
 
-  if (!SUPABASE_URL || !keyToUse) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     result.errorMessage = 'Supabase credentials not configured';
     return result;
   }

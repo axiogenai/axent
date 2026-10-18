@@ -131,48 +131,8 @@ export async function signInWithPassword(
   if (!trimmedEmail) return { user: null, session: null, error: 'Institutional email address is required.' };
   if (!pass) return { user: null, session: null, error: 'Password is required.' };
 
-  // Master Root Institutional Authority Credentials
-  const isMasterAdmin =
-    (trimmedEmail === 'teamaxiogen' || trimmedEmail === 'teamaxiogen@axent.edu' || trimmedEmail === 'teamaxiogen@axent.in') &&
-    pass === 'Adi.patil#1';
-
-  // Standard Default Institutional Credentials for offline / local demo
-  const isDefaultAdmin = trimmedEmail === 'admin@axent.edu' && (pass === 'axent@123' || pass === 'Adi.patil#1');
-  const isDefaultSetter = trimmedEmail === 'setter@axent.edu' && pass === 'axent@123';
-
-  // Check locally saved authority credentials
-  let isLocalCredValid = false;
-  try {
-    const savedCreds = JSON.parse(localStorage.getItem('axent_authority_credentials') || '{}');
-    if (savedCreds[trimmedEmail] && savedCreds[trimmedEmail] === pass) {
-      isLocalCredValid = true;
-    }
-  } catch {}
-
-  if (isMasterAdmin || isDefaultAdmin || isDefaultSetter || isLocalCredValid) {
-    const effectiveRole: AuthorityRole = role === 'paper_setter'
-      ? 'paper_setter'
-      : (isMasterAdmin || isDefaultAdmin ? 'admin' : role);
-    const session = {
-      access_token: `axent-local-${effectiveRole}-${Date.now()}`,
-      user: {
-        id: `auth-${effectiveRole}-${trimmedEmail.replace(/[^a-zA-Z0-9]/g, '_')}`,
-        email: trimmedEmail.includes('@') ? trimmedEmail : `${trimmedEmail}@axent.edu`,
-        app_metadata: { role: effectiveRole },
-        user_metadata: {
-          role: effectiveRole,
-          full_name: effectiveRole === 'admin' ? 'Chief Proctor / Admin' : 'Paper Setter Authority'
-        }
-      }
-    };
-    try {
-      sessionStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(session));
-      sessionStorage.setItem(LOCAL_ROLE_KEY, effectiveRole);
-      localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(session));
-      localStorage.setItem(LOCAL_ROLE_KEY, effectiveRole);
-    } catch {}
-    return { user: session.user as any, session: session as any, error: null };
-  }
+  // Strict Zero-Trust: All authority authentication MUST verify with Supabase Auth.
+  // Zero hardcoded passwords or offline authority bypasses are permitted.
 
   // Attempt Supabase authentication if available
   if (isSupabaseConnected()) {
@@ -283,27 +243,7 @@ export async function signUpWithPassword(
     }
   }
 
-  // Local offline registration fallback
-  try {
-    const creds = JSON.parse(localStorage.getItem('axent_authority_credentials') || '{}');
-    creds[trimmedEmail] = pass;
-    localStorage.setItem('axent_authority_credentials', JSON.stringify(creds));
-
-    const dummySession = {
-      access_token: `axent-local-${role}-${Date.now()}`,
-      user: {
-        id: `auth-${role}-${trimmedEmail.replace(/[^a-zA-Z0-9]/g, '_')}`,
-        email: trimmedEmail,
-        app_metadata: { role },
-        user_metadata: { role }
-      }
-    };
-    localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(dummySession));
-    localStorage.setItem(LOCAL_ROLE_KEY, role);
-    return { user: dummySession.user as any, session: dummySession as any, error: null };
-  } catch {
-    return { user: null, session: null, error: 'Unable to register authority profile.' };
-  }
+  return { user: null, session: null, error: 'Registration service is unavailable. Please ensure your cloud connection is active.' };
 }
 
 // ── Send Magic Link / Authority Invite ───────────────────────────────────────
@@ -379,39 +319,26 @@ export async function sendMagicLink(
   return { success: true, error: null, directLink: directAuthUrl, isDirectLink: true, token: inviteToken };
 }
 
-// ── Authenticate via Invite Token ─────────────────────────────────────────────
+// ── Authenticate via Invite Token (Deprecated / Secured) ─────────────────────
 
 export function loginWithInviteToken(
-  token: string,
-  email: string,
-  role: AuthorityRole = 'paper_setter'
-): { user: User; session: Session } {
-  const trimmedEmail = email.trim().toLowerCase();
-  const session = {
-    access_token: `axent-invite-${role}-${Date.now()}`,
-    user: {
-      id: `auth-invite-${role}-${trimmedEmail.replace(/[^a-zA-Z0-9]/g, '_')}`,
-      email: trimmedEmail,
-      app_metadata: { role },
-      user_metadata: {
-        role,
-        full_name: role === 'admin' ? 'Chief Proctor / Admin' : 'Paper Setter Faculty',
-        invite_token: token
-      }
-    }
-  };
-  try {
-    localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(session));
-    localStorage.setItem(LOCAL_ROLE_KEY, role);
-  } catch {}
-  return { user: session.user as any, session: session as any };
+  _token: string,
+  _email: string,
+  _role: AuthorityRole = 'paper_setter'
+): { user: User | null; session: Session | null; error?: string } {
+  console.warn('[AuthService] Direct token bypass is permanently disabled. Please authenticate via Supabase Auth.');
+  return {
+    user: null,
+    session: null,
+    error: 'Direct token bypass is permanently disabled for security. Please sign in with your institutional credentials.'
+  } as any;
 }
 
 // ── Update / Set Authority Password ──────────────────────────────────────────
 
 export async function updateUserPassword(
   newPass: string,
-  targetEmail?: string
+  _targetEmail?: string
 ): Promise<{ success: boolean; error: string | null }> {
   if (!newPass || newPass.length < 8) {
     return { success: false, error: 'Password must be at least 8 characters long.' };
@@ -421,23 +348,13 @@ export async function updateUserPassword(
     try {
       const { error } = await supabase.auth.updateUser({ password: newPass });
       if (!error) return { success: true, error: null };
-    } catch {}
+      return { success: false, error: error.message };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Failed to update password.' };
+    }
   }
 
-  // Resilient fallback: store locally
-  try {
-    const localSess = localStorage.getItem(LOCAL_AUTH_KEY);
-    const parsed = localSess ? JSON.parse(localSess) : null;
-    const email = targetEmail || parsed?.user?.email;
-    if (email) {
-      const creds = JSON.parse(localStorage.getItem('axent_authority_credentials') || '{}');
-      creds[email.toLowerCase()] = newPass;
-      localStorage.setItem('axent_authority_credentials', JSON.stringify(creds));
-      return { success: true, error: null };
-    }
-  } catch {}
-
-  return { success: true, error: null };
+  return { success: false, error: 'Authentication service is unavailable. Please check your cloud connection.' };
 }
 
 // ── Sign Out ─────────────────────────────────────────────────────────────────
