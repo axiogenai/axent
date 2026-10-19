@@ -248,7 +248,7 @@ export const PaperSetterPortal: React.FC = () => {
             Faculty Examination &amp; Question Authoring Matrix
           </h2>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            Author questions, configure exam papers, and schedule examination sittings • Bloom&apos;s Cognitive Taxonomy • Cloud Ledger Sync • Last updated: {lastRefreshed || 'Just now'}
+            Author questions, configure exam papers, and schedule examination sittings • Bloom&apos;s Cognitive Taxonomy • Last updated: {lastRefreshed || 'Just now'}
           </div>
         </div>
 
@@ -383,8 +383,6 @@ export const PaperSetterPortal: React.FC = () => {
           <MetricTag icon={<BookOpen size={11} color="var(--accent)" />} label="BOARD" value="Academic Board" tone="neutral" />
           <MetricTag icon={<Building2 size={11} color="var(--accent)" />} label="DEPT" value="Computer Science &amp; Eng" tone="neutral" />
           <MetricTag icon={<Sliders size={11} color="var(--accent)" />} label="STANDARDS" value="Bloom's Revised Taxonomy" tone="neutral" />
-          <MetricTag icon={<Bot size={11} color="var(--accent)" />} label="AI ENGINE" value="Groq Llama 3.3 70B" tone="neutral" />
-          <MetricTag icon={<Database size={11} color="var(--accent)" />} label="LEDGER" value="Supabase Cloud (Active)" tone="neutral" />
         </div>
 
         <MetricTag
