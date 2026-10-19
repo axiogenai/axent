@@ -12,6 +12,7 @@ import { AuthorityInvitePortal } from './components/auth/AuthorityInvitePortal';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { LandingPage } from './components/LandingPage';
 import { LaunchFilmPlayer } from './components/LaunchFilmPlayer';
+import { SEOUpdater } from './components/SEOUpdater';
 import {
   CodeSubmission,
   AnalysisReport,
@@ -347,6 +348,7 @@ export const App: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }} id="app-root">
       <ScrollToTop />
+      <SEOUpdater />
 
       {location.pathname !== '/' && location.pathname !== '/launch' && (
         <Navbar

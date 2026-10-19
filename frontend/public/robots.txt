@@ -1,0 +1,22 @@
+# ==============================================================================
+# Axent Robots.txt — Search Engine Crawling Directive
+# Domain: https://axent.axiogen.in
+# ==============================================================================
+
+User-agent: *
+Allow: /
+Allow: /mcq
+Allow: /launch
+Allow: /about
+
+# Disallow indexing of internal and administrative authority consoles
+Disallow: /admin
+Disallow: /admin/*
+Disallow: /paper-setter
+Disallow: /paper-setter/*
+Disallow: /authority-invite
+Disallow: /api/*
+
+# Host & Sitemap specifications
+Host: https://axent.axiogen.in
+Sitemap: https://axent.axiogen.in/sitemap.xml
