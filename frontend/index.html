@@ -19,7 +19,7 @@
     <!-- Canonical URL -->
     <link rel="canonical" href="https://axent.axiogen.in/" />
 
-    <!-- Favicons and PWA Icons -->
+    <!-- Favicons -->
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" media="(prefers-color-scheme: dark)" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-light-32x32.png" media="(prefers-color-scheme: light)" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
@@ -27,12 +27,13 @@
     <link rel="icon" href="/favicon.ico" />
     <link rel="manifest" href="/site.webmanifest" />
 
-    <!-- Mobile Web App Capability -->
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Axent" />
-    <meta name="application-name" content="Axent" />
-    <meta name="format-detection" content="telephone=no" />
+    <!-- Pure Browser Execution: Suppress native PWA Install prompts -->
+    <script>
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        return false;
+      });
+    </script>
 
     <!-- Open Graph / Facebook / LinkedIn / WhatsApp -->
     <meta property="og:type" content="website" />

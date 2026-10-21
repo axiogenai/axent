@@ -62,6 +62,9 @@ export function startAntiCheatingShield(config: AntiCheatingConfig): AntiCheatin
   };
   void initWakeLock();
 
+  // Track reported infractions so intervals never spam multiple strikes
+  const reportedInfractions = new Set<string>();
+
   // ── 2. CURSOR DEPARTURE & FLOATING AI DETECTION (Desktop & Tablets) ─────────
   const handleMouseLeave = (e: MouseEvent) => {
     if (!isRunning || config.enableCursorDepartureGuard === false) return;
@@ -73,8 +76,7 @@ export function startAntiCheatingShield(config: AntiCheatingConfig): AntiCheatin
         if (!isRunning) return;
         if (Date.now() - shieldStartTime < STARTUP_GRACE_PERIOD_MS) return;
         playSound('warning');
-        config.onWarningBanner('AI GUARD: Cursor departed exam window. External AI assistant or secondary panel interaction detected.');
-        config.onInfraction('Cursor departed exam viewport towards external application / AI assistant');
+        config.onWarningBanner('AI GUARD: Cursor departed exam window. Maintain visual focus on your examination terminal.');
         if (config.onAiAlert) config.onAiAlert('Cursor departure outside viewport');
       }, 7000);
     }
@@ -112,24 +114,14 @@ export function startAntiCheatingShield(config: AntiCheatingConfig): AntiCheatin
         const found = document.querySelector(sel);
         if (found) {
           (found as HTMLElement).style.display = 'none';
-          playSound('warning');
-          config.onWarningBanner('SECURITY PROTOCOL: Unauthorized floating AI assistant extension detected and blocked.');
-          config.onInfraction(`Unauthorized AI extension overlay detected: ${sel}`);
-          if (config.onAiAlert) config.onAiAlert(`Extension element ${sel} detected in DOM`);
+          if (!reportedInfractions.has(sel)) {
+            reportedInfractions.add(sel);
+            playSound('warning');
+            config.onWarningBanner('SECURITY PROTOCOL: Unauthorized floating AI assistant extension detected and suppressed.');
+            config.onInfraction(`Unauthorized AI extension overlay detected: ${sel}`);
+            if (config.onAiAlert) config.onAiAlert(`Extension element ${sel} detected in DOM`);
+          }
           break;
-        }
-      }
-
-      // Check for mobile / split-screen viewport anomalies
-      if (window.visualViewport && (Date.now() - shieldStartTime >= STARTUP_GRACE_PERIOD_MS)) {
-        const heightRatio = window.visualViewport.height / window.innerHeight;
-        // On mobile, if height shrinks under 50% without focused text input, user entered split-screen multitasking!
-        const activeTag = document.activeElement?.tagName?.toLowerCase();
-        const isTyping = activeTag === 'input' || activeTag === 'textarea';
-        if (!isTyping && heightRatio < 0.50 && window.innerWidth <= 768) {
-          playSound('warning');
-          config.onWarningBanner('MOBILE SHIELD: Split-screen multitasking detected! Close secondary floating applications.');
-          config.onInfraction('Split-screen multitasking / floating app detected');
         }
       }
     } catch {

@@ -3,7 +3,7 @@
   "short_name": "Axent",
   "description": "Enterprise Academic Examination & Cognitive Evaluation Platform",
   "start_url": "/",
-  "display": "standalone",
+  "display": "browser",
   "background_color": "#0A0A0C",
   "theme_color": "#0A0A0C",
   "icons": [

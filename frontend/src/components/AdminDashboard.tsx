@@ -39,7 +39,8 @@ import {
   getAllAttempts,
   gradeAttempt,
   auditAndCleanFinishedExamLabs,
-  cleanupExamLabWhenOver
+  cleanupExamLabWhenOver,
+  syncFromSupabase
 } from '../services/mcqService';
 import { fetchStationsFromCloud, subscribeToCloudStations } from '../services/supabaseService';
 import { InstituteLabManagerModal } from './InstituteLabManagerModal';
@@ -280,6 +281,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   useEffect(() => {
     loadData();
+    void syncFromSupabase().then(() => loadData());
     const unsubscribeBroadcast = subscribeToCctvBroadcast(() => {
       loadData();
     });

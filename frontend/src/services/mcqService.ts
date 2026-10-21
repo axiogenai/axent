@@ -293,11 +293,11 @@ export function getAllExams(): MCQExamConfig[] {
   const deletedIds = getDeletedExamIds();
   const loaded = load<MCQExamConfig[]>(MCQ_STORAGE_KEYS.EXAMS, []);
   let needsSave = false;
-  // Return loaded real exams (clean, zero fake seed fallback, excluding deleted)
+  // Return loaded real exams (clean, zero fake seed fallback, excluding deleted unless published)
   const list = (loaded || [])
     .filter((e): e is MCQExamConfig => 
       Boolean(e && typeof e === 'object' && e.id) &&
-      !deletedIds.has(e.id) &&
+      (!deletedIds.has(e.id) || e.status === 'PUBLISHED') &&
       !String(e.id || '').startsWith('exam-aptitude-') && 
       !String(e.id || '').startsWith('exam-ise-') &&
       !String(e.id || '').startsWith('seed-')
@@ -1298,11 +1298,18 @@ export async function syncFromSupabase(): Promise<void> {
     if (cloudE !== null) {
       const deletedIds = getDeletedExamIds();
 
-      // Ensure any cloud exams that were marked deleted locally get purged from cloud
+      // If a cloud exam is PUBLISHED, remove it from local deleted tombstones so stale local storage never hides valid cloud exams
+      let tombstonesUpdated = false;
       for (const ex of cloudE) {
-        if (deletedIds.has(ex.id)) {
-          void deleteExamFromCloud(ex.id);
+        if (ex.status === 'PUBLISHED' && deletedIds.has(ex.id)) {
+          deletedIds.delete(ex.id);
+          tombstonesUpdated = true;
         }
+      }
+      if (tombstonesUpdated && typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(DELETED_EXAMS_KEY, JSON.stringify(Array.from(deletedIds)));
+        } catch {}
       }
 
       // Filter out deleted IDs and merge with locally created active exams

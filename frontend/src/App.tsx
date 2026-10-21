@@ -13,6 +13,7 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { LandingPage } from './components/LandingPage';
 import { LaunchFilmPlayer } from './components/LaunchFilmPlayer';
 import { SEOUpdater } from './components/SEOUpdater';
+import { VercelBadge } from './components/ui/VercelBadge';
 import {
   CodeSubmission,
   AnalysisReport,
@@ -497,6 +498,36 @@ export const App: React.FC = () => {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+
+      {/* Universal Institutional Footer with Vercel Sponsorship Badge */}
+      {location.pathname !== '/' && location.pathname !== '/launch' && !location.pathname.startsWith('/launch') && (
+        <footer
+          style={{
+            borderTop: '1px solid var(--border)',
+            background: 'var(--bg-elevated)',
+            padding: '16px clamp(16px, 4vw, 32px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+            fontSize: '12px',
+            color: 'var(--text-muted)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>AXENT</span>
+            <span>·</span>
+            <span>Autonomous Academic Evaluation</span>
+            <span>·</span>
+            <span>© 2026 team.axiogen.in</span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            <VercelBadge style={{ height: '24px' }} />
+          </div>
+        </footer>
+      )}
     </div>
   );
 };

@@ -223,6 +223,11 @@ async function writeExamToCloud(e: MCQExamConfig): Promise<boolean> {
     const cleanInstructions = (e.instructions || '').replace(/<!--AXENT_META:[\s\S]*?-->/g, '').trim();
     const finalInstructions = cleanInstructions ? `${cleanInstructions}\n${metaTag}` : metaTag;
 
+    const normalizedStatus = String(e.status || 'PUBLISHED').toUpperCase().trim();
+    const validStatus = ['DRAFT', 'PUBLISHED', 'CLOSED', 'ARCHIVED'].includes(normalizedStatus)
+      ? normalizedStatus
+      : 'PUBLISHED';
+
     const row: any = {
       id: e.id,
       title: e.title,
@@ -230,24 +235,24 @@ async function writeExamToCloud(e: MCQExamConfig): Promise<boolean> {
       instructions: finalInstructions,
       subject: e.subject || '',
       topic: e.topic || '',
-      exam_category: e.examCategory,
-      duration_minutes: e.durationMinutes,
-      start_time: e.startTime || null,
-      end_time: e.endTime || null,
-      total_marks: e.totalMarks,
-      question_count: e.questionCount ?? (Array.isArray(e.questionIds) ? e.questionIds.length : 0),
+      exam_category: e.examCategory || 'Internal Assessment (CIE)',
+      duration_minutes: Math.max(1, Math.round(Number(e.durationMinutes) || 30)),
+      start_time: e.startTime ? Number(e.startTime) : null,
+      end_time: e.endTime ? Number(e.endTime) : null,
+      total_marks: Number(e.totalMarks) || 0,
+      question_count: Math.max(1, Number(e.questionCount) || (Array.isArray(e.questionIds) ? e.questionIds.length : 10)),
       question_ids: Array.isArray(e.questionIds) ? e.questionIds : [],
-      shuffle_questions: e.shuffleQuestions,
-      shuffle_options: e.shuffleOptions,
-      negative_marking_enabled: e.negativeMarkingEnabled,
-      allow_review: e.allowReview,
-      show_explanations_after_submit: e.showExplanationsAfterSubmit,
-      max_attempts: e.maxAttempts,
-      status: e.status,
-      created_at: e.createdAt,
-      updated_at: e.updatedAt,
-      created_by: e.createdBy,
-      published_at: e.publishedAt || null,
+      shuffle_questions: Boolean(e.shuffleQuestions ?? true),
+      shuffle_options: Boolean(e.shuffleOptions ?? true),
+      negative_marking_enabled: Boolean(e.negativeMarkingEnabled),
+      allow_review: Boolean(e.allowReview ?? true),
+      show_explanations_after_submit: Boolean(e.showExplanationsAfterSubmit ?? true),
+      max_attempts: Math.max(1, Number(e.maxAttempts) || 1),
+      status: validStatus,
+      created_at: Number(e.createdAt) || Date.now(),
+      updated_at: Number(e.updatedAt) || Date.now(),
+      created_by: e.createdBy || 'admin',
+      published_at: e.publishedAt ? Number(e.publishedAt) : null,
     };
     const { error } = await supabase.from('mcq_exams').upsert(row);
     if (error) {

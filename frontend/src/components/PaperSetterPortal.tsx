@@ -9,9 +9,6 @@ import {
   ShieldCheck,
   RefreshCw,
   Database,
-  Radio,
-  Building2,
-  Sliders,
   Bot,
   ExternalLink,
   Award
@@ -364,33 +361,7 @@ export const PaperSetterPortal: React.FC = () => {
         </div>
       </div>
 
-      {/* ── 3. CURRICULUM & STANDARDS METACHIPS BANNER ── */}
-      <div
-        style={{
-          background: 'var(--bg-surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-md)',
-          padding: '8px 14px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '8px',
-          fontSize: '12px'
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <MetricTag icon={<BookOpen size={11} color="var(--accent)" />} label="BOARD" value="Academic Board" tone="neutral" />
-          <MetricTag icon={<Building2 size={11} color="var(--accent)" />} label="DEPT" value="Computer Science &amp; Eng" tone="neutral" />
-          <MetricTag icon={<Sliders size={11} color="var(--accent)" />} label="STANDARDS" value="Bloom's Revised Taxonomy" tone="neutral" />
-        </div>
 
-        <MetricTag
-          icon={<Radio size={10} />}
-          value="Faculty Session Authenticated"
-          tone="success"
-        />
-      </div>
 
       {/* ── 4. FILTER TABS & SUB-PORTAL SELECTION (ContinuousTabs) ── */}
       <div
