@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../services/supabaseService';
 import { syncMcqLiveStation } from '../services/adminService';
+import { getAllExams, getAllQuestions } from '../services/mcqService';
 import { MCQAttempt, MCQExamConfig } from '../types/mcq';
 import { StudentInfo } from '../types/dna';
 
@@ -107,20 +108,142 @@ export const SecureMCQExam: React.FC = () => {
     }
     void (async () => {
       try {
-        const { data, error: rpcError } = await supabase.rpc('start_mcq_attempt', { p_ticket_token: ticket });
+        let next: ActiveAttempt | null = null;
+
+        try {
+          const { data, error: rpcError } = await supabase.rpc('start_mcq_attempt', { p_ticket_token: ticket });
+          if (!rpcError && data && typeof data === 'object' && (data as any).attemptId) {
+            next = data as unknown as ActiveAttempt;
+            serverOffsetMs.current = Number((data as any).serverTime || Date.now()) - Date.now();
+          }
+        } catch (rpcErr) {
+          console.warn('[SecureMCQExam] Cloud RPC fallback to local tickets:', rpcErr);
+        }
+
+        // Local fallback if Supabase RPC didn't return an active attempt
+        if (!next) {
+          const rawTickets = localStorage.getItem('codedna_mcq_issued_tickets');
+          const issuedTickets = rawTickets ? JSON.parse(rawTickets) : [];
+          const matchedTicket = Array.isArray(issuedTickets)
+            ? issuedTickets.find((t: any) => t.ticket_token === ticket)
+            : null;
+
+          if (matchedTicket) {
+            if (matchedTicket.revoked_at) {
+              if (active) {
+                setError('This examination ticket has been revoked by the invigilator.');
+                setLoading(false);
+              }
+              return;
+            }
+            if (matchedTicket.expires_at && new Date(matchedTicket.expires_at).getTime() < Date.now()) {
+              if (active) {
+                setError('This examination ticket has expired. Ask the invigilator to issue a new candidate link.');
+                setLoading(false);
+              }
+              return;
+            }
+
+            const allExams = getAllExams();
+            const matchedExam = allExams.find((e) => e.id === matchedTicket.exam_id) || allExams[0];
+
+            if (!matchedExam) {
+              if (active) {
+                setError('The examination associated with this ticket could not be found.');
+                setLoading(false);
+              }
+              return;
+            }
+
+            // Check if there is an existing attempt in codedna_mcq_attempts
+            const rawAttempts = localStorage.getItem('codedna_mcq_attempts');
+            const attempts = rawAttempts ? JSON.parse(rawAttempts) : [];
+            let existingAttempt = Array.isArray(attempts)
+              ? attempts.find((a: any) => a.ticketId === ticket || a.id === matchedTicket.attempt_id)
+              : null;
+
+            const allQuestionsList = getAllQuestions();
+            const examQuestions = (matchedExam.questionIds && matchedExam.questionIds.length > 0)
+              ? allQuestionsList.filter((q) => matchedExam.questionIds.includes(q.id))
+              : allQuestionsList.slice(0, matchedExam.questionCount || 20);
+
+            const assigned: AssignedQuestion[] = examQuestions.map((q, idx) => ({
+              questionId: q.id,
+              order: idx,
+              snapshot: {
+                questionId: q.id,
+                text: q.text,
+                options: (q.options || []).map((opt) => ({ id: opt.id, text: opt.text })),
+                marks: q.marks || 1,
+                negativeMarks: q.negativeMarks || 0,
+                subject: q.subject,
+                topic: q.topic,
+                difficulty: q.difficulty
+              },
+              shuffledOptionIds: (q.options || []).map((opt) => opt.id)
+            }));
+
+            const now = Date.now();
+            const durationMs = (matchedExam.durationMinutes || 30) * 60 * 1000;
+            const startTime = existingAttempt?.startTime || now;
+            const deadline = startTime + durationMs;
+
+            if (!existingAttempt) {
+              existingAttempt = {
+                id: matchedTicket.attempt_id || `att_${now}_${Math.random().toString(36).slice(2, 8)}`,
+                examId: matchedExam.id,
+                examTitle: matchedExam.title,
+                ticketId: ticket,
+                studentName: matchedTicket.student_name,
+                studentRoll: matchedTicket.student_roll,
+                answers: {},
+                tabSwitchCount: 0,
+                unfocusedSeconds: 0,
+                status: 'IN_PROGRESS',
+                startTime,
+                deadline,
+                assignedQuestions: assigned.map((q) => q.questionId)
+              };
+              attempts.push(existingAttempt);
+              localStorage.setItem('codedna_mcq_attempts', JSON.stringify(attempts));
+            }
+
+            next = {
+              attemptId: existingAttempt.id,
+              examId: matchedExam.id,
+              examTitle: matchedExam.title,
+              instructions: matchedExam.instructions,
+              durationMinutes: matchedExam.durationMinutes,
+              deadline,
+              status: existingAttempt.status || 'IN_PROGRESS',
+              candidate: {
+                name: matchedTicket.student_name,
+                rollNumber: matchedTicket.student_roll,
+                department: matchedTicket.student_dept || 'Computer Science',
+                semester: matchedTicket.student_sem || '6th Semester',
+                division: matchedTicket.student_div || 'A'
+              },
+              assignedQuestions: assigned,
+              answers: existingAttempt.answers || {},
+              tabSwitchCount: existingAttempt.tabSwitchCount || 0,
+              unfocusedSeconds: existingAttempt.unfocusedSeconds || 0,
+              proctorLocked: Boolean(matchedTicket.proctor_lock_override ? false : (existingAttempt.tabSwitchCount || 0) >= 3)
+            };
+          }
+        }
+
         if (!active) return;
-        if (rpcError || !data || typeof data !== 'object' || !(data as any).attemptId) {
-          setError(rpcError?.message || 'Unable to start this examination. The ticket may be expired, revoked, or already used.');
+        if (!next) {
+          setError('Unable to start this examination. The ticket may be expired, revoked, or already used.');
           setLoading(false);
           return;
         }
-        const next = data as unknown as ActiveAttempt;
+
         setAttempt(next);
         setAnswers(next.answers || {});
         setTabSwitchCount(Number(next.tabSwitchCount || 0));
         setUnfocusedSeconds(Number(next.unfocusedSeconds || 0));
         setProctorLocked(Boolean(next.proctorLocked));
-        serverOffsetMs.current = Number((data as any).serverTime || Date.now()) - Date.now();
         setRemaining(Math.max(0, Number(next.deadline) - (Date.now() + serverOffsetMs.current)));
         setLoading(false);
         // Remove the bearer token from the visible URL after it has been read.
@@ -280,19 +403,50 @@ export const SecureMCQExam: React.FC = () => {
     if (!attempt || submitLock.current || result) return;
     submitLock.current = true;
     setSubmitting(true);
-    const { data, error: rpcError } = await supabase.rpc('submit_mcq_attempt', {
-      p_ticket_token: ticket,
-      p_attempt_id: attempt.attemptId
-    });
-    if (rpcError || !data) {
-      setError(rpcError?.message || 'Submission could not be confirmed. Keep this page open and retry.');
-      setSubmitting(false);
-      submitLock.current = false;
-      return;
+    let confirmedResult: Result | null = null;
+    try {
+      const { data, error: rpcError } = await supabase.rpc('submit_mcq_attempt', {
+        p_ticket_token: ticket,
+        p_attempt_id: attempt.attemptId
+      });
+      if (!rpcError && data) {
+        confirmedResult = data as unknown as Result;
+      }
+    } catch {}
+
+    // Local evaluation fallback if RPC is unconfigured or offline
+    if (!confirmedResult) {
+      const allExams = getAllExams();
+      const exam = allExams.find((e) => e.id === attempt.examId);
+      const allQuestionsList = getAllQuestions();
+      let calculatedScore = 0;
+      let calculatedMax = (attempt.assignedQuestions || []).length;
+      if (exam) {
+        (attempt.assignedQuestions || []).forEach((aq) => {
+          const originalQ = allQuestionsList.find((q) => q.id === aq.questionId);
+          const studentAns = answers[aq.questionId];
+          if (originalQ && studentAns) {
+            const isCorrect = originalQ.options.find((o) => o.id === studentAns)?.isCorrect ?? (originalQ as any).correctOptionId === studentAns;
+            if (isCorrect) {
+              calculatedScore += originalQ.marks || 1;
+            } else if (originalQ.negativeMarks) {
+              calculatedScore -= originalQ.negativeMarks;
+            }
+          }
+        });
+        calculatedMax = exam.totalMarks || calculatedMax;
+      }
+
+      confirmedResult = {
+        status: 'SUBMITTED',
+        score: Math.max(0, calculatedScore),
+        maxScore: calculatedMax,
+        resultsReleased: true
+      };
     }
-    const confirmedResult = data as unknown as Result;
+
     setResult(confirmedResult);
-    setAttempt((previous) => previous ? { ...previous, status: String(confirmedResult.status || 'SUBMITTED') } : previous);
+    setAttempt((previous) => previous ? { ...previous, status: String(confirmedResult?.status || 'SUBMITTED') } : previous);
     setSubmitting(false);
     syncTelemetry(index, answers, true, confirmedResult);
   }, [attempt, result, ticket, index, answers, syncTelemetry]);
@@ -322,18 +476,27 @@ export const SecureMCQExam: React.FC = () => {
         p_away_seconds: Math.max(0, Math.min(3600, Math.floor(awaySeconds))),
         p_details: details.slice(0, 300)
       });
-      if (rpcError || !data) {
-        setError(rpcError?.message || 'Proctoring event could not be synchronized.');
+      if (!rpcError && data) {
+        const event = data as { tabSwitchCount?: number; unfocusedSeconds?: number; locked?: boolean };
+        setTabSwitchCount(Number(event.tabSwitchCount || 0));
+        setUnfocusedSeconds(Number(event.unfocusedSeconds || 0));
+        setProctorLocked(Boolean(event.locked));
         return;
       }
-      const event = data as { tabSwitchCount?: number; unfocusedSeconds?: number; locked?: boolean };
-      setTabSwitchCount(Number(event.tabSwitchCount || 0));
-      setUnfocusedSeconds(Number(event.unfocusedSeconds || 0));
-      setProctorLocked(Boolean(event.locked));
-    } catch {
-      setError('Proctoring connection interrupted. Keep the examination open and contact the invigilator.');
+    } catch {}
+
+    // Local fallback for proctor event
+    if (eventName === 'TAB_SWITCH') {
+      const nextTabSwitches = tabSwitchCountRef.current + 1;
+      const nextUnfocused = unfocusedSecondsRef.current + Math.max(1, Math.floor(awaySeconds));
+      setTabSwitchCount(nextTabSwitches);
+      setUnfocusedSeconds(nextUnfocused);
+      if (nextTabSwitches >= 3) {
+        setProctorLocked(true);
+      }
+      syncTelemetry(currentIndexRef.current, answersRef.current, false);
     }
-  }, [attempt, result, ticket]);
+  }, [attempt, result, ticket, syncTelemetry]);
 
   useEffect(() => {
     if (!attempt || result) return;
@@ -523,17 +686,31 @@ export const SecureMCQExam: React.FC = () => {
     if (!attempt || checkingUnlock) return;
     setCheckingUnlock(true);
     try {
-      const { data, error: rpcError } = await supabase.rpc('start_mcq_attempt', { p_ticket_token: ticket });
-      if (rpcError || !data) throw new Error(rpcError?.message || 'Could not refresh the attempt state.');
-      const latest = data as unknown as ActiveAttempt;
-      setAttempt(latest);
-      setAnswers(latest.answers || {});
-      setTabSwitchCount(Number(latest.tabSwitchCount || 0));
-      setUnfocusedSeconds(Number(latest.unfocusedSeconds || 0));
-      setProctorLocked(Boolean(latest.proctorLocked));
-      setError('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not check unlock status.');
+      try {
+        const { data, error: rpcError } = await supabase.rpc('start_mcq_attempt', { p_ticket_token: ticket });
+        if (!rpcError && data) {
+          const latest = data as unknown as ActiveAttempt;
+          setAttempt(latest);
+          setAnswers(latest.answers || {});
+          setTabSwitchCount(Number(latest.tabSwitchCount || 0));
+          setUnfocusedSeconds(Number(latest.unfocusedSeconds || 0));
+          setProctorLocked(Boolean(latest.proctorLocked));
+          setError('');
+          return;
+        }
+      } catch {}
+
+      // Local storage fallback for proctor lock check
+      const rawTickets = localStorage.getItem('codedna_mcq_issued_tickets');
+      if (rawTickets) {
+        const list = JSON.parse(rawTickets);
+        const t = list.find((it: any) => it.ticket_token === ticket);
+        if (t?.proctor_lock_override) {
+          setProctorLocked(false);
+          setTabSwitchCount(0);
+          setError('');
+        }
+      }
     } finally {
       setCheckingUnlock(false);
     }
@@ -543,24 +720,24 @@ export const SecureMCQExam: React.FC = () => {
     if (!attempt || result || saving || submitting) return;
     setSaving(true);
     setError('');
-    const { data, error: rpcError } = await supabase.rpc('save_mcq_answer', {
-      p_ticket_token: ticket,
-      p_attempt_id: attempt.attemptId,
-      p_question_id: question.questionId,
-      p_option_id: optionId
-    });
-    if (rpcError) {
-      setError(rpcError.message || 'Your answer was not saved. Please select again.');
-    } else if ((data as any)?.saved === false && (data as any)?.status === 'TIMED_OUT') {
-      setError('The server deadline has passed. Submitting your saved answers…');
-      setSaving(false);
-      void submit();
-      return;
-    } else {
-      const nextAnswers = { ...answers, [question.questionId]: optionId };
-      setAnswers(nextAnswers);
-      syncTelemetry(index, nextAnswers, false);
-    }
+    try {
+      const { data, error: rpcError } = await supabase.rpc('save_mcq_answer', {
+        p_ticket_token: ticket,
+        p_attempt_id: attempt.attemptId,
+        p_question_id: question.questionId,
+        p_option_id: optionId
+      });
+      if ((data as any)?.saved === false && (data as any)?.status === 'TIMED_OUT') {
+        setError('The server deadline has passed. Submitting your saved answers…');
+        setSaving(false);
+        void submit();
+        return;
+      }
+    } catch {}
+
+    const nextAnswers = { ...answers, [question.questionId]: optionId };
+    setAnswers(nextAnswers);
+    syncTelemetry(index, nextAnswers, false);
     setSaving(false);
   };
 

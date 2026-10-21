@@ -1237,7 +1237,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))',
               gap: '14px'
             }}
           >
@@ -1376,7 +1376,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {/* ── CCTV / SCREEN STREAM WINDOW (Matching Screenshot) ── */}
                   <div
                     style={{
-                      height: '170px',
+                      height: '190px',
+                      minHeight: '190px',
                       background: '#040508',
                       borderRadius: '8px',
                       border: '1px solid rgba(255, 255, 255, 0.05)',
@@ -1389,8 +1390,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       overflow: 'hidden'
                     }}
                   >
-                    {/* View mode toggle button in top right of feed box */}
-                    {!isSubmitted && (
+                    {/* View mode toggle button in top right of feed box (Only when in camera view or non-MCQ preview) */}
+                    {!isSubmitted && (previewMode === 'camera' || (!isMcq && previewMode === 'activity')) && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1448,7 +1449,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           style={{
                             width: '100%',
                             height: '100%',
-                            padding: '12px',
+                            padding: '10px 12px',
                             display: 'flex',
                             flexDirection: 'column',
                             justifyContent: 'space-between',
@@ -1458,37 +1459,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             border: '1px solid rgba(255, 255, 255, 0.06)'
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                               <ListChecks size={13} color="var(--accent)" />
-                              <span style={{ fontSize: '11px', fontWeight: 700, color: '#e4e4e7', letterSpacing: '0.02em' }}>
+                              <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#e4e4e7', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
                                 MCQ TELEMETRY
                               </span>
                             </div>
-                            <span
-                              style={{
-                                fontSize: '10px',
-                                fontWeight: 700,
-                                background: 'rgba(56, 189, 248, 0.15)',
-                                color: '#38bdf8',
-                                border: '1px solid rgba(56, 189, 248, 0.3)',
-                                padding: '1px 6px',
-                                borderRadius: '4px'
-                              }}
-                            >
-                              Active Q {(station.mcqProgress?.currentQuestionIndex ?? 0) + 1} / {station.mcqProgress?.totalQuestions || 10}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <span
+                                style={{
+                                  fontSize: '9.5px',
+                                  fontWeight: 700,
+                                  background: 'rgba(56, 189, 248, 0.15)',
+                                  color: '#38bdf8',
+                                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                                  padding: '1px 5px',
+                                  borderRadius: '4px',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                Active Q {(station.mcqProgress?.currentQuestionIndex ?? 0) + 1} / {station.mcqProgress?.totalQuestions || 10}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setStationViewMode((prev) => ({
+                                    ...prev,
+                                    [station.id]: 'camera'
+                                  }));
+                                  playSound('click');
+                                }}
+                                style={{
+                                  background: 'rgba(255, 255, 255, 0.08)',
+                                  border: '1px solid rgba(255, 255, 255, 0.14)',
+                                  borderRadius: '4px',
+                                  color: '#a1a1aa',
+                                  fontSize: '9.5px',
+                                  padding: '1px 5px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  whiteSpace: 'nowrap'
+                                }}
+                                title="Switch to camera feed"
+                              >
+                                <Video size={10} />
+                                <span>Camera</span>
+                              </button>
+                            </div>
                           </div>
 
-                          {/* Grid of Numbered Question Indicators */}
+                          {/* Grid of Numbered Question Indicators - Fits all 25 without scrolling */}
                           <div
                             style={{
                               display: 'grid',
                               gridTemplateColumns: 'repeat(5, 1fr)',
-                              gap: '4px',
-                              margin: '8px 0',
-                              maxHeight: '84px',
-                              overflowY: 'auto'
+                              gap: '3px',
+                              margin: '6px 0'
                             }}
                           >
                             {Array.from({ length: Math.min(25, station.mcqProgress?.totalQuestions || 10) }).map((_, idx) => {
@@ -1498,12 +1528,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 <div
                                   key={idx}
                                   style={{
-                                    height: '18px',
+                                    height: '14px',
                                     borderRadius: '3px',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    fontSize: '9px',
+                                    fontSize: '8.5px',
                                     fontWeight: 700,
                                     background: isCurrent
                                       ? 'rgba(56, 189, 248, 0.3)'
@@ -1691,7 +1721,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
 
                     <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#e4e4e7' }}>
-                      {station.marks ? (
+                      {isMcq && !isSubmitted ? (
+                        <span>
+                          {station.mcqProgress?.answeredCount ?? (station.metrics.editCount || 0)}/{station.mcqProgress?.totalQuestions || getEffectiveMaxMarks(station)} ans
+                        </span>
+                      ) : station.marks ? (
                         <span>
                           {station.marks.totalMarks}/{getEffectiveMaxMarks(station)}
                         </span>
@@ -1748,150 +1782,161 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {/* ── QUICK PROCTOR TOOLS (Integrated & High Contrast) ── */}
                   <div
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
+                      display: 'grid',
+                      gridTemplateColumns: ((isLocked || (station.metrics?.tabSwitchViolations || 0) >= 3) && !isSubmitted) || isSubmitted
+                        ? 'repeat(4, 1fr)'
+                        : 'repeat(3, 1fr)',
                       marginTop: '12px',
                       paddingTop: '10px',
                       borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-                      gap: '6px',
-                      flexWrap: 'wrap'
+                      gap: '5px'
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {/* Remote Lock / Unlock */}
-                      <button
-                        type="button"
-                        onClick={() => handleToggleLockStation(station)}
-                        style={{
-                          background: isLocked ? 'rgba(239, 68, 68, 0.18)' : 'rgba(255, 255, 255, 0.05)',
-                          border: isLocked ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(255, 255, 255, 0.14)',
-                          color: isLocked ? '#f87171' : '#e4e4e7',
-                          borderRadius: '6px',
-                          padding: '5px 10px',
-                          fontSize: '11px',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          transition: 'all 0.15s ease'
-                        }}
-                        title={isLocked ? 'Unlock student editor' : 'Freeze student editor remotely'}
-                      >
-                        {isLocked ? <Unlock size={11} /> : <Lock size={11} />}
-                        <span>{isLocked ? 'Unlock' : 'Lock'}</span>
-                      </button>
+                    {/* Remote Lock / Unlock */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleLockStation(station)}
+                      style={{
+                        width: '100%',
+                        background: isLocked ? 'rgba(239, 68, 68, 0.18)' : 'rgba(255, 255, 255, 0.05)',
+                        border: isLocked ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(255, 255, 255, 0.14)',
+                        color: isLocked ? '#f87171' : '#e4e4e7',
+                        borderRadius: '6px',
+                        padding: '5px 4px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '3px',
+                        boxSizing: 'border-box',
+                        transition: 'all 0.15s ease'
+                      }}
+                      title={isLocked ? 'Unlock student editor' : 'Freeze student editor remotely'}
+                    >
+                      {isLocked ? <Unlock size={11} /> : <Lock size={11} />}
+                      <span>{isLocked ? 'Unlock' : 'Lock'}</span>
+                    </button>
 
-                      {/* Broadcast Warning */}
+                    {/* Broadcast Warning */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWarningStationTarget(station);
+                        setWarningMessageInput('Maintain your visual focus on the examination screen at all times.');
+                        playSound('click');
+                      }}
+                      style={{
+                        width: '100%',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.14)',
+                        color: '#e4e4e7',
+                        borderRadius: '6px',
+                        padding: '5px 4px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '3px',
+                        boxSizing: 'border-box',
+                        transition: 'all 0.15s ease'
+                      }}
+                      title="Broadcast alert warning notice directly to student's screen"
+                    >
+                      <ShieldAlert size={11} />
+                      <span>Warn</span>
+                    </button>
+
+                    {/* Dossier Report */}
+                    <button
+                      type="button"
+                      onClick={() => handleViewStudentReport(station)}
+                      style={{
+                        width: '100%',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.14)',
+                        color: '#e4e4e7',
+                        borderRadius: '6px',
+                        padding: '5px 4px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '3px',
+                        boxSizing: 'border-box',
+                        transition: 'all 0.15s ease'
+                      }}
+                      title="Open full invigilation marks dossier"
+                    >
+                      <FileText size={11} />
+                      <span>Dossier</span>
+                    </button>
+
+                    {/* Conclude & Free (if locked or strikes >= 3 and not submitted) */}
+                    {(isLocked || (station.metrics?.tabSwitchViolations || 0) >= 3) && !isSubmitted && (
                       <button
                         type="button"
                         onClick={() => {
-                          setWarningStationTarget(station);
-                          setWarningMessageInput('Maintain your visual focus on the examination screen at all times.');
+                          sendProctorConcludeAndFreeCommand(station.id, station.labId);
+                          loadData();
                           playSound('click');
                         }}
                         style={{
-                          background: 'rgba(255, 255, 255, 0.05)',
-                          border: '1px solid rgba(255, 255, 255, 0.14)',
-                          color: '#e4e4e7',
+                          width: '100%',
+                          background: 'rgba(34, 197, 94, 0.15)',
+                          border: '1px solid rgba(34, 197, 94, 0.35)',
+                          color: '#4ade80',
                           borderRadius: '6px',
-                          padding: '5px 10px',
+                          padding: '5px 4px',
                           fontSize: '11px',
                           fontWeight: 600,
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '4px',
+                          justifyContent: 'center',
+                          gap: '3px',
+                          boxSizing: 'border-box',
                           transition: 'all 0.15s ease'
                         }}
-                        title="Broadcast alert warning notice directly to student's screen"
+                        title="Conclude exam, calculate marks, and release physical workstation"
                       >
-                        <ShieldAlert size={11} />
-                        <span>Warn</span>
+                        <CheckCircle2 size={11} />
+                        <span>Free</span>
                       </button>
-                    </div>
+                    )}
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {/* Dossier Report */}
+                    {/* Dismiss completed station */}
+                    {isSubmitted && (
                       <button
                         type="button"
-                        onClick={() => handleViewStudentReport(station)}
+                        onClick={() => handleRemoveSingleStation(station.id)}
                         style={{
+                          width: '100%',
                           background: 'rgba(255, 255, 255, 0.05)',
                           border: '1px solid rgba(255, 255, 255, 0.14)',
-                          color: '#e4e4e7',
+                          color: '#a1a1aa',
                           borderRadius: '6px',
-                          padding: '5px 10px',
+                          padding: '5px 4px',
                           fontSize: '11px',
-                          fontWeight: 600,
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '4px',
+                          justifyContent: 'center',
+                          gap: '3px',
+                          boxSizing: 'border-box',
                           transition: 'all 0.15s ease'
                         }}
-                        title="Open full invigilation marks dossier"
+                        title="Dismiss completed station from live CCTV grid"
                       >
-                        <FileText size={11} />
-                        <span>Dossier</span>
+                        <Trash2 size={11} />
+                        <span>Dismiss</span>
                       </button>
-
-                      {/* Conclude & Free (if locked or strikes >= 3 and not submitted) */}
-                      {(isLocked || (station.metrics?.tabSwitchViolations || 0) >= 3) && !isSubmitted && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            sendProctorConcludeAndFreeCommand(station.id, station.labId);
-                            loadData();
-                            playSound('click');
-                          }}
-                          style={{
-                            background: 'rgba(34, 197, 94, 0.15)',
-                            border: '1px solid rgba(34, 197, 94, 0.35)',
-                            color: '#4ade80',
-                            borderRadius: '6px',
-                            padding: '5px 10px',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            transition: 'all 0.15s ease'
-                          }}
-                          title="Conclude exam, calculate marks, and release physical workstation"
-                        >
-                          <CheckCircle2 size={11} />
-                          <span>Free</span>
-                        </button>
-                      )}
-
-                      {/* Dismiss completed station */}
-                      {isSubmitted && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSingleStation(station.id)}
-                          style={{
-                            background: 'rgba(255, 255, 255, 0.05)',
-                            border: '1px solid rgba(255, 255, 255, 0.14)',
-                            color: '#a1a1aa',
-                            borderRadius: '6px',
-                            padding: '5px 10px',
-                            fontSize: '11px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            transition: 'all 0.15s ease'
-                          }}
-                          title="Dismiss completed station from live CCTV grid"
-                        >
-                          <Trash2 size={11} />
-                          <span>Dismiss</span>
-                        </button>
-                      )}
-                    </div>
+                    )}
                   </div>
                 </div>
               );

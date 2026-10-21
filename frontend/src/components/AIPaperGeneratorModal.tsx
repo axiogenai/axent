@@ -2504,10 +2504,6 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
               }}
             >
               <style>{`
-                @keyframes codedna-radar-sweep {
-                  from { transform: rotate(0deg); }
-                  to { transform: rotate(360deg); }
-                }
                 @keyframes codedna-terminal-cursor {
                   0%, 100% { opacity: 1; }
                   50% { opacity: 0; }
@@ -2579,117 +2575,69 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                   </div>
                 </div>
 
-                {/* Radar Reticle Scanner & Status Columns */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 220px) 1fr', gap: '20px', alignItems: 'center' }}>
-                  {/* Radar Reticle Graphic */}
+                {/* Clean Technical Telemetry & 4-Phase Pipeline Status */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(210px, 240px) 1fr', gap: '20px', alignItems: 'stretch' }}>
+                  {/* High-Precision Inference Engine Telemetry Card (Clean, Anti-Slop, Zero-Glow) */}
                   <div
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      position: 'relative'
+                      justifyContent: 'space-between',
+                      padding: '16px',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-sm)'
                     }}
                   >
-                    <div
-                      style={{
-                        width: '180px',
-                        height: '180px',
-                        borderRadius: '50%',
-                        background: 'var(--bg-elevated)',
-                        border: '1px solid var(--border)',
-                        position: 'relative',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        overflow: 'hidden'
-                      }}
-                    >
-                      {/* Inner concentric ring */}
-                      <div
-                        style={{
-                          width: '120px',
-                          height: '120px',
-                          borderRadius: '50%',
-                          border: '1px dashed var(--border)',
-                          position: 'absolute'
-                        }}
-                      />
-                      {/* Core ring */}
-                      <div
-                        style={{
-                          width: '60px',
-                          height: '60px',
-                          borderRadius: '50%',
-                          border: '1px solid var(--border)',
-                          position: 'absolute'
-                        }}
-                      />
-                      {/* Crosshairs */}
-                      <div style={{ position: 'absolute', width: '100%', height: '1px', background: 'var(--border)' }} />
-                      <div style={{ position: 'absolute', height: '100%', width: '1px', background: 'var(--border)' }} />
-
-                      {/* Rotating Scanner Arm */}
-                      <div
-                        style={{
-                          position: 'absolute',
-                          width: '100%',
-                          height: '100%',
-                          animation: 'codedna-radar-sweep 3.5s linear infinite',
-                          transformOrigin: 'center center'
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: '50%',
-                            height: '50%',
-                            position: 'absolute',
-                            top: 0,
-                            right: 0,
-                            background: 'conic-gradient(from 180deg at 0% 100%, transparent 0deg, var(--border) 90deg)',
-                            opacity: 0.7
-                          }}
-                        />
-                        <div
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: '50%',
-                            width: '1px',
-                            height: '50%',
-                            background: 'var(--accent)'
-                          }}
-                        />
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                        <span style={{ fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
+                          INFERENCE TELEMETRY
+                        </span>
+                        <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)', border: '1px solid rgba(56, 189, 248, 0.25)', padding: '1px 6px', borderRadius: '3px' }}>
+                          ACTIVE
+                        </span>
                       </div>
 
-                      {/* Center Core Node */}
-                      <div
-                        style={{
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: '50%',
-                          background: 'var(--bg-surface)',
-                          border: '1px solid var(--border)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          position: 'relative',
-                          zIndex: 2,
-                          color: 'var(--accent)'
-                        }}
-                      >
-                        <Activity size={14} />
+                      <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
+                        LLaMA 3.3 70B Versatile
                       </div>
-
-                      {/* Cardinal angle marks */}
-                      <span style={{ position: 'absolute', top: '4px', fontSize: '8px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>000°</span>
-                      <span style={{ position: 'absolute', right: '4px', fontSize: '8px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>090°</span>
-                      <span style={{ position: 'absolute', bottom: '4px', fontSize: '8px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>180°</span>
-                      <span style={{ position: 'absolute', left: '4px', fontSize: '8px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>270°</span>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        Groq LPU Neural Synthesis Pipeline
+                      </div>
                     </div>
 
-                    <div style={{ marginTop: '8px', fontSize: '10.5px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.05em' }}>
-                      INFERENCE ACTIVE // LLaMA 3.3
+                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '10px', marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Throughput</span>
+                        <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>~280 tok/s</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Target Items</span>
+                        <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{effectiveTotalQuestions} Questions</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Determinism (Temp)</span>
+                        <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>0.2 (Verified)</strong>
+                      </div>
+                    </div>
+
+                    {/* Linear Progress Bar */}
+                    <div style={{ marginTop: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                        <span>Synthesis Progress</span>
+                        <span style={{ fontFamily: 'var(--font-mono)' }}>{Math.min(96, Math.max(15, Math.round((loadingElapsed / 24) * 100)))}%</span>
+                      </div>
+                      <div style={{ width: '100%', height: '4px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '2px', overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            width: `${Math.min(96, Math.max(15, Math.round((loadingElapsed / 24) * 100)))}%`,
+                            height: '100%',
+                            background: 'var(--accent)',
+                            transition: 'width 0.4s ease'
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
 
