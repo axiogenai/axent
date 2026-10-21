@@ -135,6 +135,147 @@ export const SecureMCQExam: React.FC = () => {
     return () => { active = false; };
   }, [ticket]);
 
+  const syncTelemetry = useCallback((currentIdx: number, currentAnswers: Record<string, string>, isDone = false, currentResult?: Result | null) => {
+    if (!attempt) return;
+    try {
+      const rawProfile = localStorage.getItem('codedna_student_profile');
+      let profile: StudentInfo;
+      const cleanRoll = attempt.candidate?.rollNumber || 'STU-01';
+      const cleanNum = cleanRoll.replace(/[^0-9]/g, '').slice(-2) || '01';
+      const stationLabel = `Station #${cleanNum.padStart(2, '0')}`;
+
+      if (rawProfile) {
+        try {
+          const parsed = JSON.parse(rawProfile);
+          profile = {
+            ...parsed,
+            name: attempt.candidate?.name || parsed.name || 'Candidate',
+            rollNumber: cleanRoll,
+            labId: parsed.labId || 'LAB-01',
+            labName: parsed.labName || 'Computer Lab 01',
+            stationNumber: parsed.stationNumber || stationLabel,
+            examMode: 'MCQ',
+            examType: 'Multiple Choice Question (MCQ) Examination',
+            assignmentTitle: attempt.examTitle
+          };
+        } catch {
+          profile = {
+            name: attempt.candidate?.name || 'Candidate',
+            rollNumber: cleanRoll,
+            labId: 'LAB-01',
+            labName: 'Computer Lab 01',
+            stationNumber: stationLabel,
+            department: 'Computer Science',
+            course: 'B.Tech',
+            semester: '6th Semester',
+            examType: 'Multiple Choice Question (MCQ) Examination',
+            assignmentTitle: attempt.examTitle
+          };
+        }
+      } else {
+        profile = {
+          name: attempt.candidate?.name || 'Candidate',
+          rollNumber: cleanRoll,
+          labId: 'LAB-01',
+          labName: 'Computer Lab 01',
+          stationNumber: stationLabel,
+          department: 'Computer Science',
+          course: 'B.Tech',
+          semester: '6th Semester',
+          examType: 'Multiple Choice Question (MCQ) Examination',
+          assignmentTitle: attempt.examTitle
+        };
+      }
+
+      try {
+        localStorage.setItem(`codedna_mcq_current_idx_${attempt.attemptId}`, String(currentIdx));
+      } catch {}
+
+      const startTimeMs = attempt.deadline
+        ? Number(attempt.deadline) - (attempt.durationMinutes || 30) * 60 * 1000
+        : Date.now();
+      const finalScore = currentResult?.score;
+      const finalMaxScore = currentResult?.maxScore ?? attempt.assignedQuestions?.length ?? 20;
+
+      try {
+        const rawAttempts = localStorage.getItem('codedna_mcq_attempts');
+        const attempts = rawAttempts ? JSON.parse(rawAttempts) : [];
+
+        const updatedAttemptObj = {
+          id: attempt.attemptId,
+          examId: attempt.examId,
+          examTitle: attempt.examTitle,
+          ticketId: ticket,
+          studentName: attempt.candidate?.name || 'Candidate',
+          studentRoll: cleanRoll,
+          answers: currentAnswers,
+          tabSwitchCount: tabSwitchCountRef.current,
+          unfocusedSeconds: unfocusedSecondsRef.current,
+          status: isDone ? 'SUBMITTED' : 'IN_PROGRESS',
+          score: finalScore,
+          maxScore: finalMaxScore,
+          startTime: startTimeMs,
+          submittedAt: isDone ? Date.now() : undefined,
+          assignedQuestions: (attempt.assignedQuestions || []).map((q) => q.questionId),
+          activeQuestionIndex: currentIdx
+        };
+
+        const existingIdx = attempts.findIndex((a: any) => a.id === attempt.attemptId);
+        if (existingIdx >= 0) {
+          attempts[existingIdx] = { ...attempts[existingIdx], ...updatedAttemptObj };
+        } else {
+          attempts.push(updatedAttemptObj);
+        }
+        localStorage.setItem('codedna_mcq_attempts', JSON.stringify(attempts));
+      } catch {}
+
+      const telemetryAttempt = {
+        id: attempt.attemptId,
+        examId: attempt.examId,
+        examTitle: attempt.examTitle,
+        ticketId: ticket,
+        studentName: attempt.candidate?.name || 'Candidate',
+        studentRoll: cleanRoll,
+        studentDept: attempt.candidate?.department || 'Computer Science',
+        studentSem: attempt.candidate?.semester || '6th Semester',
+        status: isDone ? 'SUBMITTED' : 'IN_PROGRESS',
+        answers: currentAnswers,
+        startTime: startTimeMs,
+        deadline: Number(attempt.deadline) || (Date.now() + 30 * 60 * 1000),
+        tabSwitchCount: tabSwitchCountRef.current,
+        unfocusedSeconds: unfocusedSecondsRef.current,
+        score: finalScore,
+        maxScore: finalMaxScore,
+        assignedQuestions: attempt.assignedQuestions
+      } as unknown as MCQAttempt;
+
+      const telemetryExam = {
+        id: attempt.examId,
+        title: attempt.examTitle,
+        instructions: attempt.instructions || '',
+        durationMinutes: attempt.durationMinutes || 30,
+        questionCount: attempt.assignedQuestions?.length || 0,
+        questions: [],
+        createdAt: Date.now(),
+        isPublished: true,
+        passPercentage: 40
+      } as unknown as MCQExamConfig;
+
+      telemetryAttemptRef.current = telemetryAttempt;
+      telemetryExamRef.current = telemetryExam;
+      telemetryProfileRef.current = profile;
+
+      syncMcqLiveStation(telemetryAttempt, telemetryExam, profile, currentIdx, isDone);
+    } catch (err) {
+      console.warn('[SecureMCQExam] syncTelemetry error:', err);
+    }
+  }, [attempt, ticket]);
+
+  useEffect(() => {
+    if (!attempt || result) return;
+    syncTelemetry(index, answers, false);
+  }, [attempt, index, syncTelemetry]);
+
   const submit = useCallback(async () => {
     if (!attempt || submitLock.current || result) return;
     submitLock.current = true;
@@ -149,10 +290,12 @@ export const SecureMCQExam: React.FC = () => {
       submitLock.current = false;
       return;
     }
-    setResult(data as unknown as Result);
-    setAttempt((previous) => previous ? { ...previous, status: String((data as unknown as Result).status || 'SUBMITTED') } : previous);
+    const confirmedResult = data as unknown as Result;
+    setResult(confirmedResult);
+    setAttempt((previous) => previous ? { ...previous, status: String(confirmedResult.status || 'SUBMITTED') } : previous);
     setSubmitting(false);
-  }, [attempt, result, ticket]);
+    syncTelemetry(index, answers, true, confirmedResult);
+  }, [attempt, result, ticket, index, answers, syncTelemetry]);
 
   useEffect(() => {
     if (!attempt || result) return;
@@ -244,20 +387,38 @@ export const SecureMCQExam: React.FC = () => {
 
   const startScreenShare = async () => {
     if (!attempt || result || screenSharing) return;
-    const profile = (() => {
+    const profile: StudentInfo = (() => {
       try {
         const raw = localStorage.getItem('codedna_student_profile');
-        if (!raw) return null;
-        const parsed = JSON.parse(raw) as Partial<StudentInfo>;
-        if ((parsed.rollNumber || '').trim().toLowerCase() !== (attempt.candidate?.rollNumber || '').trim().toLowerCase()) return null;
-        if (!parsed.labId || !parsed.stationNumber) return null;
-        return parsed as StudentInfo;
-      } catch { return null; }
+        if (raw) {
+          const parsed = JSON.parse(raw) as Partial<StudentInfo>;
+          if (parsed.labId && parsed.stationNumber) {
+            return {
+              ...parsed,
+              name: attempt.candidate?.name || parsed.name || 'Candidate',
+              rollNumber: attempt.candidate?.rollNumber || parsed.rollNumber || 'STU-01',
+              labId: parsed.labId,
+              labName: parsed.labName || 'Computer Lab 01',
+              stationNumber: parsed.stationNumber
+            } as StudentInfo;
+          }
+        }
+      } catch {}
+      const cleanRoll = attempt.candidate?.rollNumber || 'STU-01';
+      const cleanNum = cleanRoll.replace(/[^0-9]/g, '').slice(-2) || '01';
+      return {
+        name: attempt.candidate?.name || 'Candidate',
+        rollNumber: cleanRoll,
+        labId: 'LAB-01',
+        labName: 'Computer Lab 01',
+        stationNumber: `Station #${cleanNum.padStart(2, '0')}`,
+        course: 'B.Tech',
+        department: 'Computer Science',
+        semester: '6th Semester',
+        examType: 'Multiple Choice Question (MCQ) Examination',
+        assignmentTitle: attempt.examTitle
+      };
     })();
-    if (!profile) {
-      setError('This candidate session is not linked to a registered lab workstation. Contact the invigilator before starting screen proctoring.');
-      return;
-    }
     try {
       if (!navigator.mediaDevices?.getDisplayMedia) {
         setError('This browser does not support screen sharing. Contact the invigilator.');
@@ -396,7 +557,9 @@ export const SecureMCQExam: React.FC = () => {
       void submit();
       return;
     } else {
-      setAnswers((previous) => ({ ...previous, [question.questionId]: optionId }));
+      const nextAnswers = { ...answers, [question.questionId]: optionId };
+      setAnswers(nextAnswers);
+      syncTelemetry(index, nextAnswers, false);
     }
     setSaving(false);
   };

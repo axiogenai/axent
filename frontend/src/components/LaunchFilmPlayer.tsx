@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Play, Pause, RotateCcw, Volume2, VolumeX, Maximize2, Minimize2,
-  ChevronLeft, ChevronRight, Terminal, Shield, Check, Lock, Cpu, Globe, ArrowRight, Sparkles
-} from 'lucide-react';
+import { Shield, Check, ArrowRight } from 'lucide-react';
 
 // ── COLOR CONSTANTS (Master Specification) ──────────────────────────────────
 const C = {
@@ -56,13 +53,15 @@ class SoundDesignEngine {
   private lastTriggeredShot: number = -1;
 
   public init() {
-    if (!this.ctx) {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      this.ctx = new AudioCtx();
-    }
-    if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
+    try {
+      if (!this.ctx) {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        this.ctx = new AudioCtx();
+      }
+      if (this.ctx && this.ctx.state === 'suspended') {
+        this.ctx.resume().catch(() => {});
+      }
+    } catch {}
   }
 
   public setMuted(muted: boolean) {
@@ -411,13 +410,23 @@ function formatSMPTE(frame: number, fps = 24): string {
 }
 
 // ── MASTER LAUNCH FILM COMPONENT ───────────────────────────────────────────────
-export const LaunchFilmPlayer: React.FC = () => {
+export interface LaunchFilmPlayerProps {
+  autoPlay?: boolean;
+  onClose?: () => void;
+  isOverlay?: boolean;
+}
+
+export const LaunchFilmPlayer: React.FC<LaunchFilmPlayerProps> = ({
+  autoPlay = true,
+  onClose,
+  isOverlay = false
+}) => {
   const navigate = useNavigate();
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlaying] = useState<boolean>(autoPlay);
   const [currentFrame, setCurrentFrame] = useState(0);
   const [mode, setMode] = useState<'25s' | '15s'>('25s');
   const [isMuted, setIsMuted] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isEnding, setIsEnding] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const soundEngineRef = useRef<SoundDesignEngine | null>(null);
@@ -427,6 +436,18 @@ export const LaunchFilmPlayer: React.FC = () => {
   const totalFrames = mode === '25s' ? 600 : 360;
   const shots = mode === '25s' ? SHOTS_25S : SHOTS_15S;
 
+  const handleClose = useCallback(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (onClose) {
+      onClose();
+    } else {
+      navigate('/');
+    }
+  }, [onClose, navigate]);
+
   // Find active shot
   const currentShot = shots.find((s) => currentFrame >= s.startFrame && currentFrame < s.endFrame) || shots[shots.length - 1];
   const frameInShot = currentFrame - currentShot.startFrame;
@@ -434,10 +455,13 @@ export const LaunchFilmPlayer: React.FC = () => {
   // Initialize Sound Engine
   useEffect(() => {
     soundEngineRef.current = new SoundDesignEngine();
+    if (autoPlay) {
+      soundEngineRef.current.init();
+    }
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, []);
+  }, [autoPlay]);
 
   useEffect(() => {
     soundEngineRef.current?.setMuted(isMuted);
@@ -477,6 +501,19 @@ export const LaunchFilmPlayer: React.FC = () => {
     };
   }, [isPlaying, tick]);
 
+  // Auto-close and return to main landing page when video finishes
+  useEffect(() => {
+    if (currentFrame >= totalFrames) {
+      setIsEnding(true);
+      const timer = setTimeout(() => {
+        handleClose();
+      }, 1000); // 1.0s clean hold on final 4K branding resolve, then auto-close
+      return () => clearTimeout(timer);
+    } else {
+      setIsEnding(false);
+    }
+  }, [currentFrame, totalFrames, handleClose]);
+
   // Trigger Audio Cues based on Shot Transitions
   useEffect(() => {
     if (isPlaying && soundEngineRef.current) {
@@ -484,48 +521,18 @@ export const LaunchFilmPlayer: React.FC = () => {
     }
   }, [currentShot.id, frameInShot, isPlaying]);
 
-  // Keyboard Navigation Controls
+  // Keyboard Navigation Controls (Allow Esc to exit early)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.code === 'Space') {
+      if (e.code === 'Escape') {
         e.preventDefault();
-        setIsPlaying((p) => !p);
-      } else if (e.code === 'ArrowRight' || e.code === 'Period') {
-        setIsPlaying(false);
-        setCurrentFrame((f) => Math.min(totalFrames, f + 1));
-      } else if (e.code === 'ArrowLeft' || e.code === 'Comma') {
-        setIsPlaying(false);
-        setCurrentFrame((f) => Math.max(0, f - 1));
-      } else if (e.code === 'KeyM') {
-        setIsMuted((m) => !m);
-      } else if (e.code === 'KeyF') {
-        toggleFullscreen();
+        handleClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [totalFrames]);
-
-  const toggleFullscreen = () => {
-    if (!containerRef.current) return;
-    if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().catch(() => {});
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen().catch(() => {});
-      setIsFullscreen(false);
-    }
-  };
-
-  const handleSeek = (frame: number) => {
-    setCurrentFrame(Math.max(0, Math.min(totalFrames, frame)));
-  };
-
-  const handleRestart = () => {
-    setCurrentFrame(0);
-    setIsPlaying(true);
-  };
+  }, [handleClose]);
 
   return (
     <div
@@ -533,397 +540,73 @@ export const LaunchFilmPlayer: React.FC = () => {
       style={{
         width: '100vw',
         height: '100vh',
-        background: C.canvas,
+        background: '#000000',
         color: C.textPrimary,
         display: 'flex',
-        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
         fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         overflow: 'hidden',
         userSelect: 'none',
         position: 'relative'
       }}
     >
-      {/* ── TOP HUD HEADER ── */}
+      {/* ── PURE FULL-SCREEN CINEMATIC VIDEO (Edge-to-Edge) ── */}
       <div
         style={{
-          height: '46px',
-          borderBottom: `1px solid ${C.border}`,
-          background: 'rgba(10, 10, 12, 0.92)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 20px',
-          zIndex: 40
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <button
-            onClick={() => navigate('/')}
-            style={{
-              background: 'none',
-              border: `1px solid ${C.border}`,
-              color: C.textMuted,
-              padding: '4px 10px',
-              borderRadius: '4px',
-              fontSize: '11px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
-          >
-            <ChevronLeft size={13} />
-            <span>Back to Axent</span>
-          </button>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 800, letterSpacing: '0.08em', color: C.textPrimary }}>
-              AXENT // LAUNCH FILM
-            </span>
-            <span style={{ fontSize: '10px', color: C.accent, border: `1px solid ${C.accent}`, padding: '1px 5px', borderRadius: '2px', fontWeight: 700 }}>
-              4K 24.00 FPS
-            </span>
-          </div>
-        </div>
-
-        {/* Current Shot & Timecode Readout */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11.5px', fontFamily: 'monospace', color: C.textMuted }}>
-            <span>{currentShot.act}</span>
-            <span style={{ color: C.border }}>//</span>
-            <span style={{ color: C.textPrimary, fontWeight: 700 }}>SHOT {String(currentShot.id).padStart(2, '0')}: {currentShot.name.toUpperCase()}</span>
-          </div>
-
-          <div
-            style={{
-              background: C.surface,
-              border: `1px solid ${C.border}`,
-              borderRadius: '4px',
-              padding: '3px 10px',
-              fontFamily: 'monospace',
-              fontSize: '12.5px',
-              fontWeight: 800,
-              color: C.accentBright,
-              letterSpacing: '0.06em'
-            }}
-          >
-            {formatSMPTE(currentFrame, 24)}
-            <span style={{ color: C.textMuted, fontSize: '10px', marginLeft: '6px' }}>[F:{String(currentFrame).padStart(3, '0')}/{totalFrames}]</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── CINEMATIC 16:9 VIEWPORT ── */}
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          width: 'min(100vw, calc(100vh * (16 / 9)))',
+          height: 'min(100vh, calc(100vw * (9 / 16)))',
           background: C.canvas,
           position: 'relative',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
         }}
       >
+        <FilmShotRenderer
+          shotId={currentShot.id}
+          frameInShot={frameInShot}
+          totalShotFrames={currentShot.endFrame - currentShot.startFrame}
+          mode={mode}
+        />
+      </div>
+
+
+
+      {/* ── AUTO-RETURN NOTIFICATION ON FILM COMPLETION ── */}
+      {isEnding && (
         <div
           style={{
-            width: 'min(94vw, calc(82vh * (16 / 9)))',
-            aspectRatio: '16 / 9',
-            background: C.canvas,
-            border: `1px solid ${C.border}`,
-            position: 'relative',
-            overflow: 'hidden',
-            boxShadow: '0 24px 80px rgba(0,0,0,0.85)'
+            position: 'absolute',
+            bottom: '32px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'rgba(10, 10, 12, 0.95)',
+            border: `1px solid ${C.accent}`,
+            borderRadius: '6px',
+            padding: '8px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            color: '#fff',
+            fontSize: '12px',
+            fontWeight: 600,
+            zIndex: 60,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.8)'
           }}
         >
-          {/* RENDER SHOT CONTENT BASED ON TIMECODE */}
-          <FilmShotRenderer
-            shotId={currentShot.id}
-            frameInShot={frameInShot}
-            totalShotFrames={currentShot.endFrame - currentShot.startFrame}
-            mode={mode}
-          />
-
-          {/* Subdued Cinematic Framing Overlay / Safe Area Lines */}
           <div
             style={{
-              position: 'absolute',
-              inset: 0,
-              pointerEvents: 'none',
-              border: '1px solid rgba(255,255,255,0.03)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              padding: '12px'
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.25, fontSize: '9px', fontFamily: 'monospace' }}>
-              <span>AXENT.PROD.2026 // REC.709</span>
-              <span>SHUTTER 180° // 24 FPS</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.25, fontSize: '9px', fontFamily: 'monospace' }}>
-              <span>TC {formatSMPTE(currentFrame, 24)}</span>
-              <span>MASTER 4K UHD</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── BOTTOM TIMELINE & TRANSPORT CONTROLS ── */}
-      <div
-        style={{
-          background: C.surface,
-          borderTop: `1px solid ${C.border}`,
-          padding: '10px 20px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px',
-          zIndex: 40
-        }}
-      >
-        {/* Scrubber Bar with Shot Markers */}
-        <div style={{ position: 'relative', width: '100%', height: '14px', display: 'flex', alignItems: 'center' }}>
-          <div
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-              handleSeek(Math.floor(pct * totalFrames));
-            }}
-            style={{
-              width: '100%',
+              width: '6px',
               height: '6px',
-              background: '#1a1c22',
-              borderRadius: '3px',
-              cursor: 'pointer',
-              position: 'relative'
+              borderRadius: '50%',
+              background: C.accentBright
             }}
-          >
-            {/* Filled Progress */}
-            <div
-              style={{
-                width: `${(currentFrame / totalFrames) * 100}%`,
-                height: '100%',
-                background: C.accent,
-                borderRadius: '3px',
-                transition: 'width 0.03s linear'
-              }}
-            />
-
-            {/* Shot Markers */}
-            {shots.map((s) => {
-              const leftPct = (s.startFrame / totalFrames) * 100;
-              return (
-                <div
-                  key={s.id}
-                  title={`Shot ${s.id}: ${s.name}`}
-                  style={{
-                    position: 'absolute',
-                    left: `${leftPct}%`,
-                    top: '-3px',
-                    bottom: '-3px',
-                    width: '1.5px',
-                    background: currentFrame >= s.startFrame ? C.accentBright : C.border,
-                    pointerEvents: 'none'
-                  }}
-                />
-              );
-            })}
-
-            {/* Playhead Marker */}
-            <div
-              style={{
-                position: 'absolute',
-                left: `${(currentFrame / totalFrames) * 100}%`,
-                top: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: '12px',
-                height: '12px',
-                borderRadius: '50%',
-                background: '#fff',
-                border: `2px solid ${C.accent}`,
-                boxShadow: '0 0 6px rgba(0,0,0,0.6)',
-                pointerEvents: 'none'
-              }}
-            />
-          </div>
+          />
+          <span>Film Complete • Returning to Axent...</span>
         </div>
-
-        {/* Playback Controls & Settings */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button
-              onClick={() => setIsPlaying((p) => !p)}
-              style={{
-                background: isPlaying ? C.surfaceElevated : C.accent,
-                color: isPlaying ? C.textPrimary : '#fff',
-                border: `1px solid ${C.border}`,
-                borderRadius: '4px',
-                width: '32px',
-                height: '32px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer'
-              }}
-              title="Play / Pause (Space)"
-            >
-              {isPlaying ? <Pause size={15} /> : <Play size={15} style={{ marginLeft: '1px' }} />}
-            </button>
-
-            <button
-              onClick={handleRestart}
-              style={{
-                background: 'none',
-                border: `1px solid ${C.border}`,
-                color: C.textMuted,
-                borderRadius: '4px',
-                width: '32px',
-                height: '32px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer'
-              }}
-              title="Restart from beginning"
-            >
-              <RotateCcw size={14} />
-            </button>
-
-            <button
-              onClick={() => handleSeek(currentFrame - 1)}
-              style={{
-                background: 'none',
-                border: `1px solid ${C.border}`,
-                color: C.textMuted,
-                borderRadius: '4px',
-                padding: '0 8px',
-                height: '32px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '2px',
-                fontSize: '11px',
-                cursor: 'pointer'
-              }}
-              title="Previous Frame (,)"
-            >
-              <ChevronLeft size={12} />
-              <span>-1f</span>
-            </button>
-
-            <button
-              onClick={() => handleSeek(currentFrame + 1)}
-              style={{
-                background: 'none',
-                border: `1px solid ${C.border}`,
-                color: C.textMuted,
-                borderRadius: '4px',
-                padding: '0 8px',
-                height: '32px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '2px',
-                fontSize: '11px',
-                cursor: 'pointer'
-              }}
-              title="Next Frame (.)"
-            >
-              <span>+1f</span>
-              <ChevronRight size={12} />
-            </button>
-
-            {/* Audio Toggle */}
-            <button
-              onClick={() => setIsMuted((m) => !m)}
-              style={{
-                background: isMuted ? 'rgba(239, 68, 68, 0.15)' : 'none',
-                border: `1px solid ${isMuted ? 'rgba(239, 68, 68, 0.4)' : C.border}`,
-                color: isMuted ? '#ef4444' : C.textMuted,
-                borderRadius: '4px',
-                width: '32px',
-                height: '32px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                marginLeft: '6px'
-              }}
-              title={isMuted ? 'Unmute Audio (M)' : 'Mute Audio (M)'}
-            >
-              {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-            </button>
-          </div>
-
-          {/* Mode Selector (25s Master vs 15s Cutdown) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div
-              style={{
-                display: 'inline-flex',
-                background: C.canvas,
-                border: `1px solid ${C.border}`,
-                borderRadius: '4px',
-                padding: '2px'
-              }}
-            >
-              <button
-                onClick={() => {
-                  setMode('25s');
-                  setCurrentFrame(0);
-                }}
-                style={{
-                  background: mode === '25s' ? C.surfaceElevated : 'transparent',
-                  color: mode === '25s' ? C.textPrimary : C.textMuted,
-                  border: 'none',
-                  borderRadius: '3px',
-                  padding: '4px 10px',
-                  fontSize: '11px',
-                  fontWeight: mode === '25s' ? 700 : 500,
-                  cursor: 'pointer'
-                }}
-              >
-                25s Master Film
-              </button>
-              <button
-                onClick={() => {
-                  setMode('15s');
-                  setCurrentFrame(0);
-                }}
-                style={{
-                  background: mode === '15s' ? C.surfaceElevated : 'transparent',
-                  color: mode === '15s' ? C.textPrimary : C.textMuted,
-                  border: 'none',
-                  borderRadius: '3px',
-                  padding: '4px 10px',
-                  fontSize: '11px',
-                  fontWeight: mode === '15s' ? 700 : 500,
-                  cursor: 'pointer'
-                }}
-              >
-                15s Social Teaser
-              </button>
-            </div>
-
-            <button
-              onClick={toggleFullscreen}
-              style={{
-                background: 'none',
-                border: `1px solid ${C.border}`,
-                color: C.textMuted,
-                borderRadius: '4px',
-                width: '32px',
-                height: '32px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer'
-              }}
-              title="Toggle Fullscreen (F)"
-            >
-              {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-            </button>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 };

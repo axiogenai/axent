@@ -57,6 +57,14 @@ python manage.py runserver
 
 ---
 
+## Deployment & Hosting
+
+<a href="https://vercel.com?utm_source=team-axiogen&utm_campaign=oss">
+  <img src="https://assets.vercel.com/image/upload/v1588805858/repositories/vercel/powered-by-vercel.svg" alt="Powered by Vercel" />
+</a>
+
+---
+
 ## License
 
 Institutional Proprietary — Developed for Enterprise & University Examination Administrations.

@@ -742,14 +742,83 @@ function reconcileAttemptsIntoStations(stations: CandidateStation[]): CandidateS
           const stationNum = `Station #${cleanRoll.padStart(2, '0')}`;
           const stationId = `${labId}-WS-${cleanRoll.padStart(2, '0')}`;
 
-          if (!stationMap.has(stationId)) {
-            const safeAnswers = a.answers || {};
-            const answeredCount = Object.keys(safeAnswers).filter((k) => safeAnswers[k]).length;
-            const totalQ = a.assignedQuestions?.length || 25;
-            const isDone = a.status === 'SUBMITTED' || a.status === 'DISQUALIFIED' || a.status === 'ABANDONED';
-            const tabSwitches = a.tabSwitchCount || 0;
-            const unfocusedSec = a.unfocusedSeconds || 0;
+          const safeAnswers = a.answers || {};
+          const answeredCount = Object.keys(safeAnswers).filter((k) => safeAnswers[k]).length;
+          const totalQ = a.assignedQuestions?.length || 25;
+          const isDone = a.status === 'SUBMITTED' || a.status === 'DISQUALIFIED' || a.status === 'ABANDONED';
+          const tabSwitches = a.tabSwitchCount || 0;
+          const unfocusedSec = a.unfocusedSeconds || 0;
 
+          // Read real-time question index saved by exam screen
+          let activeQuestionIndex = 0;
+          try {
+            const rawIdx = localStorage.getItem(`codedna_mcq_current_idx_${a.id}`);
+            if (rawIdx !== null) {
+              const parsedIdx = parseInt(rawIdx, 10);
+              if (!isNaN(parsedIdx) && parsedIdx >= 0 && parsedIdx < totalQ) {
+                activeQuestionIndex = parsedIdx;
+              }
+            } else if (answeredCount > 0 && answeredCount < totalQ) {
+              activeQuestionIndex = answeredCount;
+            }
+          } catch {}
+
+          // Find existing station if present
+          let existingStation = stationMap.get(stationId);
+          if (!existingStation) {
+            for (const [, s] of stationMap.entries()) {
+              if (
+                String(s.labId || '').toUpperCase().trim() === String(labId).toUpperCase().trim() &&
+                String(s.student?.rollNumber || '').trim().toLowerCase() === String(a.studentRoll || '').trim().toLowerCase()
+              ) {
+                existingStation = s;
+                break;
+              }
+            }
+          }
+
+          if (existingStation) {
+            // Update existing workstation with latest real-time attempt progress
+            existingStation.examMode = 'MCQ';
+            existingStation.language = 'MCQ';
+            existingStation.status = isDone ? 'Submitted & Done' : 'In Progress';
+            existingStation.lastActive = isDone ? 'Submitted' : 'Just now';
+            existingStation.lastUpdatedTimestamp = Math.max(existingStation.lastUpdatedTimestamp || 0, a.submitTime || a.startTime || Date.now());
+            existingStation.tabSwitchViolations = tabSwitches;
+            existingStation.unfocusedTimeSeconds = unfocusedSec;
+            existingStation.integrityStatus = tabSwitches >= 3 ? 'High Cheating Risk / Plagiarized' : tabSwitches >= 1 ? 'Suspicious Activity / Moderate AI' : 'Verified Original Work';
+            existingStation.cheatingRisk = tabSwitches >= 3 ? 'Critical' : tabSwitches >= 1 ? 'Medium' : 'Low';
+            existingStation.metrics = {
+              ...existingStation.metrics,
+              timeSpent: Math.round(((a.submitTime || Date.now()) - (a.startTime || Date.now())) / 1000),
+              editCount: answeredCount,
+              keystrokes: answeredCount,
+              totalLines: totalQ,
+              tabSwitchViolations: tabSwitches,
+              unfocusedTimeSeconds: unfocusedSec
+            };
+            existingStation.mcqProgress = {
+              examId: a.examId,
+              examTitle: a.examTitle || existingStation.student.assignmentTitle || 'MCQ Examination',
+              answeredCount,
+              totalQuestions: totalQ,
+              currentQuestionIndex: activeQuestionIndex,
+              currentScore: a.score,
+              score: a.score,
+              maxScore: a.maxScore || totalQ,
+              tabSwitches
+            };
+            if (a.score !== undefined) {
+              existingStation.marks = {
+                executionMarks: a.score,
+                logicMarks: 0,
+                vivaMarks: 0,
+                integrityMarks: tabSwitches > 2 ? 0 : 10,
+                totalMarks: a.score,
+                maxMarks: a.maxScore || totalQ
+              };
+            }
+          } else {
             const st: CandidateStation = {
               id: stationId,
               labId,
@@ -808,7 +877,7 @@ function reconcileAttemptsIntoStations(stations: CandidateStation[]): CandidateS
                 examTitle: a.examTitle || 'MCQ Examination',
                 answeredCount,
                 totalQuestions: totalQ,
-                currentQuestionIndex: 0,
+                currentQuestionIndex: activeQuestionIndex,
                 currentScore: a.score,
                 score: a.score,
                 maxScore: a.maxScore || totalQ,
@@ -1086,7 +1155,8 @@ export function setActiveLabId(labId: string): void {
 // ── GET STATIONS FOR A SPECIFIC LAB ──
 export function getStationsForLab(labId: string): CandidateStation[] {
   const all = getLiveStations();
-  return all.filter((s) => s.labId === labId);
+  const cleanTarget = String(labId || '').toUpperCase().trim();
+  return all.filter((s) => String(s.labId || '').toUpperCase().trim() === cleanTarget);
 }
 
 // ── GET DYNAMIC LAB INFO HELPER ──

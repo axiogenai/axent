@@ -492,7 +492,7 @@ export const App: React.FC = () => {
               </ProtectedRoute>
             }
           />
-          <Route path="/launch" element={<LaunchFilmPlayer />} />
+          <Route path="/launch" element={<LaunchFilmPlayer autoPlay={true} onClose={() => navigate('/')} />} />
           {/* Catch-all fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

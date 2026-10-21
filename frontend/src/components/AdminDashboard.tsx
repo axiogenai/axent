@@ -5,7 +5,8 @@ import {
   AnalysisReport,
   ThemeMode,
   CollegeLabInfo,
-  CodeSubmission
+  CodeSubmission,
+  StudentInfo
 } from '../types/dna';
 import {
   COLLEGE_LABS,
@@ -26,6 +27,7 @@ import {
   sendProctorWarningMessage,
   subscribeToCctvBroadcast,
   syncCurrentLiveStation,
+  syncMcqLiveStation,
   clearSubmittedStations,
   removeSingleStation,
   sendProctorConcludeAndFreeCommand,
@@ -511,6 +513,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     playSound('success');
   };
 
+  const handleConnectTestMcqStation = () => {
+    const targetLab = selectedLabId === 'all' ? 'LAB-01' : selectedLabId;
+    const labInfo = allLabs.find((l) => l.labId === targetLab) || allLabs[0];
+    const existingInLab = getLiveStations().filter((s) => s.labId === targetLab);
+    const cleanIndex = existingInLab.length + 1;
+    const stationNum = `Station #${cleanIndex.toString().padStart(2, '0')}`;
+    const studentRoll = `1MS22CS${(100 + cleanIndex).toString()}`;
+    const studentName = `MCQ Candidate ${cleanIndex}`;
+
+    const mockAttempt: any = {
+      id: `mcq_test_${Date.now()}`,
+      examId: 'mcq-gate-cs',
+      examTitle: 'GATE CS - Data Structures & Algorithms',
+      ticketId: `tkt_${Date.now()}`,
+      studentName,
+      studentRoll,
+      status: 'in_progress',
+      answers: {
+        'q-1': 'A',
+        'q-2': 'C',
+        'q-3': 'B',
+        'q-4': 'D'
+      },
+      startTime: Date.now() - 15 * 60 * 1000,
+      tabSwitchCount: 0,
+      unfocusedSeconds: 0,
+      score: 16,
+      maxScore: 20,
+      assignedQuestions: Array.from({ length: 20 }, (_, i) => `q-${i + 1}`)
+    };
+
+    const mockExam: any = {
+      id: 'mcq-gate-cs',
+      title: 'GATE CS - Data Structures & Algorithms',
+      questionCount: 20,
+      totalMarks: 20
+    };
+
+    const mockStudent: StudentInfo = {
+      name: studentName,
+      rollNumber: studentRoll,
+      course: labInfo.department,
+      department: labInfo.department,
+      semester: '6th Semester',
+      examType: 'Multiple Choice Question (MCQ) Examination',
+      assignmentTitle: 'GATE CS - Data Structures & Algorithms',
+      labId: targetLab,
+      labName: labInfo.labName,
+      stationNumber: stationNum
+    };
+
+    try {
+      localStorage.setItem(`codedna_mcq_current_idx_${mockAttempt.id}`, '4');
+    } catch {}
+
+    syncMcqLiveStation(mockAttempt, mockExam, mockStudent, 4, false);
+    loadData();
+    playSound('success');
+  };
+
   // Filter stations based on security risk & search query
   const filteredStations = stations.filter((s) => {
     if (filter === 'cheating') {
@@ -563,6 +625,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         background: 'var(--bg-main)',
         padding: 'clamp(12px, 2.5vw, 24px)',
         overflowY: 'auto',
+        overflowX: 'hidden',
+        width: '100%',
+        maxWidth: '100vw',
+        boxSizing: 'border-box',
         gap: 'clamp(12px, 2vw, 18px)'
       }}
     >
@@ -640,10 +706,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             className="btn btn-secondary btn-sm"
             onClick={handleConnectTestStation}
             style={{ gap: '5px', fontSize: '11px' }}
-            title="Connect an active functional test workstation to this laboratory"
+            title="Connect an active functional coding test workstation to this laboratory"
           >
             <PlusCircle size={12} color="var(--accent)" />
             <span>+ Test Station</span>
+          </button>
+
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={handleConnectTestMcqStation}
+            style={{ gap: '5px', fontSize: '11px' }}
+            title="Connect an active MCQ test candidate with real-time question answering telemetry"
+          >
+            <BookOpen size={12} color="var(--accent)" />
+            <span>+ MCQ Test Station</span>
           </button>
 
           <a
@@ -1113,6 +1189,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <span>Connect Test Candidate</span>
               </button>
 
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={handleConnectTestMcqStation}
+                style={{ padding: '7px 18px', gap: '6px' }}
+                title="Immediately connect an active MCQ test candidate to evaluate live question telemetry"
+              >
+                <BookOpen size={13} color="var(--accent)" />
+                <span>+ Connect MCQ Test Candidate</span>
+              </button>
+
               <a
                 href={`/workspace?lab=${selectedLabId === 'all' ? 'LAB-01' : selectedLabId}&station=${(getLiveStations().filter((s) => s.labId === (selectedLabId === 'all' ? 'LAB-01' : selectedLabId)).length + 1).toString().padStart(2, '0')}`}
                 target="_blank"
@@ -1164,7 +1250,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               const isSubmitted = station.status === 'Submitted & Done';
               const isLocked = isStationEffectiveLocked(station);
-              const previewMode = stationViewMode[station.id] || 'camera';
+              const isMcq = station.examMode === 'MCQ' || station.language === 'MCQ';
+              const previewMode = stationViewMode[station.id] || (station.screenImageData ? 'camera' : (isMcq ? 'activity' : 'camera'));
 
               // Format station title nicely, e.g. "Station 01" or "Station 22" (removing any stray #)
               const cleanNum = station.stationNumber.replace(/^#/, '').trim();
@@ -1330,10 +1417,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           gap: '4px',
                           zIndex: 5
                         }}
-                        title={previewMode === 'camera' ? 'Switch to live answer / code preview' : 'Switch to camera feed'}
+                        title={previewMode === 'camera' ? (isMcq ? 'Switch to live MCQ answering telemetry' : 'Switch to live code preview') : 'Switch to camera feed'}
                       >
                         {previewMode === 'camera' ? <ListChecks size={10} /> : <Video size={10} />}
-                        <span>{previewMode === 'camera' ? 'Activity' : 'Camera'}</span>
+                        <span>{previewMode === 'camera' ? (isMcq ? 'MCQ Live' : 'Activity') : 'Camera'}</span>
                       </button>
                     )}
 
@@ -1357,36 +1444,114 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     ) : previewMode === 'activity' ? (
                       /* Live Answering / Code Preview Mode */
                       station.examMode === 'MCQ' || station.language === 'MCQ' ? (
-                        <div style={{ width: '100%', height: '100%', padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxSizing: 'border-box' }}>
+                        <div
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            padding: '12px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            boxSizing: 'border-box',
+                            background: 'rgba(0, 0, 0, 0.45)',
+                            borderRadius: '8px',
+                            border: '1px solid rgba(255, 255, 255, 0.06)'
+                          }}
+                        >
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#a1a1aa' }}>
-                              MCQ EXAMINATION
-                            </span>
-                            <span style={{ fontSize: '10px', color: '#71717a' }}>
-                              Q {(station.mcqProgress?.currentQuestionIndex ?? 0) + 1} / {station.mcqProgress?.totalQuestions || 10}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <ListChecks size={13} color="var(--accent)" />
+                              <span style={{ fontSize: '11px', fontWeight: 700, color: '#e4e4e7', letterSpacing: '0.02em' }}>
+                                MCQ TELEMETRY
+                              </span>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                background: 'rgba(56, 189, 248, 0.15)',
+                                color: '#38bdf8',
+                                border: '1px solid rgba(56, 189, 248, 0.3)',
+                                padding: '1px 6px',
+                                borderRadius: '4px'
+                              }}
+                            >
+                              Active Q {(station.mcqProgress?.currentQuestionIndex ?? 0) + 1} / {station.mcqProgress?.totalQuestions || 10}
                             </span>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap', margin: '8px 0' }}>
-                            {Array.from({ length: Math.min(20, station.mcqProgress?.totalQuestions || 10) }).map((_, idx) => {
+
+                          {/* Grid of Numbered Question Indicators */}
+                          <div
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(5, 1fr)',
+                              gap: '4px',
+                              margin: '8px 0',
+                              maxHeight: '84px',
+                              overflowY: 'auto'
+                            }}
+                          >
+                            {Array.from({ length: Math.min(25, station.mcqProgress?.totalQuestions || 10) }).map((_, idx) => {
                               const isAnswered = idx < (station.mcqProgress?.answeredCount ?? (station.metrics.editCount || 0));
                               const isCurrent = idx === (station.mcqProgress?.currentQuestionIndex ?? 0);
                               return (
                                 <div
                                   key={idx}
                                   style={{
-                                    width: '12px',
-                                    height: '12px',
-                                    borderRadius: '2px',
-                                    background: isCurrent ? 'var(--accent)' : isAnswered ? '#22c55e' : 'rgba(255, 255, 255, 0.12)',
-                                    border: isCurrent ? '1px solid #fff' : 'none'
+                                    height: '18px',
+                                    borderRadius: '3px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '9px',
+                                    fontWeight: 700,
+                                    background: isCurrent
+                                      ? 'rgba(56, 189, 248, 0.3)'
+                                      : isAnswered
+                                      ? 'rgba(34, 197, 94, 0.22)'
+                                      : 'rgba(255, 255, 255, 0.05)',
+                                    border: isCurrent
+                                      ? '1px solid #38bdf8'
+                                      : isAnswered
+                                      ? '1px solid rgba(34, 197, 94, 0.45)'
+                                      : '1px solid rgba(255, 255, 255, 0.08)',
+                                    color: isCurrent ? '#fff' : isAnswered ? '#4ade80' : '#71717a'
                                   }}
-                                  title={`Question ${idx + 1}: ${isAnswered ? 'Answered' : 'Unanswered'}`}
-                                />
+                                  title={`Question ${idx + 1}: ${isCurrent ? 'Current Active' : isAnswered ? 'Answered' : 'Unanswered'}`}
+                                >
+                                  {idx + 1}
+                                </div>
                               );
                             })}
                           </div>
-                          <div style={{ fontSize: '10.5px', color: '#71717a' }}>
-                            {station.mcqProgress?.answeredCount ?? 0}/{station.mcqProgress?.totalQuestions ?? 10} Answered
+
+                          {/* Progress bar + Answered summary */}
+                          <div>
+                            <div
+                              style={{
+                                width: '100%',
+                                height: '4px',
+                                background: 'rgba(255, 255, 255, 0.1)',
+                                borderRadius: '2px',
+                                overflow: 'hidden',
+                                marginBottom: '6px'
+                              }}
+                            >
+                              <div
+                                style={{
+                                  width: `${Math.min(100, Math.round(((station.mcqProgress?.answeredCount ?? 0) / Math.max(1, station.mcqProgress?.totalQuestions || 10)) * 100))}%`,
+                                  height: '100%',
+                                  background: '#22c55e',
+                                  transition: 'width 0.3s ease'
+                                }}
+                              />
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: '#a1a1aa' }}>
+                              <span>{station.mcqProgress?.answeredCount ?? 0}/{station.mcqProgress?.totalQuestions || 10} Answered</span>
+                              <span style={{ fontWeight: 600, color: '#e4e4e7' }}>
+                                {station.mcqProgress?.score !== undefined ? `${station.mcqProgress.score} pts` : ''}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       ) : (
@@ -1504,6 +1669,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       ) : Boolean((station.metrics?.tabSwitchViolations || 0) > 0) ? (
                         <span style={{ color: '#ef4444', fontWeight: 600 }}>
                           {station.metrics.tabSwitchViolations}/3 strikes
+                        </span>
+                      ) : isMcq ? (
+                        <span style={{ color: '#38bdf8', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <ListChecks size={12} />
+                          Currently on Q{(station.mcqProgress?.currentQuestionIndex ?? 0) + 1} ({station.mcqProgress?.answeredCount ?? 0}/{station.mcqProgress?.totalQuestions || 10} ans)
                         </span>
                       ) : station.metrics.pasteRatio >= 50 ? (
                         <span style={{ color: '#ef4444', fontWeight: 600 }}>
@@ -1730,7 +1900,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )
       ) : (
         /* ── VIEW MODE 2: UNIVERSITY EXAMINATION AUDIT LEDGER TABLE ── */
-        <div className="ledger-table-container">
+        <div className="ledger-table-container" style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <table className="ledger-table">
             <thead>
               <tr>
@@ -1740,7 +1910,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <th>Assigned Lab</th>
                 <th>IP Subnet</th>
                 <th>Language</th>
-                <th>Keystrokes</th>
+                <th>Activity / Keys</th>
                 <th>Paste %</th>
                 <th>Tab Swaps</th>
                 <th>Cheating Risk</th>
@@ -1775,7 +1945,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </td>
                     <td>{station.language}</td>
                     <td style={{ fontFamily: 'var(--font-mono)' }}>
-                      {station.metrics.keystrokes}
+                      {station.examMode === 'MCQ' || station.language === 'MCQ'
+                        ? `Q ${(station.mcqProgress?.currentQuestionIndex ?? 0) + 1}/${station.mcqProgress?.totalQuestions || 10} (${station.mcqProgress?.answeredCount ?? 0} ans)`
+                        : station.metrics.keystrokes}
                     </td>
                     <td>
                       <span

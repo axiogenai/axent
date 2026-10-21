@@ -39,8 +39,14 @@ export interface Hero1Props {
     signInHref?: string;
     /** Callback for when a nav link is clicked */
     onNavLinkClick?: (link: NavLink) => void;
+    /** Callback for when the secondary CTA button is clicked */
+    onSecondaryCtaClick?: () => void;
+    /** Callback for when a social/footer link is clicked */
+    onSocialLinkClick?: (link: SocialLink) => void;
     /** Additional wrapper CSS classes */
     className?: string;
+    /** Optional sponsorship / platform badge (e.g., Powered by Vercel) */
+    badge?: React.ReactNode;
 }
 
 const DEFAULT_NAV: NavLink[] = [
@@ -80,10 +86,24 @@ export default function Hero1({
     signInLabel,
     signInHref,
     onNavLinkClick,
+    onSecondaryCtaClick,
+    onSocialLinkClick,
     className,
+    badge,
 }: Hero1Props) {
     const [links, setLinks] = useState<NavLink[]>(navLinks);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+    React.useEffect(() => {
+        if (isMobileMenuOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => {
+            document.body.style.overflow = '';
+        };
+    }, [isMobileMenuOpen]);
 
     const handleNavLinkClick = (clickedLink: NavLink, e: React.MouseEvent) => {
         if (onNavLinkClick) {
@@ -131,7 +151,7 @@ export default function Hero1({
     return (
         <section
             className={cn(
-                "relative w-full min-h-screen flex flex-col justify-between overflow-hidden text-white selection:bg-white selection:text-black",
+                "relative w-full min-h-[100dvh] flex flex-col justify-between overflow-hidden text-white selection:bg-white selection:text-black",
                 className
             )}
             style={{ backgroundColor: "#06060c" }}
@@ -299,21 +319,21 @@ export default function Hero1({
                 variants={containerVariants}
                 initial="hidden"
                 animate="visible"
-                className="relative z-10 flex-1 flex flex-col justify-between px-6 pt-12 pb-10 md:px-12 lg:px-20 md:pt-16 md:pb-12"
+                className="relative z-10 flex-1 flex flex-col justify-between px-5 pt-8 pb-8 sm:px-12 lg:px-20 md:pt-16 md:pb-12"
             >
                 {/* Top Section: Headline & CTA Button */}
-                <div className="flex flex-col gap-8 md:gap-10 max-w-[850px] mt-[5vh]">
+                <div className="flex flex-col gap-6 sm:gap-8 md:gap-10 max-w-[850px] mt-2 sm:mt-[5vh]">
                     <motion.h1
                         variants={itemVariants}
-                        className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-semibold leading-[1.08] tracking-[-0.04em] text-white"
+                        className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-semibold leading-[1.1] tracking-[-0.04em] text-white"
                     >
                         {headline}
                     </motion.h1>
 
-                    <motion.div variants={itemVariants} className="flex flex-wrap items-center gap-4">
+                    <motion.div variants={itemVariants} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
                         <a
                             href={ctaHref}
-                            className="inline-flex w-fit items-center gap-4 bg-white text-black font-semibold text-sm p-1.5 pl-5 rounded-lg hover:bg-white/90 transition-all duration-300 shadow-[0_4px_16px_rgba(255,255,255,0.06)] group"
+                            className="inline-flex w-full sm:w-fit items-center justify-between sm:justify-start gap-4 bg-white text-black font-semibold text-sm p-1.5 pl-5 rounded-lg hover:bg-white/90 transition-all duration-300 shadow-[0_4px_16px_rgba(255,255,255,0.06)] group"
                         >
                             <span>{ctaLabel}</span>
                             <span className="w-8 h-8 rounded-md bg-black flex items-center justify-center shrink-0 overflow-hidden relative">
@@ -324,7 +344,13 @@ export default function Hero1({
                         {secondaryCtaLabel && secondaryCtaHref && (
                             <a
                                 href={secondaryCtaHref}
-                                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-white/20 text-white text-sm font-medium hover:border-white/50 hover:bg-white/5 transition-all duration-300"
+                                onClick={(e) => {
+                                    if (onSecondaryCtaClick) {
+                                        e.preventDefault();
+                                        onSecondaryCtaClick();
+                                    }
+                                }}
+                                className="inline-flex w-full sm:w-fit items-center justify-center gap-2 px-5 py-2.5 rounded-lg border border-white/20 text-white text-sm font-medium hover:border-white/50 hover:bg-white/5 transition-all duration-300 cursor-pointer"
                             >
                                 <span>{secondaryCtaLabel}</span>
                                 <ArrowUpRight className="w-3.5 h-3.5 text-white/60" />
@@ -336,7 +362,7 @@ export default function Hero1({
                 {/* Bottom Section: Description & Controls */}
                 <motion.div
                     variants={itemVariants}
-                    className="flex flex-col lg:flex-row lg:items-end justify-between gap-10 lg:gap-10 mt-auto pt-16 w-full relative"
+                    className="flex flex-col lg:flex-row lg:items-end justify-between gap-8 lg:gap-10 mt-auto pt-8 sm:pt-16 w-full relative"
                 >
                     <div className="md:max-w-2xl">
                         <p className="text-white/80 text-sm md:text-base lg:text-lg leading-relaxed font-normal whitespace-pre-line">
@@ -344,18 +370,29 @@ export default function Hero1({
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-6 lg:gap-10">
+                    <div className="flex flex-wrap items-center gap-6 lg:gap-8">
                         {socialLinks.map((social) => (
                             <a
                                 key={social.label}
                                 href={social.href}
+                                onClick={(e) => {
+                                    if (onSocialLinkClick && (social.href === '/launch' || !social.href.startsWith('http'))) {
+                                        e.preventDefault();
+                                        onSocialLinkClick(social);
+                                    }
+                                }}
                                 target={social.href.startsWith("http") ? "_blank" : undefined}
                                 rel={social.href.startsWith("http") ? "noopener noreferrer" : undefined}
-                                className="text-white/70 text-sm lg:text-base hover:text-white transition-colors duration-250 tracking-wide font-mono"
+                                className="text-white/70 text-sm lg:text-base hover:text-white transition-colors duration-250 tracking-wide font-mono cursor-pointer"
                             >
                                 {social.label}
                             </a>
                         ))}
+                        {badge && (
+                            <div className="inline-flex items-center shrink-0">
+                                {badge}
+                            </div>
+                        )}
                     </div>
                 </motion.div>
             </motion.div>

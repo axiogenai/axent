@@ -1,6 +1,7 @@
 import React from 'react';
 import LogoIcon from '@/assets/logo-icon';
 import { motion, type Variants } from 'motion/react';
+import { VercelBadge } from '../VercelBadge';
 import {
   FaFacebookF,
   FaInstagram,
@@ -32,6 +33,7 @@ export interface Footer16Props {
   socials?: Footer16Social[];
   copyright?: string;
   backgroundImage?: string;
+  badge?: React.ReactNode;
 }
 
 const defaultColumns: Footer16Column[] = [];
@@ -121,7 +123,9 @@ export function Footer16({
   socials = defaultSocials,
   copyright = '© 2026 Axent · Engineered by team.axiogen.in. All institutional rights reserved.',
   backgroundImage = backgroundUrl,
+  badge,
 }: Footer16Props) {
+  const activeBadge = badge !== undefined ? badge : <VercelBadge />;
   return (
     <footer className="relative w-full overflow-hidden bg-zinc-950 font-sans text-zinc-100 antialiased">
       <div
@@ -139,7 +143,11 @@ export function Footer16({
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, amount: 0.22 }}
-        className="relative w-full mx-auto flex min-h-[460px] sm:min-h-[640px] lg:min-h-[720px] flex-col justify-end pt-10 sm:pt-16"
+        className={`relative w-full mx-auto flex flex-col justify-end pt-8 sm:pt-16 ${
+          columns && columns.length > 0
+            ? 'min-h-[460px] sm:min-h-[640px] lg:min-h-[720px]'
+            : 'min-h-[160px] sm:min-h-[220px]'
+        }`}
       >
         {/* Sleek, tall, atmospheric watermark hidden on mobile to prevent logo collision, visible on desktop/tablet */}
         <motion.div
@@ -247,9 +255,16 @@ export function Footer16({
             variants={riseVariants}
             className="mt-8 flex flex-col gap-4 border-t border-white/10 pt-5 sm:mt-9 sm:flex-row sm:items-center sm:justify-between"
           >
-            <p className="text-xs font-normal text-zinc-500">
-              {copyright}
-            </p>
+            <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+              <p className="text-xs font-normal text-zinc-500">
+                {copyright}
+              </p>
+              {activeBadge && (
+                <div className="inline-flex items-center">
+                  {activeBadge}
+                </div>
+              )}
+            </div>
 
             <motion.ul
               variants={listVariants}
