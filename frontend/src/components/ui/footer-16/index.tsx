@@ -102,7 +102,7 @@ export function Footer16({
       {/* 1. Giant atmospheric watermark text UNDER/BEHIND the mountains */}
       <motion.div
         variants={wordmarkVariants}
-        className="pointer-events-none absolute inset-x-0 top-7 sm:top-5 lg:top-7 flex w-full justify-center overflow-hidden z-0 px-4"
+        className="pointer-events-none absolute inset-x-0 top-24 sm:top-5 lg:top-7 flex w-full justify-center overflow-hidden z-0 px-4"
         aria-hidden="true"
       >
         <div className="w-full max-w-[1380px] flex justify-center">
@@ -152,7 +152,7 @@ export function Footer16({
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, amount: 0.22 }}
-        className="relative z-20 w-full mx-auto flex flex-col justify-end pt-5 sm:pt-28 lg:pt-36 min-h-[250px] sm:min-h-[460px] lg:min-h-[520px]"
+        className="relative z-20 w-full mx-auto flex flex-col justify-end pt-16 sm:pt-28 lg:pt-36 min-h-[390px] sm:min-h-[460px] lg:min-h-[520px]"
       >
         {/* Backdrop blur glass container */}
         <div className="relative z-10 border-t border-white/10 bg-black/40 px-5 pt-6 pb-6 backdrop-blur-md sm:px-12 sm:pt-8 sm:pb-8">
