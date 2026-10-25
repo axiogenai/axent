@@ -13,7 +13,6 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { LandingPage } from './components/LandingPage';
 import { LaunchFilmPlayer } from './components/LaunchFilmPlayer';
 import { SEOUpdater } from './components/SEOUpdater';
-import { VercelBadge } from './components/ui/VercelBadge';
 import {
   CodeSubmission,
   AnalysisReport,

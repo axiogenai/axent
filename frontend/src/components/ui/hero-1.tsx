@@ -388,11 +388,6 @@ export default function Hero1({
                                 {social.label}
                             </a>
                         ))}
-                        {badge && (
-                            <div className="inline-flex items-center shrink-0">
-                                {badge}
-                            </div>
-                        )}
                     </div>
                 </motion.div>
             </motion.div>

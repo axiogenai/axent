@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Hero1 from './ui/hero-1';
 import { Footer16 } from './ui/footer-16';
-import { VercelBadge } from './ui/VercelBadge';
 import { LaunchFilmPlayer } from './LaunchFilmPlayer';
 import { ThemeMode } from '../types/dna';
 import { playSound } from '../utils/sounds';
@@ -68,7 +67,6 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
           { label: 'team.axiogen.in', href: 'https://team.axiogen.in' },
           { label: 'Launch Film (4K)', href: '/launch' }
         ]}
-        badge={<VercelBadge />}
         onNavLinkClick={(link) => handleNav(link.href)}
       />
 
@@ -77,8 +75,34 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         brandName="AXENT"
         tagline={'Autonomous Academic Examination & Proctoring Platform.\nEngineered for uncompromised institutional integrity, real-time forensics,\nand cryptographic audit ledgers.'}
         copyright="© 2026 Axent · Engineered by team.axiogen.in. All institutional rights reserved."
-        columns={[]}
-        badge={<VercelBadge />}
+        columns={[
+          {
+            title: 'Platform Portals',
+            links: [
+              { label: 'Candidate Examination Hall', href: '/mcq' },
+              { label: 'Central Proctor CCTV Control', href: '/admin' },
+              { label: 'Paper Setter & Question Bank', href: '/paper-setter' },
+              { label: 'Monaco Coding Practical Hall', href: '/workspace' },
+            ]
+          },
+          {
+            title: 'Integrity Architecture',
+            links: [
+              { label: 'Dual-Stream Forensic Telemetry', href: '#features' },
+              { label: 'Campus Kiosk Lockdown Engine', href: '#security' },
+              { label: 'Keystroke & Focus Tracker', href: '#features' },
+              { label: 'Cryptographic Audit Ledger', href: '#security' },
+            ]
+          },
+          {
+            title: 'Organization',
+            links: [
+              { label: 'Axiogen Intelligence', href: 'https://team.axiogen.in' },
+              { label: 'GitHub Source Repository', href: 'https://github.com/axiogenai/axent' },
+              { label: 'Master Launch Film (4K)', href: '/launch' },
+            ]
+          }
+        ]}
       />
 
       {/* ── 3. FULL-SCREEN 4K MASTER LAUNCH FILM OVERLAY (Auto-Play & Auto-Return) ── */}
