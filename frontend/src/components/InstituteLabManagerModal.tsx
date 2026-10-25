@@ -22,11 +22,9 @@ import {
   getAllCollegeLabs,
   saveCollegeLab,
   deleteCollegeLab,
-  resetCollegeLabs,
   syncCollegeLabsFromCloud,
   purgePhantomExamLabs,
-  isPhantomLab,
-  DEFAULT_INSTITUTE_LABS
+  isPhantomLab
 } from '../services/adminService';
 import { playSound } from '../utils/sounds';
 import { ConfirmationModal } from './ConfirmationModal';
@@ -128,14 +126,22 @@ export const InstituteLabManagerModal: React.FC<InstituteLabManagerModalProps> =
   };
 
   const [labToDelete, setLabToDelete] = useState<string | null>(null);
-  const [showResetDefaultsConfirm, setShowResetDefaultsConfirm] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const handleDeleteLab = (labId: string) => {
     setLabToDelete(labId);
   };
 
-  const handleResetDefaults = () => {
-    setShowResetDefaultsConfirm(true);
+  const handleSyncFromCloud = async () => {
+    setIsSyncing(true);
+    playSound('click');
+    try {
+      const cloudLabs = await syncCollegeLabsFromCloud();
+      setLabs(cloudLabs.filter((l) => !isPhantomLab(l)));
+      onLabsUpdated();
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   // Generate Kiosk Script Text
@@ -473,7 +479,8 @@ exit
                     Active Institute Laboratories ({labs.length})
                   </div>
                   <button
-                    onClick={handleResetDefaults}
+                    onClick={() => void handleSyncFromCloud()}
+                    disabled={isSyncing}
                     style={{
                       background: 'transparent',
                       border: '1px solid var(--border)',
@@ -481,14 +488,14 @@ exit
                       padding: '4px 8px',
                       fontSize: '11px',
                       color: 'var(--text-muted)',
-                      cursor: 'pointer',
+                      cursor: isSyncing ? 'not-allowed' : 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '4px'
                     }}
                   >
-                    <RotateCcw size={11} />
-                    <span>Restore Default College Labs</span>
+                    <RotateCcw size={11} className={isSyncing ? 'animate-spin' : ''} />
+                    <span>{isSyncing ? 'Syncing...' : 'Sync Cloud Labs'}</span>
                   </button>
                 </div>
 
@@ -505,7 +512,14 @@ exit
                       </tr>
                     </thead>
                     <tbody>
-                      {labs.map((lab) => (
+                      {labs.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                            No institute laboratories registered yet. Register a new laboratory above or sync from cloud.
+                          </td>
+                        </tr>
+                      ) : (
+                        labs.map((lab) => (
                         <tr key={lab.labId} style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)' }}>
                           <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--accent)' }}>
                             {lab.labId}
@@ -559,7 +573,7 @@ exit
                             </button>
                           </td>
                         </tr>
-                      ))}
+                      )))}
                     </tbody>
                   </table>
                 </div>
@@ -944,33 +958,6 @@ exit
           }
         }}
         onCancel={() => setLabToDelete(null)}
-      />
-
-      {/* Reset Defaults Confirmation Modal */}
-      <ConfirmationModal
-        isOpen={showResetDefaultsConfirm}
-        title="Restore Default Laboratories?"
-        message="Reset all custom laboratories and restore the official college template labs? Any custom laboratories authored in this browser will be replaced."
-        confirmText="Restore Templates"
-        cancelText="Cancel"
-        tone="warning"
-        icon="warning"
-        badgeText="Restore Official Templates"
-        onConfirm={() => {
-          // 1. Immediately dismiss modal (0ms)
-          setShowResetDefaultsConfirm(false);
-          playSound('warning');
-
-          // 2. Optimistically restore defaults immediately (0ms)
-          setLabs(DEFAULT_INSTITUTE_LABS);
-
-          // 3. Background reset and notify parent
-          void resetCollegeLabs().then((reset) => {
-            setLabs(reset);
-            onLabsUpdated();
-          });
-        }}
-        onCancel={() => setShowResetDefaultsConfirm(false)}
       />
     </div>
   );

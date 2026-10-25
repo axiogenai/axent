@@ -15,7 +15,7 @@ import {
 import { playSound } from '../utils/sounds';
 import { parseExamToken } from '../utils/tokenParser';
 import { syncMcqLiveStation, subscribeToCctvBroadcast, isStationLocked } from '../services/adminService';
-import { fetchSingleStationLockStatus, updateStationLockInCloud } from '../services/supabaseService';
+import { fetchSingleStationLockStatus, updateStationLockInCloud, subscribeToCloudStations } from '../services/supabaseService';
 import { startAntiCheatingShield } from '../services/antiCheatingGuard';
 import { StudentInfo, ExamCategory } from '../types/dna';
 import { SimpleSelect } from './watermelon/Select';
@@ -2470,12 +2470,41 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       }
     });
 
+    // Realtime Supabase Cloud Listener for cross-device proctor lock & warning dispatch
+    const unsubscribeCloud = subscribeToCloudStations((payload) => {
+      const row = payload?.new;
+      if (!row) return;
+      const cleanNum = cleanStationNum.replace(/^0+/, '');
+      const isMatch = row.id === stationId ||
+        row.station_number === student.stationNumber ||
+        row.id?.endsWith(`WS-${cleanNum}`) ||
+        row.id === cleanStationNum;
+
+      if (isMatch) {
+        if (row.is_locked_by_proctor !== undefined) {
+          const locked = Boolean(row.is_locked_by_proctor);
+          setIsLockedByProctor(locked);
+          if (locked) {
+            playSound('warning');
+          } else {
+            setProctorWarning(null);
+            if (attempt) pardonInfractions(attempt.id);
+            setAttempt((prev) => prev ? { ...prev, tabSwitchCount: 0, unfocusedSeconds: 0 } : null);
+            playSound('success');
+          }
+        }
+        if (row.proctor_warning_message) {
+          setProctorWarning(row.proctor_warning_message);
+          playSound('warning');
+        }
+      }
+    });
+
     const pollInterval = setInterval(async () => {
       try {
         const cloudStatus = await fetchSingleStationLockStatus(stationId);
         if (cloudStatus) {
-          const currentExplicitLock = typeof window !== 'undefined' ? localStorage.getItem(`codedna_lock_station_${stationId}`) : null;
-          if (cloudStatus.isLocked && !isLockedByProctor && currentExplicitLock !== 'false') {
+          if (cloudStatus.isLocked && !isLockedByProctor) {
             setIsLockedByProctor(true);
             if (cloudStatus.warningMessage) setProctorWarning(cloudStatus.warningMessage);
             playSound('warning');
@@ -2499,6 +2528,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
     return () => {
       unsubscribe();
+      unsubscribeCloud();
       clearInterval(pollInterval);
     };
   }, [student.labId, student.stationNumber, attempt, stationId, cleanStationNum]);

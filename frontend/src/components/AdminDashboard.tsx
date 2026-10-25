@@ -226,19 +226,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
     }
 
-    // Instantly update state with 0ms delay
-    setStations(list);
+    // Smooth update: preserve existing workstations while cloud fetch is pending to prevent visual flickering
+    setStations((prev) => {
+      if (list.length > 0) return list;
+      if (prev.length > 0) return prev;
+      return [];
+    });
     setLastRefreshed(new Date().toLocaleTimeString());
 
     // Asynchronous non-blocking cloud merge
     fetchStationsFromCloud(selectedLabId === 'all' ? undefined : selectedLabId).then((cloudStations) => {
-      if (cloudStations && cloudStations.length > 0) {
+      if (cloudStations) {
         const stationMap = new Map<string, CandidateStation>();
-        list.forEach((s) => stationMap.set(s.id, s));
-        cloudStations.forEach((cs) => {
-          const existing = stationMap.get(cs.id);
-          if (!existing || (cs.lastUpdatedTimestamp || 0) >= (existing.lastUpdatedTimestamp || 0)) {
-            stationMap.set(cs.id, cs);
+        cloudStations.forEach((cs) => stationMap.set(cs.id, cs));
+        list.forEach((s) => {
+          const existing = stationMap.get(s.id);
+          if (!existing || (s.lastUpdatedTimestamp || 0) >= (existing.lastUpdatedTimestamp || 0)) {
+            stationMap.set(s.id, s);
           }
         });
         const merged = Array.from(stationMap.values());
@@ -638,7 +642,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <div className="kpi-grid">
         <WatermelonStatCard
           label="Campus Laboratories"
-          value={campusStats.totalLabs}
+          value={allLabs.length}
           unit="Labs"
           icon={<Building size={13} />}
           iconColor="var(--accent)"
@@ -646,7 +650,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         <WatermelonStatCard
           label="Active Sessions"
-          value={campusStats.activeExams}
+          value={activeCount}
           unit="Active"
           icon={<Clock size={13} />}
           iconColor="var(--warning)"
@@ -654,7 +658,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         <WatermelonStatCard
           label="Submissions Done"
-          value={campusStats.submitted}
+          value={submittedCount}
           unit="Submitted"
           icon={<CheckCircle2 size={13} />}
           iconColor="var(--success)"
@@ -662,10 +666,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         <WatermelonStatCard
           label="Cheating Alerts"
-          value={campusStats.cheatingAlerts}
+          value={cheatingCount}
           unit="Flagged"
           icon={<ShieldAlert size={13} />}
-          iconColor={campusStats.cheatingAlerts > 0 ? 'var(--danger)' : 'var(--success)'}
+          iconColor={cheatingCount > 0 ? 'var(--danger)' : 'var(--success)'}
         />
       </div>
 
@@ -698,7 +702,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             College Multi-Laboratory Examination Grid
           </h2>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            Monitoring {selectedLabId === 'all' ? `All Examination Laboratories (${allLabs.length} Active Labs)` : currentLabInfo?.labName} • Instant Live CCTV Telemetry Sync • Last updated: {lastRefreshed}
+            Monitoring {selectedLabId === 'all' ? (allLabs.length > 0 ? `All Laboratories (${allLabs.length} Active Labs)` : `All Active Workstations (${stations.length} Online)`) : currentLabInfo?.labName} • Instant Live CCTV Telemetry Sync • Last updated: {lastRefreshed}
           </div>
         </div>
 
@@ -825,7 +829,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               options={[
                 {
                   value: 'all',
-                  label: `All ${allLabs.length} Labs (Campus Overview - ${stations.length} Active Online)`,
+                  label: allLabs.length > 0
+                    ? `All ${allLabs.length} Labs (Campus Overview - ${stations.length} Active Online)`
+                    : `Campus Overview (${stations.length} Active Workstations)`,
                   badge: 'ALL'
                 },
                 ...allLabs.map((lab) => {

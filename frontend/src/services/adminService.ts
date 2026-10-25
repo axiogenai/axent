@@ -189,57 +189,9 @@ export function subscribeToCctvBroadcast(
   };
 }
 
-// ── REAL INSTITUTE LABORATORIES ──
-// Canonical 5 physical college laboratories
-export const DEFAULT_INSTITUTE_LABS: CollegeLabInfo[] = [
-  {
-    labId: 'LAB-01',
-    labCode: 'CSE-101',
-    labName: 'Turing Advanced Computing Lab',
-    department: 'Computer Science & Engineering',
-    block: 'Dr. A.P.J. Abdul Kalam Computing Complex (Block A, 3rd Floor)',
-    totalStations: 50,
-    invigilatorName: 'Prof. Alan Turing / Senior Lab Proctor'
-  },
-  {
-    labId: 'LAB-02',
-    labCode: 'ISE-201',
-    labName: 'Lovelace Systems Architecture Lab',
-    department: 'Information Science & Engineering',
-    block: 'Ada Lovelace Tech Wing (Block B, 2nd Floor)',
-    totalStations: 50,
-    invigilatorName: 'Dr. Ada Lovelace / Dept Invigilator'
-  },
-  {
-    labId: 'LAB-03',
-    labCode: 'ECE-301',
-    labName: 'Shannon Embedded Systems Lab',
-    department: 'Electronics & Communication Engineering',
-    block: 'Claude Shannon Electronics Hub (Block C, Ground Floor)',
-    totalStations: 50,
-    invigilatorName: 'Prof. Claude Shannon / System Admin'
-  },
-  {
-    labId: 'LAB-04',
-    labCode: 'AI-401',
-    labName: 'von Neumann Cognitive Computing Lab',
-    department: 'Artificial Intelligence & Machine Learning',
-    block: 'John von Neumann AI Tower (Block D, 4th Floor)',
-    totalStations: 50,
-    invigilatorName: 'Dr. John von Neumann / AI Faculty'
-  },
-  {
-    labId: 'LAB-05',
-    labCode: 'GEN-501',
-    labName: 'Central Placement Examination Hub',
-    department: 'Training & Placement Cell',
-    block: 'Central Convention & Examination Pavilion',
-    totalStations: 50,
-    invigilatorName: 'Director of Placements / University Invigilator'
-  }
-];
-
-export const COLLEGE_LABS: CollegeLabInfo[] = DEFAULT_INSTITUTE_LABS;
+// ── REAL INSTITUTE LABORATORIES (Zero Hardcoded / Seed Data Enforcement) ──
+export const DEFAULT_INSTITUTE_LABS: CollegeLabInfo[] = [];
+export const COLLEGE_LABS: CollegeLabInfo[] = [];
 
 export const LAB_LOCK_PREFIX = 'codedna_lock_lab_';
 export const STATION_LOCK_PREFIX = 'codedna_lock_station_';
@@ -247,7 +199,7 @@ export const CAMPUS_LOCK_KEY = 'codedna_lock_all';
 export const CUSTOM_LABS_KEY = 'codedna_custom_institute_labs';
 export const DELETED_LABS_KEY = 'codedna_deleted_college_lab_ids';
 
-// ── PERSISTENT LAB TOMBSTONE REGISTRY (Guarantees deleted labs NEVER resurrect) ──
+// ── PERSISTENT LAB TOMBSTONE REGISTRY ──
 export function getDeletedLabIds(): Set<string> {
   if (typeof window === 'undefined') return new Set();
   try {
@@ -336,44 +288,54 @@ export function pruneAndDeduplicateLabs(labs: CollegeLabInfo[]): CollegeLabInfo[
 
 export function getAllCollegeLabs(): CollegeLabInfo[] {
   const deletedIds = getDeletedLabIds();
-  const defaultAvailable = DEFAULT_INSTITUTE_LABS.filter((l) => !deletedIds.has(l.labId.toUpperCase().trim()));
+  if (typeof window === 'undefined') return [];
 
-  if (typeof window === 'undefined') return defaultAvailable;
+  const labMap = new Map<string, CollegeLabInfo>();
+
   try {
     const raw = localStorage.getItem(CUSTOM_LABS_KEY);
-    if (raw !== null) {
-      const parsed = JSON.parse(raw);
+    if (raw) {
+      const parsed: CollegeLabInfo[] = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        // Filter out phantom labs and deleted labs
-        const valid = parsed
-          .filter((l): l is CollegeLabInfo =>
-            Boolean(l && l.labId && !isPhantomLab(l) && !deletedIds.has(String(l.labId).toUpperCase().trim()))
-          )
-          .map((l) => ({ ...l, labId: String(l.labId).toUpperCase().trim() }));
-
-        const seen = new Set<string>();
-        const deduped: CollegeLabInfo[] = [];
-        for (const l of valid) {
-          if (!seen.has(l.labId)) {
-            seen.add(l.labId);
-            deduped.push(l);
+        parsed.forEach((l) => {
+          if (l && l.labId && !isPhantomLab(l) && !deletedIds.has(String(l.labId).toUpperCase().trim())) {
+            labMap.set(String(l.labId).toUpperCase().trim(), {
+              ...l,
+              labId: String(l.labId).toUpperCase().trim()
+            });
           }
-        }
-
-        if (deduped.length !== parsed.length) {
-          localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(deduped));
-          notifyLabsChanged(deduped);
-        }
-        return deduped;
+        });
       }
     }
   } catch {}
 
-  // Initialize with non-deleted standard institute laboratories
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(defaultAvailable));
-  }
-  return defaultAvailable;
+  // Dynamically discover any labs from active candidate stations (Zero Hardcoded Labs)
+  try {
+    const rawStations = localStorage.getItem(STATIONS_KEY);
+    if (rawStations) {
+      const stations: CandidateStation[] = JSON.parse(rawStations);
+      if (Array.isArray(stations)) {
+        stations.forEach((s) => {
+          if (s && s.labId) {
+            const cleanId = String(s.labId).toUpperCase().trim();
+            if (!deletedIds.has(cleanId) && !labMap.has(cleanId)) {
+              labMap.set(cleanId, {
+                labId: cleanId,
+                labCode: cleanId,
+                labName: s.labName || s.student?.labName || cleanId,
+                department: s.student?.department || 'Academic Department',
+                block: 'Examination Complex',
+                totalStations: 50,
+                invigilatorName: 'Invigilator'
+              });
+            }
+          }
+        });
+      }
+    }
+  } catch {}
+
+  return Array.from(labMap.values());
 }
 
 export function notifyLabsChanged(labs: CollegeLabInfo[]): void {
@@ -484,8 +446,7 @@ export function ensureLabForExam(exam: {
 }): CollegeLabInfo {
   const existingLabs = getAllCollegeLabs();
   const deletedIds = getDeletedLabIds();
-  const availableLabs = (existingLabs.length > 0 ? existingLabs : DEFAULT_INSTITUTE_LABS)
-    .filter((l) => !deletedIds.has(l.labId.toUpperCase().trim()));
+  const availableLabs = existingLabs.filter((l) => !deletedIds.has(l.labId.toUpperCase().trim()));
 
   // 1. If exam already has an assignedLabId, check if it matches an existing physical non-deleted lab
   if (exam.assignedLabId) {
@@ -498,39 +459,27 @@ export function ensureLabForExam(exam: {
     }
   }
 
-  // 2. Department or subject matching: bind to the appropriate existing physical lab
-  const query = `${exam.department || ''} ${exam.subject || ''} ${exam.title || ''}`.toLowerCase();
-  if (query.includes('info') || query.includes('ise') || query.includes('information')) {
-    const iseLab = availableLabs.find((l) => l.labId === 'LAB-02' || l.department.toLowerCase().includes('information'));
-    if (iseLab) return iseLab;
-  }
-  if (query.includes('ece') || query.includes('electronics') || query.includes('embedded')) {
-    const eceLab = availableLabs.find((l) => l.labId === 'LAB-03' || l.department.toLowerCase().includes('electronics'));
-    if (eceLab) return eceLab;
-  }
-  if (query.includes('ai') || query.includes('artificial') || query.includes('machine learning') || query.includes('aiml')) {
-    const aiLab = availableLabs.find((l) => l.labId === 'LAB-04' || l.department.toLowerCase().includes('artificial'));
-    if (aiLab) return aiLab;
-  }
-  if (query.includes('placement') || query.includes('aptitude') || query.includes('reasoning') || query.includes('training')) {
-    const genLab = availableLabs.find((l) => l.labId === 'LAB-05' || l.department.toLowerCase().includes('placement'));
-    if (genLab) return genLab;
-  }
-
-  // 3. Default to the first available non-deleted physical lab
+  // 2. Department or subject matching: bind to existing matching physical lab if one exists
   if (availableLabs.length > 0) {
+    const query = `${exam.department || ''} ${exam.subject || ''} ${exam.title || ''}`.toLowerCase();
+    const matched = availableLabs.find((l) =>
+      query.includes(l.department.toLowerCase()) || query.includes(l.labName.toLowerCase())
+    );
+    if (matched) return matched;
     return availableLabs[0];
   }
 
-  // 4. Safe fallback if all labs were cleared
+  // 3. Dynamic lab metadata (Zero Hardcoded / Zero Mock Labs)
+  const dynamicId = exam.assignedLabId?.trim() || 'MAIN';
+  const dynamicName = exam.assignedLabName?.trim() || exam.department || `${exam.title || 'Examination'} Center`;
   return {
-    labId: 'LAB-01',
-    labCode: 'CSE-101',
-    labName: 'Central Computing Lab',
-    department: 'Computer Science & Engineering',
-    block: 'Main Academic Block',
+    labId: dynamicId,
+    labCode: dynamicId,
+    labName: dynamicName,
+    department: exam.department || exam.subject || 'Academic Department',
+    block: 'Examination Complex',
     totalStations: 50,
-    invigilatorName: 'Senior Lab Proctor'
+    invigilatorName: 'Invigilator'
   };
 }
 
