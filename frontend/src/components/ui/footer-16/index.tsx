@@ -117,7 +117,7 @@ export function Footer16({
             : 'min-h-[160px] sm:min-h-[220px]'
         }`}
       >
-        {/* Sleek atmospheric watermark */}
+        {/* Sleek, tall, atmospheric watermark hidden on mobile to prevent logo collision, visible on desktop/tablet */}
         <motion.div
           variants={wordmarkVariants}
           className="pointer-events-none absolute inset-x-0 top-[2%] sm:top-[5%] lg:top-[6%] hidden sm:flex w-full justify-center overflow-hidden z-0 px-4"
@@ -126,41 +126,42 @@ export function Footer16({
           <div className="w-full max-w-[1380px] flex justify-center">
             <svg
               className="w-full h-auto select-none"
-              viewBox="0 0 1200 240"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 1000 240"
               preserveAspectRatio="xMidYMid meet"
+              aria-label={brandName}
             >
               <defs>
-                <linearGradient id="axent-watermark-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#ffffff" stopOpacity="0.12" />
-                  <stop offset="50%" stopColor="#ffffff" stopOpacity="0.04" />
-                  <stop offset="100%" stopColor="#ffffff" stopOpacity="0.0" />
+                <linearGradient id="brandGrad16" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#71717a" stopOpacity="0.85" />
+                  <stop offset="35%" stopColor="#52525b" stopOpacity="0.75" />
+                  <stop offset="100%" stopColor="#27272a" stopOpacity="0" />
                 </linearGradient>
               </defs>
               <text
                 x="50%"
-                y="185"
+                y="190"
                 textAnchor="middle"
-                fill="url(#axent-watermark-gradient)"
+                fill="url(#brandGrad16)"
                 fontFamily="system-ui, -apple-system, sans-serif"
                 fontWeight="900"
-                fontSize="170"
-                letterSpacing="0.22em"
+                fontSize="180"
+                letterSpacing="0.2em"
               >
-                AXENT
+                {brandName}
               </text>
             </svg>
           </div>
         </motion.div>
 
-        <div className="relative z-10 w-full max-w-7xl mx-auto px-4 pb-8 sm:px-6 sm:pb-12 lg:px-8">
-          <div className="flex flex-col gap-8 lg:flex-row lg:justify-between lg:gap-12">
-            <motion.div variants={riseVariants} className="max-w-sm">
+        {/* Backdrop blur glass container */}
+        <div className="relative z-10 border-t border-white/10 bg-black/40 px-5 pt-8 pb-7 backdrop-blur-md sm:px-12 sm:pt-11 sm:pb-8 lg:pt-[46px]">
+          <div className={columns && columns.length > 0 ? "grid gap-8 sm:gap-10 lg:grid-cols-[minmax(240px,1fr)_minmax(500px,1.2fr)] lg:gap-x-16" : "flex flex-col max-w-xl"}>
+            {/* Brand column */}
+            <motion.div variants={riseVariants} className="max-w-xl">
               <a
                 href="/"
-                className="inline-flex items-center gap-2 text-zinc-100 transition-opacity hover:opacity-80"
-                aria-label={brandName}
+                className="group inline-flex items-center gap-2 text-zinc-50 transition-[opacity,transform] duration-200 ease-out hover:opacity-85 active:scale-[0.96]"
+                aria-label={`${brandName} home`}
               >
                 {brandLogo ? (
                   brandLogo
@@ -178,7 +179,7 @@ export function Footer16({
               </p>
             </motion.div>
 
-            {/* Links Columns */}
+            {/* Links Columns (rendered only if columns array is non-empty) */}
             {columns && columns.length > 0 && (
               <motion.nav
                 variants={sectionVariants}
@@ -219,15 +220,11 @@ export function Footer16({
 
           <motion.div
             variants={riseVariants}
-            className="mt-8 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-5 sm:mt-9 sm:flex-row"
+            className="mt-8 flex flex-col gap-4 border-t border-white/10 pt-5 sm:mt-9 sm:flex-row sm:items-center sm:justify-between"
           >
-            <p className="text-xs font-normal text-zinc-500 text-center sm:text-left">
+            <p className="text-xs font-normal text-zinc-500">
               {copyright}
             </p>
-            <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">
-              <span className="inline-block size-1.5 rounded-full bg-emerald-500" />
-              <span>Campus Integrity Core Active</span>
-            </div>
           </motion.div>
         </div>
       </motion.div>
