@@ -13,8 +13,10 @@ import {
   LogOut,
   LucideIcon,
   Menu,
-  X
+  X,
+  Download
 } from 'lucide-react';
+import { triggerInstallPrompt } from './ui/PWAInstallPrompt';
 import { ThemeMode } from '../types/dna';
 import {
   signOut,
@@ -297,6 +299,30 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
           </div>
+
+          {/* Standalone Install App Trigger */}
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => triggerInstallPrompt()}
+            title="Install Axent Standalone App"
+            style={{
+              height: '32px',
+              padding: '0 10px',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border)',
+              background: 'var(--bg-surface)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '11px',
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+              flexShrink: 0
+            }}
+          >
+            <Download size={13} />
+            <span className="hidden sm:inline">Install App</span>
+          </button>
 
           {/* Theme Toggle (Always Accessible on all screen sizes) */}
           <button

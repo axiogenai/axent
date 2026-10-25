@@ -28,6 +28,7 @@ import { playSound } from './utils/sounds';
 import { initBackendKeepAlive } from './services/keepAliveService';
 import { RefreshCw, FileCode, Play } from 'lucide-react';
 import { DEFAULT_LANGUAGE_TEMPLATES } from './components/CodeEditor';
+import { PWAInstallPrompt } from './components/ui/PWAInstallPrompt';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -100,7 +101,7 @@ export const App: React.FC = () => {
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as any).standalone === true
     );
-    if (isStandalone && (location.pathname === '/' || location.pathname === '/workspace')) {
+    if (isStandalone && location.pathname !== '/mcq') {
       navigate('/mcq', { replace: true });
     }
   }, [location.pathname, navigate]);
@@ -361,7 +362,7 @@ export const App: React.FC = () => {
       <ScrollToTop />
       <SEOUpdater />
 
-      {location.pathname !== '/' && location.pathname !== '/launch' && (
+      {location.pathname !== '/' && location.pathname !== '/launch' && !location.pathname.startsWith('/mcq') && (
         <Navbar
           theme={theme}
           onToggleTheme={toggleTheme}
@@ -508,6 +509,7 @@ export const App: React.FC = () => {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+      <PWAInstallPrompt />
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import React from 'react';
 import LogoIcon from '@/assets/logo-icon';
 import { motion, type Variants } from 'motion/react';
+import { Download } from 'lucide-react';
 
 export interface Footer16Link {
   label: string;
@@ -19,6 +20,7 @@ export interface Footer16Props {
   columns?: Footer16Column[];
   copyright?: string;
   backgroundImage?: string;
+  onGetAppClick?: () => void;
 }
 
 const defaultColumns: Footer16Column[] = [];
@@ -93,69 +95,68 @@ export function Footer16({
   columns = defaultColumns,
   copyright = '© 2026 Axent · Engineered by team.axiogen.in. All institutional rights reserved.',
   backgroundImage = backgroundUrl,
+  onGetAppClick,
 }: Footer16Props) {
   return (
     <footer className="relative w-full overflow-hidden bg-zinc-950 font-sans text-zinc-100 antialiased">
+      {/* 1. Giant atmospheric watermark text UNDER/BEHIND the mountains */}
+      <motion.div
+        variants={wordmarkVariants}
+        className="pointer-events-none absolute inset-x-0 top-3 sm:top-5 lg:top-7 flex w-full justify-center overflow-hidden z-0 px-4"
+        aria-hidden="true"
+      >
+        <div className="w-full max-w-[1380px] flex justify-center">
+          <svg
+            className="w-full h-auto select-none"
+            viewBox="0 0 1000 220"
+            preserveAspectRatio="xMidYMid meet"
+            aria-label={brandName}
+          >
+            <defs>
+              <linearGradient id="brandGrad16" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#e4e4e7" stopOpacity="0.9" />
+                <stop offset="35%" stopColor="#a1a1aa" stopOpacity="0.75" />
+                <stop offset="100%" stopColor="#3f3f46" stopOpacity="0.1" />
+              </linearGradient>
+            </defs>
+            <text
+              x="50%"
+              y="152"
+              textAnchor="middle"
+              fill="url(#brandGrad16)"
+              fontFamily="system-ui, -apple-system, sans-serif"
+              fontWeight="900"
+              fontSize="165"
+              letterSpacing="0.2em"
+            >
+              {brandName}
+            </text>
+          </svg>
+        </div>
+      </motion.div>
+
+      {/* 2. Mountains background layer IN FRONT OF the text */}
       <div
-        className="absolute inset-0 z-10 bg-cover bg-center sm:-translate-y-16"
+        className="absolute inset-0 z-10 bg-cover bg-center pointer-events-none translate-y-1 sm:translate-y-2"
         style={{ backgroundImage: `url(${backgroundImage})` }}
         aria-hidden="true"
       />
       <div
-        className="absolute inset-0 bg-[linear-gradient(180deg,rgba(9,10,14,0.35)_0%,rgba(9,10,14,0.06)_42%,rgba(9,10,14,0.58)_68%,rgba(9,10,14,0.9)_100%)]"
+        className="absolute inset-0 z-10 pointer-events-none bg-[linear-gradient(180deg,rgba(9,10,14,0.25)_0%,rgba(9,10,14,0.04)_42%,rgba(9,10,14,0.58)_68%,rgba(9,10,14,0.9)_100%)]"
         aria-hidden="true"
       />
 
+      {/* 3. Foreground content with bottom glass blur dock */}
       <motion.div
         variants={sectionVariants}
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, amount: 0.22 }}
-        className={`relative w-full mx-auto flex flex-col justify-end pt-8 sm:pt-16 ${
-          columns && columns.length > 0
-            ? 'min-h-[460px] sm:min-h-[640px] lg:min-h-[720px]'
-            : 'min-h-[160px] sm:min-h-[220px]'
-        }`}
+        className="relative z-20 w-full mx-auto flex flex-col justify-end pt-28 sm:pt-40 min-h-[460px] sm:min-h-[540px]"
       >
-        {/* Sleek, tall, atmospheric watermark hidden on mobile to prevent logo collision, visible on desktop/tablet */}
-        <motion.div
-          variants={wordmarkVariants}
-          className="pointer-events-none absolute inset-x-0 top-[2%] sm:top-[5%] lg:top-[6%] hidden sm:flex w-full justify-center overflow-hidden z-0 px-4"
-          aria-hidden="true"
-        >
-          <div className="w-full max-w-[1380px] flex justify-center">
-            <svg
-              className="w-full h-auto select-none"
-              viewBox="0 0 1000 240"
-              preserveAspectRatio="xMidYMid meet"
-              aria-label={brandName}
-            >
-              <defs>
-                <linearGradient id="brandGrad16" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#71717a" stopOpacity="0.85" />
-                  <stop offset="35%" stopColor="#52525b" stopOpacity="0.75" />
-                  <stop offset="100%" stopColor="#27272a" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              <text
-                x="50%"
-                y="190"
-                textAnchor="middle"
-                fill="url(#brandGrad16)"
-                fontFamily="system-ui, -apple-system, sans-serif"
-                fontWeight="900"
-                fontSize="180"
-                letterSpacing="0.2em"
-              >
-                {brandName}
-              </text>
-            </svg>
-          </div>
-        </motion.div>
-
         {/* Backdrop blur glass container */}
-        <div className="relative z-10 border-t border-white/10 bg-black/40 px-5 pt-8 pb-7 backdrop-blur-md sm:px-12 sm:pt-11 sm:pb-8 lg:pt-[46px]">
-          <div className={columns && columns.length > 0 ? "grid gap-8 sm:gap-10 lg:grid-cols-[minmax(240px,1fr)_minmax(500px,1.2fr)] lg:gap-x-16" : "flex flex-col max-w-xl"}>
+        <div className="relative z-10 border-t border-white/10 bg-black/40 px-5 pt-7 pb-7 backdrop-blur-md sm:px-12 sm:pt-8 sm:pb-8">
+          <div className={columns && columns.length > 0 ? "grid gap-8 sm:gap-10 lg:grid-cols-[minmax(240px,1fr)_minmax(500px,1.2fr)] lg:gap-x-16" : "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6"}>
             {/* Brand column */}
             <motion.div variants={riseVariants} className="max-w-xl">
               <a
@@ -178,6 +179,20 @@ export function Footer16({
                 {tagline}
               </p>
             </motion.div>
+
+            {/* Get App Button */}
+            {onGetAppClick && (!columns || columns.length === 0) && (
+              <motion.div variants={riseVariants} className="flex items-center sm:self-center shrink-0">
+                <button
+                  type="button"
+                  onClick={onGetAppClick}
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-zinc-900/80 px-4 py-2.5 text-xs font-semibold text-zinc-100 shadow-sm backdrop-blur-md transition-all hover:border-white/30 hover:bg-zinc-800 active:scale-95 cursor-pointer"
+                >
+                  <Download className="h-4 w-4 text-zinc-300" />
+                  <span>Get App</span>
+                </button>
+              </motion.div>
+            )}
 
             {/* Links Columns (rendered only if columns array is non-empty) */}
             {columns && columns.length > 0 && (
@@ -217,15 +232,6 @@ export function Footer16({
               </motion.nav>
             )}
           </div>
-
-          <motion.div
-            variants={riseVariants}
-            className="mt-8 flex flex-col gap-4 border-t border-white/10 pt-5 sm:mt-9 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <p className="text-xs font-normal text-zinc-500">
-              {copyright}
-            </p>
-          </motion.div>
         </div>
       </motion.div>
     </footer>

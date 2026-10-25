@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Hero1 from './ui/hero-1';
 import { Footer16 } from './ui/footer-16';
 import { LaunchFilmPlayer } from './LaunchFilmPlayer';
+import { triggerInstallPrompt } from './ui/PWAInstallPrompt';
 import { ThemeMode } from '../types/dna';
 import { playSound } from '../utils/sounds';
 
@@ -16,6 +17,10 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
 
   const handleNav = (path: string) => {
     playSound('click');
+    if (path === '#install') {
+      triggerInstallPrompt();
+      return;
+    }
     if (path === '/launch') {
       setShowFilm(true);
       return;
@@ -47,7 +52,8 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         }
         navLinks={[
           { label: 'Examination Hall', href: '/mcq', active: true },
-          { label: '25s Launch Film', href: '/launch' }
+          { label: '25s Launch Film', href: '/launch' },
+          { label: 'Install App', href: '#install' }
         ]}
         headline={
           <>
@@ -76,6 +82,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         tagline={'Autonomous Academic Examination & Proctoring Platform.\nEngineered for uncompromised institutional integrity, real-time forensics,\nand cryptographic audit ledgers.'}
         copyright="© 2026 Axent · Engineered by team.axiogen.in. All institutional rights reserved."
         columns={[]}
+        onGetAppClick={triggerInstallPrompt}
       />
 
       {/* ── 3. FULL-SCREEN 4K MASTER LAUNCH FILM OVERLAY (Auto-Play & Auto-Return) ── */}

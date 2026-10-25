@@ -19,3 +19,18 @@ if (rootElement) {
   );
 }
 
+// Register Progressive Web App Service Worker
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((reg) => {
+        console.debug('Axent ServiceWorker active with scope:', reg.scope);
+      })
+      .catch((err) => {
+        console.debug('ServiceWorker registration skipped:', err);
+      });
+  });
+}
+
+
