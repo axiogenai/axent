@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { supabase } from '../services/supabaseService';
-import { syncMcqLiveStation } from '../services/adminService';
+import { supabase, subscribeToCloudStations, fetchSingleStationLockStatus } from '../services/supabaseService';
+import { syncMcqLiveStation, subscribeToCctvBroadcast, CctvBroadcastMessage } from '../services/adminService';
 import { getAllExams, getAllQuestions } from '../services/mcqService';
 import { MCQAttempt, MCQExamConfig } from '../types/mcq';
 import { StudentInfo } from '../types/dna';
+import { playSound } from '../utils/sounds';
+import { ShieldAlert } from 'lucide-react';
 
 type Option = { id: string; text: string };
 type AssignedQuestion = {
@@ -72,6 +74,7 @@ export const SecureMCQExam: React.FC = () => {
   const [error, setError] = useState('');
   const [result, setResult] = useState<Result | null>(null);
   const [proctorLocked, setProctorLocked] = useState(false);
+  const [proctorWarning, setProctorWarning] = useState<string | null>(null);
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [unfocusedSeconds, setUnfocusedSeconds] = useState(0);
   const [screenSharing, setScreenSharing] = useState(false);
@@ -540,6 +543,116 @@ export const SecureMCQExam: React.FC = () => {
     };
   }, [attempt, result, recordProctorEvent]);
 
+  // ── REALTIME PROCTOR COMMAND LISTENER (Cross-device + Local Broadcast) ──
+  useEffect(() => {
+    if (!attempt || result) return;
+
+    const rawProfile = localStorage.getItem('codedna_student_profile');
+    let labId = 'LAB-01';
+    let stationNum = '01';
+    if (rawProfile) {
+      try {
+        const parsed = JSON.parse(rawProfile);
+        if (parsed.labId) labId = parsed.labId;
+        if (parsed.stationNumber) stationNum = String(parsed.stationNumber).replace(/[^0-9]/g, '') || '01';
+      } catch {}
+    } else if (attempt.candidate?.rollNumber) {
+      stationNum = String(attempt.candidate.rollNumber).replace(/[^0-9]/g, '').slice(-2) || '01';
+    }
+    const currentStationId = `${labId}-WS-${stationNum.padStart(2, '0')}`;
+
+    // 1. BroadcastChannel / Local Storage listener
+    const unsubscribeCctv = subscribeToCctvBroadcast((msg: CctvBroadcastMessage) => {
+      const isTarget =
+        msg.stationId === 'all' ||
+        msg.stationId === currentStationId ||
+        msg.stationId === stationNum ||
+        (msg.labId && msg.labId === labId);
+
+      if (msg.type === 'LOCK_COMMAND') {
+        if (isTarget) {
+          if (msg.isLocked) {
+            setProctorLocked(true);
+            playSound('warning');
+          } else {
+            setProctorLocked(false);
+            setProctorWarning(null);
+            setTabSwitchCount(0);
+            setUnfocusedSeconds(0);
+            playSound('success');
+          }
+        }
+      } else if (msg.type === 'PROCTOR_MESSAGE') {
+        if (isTarget) {
+          setProctorWarning(msg.warningMessage || 'Attention: Maintain visual focus on your examination terminal.');
+          playSound('warning');
+        }
+      } else if (msg.type === 'CONCLUDE_AND_FREE') {
+        if (isTarget) {
+          void submit();
+        }
+      }
+    });
+
+    // 2. Supabase Realtime subscription on candidate_stations
+    const unsubscribeCloud = subscribeToCloudStations((payload) => {
+      const row = payload?.new;
+      if (!row) return;
+      const cleanNum = stationNum.replace(/^0+/, '');
+      const isMatch =
+        row.id === currentStationId ||
+        row.station_number === `Station #${stationNum.padStart(2, '0')}` ||
+        row.id?.endsWith(`WS-${cleanNum}`) ||
+        row.id === cleanNum;
+
+      if (isMatch) {
+        if (row.is_locked_by_proctor !== undefined) {
+          const locked = Boolean(row.is_locked_by_proctor);
+          setProctorLocked(locked);
+          if (locked) {
+            playSound('warning');
+          } else {
+            setProctorLocked(false);
+            setProctorWarning(null);
+            setTabSwitchCount(0);
+            setUnfocusedSeconds(0);
+            playSound('success');
+          }
+        }
+        if (row.proctor_warning_message) {
+          setProctorWarning(row.proctor_warning_message);
+          playSound('warning');
+        }
+      }
+    });
+
+    // 3. Fallback polling for lock status
+    const pollInterval = window.setInterval(async () => {
+      try {
+        const cloudStatus = await fetchSingleStationLockStatus(currentStationId);
+        if (cloudStatus) {
+          if (cloudStatus.isLocked && !proctorLocked) {
+            setProctorLocked(true);
+            if (cloudStatus.warningMessage) setProctorWarning(cloudStatus.warningMessage);
+            playSound('warning');
+          } else if (!cloudStatus.isLocked && proctorLocked) {
+            setProctorLocked(false);
+            setProctorWarning(null);
+            setTabSwitchCount(0);
+            setUnfocusedSeconds(0);
+            playSound('success');
+          }
+        }
+      } catch {}
+    }, 3000);
+
+    return () => {
+      unsubscribeCctv();
+      unsubscribeCloud();
+      window.clearInterval(pollInterval);
+    };
+  }, [attempt, result, proctorLocked, submit]);
+
   const requestFullscreen = async () => {
     try {
       if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
@@ -794,23 +907,59 @@ export const SecureMCQExam: React.FC = () => {
         </div>
         <div style={timerStyle} aria-live="polite"><span>Time remaining</span><strong>{String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}</strong></div>
       </header>
-      {attempt.instructions && <p style={{ background: '#f1f5f9', borderRadius: 10, padding: 12 }}>{attempt.instructions}</p>}
-      {error && <p role="alert" style={{ color: '#dc2626' }}>{error}</p>}
+      {attempt.instructions && <p style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, fontSize: 13 }}>{attempt.instructions}</p>}
+      {error && <p role="alert" style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</p>}
+      {proctorWarning && (
+        <div
+          role="alert"
+          style={{
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            background: 'rgba(239, 68, 68, 0.12)',
+            padding: '12px 16px',
+            borderRadius: 10,
+            marginBottom: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--danger)' }}>
+            <ShieldAlert size={16} />
+            <span style={{ fontSize: 13, fontWeight: 600 }}>{proctorWarning}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setProctorWarning(null)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--danger)',
+              cursor: 'pointer',
+              fontSize: 12,
+              fontWeight: 700
+            }}
+          >
+            Acknowledge
+          </button>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', margin: '12px 0' }}>
-        <span style={{ fontSize: 12, color: proctorLocked ? '#b45309' : '#64748b' }}>Proctoring: {tabSwitchCount} tab switches · {unfocusedSeconds}s away · {screenSharing ? 'screen shared' : 'screen not shared'}</span>
+        <span style={{ fontSize: 12, color: proctorLocked ? '#b45309' : 'var(--text-muted)' }}>Proctoring: {tabSwitchCount} tab switches · {unfocusedSeconds}s away · {screenSharing ? 'screen shared' : 'screen not shared'}</span>
         <button type="button" style={secondaryButton} onClick={() => void requestFullscreen()}>Enter full screen</button>
         <button type="button" style={secondaryButton} onClick={() => void (screenSharing ? stopScreenShare() : startScreenShare())}>{screenSharing ? 'Stop screen share' : 'Share screen with invigilator'}</button>
       </div>
       {proctorLocked && <div role="alert" style={{ border: '1px solid #f59e0b', background: 'rgba(245,158,11,.10)', padding: 14, borderRadius: 10, marginBottom: 16 }}>
-        <strong>Examination locked after three focus violations.</strong>
-        <p>Answers are blocked by the server until an administrator unlocks this attempt. Contact the invigilator, then check again.</p>
+        <strong>Examination locked after focus violations or remote proctor freeze.</strong>
+        <p style={{ margin: '6px 0 10px', fontSize: 13, color: 'var(--text-secondary)' }}>Answers are blocked until an administrator or invigilator unlocks this workstation remotely.</p>
         <button type="button" style={secondaryButton} disabled={checkingUnlock} onClick={() => void checkProctorUnlock()}>{checkingUnlock ? 'Checking…' : 'Check invigilator unlock'}</button>
       </div>}
       <div style={progressRow}><span>Question {index + 1} of {attempt.assignedQuestions.length}</span><span>{Object.keys(answers).filter((key) => Boolean(answers[key])).length} answered</span></div>
       <div style={progressTrack}><div style={{ ...progressFill, width: `${((index + 1) / Math.max(1, attempt.assignedQuestions.length)) * 100}%` }} /></div>
       {question && <article>
-        <h2 style={{ fontSize: 21, lineHeight: 1.5, marginTop: 26 }}>{question.snapshot.text}</h2>
-        <p style={{ color: '#64748b', fontSize: 13 }}>Marks: {question.snapshot.marks}</p>
+        <h2 style={{ fontSize: 'clamp(17px, 3vw, 21px)', lineHeight: 1.5, marginTop: 26, color: 'var(--text-primary)' }}>{question.snapshot.text}</h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Marks: {question.snapshot.marks}</p>
         <div style={{ display: 'grid', gap: 10, marginTop: 18 }}>
           {orderedOptions.map((option, optionIndex) => {
             const selected = answers[question.questionId] === option.id;
@@ -830,21 +979,21 @@ export const SecureMCQExam: React.FC = () => {
           <button style={primaryButton} disabled={saving || submitting || proctorLocked} onClick={() => void submit()}>{submitting ? 'Submitting…' : 'Submit examination'}</button>
         </div>
       </footer>
-      {saving && <p role="status" style={{ color: '#64748b' }}>Saving answer securely…</p>}
+      {saving && <p role="status" style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 8 }}>Saving answer securely…</p>}
     </section>
   </main>;
 };
 
-const page: React.CSSProperties = { minHeight: 'calc(100vh - 52px)', background: 'var(--bg-main)', padding: '32px 16px', color: 'var(--text-primary)' };
-const panel: React.CSSProperties = { maxWidth: 900, margin: '0 auto', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 18, padding: 28, boxShadow: '0 12px 40px rgba(15,23,42,.08)' };
-const eyebrow: React.CSSProperties = { color: '#64748b', letterSpacing: '.14em', fontSize: 11, fontWeight: 800 };
-const timerStyle: React.CSSProperties = { display: 'grid', gap: 4, textAlign: 'right', background: '#0f172a', color: '#fff', padding: '12px 16px', borderRadius: 12 };
+const page: React.CSSProperties = { minHeight: 'calc(100vh - 52px)', background: 'var(--bg-main)', padding: 'clamp(14px, 3.5vw, 32px) clamp(10px, 2.5vw, 16px)', color: 'var(--text-primary)', boxSizing: 'border-box', width: '100%' };
+const panel: React.CSSProperties = { maxWidth: 900, width: '100%', boxSizing: 'border-box', margin: '0 auto', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 18, padding: 'clamp(16px, 3.5vw, 28px)', boxShadow: '0 12px 40px rgba(15,23,42,.08)' };
+const eyebrow: React.CSSProperties = { color: 'var(--text-muted)', letterSpacing: '.14em', fontSize: 11, fontWeight: 800 };
+const timerStyle: React.CSSProperties = { display: 'grid', gap: 4, textAlign: 'right', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', padding: '8px 14px', borderRadius: 10 };
 const scoreGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12, margin: '24px 0' };
-const progressRow: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', marginTop: 24, color: '#64748b', fontSize: 13 };
-const progressTrack: React.CSSProperties = { height: 5, background: '#e2e8f0', borderRadius: 99, overflow: 'hidden', marginTop: 8 };
-const progressFill: React.CSSProperties = { height: '100%', background: '#2563eb', borderRadius: 99 };
-const optionStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-main)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 15, textAlign: 'left' };
-const selectedOptionStyle: React.CSSProperties = { borderColor: '#2563eb', background: 'rgba(37,99,235,.08)' };
-const optionLetter: React.CSSProperties = { display: 'grid', placeItems: 'center', width: 28, height: 28, borderRadius: 8, background: 'var(--bg-elevated)', fontWeight: 800, flexShrink: 0 };
-const primaryButton: React.CSSProperties = { background: '#2563eb', color: '#fff', border: 0, borderRadius: 10, padding: '12px 18px', fontWeight: 700, cursor: 'pointer' };
-const secondaryButton: React.CSSProperties = { background: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 18px', fontWeight: 600, cursor: 'pointer' };
+const progressRow: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', marginTop: 24, color: 'var(--text-muted)', fontSize: 13 };
+const progressTrack: React.CSSProperties = { height: 5, background: 'var(--border)', borderRadius: 99, overflow: 'hidden', marginTop: 8 };
+const progressFill: React.CSSProperties = { height: '100%', background: 'var(--accent)', borderRadius: 99 };
+const optionStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-main)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 15, textAlign: 'left', width: '100%', boxSizing: 'border-box' };
+const selectedOptionStyle: React.CSSProperties = { borderColor: 'var(--accent)', background: 'rgba(59,130,246,.08)' };
+const optionLetter: React.CSSProperties = { display: 'grid', placeItems: 'center', width: 28, height: 28, borderRadius: 8, background: 'var(--bg-elevated)', fontWeight: 800, flexShrink: 0, border: '1px solid var(--border)' };
+const primaryButton: React.CSSProperties = { background: 'var(--accent)', color: '#fff', border: 0, borderRadius: 10, padding: '10px 18px', fontWeight: 700, cursor: 'pointer', minHeight: '38px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' };
+const secondaryButton: React.CSSProperties = { background: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 18px', fontWeight: 600, cursor: 'pointer', minHeight: '38px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' };
