@@ -207,7 +207,10 @@ export const PaperSetterPortal: React.FC = () => {
           flexWrap: 'wrap',
           gap: '14px',
           padding: '16px 20px',
-          border: '1px solid var(--border)'
+          border: '1px solid var(--border)',
+          boxSizing: 'border-box',
+          width: '100%',
+          maxWidth: '100%'
         }}
       >
         <div>

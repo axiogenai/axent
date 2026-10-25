@@ -169,16 +169,30 @@ export const Navbar: React.FC<NavbarProps> = ({
           }}
           title="Axent Platform Home"
         >
-          <img
-            src={theme === 'dark' ? '/axent-logo.png' : '/axent-lightmode.png'}
-            alt="Axent"
-            style={{
-              height: '24px',
-              width: 'auto',
-              display: 'block',
-              objectFit: 'contain'
-            }}
-          />
+          <div style={{ display: 'flex', alignItems: 'center', height: '24px' }}>
+            <img
+              src="/axent-lightmode.png"
+              alt="Axent"
+              className="axent-theme-logo-light"
+              style={{
+                height: '24px',
+                width: 'auto',
+                display: 'block',
+                objectFit: 'contain'
+              }}
+            />
+            <img
+              src="/axent-logo.png"
+              alt="Axent"
+              className="axent-theme-logo-dark"
+              style={{
+                height: '24px',
+                width: 'auto',
+                display: 'block',
+                objectFit: 'contain'
+              }}
+            />
+          </div>
         </div>
 
         {/* ── Navigation Tabs (Desktop only: Filtered strictly by Role) ── */}
@@ -346,28 +360,26 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
 
           {/* Mobile Hamburger Menu Toggle (Screens < 768px) */}
-          {(activeNavItems.length > 0 || isAdminRoute || isPaperSetterRoute || isLoginRoute) && (
-            <button
-              className="md:hidden btn btn-ghost btn-sm"
-              onClick={() => setMobileMenuOpen((prev) => !prev)}
-              aria-label="Toggle Navigation Drawer"
-              style={{
-                width: '32px',
-                height: '32px',
-                padding: 0,
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--border)',
-                background: mobileMenuOpen ? 'var(--accent)' : 'var(--bg-surface)',
-                color: mobileMenuOpen ? 'var(--accent-contrast)' : 'var(--text-primary)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0
-              }}
-            >
-              {mobileMenuOpen ? <X size={15} /> : <Menu size={15} />}
-            </button>
-          )}
+          <button
+            className="md:hidden btn btn-ghost btn-sm"
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+            aria-label="Toggle Navigation Drawer"
+            style={{
+              width: '32px',
+              height: '32px',
+              padding: 0,
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border)',
+              background: mobileMenuOpen ? 'var(--accent)' : 'var(--bg-surface)',
+              color: mobileMenuOpen ? 'var(--accent-contrast)' : 'var(--text-primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}
+          >
+            {mobileMenuOpen ? <X size={15} /> : <Menu size={15} />}
+          </button>
         </div>
       </header>
 
@@ -387,8 +399,15 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Exam Hall Link */}
             <button
-              onClick={() => navigate('/mcq')}
-              className="w-full flex items-center justify-between p-3.5 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-primary)] text-sm font-semibold text-left transition-colors"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                navigate('/mcq');
+              }}
+              className={`w-full flex items-center justify-between p-3.5 rounded-lg border text-sm font-semibold text-left transition-colors ${
+                isMcqRoute
+                  ? 'border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--text-primary)]'
+                  : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-primary)]'
+              }`}
             >
               <div className="flex items-center gap-3">
                 <ListChecks size={16} className="text-[var(--accent)]" />
@@ -397,10 +416,32 @@ export const Navbar: React.FC<NavbarProps> = ({
               <ExternalLink size={14} className="text-[var(--text-muted)]" />
             </button>
 
+            {/* Coding Workspace Link */}
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                navigate('/workspace');
+              }}
+              className={`w-full flex items-center justify-between p-3.5 rounded-lg border text-sm font-semibold text-left transition-colors ${
+                location.pathname === '/workspace'
+                  ? 'border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--text-primary)]'
+                  : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-primary)]'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Code2 size={16} className="text-[var(--accent)]" />
+                <span>Coding Practical Workspace</span>
+              </div>
+              <ExternalLink size={14} className="text-[var(--text-muted)]" />
+            </button>
+
             {/* Admin CCTV Portal */}
             {(isAdmin || isAdminRoute || isPaperSetterRoute) && (
               <button
-                onClick={() => navigate('/admin')}
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  navigate('/admin');
+                }}
                 className={`w-full flex items-center justify-between p-3.5 rounded-lg border text-sm font-semibold text-left transition-colors ${
                   isAdminRoute
                     ? 'border-red-500/40 bg-red-500/10 text-red-500'
@@ -422,7 +463,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Paper Setter Portal */}
             {(isAdmin || isAdminRoute || isPaperSetterRoute) && (
               <button
-                onClick={() => navigate('/paper-setter')}
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  navigate('/paper-setter');
+                }}
                 className={`w-full flex items-center justify-between p-3.5 rounded-lg border text-sm font-semibold text-left transition-colors ${
                   isPaperSetterRoute
                     ? 'border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-primary)]'

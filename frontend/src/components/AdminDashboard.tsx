@@ -57,6 +57,11 @@ import {
   Monitor,
   Video,
   User,
+  Users,
+  Home,
+  BarChart2,
+  Settings,
+  Menu,
   Hash,
   Award,
   Terminal,
@@ -202,6 +207,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [warningStationTarget, setWarningStationTarget] = useState<CandidateStation | null>(null);
   const [warningMessageInput, setWarningMessageInput] = useState<string>('Maintain your visual focus on the examination screen at all times.');
   const [stationViewMode, setStationViewMode] = useState<Record<string, 'camera' | 'activity'>>({});
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [activeSidebarItem, setActiveSidebarItem] = useState('control_room');
 
   const loadData = () => {
     purgeDemoStations();
@@ -622,56 +629,407 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     playSound('click');
   };
 
+  const sidebarNavItems = [
+    { id: 'control_room', label: 'Control Room', icon: Home },
+    { id: 'live_proctoring', label: 'Live Proctoring', icon: Video },
+    { id: 'candidates', label: 'Candidates', icon: Users, badge: activeCount > 0 ? activeCount : undefined },
+    { id: 'examinations', label: 'Examinations', icon: FileText },
+    { id: 'test_stations', label: 'Test Stations', icon: Monitor },
+    { id: 'reports', label: 'Reports', icon: BarChart2 },
+    { id: 'cheating_alerts', label: 'Cheating Alerts', icon: AlertTriangle, badge: cheatingCount, badgeColor: cheatingCount > 0 ? 'danger' : undefined },
+    { id: 'audit_ledger', label: 'Audit Ledger', icon: Layers },
+    { id: 'institutions', label: 'Institutions', icon: Building },
+    { id: 'settings', label: 'Settings', icon: Settings }
+  ];
+
+  const handleSidebarSelect = (itemId: string) => {
+    setActiveSidebarItem(itemId);
+    playSound('click');
+    if (itemId === 'control_room') {
+      setViewMode('cctv');
+      setFilter('all');
+      setSelectedLabId('all');
+    } else if (itemId === 'live_proctoring') {
+      setViewMode('cctv');
+    } else if (itemId === 'candidates') {
+      setFilter('active');
+    } else if (itemId === 'examinations') {
+      navigate('/admin/mcq-tickets');
+    } else if (itemId === 'test_stations') {
+      setFilter('all');
+    } else if (itemId === 'reports') {
+      navigate('/report');
+    } else if (itemId === 'cheating_alerts') {
+      setFilter('cheating');
+    } else if (itemId === 'audit_ledger') {
+      setViewMode('ledger');
+    } else if (itemId === 'institutions') {
+      setShowLabManager(true);
+    } else if (itemId === 'settings') {
+      setShowResetRoomConfirm(true);
+    }
+    setMobileSidebarOpen(false);
+  };
+
   return (
     <div
       style={{
         flex: 1,
         display: 'flex',
-        flexDirection: 'column',
+        flexDirection: 'row',
         background: 'var(--bg-main)',
-        padding: 'clamp(12px, 2.5vw, 24px)',
-        overflowY: 'auto',
-        overflowX: 'hidden',
+        minHeight: 'calc(100vh - 52px)',
         width: '100%',
         maxWidth: '100vw',
-        boxSizing: 'border-box',
-        gap: 'clamp(12px, 2vw, 18px)'
+        overflow: 'hidden',
+        position: 'relative'
       }}
     >
-      {/* ── TOP CAMPUS MACRO KPI RIBBON (50 LABS SCALE) ── */}
-      <div className="kpi-grid">
-        <WatermelonStatCard
-          label="Campus Laboratories"
-          value={allLabs.length}
-          unit="Labs"
-          icon={<Building size={13} />}
-          iconColor="var(--accent)"
-        />
+      {/* ── LEFT DESKTOP NAVIGATION SIDEBAR (Exact axent.axiogen.in standard) ── */}
+      <aside
+        className={`admin-left-sidebar ${mobileSidebarOpen ? 'admin-sidebar-mobile-open' : ''}`}
+        style={{
+          width: '230px',
+          minWidth: '230px',
+          background: 'var(--bg-surface)',
+          borderRight: '1px solid var(--border)',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          padding: '16px 12px 14px',
+          boxSizing: 'border-box',
+          overflowY: 'auto'
+        }}
+      >
+        {/* Navigation Items List */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          {sidebarNavItems.map((item) => {
+            const isActive = activeSidebarItem === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => handleSidebarSelect(item.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '9px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: isActive ? '#2563eb' : 'transparent',
+                  color: isActive ? '#ffffff' : 'var(--text-secondary)',
+                  fontWeight: isActive ? 600 : 500,
+                  fontSize: '12.5px',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'all 0.15s ease',
+                  width: '100%'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <item.icon size={16} color={isActive ? '#ffffff' : 'currentColor'} />
+                  <span>{item.label}</span>
+                </div>
+                {item.badge !== undefined && (
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      padding: '1px 6px',
+                      borderRadius: '10px',
+                      background: item.badgeColor === 'danger' ? '#ef4444' : 'var(--bg-elevated)',
+                      color: '#ffffff',
+                      lineHeight: 1.2
+                    }}
+                  >
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-        <WatermelonStatCard
-          label="Active Sessions"
-          value={activeCount}
-          unit="Active"
-          icon={<Clock size={13} />}
-          iconColor="var(--warning)"
-        />
+        {/* Sidebar Footer Branding & Status */}
+        <div
+          style={{
+            paddingTop: '16px',
+            borderTop: '1px solid var(--border)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' }} />
+              <span style={{ fontSize: '11px', color: '#22c55e', fontWeight: 600 }}>System Online</span>
+            </div>
+            <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>v1.0.0</span>
+          </div>
 
-        <WatermelonStatCard
-          label="Submissions Done"
-          value={submittedCount}
-          unit="Submitted"
-          icon={<CheckCircle2 size={13} />}
-          iconColor="var(--success)"
-        />
+          <div>
+            <div style={{ height: '18px', display: 'flex', alignItems: 'center', marginBottom: '2px' }}>
+              <img
+                src="/axent-lightmode.png"
+                alt="Axent"
+                className="axent-theme-logo-light"
+                style={{ height: '16px', width: 'auto', objectFit: 'contain' }}
+              />
+              <img
+                src="/axent-logo.png"
+                alt="Axent"
+                className="axent-theme-logo-dark"
+                style={{ height: '16px', width: 'auto', objectFit: 'contain' }}
+              />
+            </div>
+            <div style={{ fontSize: '10px', color: 'var(--text-muted)', lineHeight: 1.2 }}>
+              Axiogen Examination Network
+            </div>
+          </div>
+        </div>
+      </aside>
 
-        <WatermelonStatCard
-          label="Cheating Alerts"
-          value={cheatingCount}
-          unit="Flagged"
-          icon={<ShieldAlert size={13} />}
-          iconColor={cheatingCount > 0 ? 'var(--danger)' : 'var(--success)'}
+      {/* Mobile Backdrop overlay */}
+      {mobileSidebarOpen && (
+        <div
+          onClick={() => setMobileSidebarOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            zIndex: 999
+          }}
         />
-      </div>
+      )}
+
+      {/* ── RIGHT MAIN DASHBOARD CONTENT AREA ── */}
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          padding: 'clamp(12px, 2.5vw, 24px)',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          boxSizing: 'border-box',
+          gap: 'clamp(14px, 2vw, 18px)',
+          minWidth: 0
+        }}
+      >
+        {/* Mobile Navigation Toggle Bar */}
+        <div className="admin-mobile-nav-toggle" style={{ alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-elevated)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+          <button
+            type="button"
+            onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+          >
+            <Menu size={16} />
+            <span>Navigation Menu</span>
+          </button>
+          <span style={{ fontSize: '11px', color: 'var(--accent)', fontWeight: 600 }}>
+            {sidebarNavItems.find(i => i.id === activeSidebarItem)?.label || 'Control Room'}
+          </span>
+        </div>
+
+        {/* ── TOP CAMPUS MACRO KPI RIBBON (Exact axent.axiogen.in matching) ── */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
+            gap: '14px',
+            width: '100%'
+          }}
+        >
+          {/* Card 1: Campus Laboratories */}
+          <div
+            className="card-elevated"
+            onClick={() => setShowLabManager(true)}
+            style={{
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
+              borderRadius: '10px',
+              padding: '16px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              cursor: 'pointer',
+              boxShadow: 'var(--shadow-sm)',
+              boxSizing: 'border-box'
+            }}
+          >
+            <div
+              style={{
+                width: '46px',
+                height: '46px',
+                borderRadius: '8px',
+                background: 'rgba(37, 99, 235, 0.12)',
+                color: '#3b82f6',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              <Building size={22} />
+            </div>
+            <div>
+              <div style={{ fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                Campus Laboratories
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                <span style={{ fontSize: '26px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', lineHeight: 1 }}>
+                  {allLabs.length}
+                </span>
+                <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 500 }}>
+                  Labs
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: Active Sessions */}
+          <div
+            className="card-elevated"
+            onClick={() => setFilter('active')}
+            style={{
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
+              borderRadius: '10px',
+              padding: '16px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              cursor: 'pointer',
+              boxShadow: 'var(--shadow-sm)',
+              boxSizing: 'border-box'
+            }}
+          >
+            <div
+              style={{
+                width: '46px',
+                height: '46px',
+                borderRadius: '8px',
+                background: 'rgba(234, 179, 8, 0.12)',
+                color: '#eab308',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              <Monitor size={22} />
+            </div>
+            <div>
+              <div style={{ fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                Active Sessions
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                <span style={{ fontSize: '26px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', lineHeight: 1 }}>
+                  {activeCount}
+                </span>
+                <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 500 }}>
+                  Active
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Submissions Done */}
+          <div
+            className="card-elevated"
+            onClick={() => setFilter('submitted')}
+            style={{
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
+              borderRadius: '10px',
+              padding: '16px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              cursor: 'pointer',
+              boxShadow: 'var(--shadow-sm)',
+              boxSizing: 'border-box'
+            }}
+          >
+            <div
+              style={{
+                width: '46px',
+                height: '46px',
+                borderRadius: '8px',
+                background: 'rgba(34, 197, 94, 0.12)',
+                color: '#22c55e',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              <FileText size={22} />
+            </div>
+            <div>
+              <div style={{ fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                Submissions Done
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                <span style={{ fontSize: '26px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', lineHeight: 1 }}>
+                  {submittedCount}
+                </span>
+                <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 500 }}>
+                  Submitted
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 4: Cheating Alerts */}
+          <div
+            className="card-elevated"
+            onClick={() => setFilter('cheating')}
+            style={{
+              background: 'var(--bg-elevated)',
+              border: cheatingCount > 0 ? '1px solid rgba(239, 68, 68, 0.35)' : '1px solid var(--border)',
+              borderRadius: '10px',
+              padding: '16px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              cursor: 'pointer',
+              boxShadow: 'var(--shadow-sm)',
+              boxSizing: 'border-box'
+            }}
+          >
+            <div
+              style={{
+                width: '46px',
+                height: '46px',
+                borderRadius: '8px',
+                background: cheatingCount > 0 ? 'rgba(239, 68, 68, 0.16)' : 'rgba(239, 68, 68, 0.08)',
+                color: '#ef4444',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              <ShieldAlert size={22} />
+            </div>
+            <div>
+              <div style={{ fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                Cheating Alerts
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                <span style={{ fontSize: '26px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: cheatingCount > 0 ? '#ef4444' : 'var(--text-primary)', lineHeight: 1 }}>
+                  {cheatingCount}
+                </span>
+                <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 500 }}>
+                  Flagged
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
 
       {/* ── TOP INVIGILATOR COMMAND & LAB SELECTOR BAR ── */}
       <div
@@ -683,7 +1041,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           flexWrap: 'wrap',
           gap: '14px',
           padding: '16px 20px',
-          border: '1px solid var(--border)'
+          border: '1px solid var(--border)',
+          boxSizing: 'border-box',
+          width: '100%',
+          maxWidth: '100%'
         }}
       >
         <div>
@@ -2149,7 +2510,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           onClick={() => setSelectedStationId(null)}
         >
           <div
-            className="card-elevated"
+            className="card-elevated admin-station-modal"
             style={{
               width: '100%',
               maxWidth: '920px',
@@ -3144,6 +3505,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };

@@ -329,6 +329,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'flex-end',
+            flexWrap: 'wrap',
             gap: '10px'
           }}
         >

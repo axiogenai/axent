@@ -984,7 +984,7 @@ export const SecureMCQExam: React.FC = () => {
   </main>;
 };
 
-const page: React.CSSProperties = { minHeight: 'calc(100vh - 52px)', background: 'var(--bg-main)', padding: 'clamp(14px, 3.5vw, 32px) clamp(10px, 2.5vw, 16px)', color: 'var(--text-primary)', boxSizing: 'border-box', width: '100%' };
+const page: React.CSSProperties = { minHeight: 'calc(100dvh - 52px)', background: 'var(--bg-main)', padding: 'clamp(14px, 3.5vw, 32px) clamp(10px, 2.5vw, 16px)', color: 'var(--text-primary)', boxSizing: 'border-box', width: '100%' };
 const panel: React.CSSProperties = { maxWidth: 900, width: '100%', boxSizing: 'border-box', margin: '0 auto', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 18, padding: 'clamp(16px, 3.5vw, 28px)', boxShadow: '0 12px 40px rgba(15,23,42,.08)' };
 const eyebrow: React.CSSProperties = { color: 'var(--text-muted)', letterSpacing: '.14em', fontSize: 11, fontWeight: 800 };
 const timerStyle: React.CSSProperties = { display: 'grid', gap: 4, textAlign: 'right', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', padding: '8px 14px', borderRadius: 10 };

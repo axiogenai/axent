@@ -57,9 +57,10 @@ type AuthTab = 'signin' | 'magic_link' | 'set_password';
 
 export interface AuthorityLoginProps {
   fixedRole?: AuthorityRole;
+  theme?: 'light' | 'dark';
 }
 
-export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => {
+export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole, theme }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -83,10 +84,37 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
   useEffect(() => {
     setRole(effectiveRole);
   }, [effectiveRole]);
-  const isDarkMode = typeof window !== 'undefined' && (
-    document.documentElement.getAttribute('data-theme') === 'dark' ||
-    localStorage.getItem('codedna_theme') === 'dark'
-  );
+
+  const [activeTheme, setActiveTheme] = useState<'light' | 'dark'>(() => {
+    if (theme) return theme;
+    if (typeof window !== 'undefined') {
+      const docTheme = document.documentElement.getAttribute('data-theme');
+      if (docTheme === 'dark' || docTheme === 'light') return docTheme;
+      const stored = localStorage.getItem('codedna_theme');
+      if (stored === 'dark' || stored === 'light') return stored;
+    }
+    return 'light';
+  });
+
+  useEffect(() => {
+    if (theme) setActiveTheme(theme);
+  }, [theme]);
+
+  useEffect(() => {
+    const updateTheme = () => {
+      const docTheme = document.documentElement.getAttribute('data-theme');
+      if (docTheme === 'dark' || docTheme === 'light') {
+        setActiveTheme(docTheme);
+      }
+    };
+    const observer = new MutationObserver(updateTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    window.addEventListener('storage', updateTheme);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('storage', updateTheme);
+    };
+  }, []);
 
   const [activeTab, setActiveTab] = useState<AuthTab>(() => {
     if (typeParam === 'recovery' || typeParam === 'invite') return 'set_password';
@@ -247,6 +275,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
   if (!isDedicatedPortal) {
     return (
       <div
+        className="authority-login-container"
         style={{
           minHeight: 'calc(100vh - 52px)',
           display: 'flex',
@@ -257,6 +286,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
         }}
       >
         <div
+          className="card-elevated authority-portal-card"
           style={{
             maxWidth: '680px',
             width: '100%',
@@ -276,18 +306,30 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-              <img
-                src={isDarkMode ? '/axent-logo.png' : '/axent-lightmode.png'}
-                alt="Axent"
-                style={{
-                  height: '28px',
-                  width: 'auto',
-                  display: 'block',
-                  objectFit: 'contain'
-                }}
-              />
+              <div style={{ display: 'flex', alignItems: 'center', height: '28px' }}>
+                <img
+                  src="/axent-lightmode.png"
+                  alt="Axent"
+                  className="axent-theme-logo-light"
+                  style={{
+                    height: '28px',
+                    width: 'auto',
+                    objectFit: 'contain'
+                  }}
+                />
+                <img
+                  src="/axent-logo.png"
+                  alt="Axent"
+                  className="axent-theme-logo-dark"
+                  style={{
+                    height: '28px',
+                    width: 'auto',
+                    objectFit: 'contain'
+                  }}
+                />
+              </div>
               <div>
-                <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--accent)' }}>
+                <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)' }}>
                   Axent Assessment Authority
                 </span>
                 <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
@@ -327,13 +369,13 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: 'var(--accent)'
+                      color: 'var(--text-primary)'
                     }}
                   >
                     <Layers size={18} />
                   </div>
                   <div>
-                    <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--accent)' }}>
+                    <span style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)' }}>
                       FACULTY PORTAL
                     </span>
                     <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -361,7 +403,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
                   borderRadius: 'var(--radius-xs)',
                   border: '1px solid var(--accent)',
                   background: 'var(--accent)',
-                  color: 'var(--accent-fg)',
+                  color: 'var(--accent-contrast)',
                   fontSize: '12.5px',
                   fontWeight: 600,
                   cursor: 'pointer'
@@ -397,13 +439,13 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: 'var(--danger, #ef4444)'
+                      color: 'var(--text-primary)'
                     }}
                   >
                     <ShieldAlert size={18} />
                   </div>
                   <div>
-                    <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--danger, #ef4444)' }}>
+                    <span style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)' }}>
                       ADMINISTRATION & PROCTORING
                     </span>
                     <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -429,9 +471,9 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
                   width: '100%',
                   padding: '10px 14px',
                   borderRadius: 'var(--radius-xs)',
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg-elevated)',
-                  color: 'var(--text-primary)',
+                  border: '1px solid var(--accent)',
+                  background: 'var(--accent)',
+                  color: 'var(--accent-contrast)',
                   fontSize: '12.5px',
                   fontWeight: 600,
                   cursor: 'pointer'
@@ -453,6 +495,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
+                flexWrap: 'wrap',
                 gap: '16px'
               }}
             >
@@ -545,88 +588,145 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
 
   return (
     <div
+      className="authority-login-container"
       style={{
         minHeight: 'calc(100vh - 52px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 'clamp(20px, 4vw, 36px) clamp(12px, 3vw, 16px)',
-        background: 'var(--bg-main)'
+        padding: 'clamp(24px, 4vw, 40px) clamp(12px, 3vw, 16px)',
+        background: 'var(--bg-main)',
+        boxSizing: 'border-box'
       }}
     >
       <div
+        className="card-elevated authority-login-card"
         style={{
-          maxWidth: '440px',
+          maxWidth: '430px',
           width: '100%',
           background: 'var(--bg-elevated)',
           border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-md)',
-          boxShadow: 'var(--shadow-md)',
-          overflow: 'hidden'
+          borderRadius: '12px',
+          boxShadow: 'inset 0 1px 0 0 rgba(255, 255, 255, 0.07), 0 20px 40px -12px rgba(0, 0, 0, 0.15)',
+          overflow: 'hidden',
+          boxSizing: 'border-box'
         }}
       >
-        {/* ── Dedicated Brand Header (Role Specific) ── */}
+        {/* ── Classic Luxury Brand Header ── */}
         <div
           style={{
-            padding: '24px clamp(16px, 4vw, 28px) 18px',
+            padding: '22px clamp(20px, 5vw, 26px) 20px',
             borderBottom: '1px solid var(--border)',
-            background: 'var(--bg-surface)'
+            background: 'var(--bg-surface)',
+            boxSizing: 'border-box'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-            <img
-              src={isDarkMode ? '/axent-logo.png' : '/axent-lightmode.png'}
-              alt="Axent"
-              style={{
-                height: '28px',
-                width: 'auto',
-                display: 'block',
-                objectFit: 'contain'
-              }}
-            />
-            <div>
-              <span
+          {/* Top Brand & Access Level Row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', height: '21px', flexShrink: 0 }}>
+              <img
+                src="/axent-lightmode.png"
+                alt="Axent"
+                className="axent-theme-logo-light"
                 style={{
-                  fontSize: '10.5px',
-                  fontWeight: 800,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                  color: role === 'admin' ? 'var(--danger, #ef4444)' : 'var(--accent)'
+                  height: '21px',
+                  maxHeight: '21px',
+                  width: 'auto',
+                  display: 'block',
+                  objectFit: 'contain'
                 }}
-              >
-                {role === 'admin' ? 'Administration & Proctoring' : 'Faculty Examination Portal'}
-              </span>
-              <h1 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-                {role === 'admin' ? 'Chief Proctor & Admin Portal' : 'Paper Setter Gateway'}
-              </h1>
+              />
+              <img
+                src="/axent-logo.png"
+                alt="Axent"
+                className="axent-theme-logo-dark"
+                style={{
+                  height: '21px',
+                  maxHeight: '21px',
+                  width: 'auto',
+                  display: 'block',
+                  objectFit: 'contain'
+                }}
+              />
             </div>
+            <span
+              style={{
+                fontSize: '9.5px',
+                fontWeight: 700,
+                fontFamily: 'var(--font-mono, monospace)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                padding: '0 8px',
+                height: '20px',
+                borderRadius: '4px',
+                background: 'var(--bg-elevated)',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--border)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                lineHeight: 1,
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-muted)' }} />
+              Admin & Faculty
+            </span>
           </div>
-          <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.45 }}>
-            {role === 'admin'
-              ? 'Authorized portal for live CCTV invigilation, real-time telemetry, and candidate integrity audits.'
-              : 'Authorized portal for faculty question authoring, syllabus configuration, and test deployment.'}
-          </p>
+
+          {/* Micro Header & Title */}
+          <div>
+            <div
+              style={{
+                fontSize: '10px',
+                fontWeight: 600,
+                fontFamily: 'var(--font-mono, monospace)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                color: 'var(--text-muted)',
+                marginBottom: '5px',
+                lineHeight: 1.2
+              }}
+            >
+              Institutional Authority
+            </div>
+            <h1
+              style={{
+                margin: '0 0 6px',
+                fontSize: '18px',
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                letterSpacing: '-0.02em',
+                lineHeight: 1.25
+              }}
+            >
+              Faculty & Admin Portal
+            </h1>
+            <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              Authorized terminal for question setters, faculty examiners, and Chief Proctors.
+            </p>
+          </div>
         </div>
 
-        {/* ── Watermelon UI Tabs List (Sign In / Register) ── */}
-        {/* ── Body Container ── */}
-        <div style={{ padding: '24px clamp(16px, 4vw, 28px)' }}>
+        {/* ── Form Body Container ── */}
+        <div style={{ padding: '22px clamp(20px, 5vw, 26px)', boxSizing: 'border-box' }}>
           {/* Feedback Alerts */}
           {errorMessage && (
             <div
               style={{
                 marginBottom: '16px',
-                padding: '12px 14px',
-                borderRadius: 'var(--radius-sm)',
+                padding: '11px 13px',
+                borderRadius: '6px',
                 background: 'var(--danger-bg)',
                 border: '1px solid var(--danger-border)',
                 display: 'flex',
                 alignItems: 'flex-start',
-                gap: '8px'
+                gap: '8px',
+                boxSizing: 'border-box'
               }}
             >
-              <AlertTriangle size={15} color="var(--danger)" style={{ marginTop: '2px', flexShrink: 0 }} />
-              <div style={{ fontSize: '12px', color: 'var(--danger)', lineHeight: 1.4, flex: 1 }}>
+              <AlertTriangle size={14} color="var(--danger)" style={{ marginTop: '2px', flexShrink: 0 }} />
+              <div style={{ fontSize: '11.5px', color: 'var(--danger)', lineHeight: 1.4, flex: 1 }}>
                 {errorMessage}
               </div>
             </div>
@@ -636,17 +736,18 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
             <div
               style={{
                 marginBottom: '16px',
-                padding: '10px 14px',
-                borderRadius: 'var(--radius-sm)',
+                padding: '10px 13px',
+                borderRadius: '6px',
                 background: 'var(--success-bg)',
                 border: '1px solid var(--success-border)',
                 display: 'flex',
                 alignItems: 'flex-start',
-                gap: '8px'
+                gap: '8px',
+                boxSizing: 'border-box'
               }}
             >
               <CheckCircle2 size={14} color="var(--success)" style={{ marginTop: '2px', flexShrink: 0 }} />
-              <span style={{ fontSize: '12px', color: 'var(--success)', lineHeight: 1.4 }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--success)', lineHeight: 1.4 }}>
                 {successMessage}
               </span>
             </div>
@@ -654,13 +755,13 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
 
           {/* ── TAB 1: Sign In ── */}
           {activeTab === 'signin' && (
-            <form onSubmit={handlePasswordLogin} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <form onSubmit={handlePasswordLogin} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', marginBottom: '5px' }}>
+                <label style={{ display: 'block', fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: '5px' }}>
                   Institutional Email
                 </label>
                 <div style={{ position: 'relative' }}>
-                  <Mail size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+                  <Mail size={13} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
                   <input
                     type="email"
                     required
@@ -670,83 +771,121 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
                     autoCapitalize="none"
                     autoCorrect="off"
                     spellCheck={false}
+                    className="authority-auth-input"
                     style={{
                       width: '100%',
                       height: '38px',
                       padding: '0 12px 0 34px',
-                      fontSize: '13px',
-                      borderRadius: 'var(--radius-sm)',
+                      fontSize: '12px',
+                      borderRadius: '6px',
                       background: 'var(--bg-surface)',
                       border: '1px solid var(--border)',
                       color: 'var(--text-primary)',
-                      boxSizing: 'border-box'
+                      boxSizing: 'border-box',
+                      boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.04)',
+                      transition: 'border-color 0.15s ease'
                     }}
                   />
                 </div>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', marginBottom: '5px' }}>
+                <label style={{ display: 'block', fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: '5px' }}>
                   Password
                 </label>
                 <div style={{ position: 'relative' }}>
-                  <Lock size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+                  <Lock size={13} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
-                    placeholder="Enter authority password"
+                    placeholder="Enter password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    className="authority-auth-input"
                     style={{
                       width: '100%',
                       height: '38px',
-                      padding: '0 36px 0 34px',
-                      fontSize: '13px',
-                      borderRadius: 'var(--radius-sm)',
+                      padding: '0 38px 0 34px',
+                      fontSize: '12px',
+                      borderRadius: '6px',
                       background: 'var(--bg-surface)',
                       border: '1px solid var(--border)',
                       color: 'var(--text-primary)',
-                      boxSizing: 'border-box'
+                      boxSizing: 'border-box',
+                      boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.04)',
+                      transition: 'border-color 0.15s ease'
                     }}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   >
-                    {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                    {showPassword ? <EyeOff size={13} /> : <Eye size={13} />}
                   </button>
                 </div>
               </div>
 
+              {/* Master Luxury Executive CTA Button */}
               <button
                 type="submit"
                 disabled={isLoading}
-                className="btn btn-primary"
+                className="no-touch-expand authority-submit-btn"
                 style={{
                   width: '100%',
-                  height: '40px',
+                  height: '42px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '8px',
                   fontSize: '13px',
-                  fontWeight: 700,
+                  fontWeight: 600,
+                  letterSpacing: '-0.01em',
+                  borderRadius: '6px',
+                  background: 'var(--accent)',
+                  color: 'var(--accent-contrast)',
+                  border: '1px solid var(--accent)',
+                  cursor: isLoading ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 2px 5px rgba(0, 0, 0, 0.12), inset 0 1px 0 0 rgba(255, 255, 255, 0.15)',
+                  transition: 'all 0.15s cubic-bezier(0.16, 1, 0.3, 1)',
                   marginTop: '4px'
                 }}
               >
                 {isLoading ? (
                   <>
-                    <RefreshCw size={14} className="spinner-icon" />
+                    <RefreshCw size={13} className="spinner-icon" />
                     <span>Verifying Authority Credentials...</span>
                   </>
                 ) : (
                   <>
-                    <span>Enter {role === 'admin' ? 'Admin Console' : 'Paper Setter Portal'}</span>
-                    <ArrowRight size={14} />
+                    <span>Enter Institutional Console</span>
+                    <ArrowRight size={13} />
                   </>
                 )}
               </button>
+
+              {/* Security Trust Seal */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  marginTop: '8px',
+                  paddingTop: '10px',
+                  borderTop: '1px solid var(--border)',
+                  fontSize: '9.5px',
+                  fontFamily: 'var(--font-mono, monospace)',
+                  color: 'var(--text-muted)',
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <Shield size={12} strokeWidth={2.2} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+                <span>EAL-6 Session Integrity &bull; 256-Bit Encrypted</span>
+              </div>
             </form>
           )}
 
@@ -779,11 +918,12 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
                     placeholder="At least 8 characters"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
+                    className="authority-auth-input"
                     style={{
                       width: '100%',
                       height: '38px',
-                      padding: '0 36px 0 34px',
-                      fontSize: '13px',
+                      padding: '0 38px 0 34px',
+                      fontSize: '12px',
                       borderRadius: 'var(--radius-sm)',
                       background: 'var(--bg-surface)',
                       border: '1px solid var(--border)',
@@ -813,11 +953,12 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
                     placeholder="Re-enter password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="authority-auth-input"
                     style={{
                       width: '100%',
                       height: '38px',
                       padding: '0 12px 0 34px',
-                      fontSize: '13px',
+                      fontSize: '12px',
                       borderRadius: 'var(--radius-sm)',
                       background: 'var(--bg-surface)',
                       border: '1px solid var(--border)',
@@ -843,27 +984,36 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
               <button
                 type="submit"
                 disabled={isLoading || !isPasswordValid || !doPasswordsMatch}
-                className="btn btn-primary"
+                className="no-touch-expand authority-submit-btn"
                 style={{
                   width: '100%',
-                  height: '40px',
+                  height: '42px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '8px',
-                  fontSize: '13px',
-                  fontWeight: 700
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  letterSpacing: '0.01em',
+                  borderRadius: '6px',
+                  background: 'var(--accent)',
+                  color: 'var(--accent-contrast)',
+                  border: '1px solid var(--accent)',
+                  cursor: isLoading || !isPasswordValid || !doPasswordsMatch ? 'not-allowed' : 'pointer',
+                  opacity: isLoading || !isPasswordValid || !doPasswordsMatch ? 0.6 : 1,
+                  boxShadow: '0 2px 5px rgba(0, 0, 0, 0.12), inset 0 1px 0 0 rgba(255, 255, 255, 0.15)',
+                  transition: 'all 0.15s cubic-bezier(0.16, 1, 0.3, 1)'
                 }}
               >
                 {isLoading ? (
                   <>
-                    <RefreshCw size={14} className="spinner-icon" />
+                    <RefreshCw size={13} className="spinner-icon" />
                     <span>Saving Password...</span>
                   </>
                 ) : (
                   <>
                     <span>Set Password & Enter Portal</span>
-                    <ArrowRight size={14} />
+                    <ArrowRight size={13} />
                   </>
                 )}
               </button>
@@ -897,16 +1047,17 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
                 background: 'none',
                 border: 'none',
                 padding: 0,
-                fontSize: '12px',
+                fontSize: '11.5px',
                 color: 'var(--text-secondary)',
                 cursor: 'pointer',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '6px',
+                whiteSpace: 'nowrap'
               }}
             >
-              <Layers size={13} color="var(--accent)" />
-              <span>Are you authoring test papers? <strong style={{ color: 'var(--text-primary)' }}>Switch to Paper Setter Gateway</strong></span>
+              <Layers size={13} color="var(--text-secondary)" style={{ flexShrink: 0 }} />
+              <span>Faculty or Examiner? <strong style={{ color: 'var(--text-primary)' }}>Open Setter Portal</strong></span>
             </button>
           ) : (
             <button
@@ -919,16 +1070,17 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
                 background: 'none',
                 border: 'none',
                 padding: 0,
-                fontSize: '12px',
+                fontSize: '11.5px',
                 color: 'var(--text-secondary)',
                 cursor: 'pointer',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '6px',
+                whiteSpace: 'nowrap'
               }}
             >
-              <ShieldAlert size={13} color="var(--danger, #ef4444)" />
-              <span>Chief Proctor or Invigilator? <strong style={{ color: 'var(--text-primary)' }}>Switch to Admin CCTV Gateway</strong></span>
+              <ShieldAlert size={13} color="var(--text-secondary)" style={{ flexShrink: 0 }} />
+              <span>Admin or Proctor? <strong style={{ color: 'var(--text-primary)' }}>Open CCTV Console</strong></span>
             </button>
           )}
 
@@ -974,7 +1126,11 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole }) => 
   );
 };
 
-export const PaperSetterLogin: React.FC = () => <AuthorityLogin fixedRole="paper_setter" />;
-export const AdminLogin: React.FC = () => <AuthorityLogin fixedRole="admin" />;
+export const PaperSetterLogin: React.FC<{ theme?: 'light' | 'dark' }> = ({ theme }) => (
+  <AuthorityLogin fixedRole="paper_setter" theme={theme} />
+);
+export const AdminLogin: React.FC<{ theme?: 'light' | 'dark' }> = ({ theme }) => (
+  <AuthorityLogin fixedRole="admin" theme={theme} />
+);
 
 export default AuthorityLogin;

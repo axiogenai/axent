@@ -415,11 +415,11 @@ export const App: React.FC = () => {
           />
           <Route
             path="/login"
-            element={<AuthorityLogin />}
+            element={<AuthorityLogin theme={theme} />}
           />
           <Route
             path="/login/paper-setter"
-            element={<PaperSetterLogin />}
+            element={<PaperSetterLogin theme={theme} />}
           />
           <Route
             path="/login/setter"
@@ -431,7 +431,7 @@ export const App: React.FC = () => {
           />
           <Route
             path="/login/admin"
-            element={<AdminLogin />}
+            element={<AdminLogin theme={theme} />}
           />
           <Route
             path="/admin-login"

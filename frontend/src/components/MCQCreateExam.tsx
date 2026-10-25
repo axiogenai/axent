@@ -584,13 +584,15 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ initial, onSave, onBack }) => {
       </h3>
 
       {/* Step tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '24px', overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
         {steps.map((s) => (
           <button key={s.id} onClick={() => setStep(s.id)} style={{
             background: 'none', border: 'none', borderBottom: `2px solid ${step === s.id ? 'var(--accent)' : 'transparent'}`,
             cursor: 'pointer', padding: '10px 18px', fontSize: '13px', fontWeight: step === s.id ? 700 : 500,
             color: step === s.id ? 'var(--text-primary)' : 'var(--text-muted)',
             marginBottom: '-1px',
+            flexShrink: 0,
+            whiteSpace: 'nowrap'
           }}>
             {s.label}
           </button>
@@ -892,7 +894,7 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ initial, onSave, onBack }) => {
       )}
 
       {/* Footer */}
-      <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '28px', paddingTop: '20px', borderTop: '1px solid var(--border)' }}>
+      <div className="exam-editor-footer" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: '28px', paddingTop: '20px', borderTop: '1px solid var(--border)' }}>
         <button onClick={onBack} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '9px 20px', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: 500 }}>
           Cancel
         </button>

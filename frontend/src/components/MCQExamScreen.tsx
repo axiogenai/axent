@@ -156,7 +156,10 @@ const FormattedQuestionContent: React.FC<FormattedQuestionContentProps> = ({ con
           border: '1px solid var(--border)',
           background: 'var(--bg-surface)',
           overflow: 'hidden',
-          boxShadow: 'var(--shadow-sm)'
+          boxShadow: 'var(--shadow-sm)',
+          maxWidth: '100%',
+          width: '100%',
+          boxSizing: 'border-box'
         }}
       >
         <div
@@ -164,18 +167,18 @@ const FormattedQuestionContent: React.FC<FormattedQuestionContentProps> = ({ con
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '7px 14px',
+            padding: '5px 12px',
             background: 'var(--bg-elevated)',
             borderBottom: '1px solid var(--border)',
-            fontSize: '11px',
+            fontSize: '10.5px',
             color: 'var(--text-muted)'
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ display: 'flex', gap: '4px' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--border-strong)' }} />
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--border-strong)' }} />
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--border-strong)' }} />
+              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--border-strong)' }} />
+              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--border-strong)' }} />
+              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--border-strong)' }} />
             </div>
             <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text-secondary)' }}>
               {lang}
@@ -189,7 +192,7 @@ const FormattedQuestionContent: React.FC<FormattedQuestionContentProps> = ({ con
               border: '1px solid var(--border)',
               borderRadius: 'var(--radius-xs)',
               padding: '2px 8px',
-              fontSize: '11px',
+              fontSize: '10.5px',
               color: 'var(--text-muted)',
               cursor: 'pointer',
               display: 'flex',
@@ -214,14 +217,16 @@ const FormattedQuestionContent: React.FC<FormattedQuestionContentProps> = ({ con
         <pre
           style={{
             margin: 0,
-            padding: '14px 16px',
+            padding: '10px 12px',
             fontFamily: "var(--font-mono, 'JetBrains Mono', Consolas, monospace)",
-            fontSize: '13px',
-            lineHeight: 1.55,
+            fontSize: '12px',
+            lineHeight: 1.45,
             color: 'var(--text-primary)',
             overflowX: 'auto',
-            maxHeight: '420px',
-            whiteSpace: 'pre'
+            maxHeight: '320px',
+            maxWidth: '100%',
+            whiteSpace: 'pre',
+            WebkitOverflowScrolling: 'touch'
           }}
         >
           <code>{codeSnippet.trim()}</code>
@@ -242,7 +247,16 @@ const FormattedQuestionContent: React.FC<FormattedQuestionContentProps> = ({ con
   }
 
   return (
-    <div style={{ lineHeight: 1.6, ...style }}>
+    <div
+      style={{
+        lineHeight: 1.6,
+        wordBreak: 'break-word',
+        overflowWrap: 'break-word',
+        maxWidth: '100%',
+        minWidth: 0,
+        ...style
+      }}
+    >
       {elements}
     </div>
   );
@@ -445,9 +459,10 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
   const navigate = useNavigate();
   const [mode, setMode] = useState<'manual' | 'token'>('manual');
   
-  // Manual student identity state (Exam Type is determined by the Paper-Setter)
-  const [name, setName] = useState('');
-  const [roll, setRoll] = useState('');
+  // Manual student identity state (Pre-filled for demo tests)
+  const isDemoExam = exam.id === 'demo-test-3q';
+  const [name, setName] = useState(() => (isDemoExam ? 'Candidate Alex' : ''));
+  const [roll, setRoll] = useState(() => (isDemoExam ? 'DEMO-101' : ''));
   const [dept, setDept] = useState('CSE');
   const [sem, setSem] = useState('4th Sem');
   const [division, setDivision] = useState('A');
@@ -458,6 +473,8 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
   const [tokenCopied, setTokenCopied] = useState(false);
 
   const parsedToken = tokenInput.trim() ? parseExamToken(tokenInput.trim()) : null;
+  const now = getSynchronizedNow();
+  const isLive = (!exam.startTime || now >= exam.startTime) && (!exam.endTime || now <= exam.endTime);
 
   const handleStartManual = () => {
     const errs: string[] = [];
@@ -594,19 +611,49 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
   return (
     <div className="mcq-reg-wrapper">
       <div style={{ maxWidth: '1360px', margin: '0 auto', width: '100%' }}>
-        {/* Top Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '22px', flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '2px 8px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
-                Computer-Based Examination Terminal
-              </span>
-              <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
-                CCTV Synced
+        {/* Sleek Minimalist Top Header (Single row, non-wrapping) */}
+        <div
+          className="mcq-checkin-header no-wrap-header"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'nowrap',
+            gap: '10px',
+            marginBottom: '14px',
+            width: '100%'
+          }}
+        >
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+              <span
+                style={{
+                  fontSize: '9.5px',
+                  fontFamily: 'var(--font-mono, monospace)',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.12em',
+                  color: 'var(--text-muted)',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                Terminal · CCTV Synced
               </span>
             </div>
-            <h1 style={{ margin: 0, fontSize: 'clamp(18px, 3.5vw, 22px)', fontWeight: 800, color: 'var(--text-primary)' }}>
-              Candidate Verification & Session Check-In
+            <h1
+              style={{
+                margin: 0,
+                fontSize: '16.5px',
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+                letterSpacing: '-0.015em',
+                lineHeight: 1.25,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+            >
+              Candidate Check-In
             </h1>
           </div>
 
@@ -616,93 +663,225 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
               if (onBack) onBack();
               else window.location.href = '/mcq';
             }}
-            className="btn btn-secondary btn-sm"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 14px', fontSize: '12.5px', fontWeight: 600 }}
+            className="no-touch-expand"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              height: '28px',
+              minHeight: '28px',
+              padding: '0 10px',
+              fontSize: '11px',
+              fontWeight: 500,
+              color: 'var(--text-secondary)',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+              transition: 'all 0.15s ease'
+            }}
           >
-            <ChevronLeft size={14} />
-            <span>Back to Available Exams</span>
+            <ChevronLeft size={13} />
+            <span>Exams</span>
           </button>
         </div>
 
         {/* 2-Column Split: Left = Examination Blueprint, Right = Registration Form */}
         <div className="mcq-reg-grid">
         
-        {/* Gateway Card */}
-        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '24px', marginBottom: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-md)', background: 'var(--bg-surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <BookOpen size={18} color="var(--text-secondary)" />
-              </div>
-              <div>
-                <h1 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: 'var(--text-primary)' }}>{exam.title}</h1>
-                <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>{exam.subject || 'General Assessment'}{exam.topic ? ` · ${exam.topic}` : ''}</p>
-              </div>
+        {/* Gateway Card (Slim, Classic Luxury Alignment) */}
+        <div
+          className="mcq-reg-card"
+          style={{
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border)',
+            borderRadius: '8px',
+            padding: '16px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+            boxSizing: 'border-box',
+            maxWidth: '100%',
+            width: '100%'
+          }}
+        >
+          {/* Top Badges Row: Book Symbol on left, then Category, then Live Session */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px', flexWrap: 'nowrap' }}>
+            <div
+              style={{
+                width: '22px',
+                height: '22px',
+                borderRadius: '4px',
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              <BookOpen size={12} color="var(--text-secondary)" />
             </div>
+
+            <span
+              style={{
+                fontSize: '9.5px',
+                fontWeight: 600,
+                fontFamily: 'var(--font-mono, monospace)',
+                color: 'var(--text-muted)',
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+                lineHeight: 1
+              }}
+            >
+              {exam.examCategory || exam.subject || 'Assessment'}
+            </span>
+
+            {isLive && (
+              <span
+                style={{
+                  fontSize: '9.5px',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.1em',
+                  fontFamily: 'var(--font-mono, monospace)',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  background: 'rgba(197, 160, 89, 0.08)',
+                  color: '#C5A059',
+                  border: '1px solid rgba(197, 160, 89, 0.25)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                  lineHeight: 1
+                }}
+              >
+                <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#C5A059' }} />
+                Live Session
+              </span>
+            )}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
-            <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', textAlign: 'center' }}>
-              <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>{exam.questionCount}</div>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Questions</div>
+          {/* Title & Topic Header (Clean Left Flush Alignment) */}
+          <div style={{ marginBottom: '12px' }}>
+            <h2
+              style={{
+                margin: 0,
+                fontSize: '14.5px',
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+                lineHeight: 1.35,
+                letterSpacing: '-0.01em'
+              }}
+            >
+              {exam.title}
+            </h2>
+            <p
+              style={{
+                margin: '3px 0 0',
+                fontSize: '11px',
+                color: 'var(--text-muted)',
+                lineHeight: 1.35
+              }}
+            >
+              {exam.subject || 'General Assessment'}{exam.topic ? ` · ${exam.topic}` : ''}
+            </p>
+          </div>
+
+          {/* Unified Slim 3-Cell Telemetry Strip */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '6px',
+              padding: '6px 0',
+              marginBottom: '12px',
+              textAlign: 'center'
+            }}
+          >
+            <div style={{ borderRight: '1px solid var(--border)', padding: '0 4px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono, monospace)', lineHeight: 1.2 }}>
+                {exam.questionCount}
+              </div>
+              <div style={{ fontSize: '9px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '1px' }}>
+                Questions
+              </div>
             </div>
-            <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', textAlign: 'center' }}>
-              <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>{exam.totalMarks}</div>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Marks</div>
+            <div style={{ borderRight: '1px solid var(--border)', padding: '0 4px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono, monospace)', lineHeight: 1.2 }}>
+                {exam.durationMinutes}m
+              </div>
+              <div style={{ fontSize: '9px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '1px' }}>
+                Duration
+              </div>
             </div>
-            <div style={{ gridColumn: 'span 2', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', textAlign: 'center' }}>
-              <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>{exam.durationMinutes} min</div>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Duration</div>
+            <div style={{ padding: '0 4px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono, monospace)', lineHeight: 1.2 }}>
+                {exam.totalMarks}
+              </div>
+              <div style={{ fontSize: '9px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '1px' }}>
+                Marks
+              </div>
             </div>
           </div>
 
           {(() => {
             const cleanInstructions = (exam.instructions || '').replace(/<!--AXENT_META:[\s\S]*?-->/g, '').trim();
             return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {cleanInstructions && (
-                  <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
-                    <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                  <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '6px', padding: '8px 10px' }}>
+                    <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
                       {cleanInstructions}
                     </p>
                   </div>
                 )}
 
-                {/* Terminal Proctoring Rules */}
-                <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '5px', borderBottom: '1px solid var(--border)' }}>
-                    <span style={{ fontSize: '10.5px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-primary)' }}>
-                      Terminal Proctoring Rules
+                {/* Terminal Proctoring Rules (Slim & Refined) */}
+                <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '6px', padding: '8px 10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', paddingBottom: '4px', borderBottom: '1px solid var(--border)' }}>
+                    <span style={{ fontSize: '9.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-primary)' }}>
+                      Proctoring Protocols
                     </span>
-                    <span style={{ fontSize: '9.5px', fontWeight: 700, padding: '1px 6px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                      Strictly Enforced
+                    <span style={{ fontSize: '9px', fontWeight: 600, padding: '1px 5px', borderRadius: '4px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                      Enforced
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
-                      <Ban size={13} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
-                      <span><strong style={{ color: 'var(--text-primary)' }}>No Right-Click:</strong> Context menu and inspect actions are blocked.</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                      <Ban size={12} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
+                      <span><strong style={{ color: 'var(--text-primary)' }}>No Right-Click:</strong> Context menu actions blocked.</span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
-                      <CopyX size={13} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
-                      <span><strong style={{ color: 'var(--text-primary)' }}>No Copy / Paste:</strong> Shortcuts (Ctrl+C, Ctrl+V, Ctrl+U) are disabled.</span>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                      <CopyX size={12} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
+                      <span><strong style={{ color: 'var(--text-primary)' }}>No Copy / Paste:</strong> Shortcuts disabled.</span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
-                      <Code2 size={13} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
-                      <span><strong style={{ color: 'var(--text-primary)' }}>No DevTools:</strong> F12 key and developer console are strictly prohibited.</span>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                      <Code2 size={12} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
+                      <span><strong style={{ color: 'var(--text-primary)' }}>No DevTools:</strong> F12 console prohibited.</span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
-                      <ShieldAlert size={13} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
-                      <span><strong style={{ color: 'var(--text-primary)' }}>No Tab Switching:</strong> Max 3 window focus losses before terminal locks.</span>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                      <ShieldAlert size={12} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
+                      <span><strong style={{ color: 'var(--text-primary)' }}>No Tab Switching:</strong> Focus loss triggers lockout.</span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
-                      <Maximize2 size={13} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
-                      <span><strong style={{ color: 'var(--text-primary)' }}>Fullscreen Required:</strong> Must stay in fullscreen; exiting is logged.</span>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                      <Maximize2 size={12} style={{ color: 'var(--text-primary)', marginTop: '2px', flexShrink: 0 }} />
+                      <span><strong style={{ color: 'var(--text-primary)' }}>Fullscreen Required:</strong> Window exits are logged.</span>
                     </div>
                   </div>
                 </div>
@@ -712,35 +891,89 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
         </div>
 
         {/* Candidate Registration / Token Import Card */}
-        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '24px' }}>
+        <div
+          className="mcq-reg-card"
+          style={{
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border)',
+            borderRadius: '8px',
+            padding: '16px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+            boxSizing: 'border-box',
+            maxWidth: '100%',
+            width: '100%'
+          }}
+        >
           
-          {/* Mode Switcher Tabs */}
-          <div style={{ display: 'flex', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '3px', marginBottom: '20px' }}>
+          {/* Mode Switcher Tabs (Medium Size, Non-wrapping) */}
+          <div
+            style={{
+              display: 'flex',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '6px',
+              padding: '3px',
+              marginBottom: '14px',
+              height: '30px',
+              boxSizing: 'border-box',
+              overflow: 'hidden'
+            }}
+          >
             <button
+              type="button"
               onClick={() => { setMode('manual'); playSound('click'); }}
+              className="no-touch-expand mcq-mode-tab-btn"
               style={{
-                flex: 1, padding: '8px 12px', border: 'none', borderRadius: 'var(--radius-sm)',
+                flex: 1,
+                height: '24px',
+                minHeight: 0,
+                padding: '0 8px',
+                border: 'none',
+                borderRadius: '4px',
                 background: mode === 'manual' ? 'var(--bg-elevated)' : 'transparent',
                 color: mode === 'manual' ? 'var(--text-primary)' : 'var(--text-muted)',
-                fontWeight: mode === 'manual' ? 700 : 500, fontSize: '12px', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                fontWeight: mode === 'manual' ? 600 : 500,
+                fontSize: '11px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '5px',
+                whiteSpace: 'nowrap',
+                boxShadow: mode === 'manual' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                transition: 'all 0.15s ease'
               }}
             >
-              <BookOpen size={13} />
-              <span>Manual Candidate Entry</span>
+              <User size={12} />
+              <span>Manual Entry</span>
             </button>
             <button
+              type="button"
               onClick={() => { setMode('token'); playSound('click'); }}
+              className="no-touch-expand mcq-mode-tab-btn"
               style={{
-                flex: 1, padding: '8px 12px', border: 'none', borderRadius: 'var(--radius-sm)',
+                flex: 1,
+                height: '24px',
+                minHeight: 0,
+                padding: '0 8px',
+                border: 'none',
+                borderRadius: '4px',
                 background: mode === 'token' ? 'var(--bg-elevated)' : 'transparent',
                 color: mode === 'token' ? 'var(--text-primary)' : 'var(--text-muted)',
-                fontWeight: mode === 'token' ? 700 : 500, fontSize: '12px', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                fontWeight: mode === 'token' ? 600 : 500,
+                fontSize: '11px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '5px',
+                whiteSpace: 'nowrap',
+                boxShadow: mode === 'token' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                transition: 'all 0.15s ease'
               }}
             >
-              <KeyRound size={13} />
-              <span>OR Import with Token</span>
+              <KeyRound size={12} />
+              <span>Import Token</span>
             </button>
           </div>
 
@@ -759,11 +992,14 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
                 </div>
               )}
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* 1:1 Two-Column Compact Candidate Identity Form */}
+              <div className="mcq-candidate-form-grid">
                 {/* MCQ Exam Selection (Only if multiple exams exist) */}
                 {allExams.filter((e) => e.status === 'PUBLISHED').length > 1 && (
-                  <div>
-                    <label style={labelStyle}>Select Examination Session *</label>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
+                      Select Examination Session *
+                    </label>
                     <SimpleSelect
                       value={exam.id}
                       onChange={(val) => {
@@ -778,80 +1014,103 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
                   </div>
                 )}
 
-                {/* Candidate Full Name */}
-                <div>
-                  <label style={labelStyle}>Full Name *</label>
+                {/* Candidate Full Name (Spans across) */}
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
+                    Full Name *
+                  </label>
                   <input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Enter your registered name"
-                    style={inputStyle}
+                    style={{ ...inputStyle, padding: '6px 10px', height: '32px', fontSize: '12px', borderRadius: '6px', background: 'var(--bg-surface)' }}
                     onKeyDown={(e) => e.key === 'Enter' && handleStartManual()}
                   />
                 </div>
 
-                {/* Roll Number / USN */}
+                {/* Row 2: Roll Number / USN (1fr) & Department (1fr) -> 1:1 */}
                 <div>
-                  <label style={labelStyle}>Roll Number / USN *</label>
+                  <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
+                    Roll Number / USN *
+                  </label>
                   <input
                     value={roll}
                     onChange={(e) => setRoll(e.target.value)}
-                    placeholder="Enter Roll No."
-                    style={inputStyle}
+                    placeholder="e.g. DEMO-101"
+                    style={{ ...inputStyle, padding: '6px 10px', height: '32px', fontSize: '12px', borderRadius: '6px', background: 'var(--bg-surface)' }}
                     onKeyDown={(e) => e.key === 'Enter' && handleStartManual()}
                   />
                 </div>
 
-                {/* Department, Semester, Division */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '10px' }}>
-                  <div>
-                    <label style={labelStyle}>Department *</label>
-                    <SimpleSelect
-                      value={dept}
-                      onChange={(val) => {
-                        setDept(String(val));
-                        playSound('click');
-                      }}
-                      options={DEPARTMENT_OPTIONS}
-                    />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Semester *</label>
-                    <SimpleSelect
-                      value={sem}
-                      onChange={(val) => {
-                        setSem(String(val));
-                        playSound('click');
-                      }}
-                      options={SEMESTER_OPTIONS}
-                    />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Division *</label>
-                    <SimpleSelect
-                      value={division}
-                      onChange={(val) => {
-                        setDivision(String(val));
-                        playSound('click');
-                      }}
-                      options={DIVISION_OPTIONS}
-                    />
-                  </div>
+                <div>
+                  <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
+                    Department *
+                  </label>
+                  <SimpleSelect
+                    value={dept}
+                    onChange={(val) => {
+                      setDept(String(val));
+                      playSound('click');
+                    }}
+                    options={DEPARTMENT_OPTIONS}
+                  />
                 </div>
 
-                <button
-                  onClick={handleStartManual}
-                  style={{
-                    width: '100%', marginTop: '10px',
-                    background: 'var(--accent)', border: 'none',
-                    borderRadius: 'var(--radius-sm)', padding: '12px',
-                    cursor: 'pointer', color: 'var(--accent-contrast)', fontSize: '13px', fontWeight: 700,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
-                  }}
-                >
-                  <CheckCircle2 size={14} />
-                  <span>Start MCQ Examination</span>
-                </button>
+                {/* Row 3: Semester (1fr) & Division (1fr) -> 1:1 */}
+                <div>
+                  <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
+                    Semester *
+                  </label>
+                  <SimpleSelect
+                    value={sem}
+                    onChange={(val) => {
+                      setSem(String(val));
+                      playSound('click');
+                    }}
+                    options={SEMESTER_OPTIONS}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
+                    Division *
+                  </label>
+                  <SimpleSelect
+                    value={division}
+                    onChange={(val) => {
+                      setDivision(String(val));
+                      playSound('click');
+                    }}
+                    options={DIVISION_OPTIONS}
+                  />
+                </div>
+
+                <div style={{ gridColumn: '1 / -1', marginTop: '6px' }}>
+                  <button
+                    onClick={handleStartManual}
+                    style={{
+                      width: '100%',
+                      background: 'var(--accent)',
+                      border: 'none',
+                      borderRadius: '6px',
+                      height: '34px',
+                      padding: '0 14px',
+                      cursor: 'pointer',
+                      color: 'var(--accent-contrast)',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      letterSpacing: '0.02em',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.06)'
+                    }}
+                  >
+                    <CheckCircle2 size={13} />
+                    <span>Start MCQ Examination</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -883,13 +1142,16 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
                   value={tokenInput}
                   onChange={(e) => setTokenInput(e.target.value)}
                   placeholder="Paste encoded admit token here (e.g. CDNA-TK-eyJhbGciOiJIUzI1Ni...)"
-                  rows={4}
+                  rows={3}
+                  className="mcq-token-textarea"
                   style={{
                     ...inputStyle,
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '11px',
-                    lineHeight: 1.45,
-                    resize: 'vertical'
+                    fontFamily: 'var(--font-mono, monospace)',
+                    fontSize: '12px',
+                    lineHeight: 1.5,
+                    resize: 'vertical',
+                    padding: '8px 10px',
+                    borderRadius: '6px'
                   }}
                 />
               </div>
@@ -951,11 +1213,17 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
                   width: '100%',
                   background: !parsedToken || !parsedToken.success ? 'var(--bg-surface)' : 'var(--accent)',
                   border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-sm)', padding: '12px',
+                  borderRadius: '6px',
+                  height: '34px',
+                  padding: '0 14px',
                   cursor: !parsedToken || !parsedToken.success ? 'not-allowed' : 'pointer',
                   color: !parsedToken || !parsedToken.success ? 'var(--text-muted)' : 'var(--accent-contrast)',
-                  fontSize: '13px', fontWeight: 700,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                  fontSize: '12.5px',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
                 }}
               >
                 <Check size={14} />
@@ -1352,7 +1620,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
 
   return (
     <div className="mcq-results-wrapper">
-      <div style={{ maxWidth: '1440px', margin: '0 auto', width: '100%' }}>
+      <div style={{ maxWidth: '1440px', margin: '0 auto', width: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
         {/* Time Expired Auto-Submit Banner */}
         {attempt.status === 'TIMED_OUT' && (
           <div
@@ -1413,59 +1681,55 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
 
         {/* Top Official Ledger Header */}
         <div className="mcq-results-header">
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+          <div style={{ minWidth: 0, flex: '1 1 auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', flexWrap: 'nowrap' }}>
               <span
                 style={{
-                  fontSize: '10px',
-                  fontWeight: 800,
+                  fontSize: '9.5px',
+                  fontWeight: 700,
                   textTransform: 'uppercase',
                   letterSpacing: '0.08em',
-                  padding: '2px 8px',
-                  borderRadius: 'var(--radius-pill)',
+                  padding: '2px 7px',
+                  borderRadius: '4px',
                   background: 'var(--bg-surface)',
                   border: '1px solid var(--border)',
-                  color: 'var(--text-secondary)'
+                  color: 'var(--text-secondary)',
+                  whiteSpace: 'nowrap'
                 }}
               >
-                OFFICIAL EXAMINATION TRANSCRIPT · CODE-DNA LEDGER
+                OFFICIAL TRANSCRIPT
               </span>
               <span
                 style={{
-                  fontSize: '11px',
+                  fontSize: '10px',
                   fontWeight: 700,
-                  padding: '2px 8px',
-                  borderRadius: 'var(--radius-pill)',
+                  padding: '2px 7px',
+                  borderRadius: '4px',
                   background: 'var(--bg-surface)',
                   border: `1px solid ${gradeColor}`,
-                  color: gradeColor
+                  color: gradeColor,
+                  whiteSpace: 'nowrap'
                 }}
               >
                 {gradeLabel}
               </span>
             </div>
-            <h1 style={{ margin: '0 0 6px', fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)' }}>
+            <h1 style={{ margin: '0 0 6px', fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1.25 }}>
               {attempt.examTitle}
             </h1>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', fontSize: '13px', color: 'var(--text-secondary)' }}>
+            <div className="mcq-results-meta" style={{ display: 'flex', alignItems: 'center', gap: '6px 12px', flexWrap: 'wrap', fontSize: '12px', color: 'var(--text-secondary)' }}>
               <span>Candidate: <strong style={{ color: 'var(--text-primary)' }}>{attempt.studentName}</strong></span>
-              <span>•</span>
-              <span>USN / Roll: <strong style={{ color: 'var(--text-primary)' }}>{attempt.studentRoll}</strong></span>
-              <span>•</span>
+              <span>Roll: <strong style={{ color: 'var(--text-primary)' }}>{attempt.studentRoll}</strong></span>
               <span>Dept: <strong>{attempt.studentDept || 'CSE'}</strong></span>
-              <span>•</span>
-              <span>Sem: <strong>{attempt.studentSem || '4th Sem'}</strong> ({attempt.studentDiv || 'A'})</span>
+              <span>Sem: <strong>{attempt.studentSem || '4th Sem'} ({attempt.studentDiv || 'A'})</strong></span>
               {attempt?.submitTime && (() => {
                 try {
                   const d = new Date(attempt.submitTime);
                   if (!isNaN(d.getTime())) {
                     return (
-                      <>
-                        <span>•</span>
-                        <span style={{ color: 'var(--text-muted)' }}>
-                          Submitted {d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </>
+                      <span style={{ color: 'var(--text-muted)' }}>
+                        Submitted {d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
                     );
                   }
                 } catch {}
@@ -1474,62 +1738,83 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="mcq-results-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button
+              type="button"
               onClick={() => window.print()}
-              className="btn btn-ghost btn-sm"
+              className="no-touch-expand mcq-results-btn"
               style={{
-                height: '36px',
-                padding: '0 14px',
-                gap: '6px',
-                fontSize: '12px',
+                height: '32px',
+                padding: '0 12px',
+                gap: '5px',
+                fontSize: '11.5px',
                 fontWeight: 600,
-                borderRadius: 'var(--radius-sm)',
+                borderRadius: '6px',
                 border: '1px solid var(--border)',
-                background: 'var(--bg-surface)'
+                background: 'var(--bg-surface)',
+                color: 'var(--text-primary)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer'
               }}
             >
-              <Download size={13} />
-              <span>Print Transcript</span>
+              <Download size={12} />
+              <span className="mcq-btn-text-full">Print Transcript</span>
+              <span className="mcq-btn-text-short">Print</span>
             </button>
 
             {onRestart && (
               <button
+                type="button"
                 onClick={onRestart}
-                className="btn btn-secondary btn-sm"
+                className="no-touch-expand mcq-results-btn"
                 style={{
-                  height: '36px',
-                  padding: '0 16px',
-                  gap: '6px',
-                  fontSize: '12px',
+                  height: '32px',
+                  padding: '0 12px',
+                  gap: '5px',
+                  fontSize: '11.5px',
                   fontWeight: 600,
-                  borderRadius: 'var(--radius-sm)',
+                  borderRadius: '6px',
                   border: '1px solid var(--border)',
-                  background: 'var(--bg-surface)'
+                  background: 'var(--bg-surface)',
+                  color: 'var(--text-primary)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer'
                 }}
               >
-                <RotateCcw size={13} />
-                <span>Retake Exam</span>
+                <RotateCcw size={12} />
+                <span className="mcq-btn-text-full">Retake Exam</span>
+                <span className="mcq-btn-text-short">Retake</span>
               </button>
             )}
 
             {onExit && (
               <button
+                type="button"
                 onClick={onExit}
-                className="btn btn-primary btn-sm"
+                className="no-touch-expand mcq-results-btn"
                 style={{
-                  height: '36px',
-                  padding: '0 16px',
-                  gap: '6px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  borderRadius: 'var(--radius-sm)',
+                  height: '32px',
+                  padding: '0 12px',
+                  gap: '5px',
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                  borderRadius: '6px',
                   background: 'var(--accent)',
-                  color: 'var(--accent-contrast)'
+                  color: 'var(--accent-contrast)',
+                  border: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer'
                 }}
               >
-                <LogOut size={13} />
-                <span>Exit Exam & Return to Catalog</span>
+                <LogOut size={12} />
+                <span className="mcq-btn-text-full">Exit & Catalog</span>
+                <span className="mcq-btn-text-short">Exit</span>
               </button>
             )}
           </div>
@@ -1537,37 +1822,37 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
 
         {/* 5-Card High-Density Scoreboard */}
         <div className="mcq-results-scoreboard">
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px 20px' }}>
+          <div className="mcq-scoreboard-card" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px 20px' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Total Marks Awarded</div>
             <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-primary)' }}>
               {grade.score} <span style={{ fontSize: '15px', color: 'var(--text-muted)', fontWeight: 500 }}>/ {grade.maxScore}</span>
             </div>
           </div>
 
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px 20px' }}>
+          <div className="mcq-scoreboard-card" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px 20px' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Aggregate Percentage</div>
             <div style={{ fontSize: '28px', fontWeight: 800, color: gradeColor }}>
               {grade.percentageScore}%
             </div>
           </div>
 
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px 20px' }}>
+          <div className="mcq-scoreboard-card" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px 20px' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Correct Questions</div>
             <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--success)' }}>
               {grade.correctCount} <span style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: 500 }}>of {grade.perQuestion.length}</span>
             </div>
           </div>
 
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px 20px' }}>
+          <div className="mcq-scoreboard-card" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px 20px' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Incorrect / Penalty</div>
             <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--danger)' }}>
               {grade.wrongCount} <span style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: 500 }}>wrong</span>
             </div>
           </div>
 
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px 20px' }}>
+          <div className="mcq-scoreboard-card" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px 20px' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Security & Proctoring</div>
-            <div style={{ fontSize: '15px', fontWeight: 700, color: attempt.tabSwitchCount > 0 ? 'var(--warning)' : 'var(--success)', marginTop: '8px' }}>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: attempt.tabSwitchCount > 0 ? 'var(--warning)' : 'var(--success)', marginTop: '8px', wordBreak: 'break-word' }}>
               {attempt.tabSwitchCount === 0 ? 'Verified Clean (0 Violations)' : `${attempt.tabSwitchCount} Tab Violation(s)`}
             </div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
@@ -1579,55 +1864,94 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
         {/* 2-Column Main Body: Left 68% Detailed Questions, Right 32% Matrix & Telemetry */}
         <div className="mcq-results-layout">
           {/* Left Column: Question-by-Question Review */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="mcq-results-questions-col" style={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0, width: '100%', maxWidth: '100%' }}>
+            {/* Question Review Header & Segmented Filter */}
             <div
+              className="mcq-review-header-card"
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
                 background: 'var(--bg-elevated)',
                 border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-md)',
-                padding: '12px 18px',
-                flexWrap: 'wrap',
-                gap: '12px'
+                borderRadius: '8px',
+                padding: '10px 12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                boxSizing: 'border-box',
+                width: '100%',
+                maxWidth: '100%',
+                overflow: 'hidden'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CheckSquare size={16} color="var(--accent)" />
-                <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  Question-by-Question Review
-                </span>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  ({filteredQuestions.length} of {perQuestionList.length} displayed)
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                  <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: 'var(--bg-surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <CheckSquare size={11} color="var(--accent)" />
+                  </div>
+                  <span style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                    Question Review
+                  </span>
+                </div>
+                <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-muted)', background: 'var(--bg-surface)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  {filteredQuestions.length} of {perQuestionList.length} Questions
                 </span>
               </div>
 
-              {/* Filter Tabs */}
-              <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-surface)', padding: '2px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+              {/* Filter Tabs Segmented Control */}
+              <div
+                className="mcq-review-filter-tabs"
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                  width: '100%',
+                  maxWidth: '100%',
+                  background: 'var(--bg-surface)',
+                  padding: '2px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border)',
+                  boxSizing: 'border-box',
+                  gap: '2px'
+                }}
+              >
                 {[
                   { id: 'all', label: `All (${perQuestionList.length})` },
                   { id: 'correct', label: `Correct (${grade?.correctCount ?? 0})` },
                   { id: 'wrong', label: `Wrong (${grade?.wrongCount ?? 0})` },
                   { id: 'unanswered', label: `Skipped (${grade?.unansweredCount ?? 0})` },
-                ].map((f) => (
-                  <button
-                    key={f.id}
-                    onClick={() => setFilterMode(f.id as any)}
-                    style={{
-                      background: filterMode === f.id ? 'var(--bg-elevated)' : 'transparent',
-                      border: 'none',
-                      borderRadius: 'var(--radius-xs)',
-                      padding: '4px 8px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      color: filterMode === f.id ? 'var(--text-primary)' : 'var(--text-muted)',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {f.label}
-                  </button>
-                ))}
+                ].map((f) => {
+                  const isActive = filterMode === f.id;
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      className="no-touch-expand mcq-filter-tab-btn"
+                      onClick={() => setFilterMode(f.id as any)}
+                      style={{
+                        width: '100%',
+                        minWidth: 0,
+                        height: '28px',
+                        minHeight: '28px',
+                        background: isActive ? 'var(--bg-elevated)' : 'transparent',
+                        border: isActive ? '1px solid var(--border)' : '1px solid transparent',
+                        borderRadius: '4px',
+                        padding: '0 2px',
+                        fontSize: 'clamp(9.5px, 2.7vw, 11px)',
+                        letterSpacing: '-0.02em',
+                        fontWeight: isActive ? 700 : 500,
+                        color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        whiteSpace: 'nowrap',
+                        boxShadow: isActive ? 'var(--shadow-sm)' : 'none',
+                        transition: 'all 0.15s ease',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      {f.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -1638,16 +1962,21 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
                 <div
                   id={`q-item-${originalIndex}`}
                   key={pq.questionId}
+                  className="mcq-review-item-card"
                   style={{
                     background: 'var(--bg-elevated)',
                     border: `1px solid ${pq.isCorrect ? 'var(--success-border)' : pq.selectedOptionId ? 'var(--danger-border)' : 'var(--border)'}`,
-                    borderRadius: 'var(--radius-md)',
-                    padding: '20px',
+                    borderRadius: '8px',
+                    padding: 'clamp(12px, 3.5vw, 18px)',
+                    boxSizing: 'border-box',
+                    width: '100%',
+                    maxWidth: '100%',
+                    overflow: 'hidden',
                     transition: 'border-color 0.2s ease'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                       <span
                         style={{
                           width: '24px',
@@ -1660,7 +1989,8 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
                           alignItems: 'center',
                           justifyContent: 'center',
                           fontSize: '11px',
-                          fontWeight: 800
+                          fontWeight: 800,
+                          flexShrink: 0
                         }}
                       >
                         {originalIndex + 1}
@@ -1672,13 +2002,14 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
 
                     <span
                       style={{
-                        fontSize: '12px',
+                        fontSize: '11.5px',
                         fontWeight: 700,
                         padding: '2px 8px',
-                        borderRadius: 'var(--radius-xs)',
+                        borderRadius: '4px',
                         background: pq.isCorrect ? 'var(--success-bg)' : pq.selectedOptionId ? 'var(--danger-bg)' : 'var(--bg-surface)',
                         color: pq.isCorrect ? 'var(--success)' : pq.selectedOptionId ? 'var(--danger)' : 'var(--text-muted)',
-                        border: `1px solid ${pq.isCorrect ? 'var(--success-border)' : pq.selectedOptionId ? 'var(--danger-border)' : 'var(--border)'}`
+                        border: `1px solid ${pq.isCorrect ? 'var(--success-border)' : pq.selectedOptionId ? 'var(--danger-border)' : 'var(--border)'}`,
+                        flexShrink: 0
                       }}
                     >
                       {pq.marksAwarded > 0 ? `+${pq.marksAwarded}` : pq.marksAwarded < 0 ? String(pq.marksAwarded) : '0'} pts
@@ -1687,17 +2018,22 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
 
                   <FormattedQuestionContent
                     content={pq.question}
-                    style={{ margin: '0 0 14px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}
+                    style={{ margin: '0 0 12px', fontSize: '13.5px', fontWeight: 600, color: 'var(--text-primary)' }}
                   />
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+                  <div className="mcq-review-answers-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '8px', marginBottom: '10px' }}>
                     {/* Candidate's Selection */}
                     <div
+                      className="mcq-review-answer-box"
                       style={{
                         padding: '10px 14px',
                         borderRadius: 'var(--radius-sm)',
                         background: pq.isCorrect ? 'var(--success-bg)' : pq.selectedOptionId ? 'var(--danger-bg)' : 'var(--bg-surface)',
-                        border: `1px solid ${pq.isCorrect ? 'var(--success-border)' : pq.selectedOptionId ? 'var(--danger-border)' : 'var(--border)'}`
+                        border: `1px solid ${pq.isCorrect ? 'var(--success-border)' : pq.selectedOptionId ? 'var(--danger-border)' : 'var(--border)'}`,
+                        boxSizing: 'border-box',
+                        minWidth: 0,
+                        wordBreak: 'break-word',
+                        overflowWrap: 'break-word'
                       }}
                     >
                       <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>
@@ -1710,11 +2046,16 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
 
                     {/* Official Key */}
                     <div
+                      className="mcq-review-answer-box"
                       style={{
                         padding: '10px 14px',
                         borderRadius: 'var(--radius-sm)',
                         background: 'var(--bg-surface)',
-                        border: '1px solid var(--border)'
+                        border: '1px solid var(--border)',
+                        boxSizing: 'border-box',
+                        minWidth: 0,
+                        wordBreak: 'break-word',
+                        overflowWrap: 'break-word'
                       }}
                     >
                       <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>
@@ -1727,7 +2068,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
                   </div>
 
                   {pq.explanation && (
-                    <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
+                    <div className="mcq-review-explanation-box" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px', boxSizing: 'border-box', minWidth: 0, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                       <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>
                         Academic Explanation
                       </div>
@@ -1744,7 +2085,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
 
           {/* Right Column: Question Navigator Matrix & Metadata Sidebar */}
           <div className="mcq-results-sidebar">
-            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px' }}>
+            <div className="mcq-results-sidebar-card" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px', boxSizing: 'border-box', width: '100%', maxWidth: '100%' }}>
               <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Question Matrix
               </div>
@@ -1792,7 +2133,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
             </div>
 
             {/* Candidate & Proctoring Snapshot */}
-            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px' }}>
+            <div className="mcq-results-sidebar-card" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px', boxSizing: 'border-box', width: '100%', maxWidth: '100%' }}>
               <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Terminal Identity
               </div>
@@ -1818,7 +2159,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
 
             {/* Session Complete & Exit Action Card */}
             {onExit && (
-              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px' }}>
+              <div className="mcq-results-sidebar-card" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px', boxSizing: 'border-box', width: '100%', maxWidth: '100%' }}>
                 <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Session Complete
                 </div>
@@ -2260,8 +2601,10 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
   const cleanStationNum = (student.stationNumber || '01').replace(/[^0-9]/g, '') || '01';
   const stationId = `${student.labId || 'LAB-01'}-WS-${cleanStationNum.padStart(2, '0')}`;
+  const isDemoExam = exam?.id === 'demo-test-3q';
   const isExplicitPardoned = typeof window !== 'undefined' ? localStorage.getItem(`codedna_lock_station_${stationId}`) === 'false' : false;
   const isStrictLocked = Boolean(
+    !isDemoExam &&
     !isExplicitPardoned &&
     (isLockedByProctor || (attempt && attempt.tabSwitchCount >= 3)) &&
     attempt &&
@@ -2368,29 +2711,35 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
             tabSwitchCount: newCount,
           };
           if (newCount === 1) {
-            setActiveStrikeModal({
-              strike: 1,
-              awaySeconds: 0,
-              reason
-            });
+            if (!isDemoExam) {
+              setActiveStrikeModal({
+                strike: 1,
+                awaySeconds: 0,
+                reason
+              });
+            }
             setProctorWarning(`PROCTOR WARNING (Strike 1/3): ${reason}`);
             if (exam) syncMcqLiveStation(updated, exam, student, currentIdx, false);
           } else if (newCount === 2) {
-            setActiveStrikeModal({
-              strike: 2,
-              awaySeconds: 0,
-              reason
-            });
+            if (!isDemoExam) {
+              setActiveStrikeModal({
+                strike: 2,
+                awaySeconds: 0,
+                reason
+              });
+            }
             setProctorWarning(`CRITICAL WARNING (Strike 2/3): FINAL STRIKE WARNING! ${reason}`);
             if (exam) syncMcqLiveStation(updated, exam, student, currentIdx, false);
           } else if (newCount >= 3) {
             setActiveStrikeModal(null);
             setProctorWarning(`ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded! Workstation frozen. Contact Invigilator.`);
-            setIsLockedByProctor(true);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem(`codedna_lock_station_${stationId}`, 'true');
+            if (!isDemoExam) {
+              setIsLockedByProctor(true);
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(`codedna_lock_station_${stationId}`, 'true');
+              }
+              updateStationLockInCloud(stationId, true, `ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded.`, student.labId || 'LAB-01');
             }
-            updateStationLockInCloud(stationId, true, `ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded.`, student.labId || 'LAB-01');
             if (exam) syncMcqLiveStation(updated, exam, student, currentIdx, true);
           }
           return updated;
@@ -2682,29 +3031,35 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
             playSound('warning');
 
             if (newCount === 1) {
-              setActiveStrikeModal({
-                strike: 1,
-                awaySeconds: awayDuration,
-                reason: `Window or tab focus lost for ${awayDuration}s`
-              });
+              if (!isDemoExam) {
+                setActiveStrikeModal({
+                  strike: 1,
+                  awaySeconds: awayDuration,
+                  reason: `Window or tab focus lost for ${awayDuration}s`
+                });
+              }
               setProctorWarning(`PROCTOR WARNING (Strike 1/3): Window focus lost for ${awayDuration}s! Tab switching is logged to the invigilator dashboard.`);
               if (exam) syncMcqLiveStation(updated, exam, student, currentIdx, false);
             } else if (newCount === 2) {
-              setActiveStrikeModal({
-                strike: 2,
-                awaySeconds: awayDuration,
-                reason: `Window or tab focus lost for ${awayDuration}s`
-              });
+              if (!isDemoExam) {
+                setActiveStrikeModal({
+                  strike: 2,
+                  awaySeconds: awayDuration,
+                  reason: `Window or tab focus lost for ${awayDuration}s`
+                });
+              }
               setProctorWarning(`CRITICAL WARNING (Strike 2/3): FINAL STRIKE WARNING! Window left for ${awayDuration}s! One more tab switch or Alt+Tab will automatically freeze your workstation.`);
               if (exam) syncMcqLiveStation(updated, exam, student, currentIdx, false);
             } else if (newCount >= 3) {
               setActiveStrikeModal(null);
               setProctorWarning(`ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded! Workstation frozen. Contact Invigilator.`);
-              setIsLockedByProctor(true);
-              if (typeof window !== 'undefined') {
-                localStorage.setItem(`codedna_lock_station_${stationId}`, 'true');
+              if (!isDemoExam) {
+                setIsLockedByProctor(true);
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem(`codedna_lock_station_${stationId}`, 'true');
+                }
+                updateStationLockInCloud(stationId, true, `ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded.`, student.labId || 'LAB-01');
               }
-              updateStationLockInCloud(stationId, true, `ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded.`, student.labId || 'LAB-01');
               if (exam) syncMcqLiveStation(updated, exam, student, currentIdx, true);
             }
 
@@ -3547,7 +3902,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       )}
 
       {/* ── Interactive 1-by-1 Strike Warning Modal ───────────────────────── */}
-      {activeStrikeModal && !isStrictLocked && attempt && attempt.status === 'IN_PROGRESS' && (
+      {activeStrikeModal && !isStrictLocked && !isDemoExam && attempt && attempt.status === 'IN_PROGRESS' && (
         <div
           data-proctor-unlock-exempt="true"
           style={{
@@ -3559,40 +3914,77 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '16px'
+            padding: '12px',
+            boxSizing: 'border-box'
           }}
         >
           <div
             data-proctor-unlock-exempt="true"
             style={{
-              maxWidth: '500px',
+              maxWidth: '420px',
               width: '100%',
+              maxHeight: 'min(92dvh, 520px)',
+              display: 'flex',
+              flexDirection: 'column',
               background: 'var(--bg-elevated)',
               border: `1px solid ${activeStrikeModal.strike === 2 ? 'var(--warning-border)' : 'var(--border)'}`,
-              borderRadius: 'var(--radius-lg)',
-              padding: '28px',
+              borderRadius: '12px',
+              padding: 'clamp(16px, 4.5vw, 22px)',
               textAlign: 'center',
-              boxShadow: '0 25px 60px rgba(0,0,0,0.85)',
-              boxSizing: 'border-box'
+              boxShadow: '0 20px 50px rgba(0,0,0,0.85)',
+              boxSizing: 'border-box',
+              position: 'relative',
+              overflowY: 'auto'
             }}
           >
+            {/* Top-right quick dismiss button */}
+            <button
+              type="button"
+              data-proctor-unlock-exempt="true"
+              onClick={() => {
+                playSound('click');
+                setActiveStrikeModal(null);
+                setProctorWarning(null);
+              }}
+              aria-label="Dismiss notice"
+              className="no-touch-expand"
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-muted)',
+                padding: '4px',
+                borderRadius: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                lineHeight: 1
+              }}
+            >
+              <X size={15} />
+            </button>
+
             <div
               style={{
-                width: '54px',
-                height: '54px',
+                width: '40px',
+                height: '40px',
                 borderRadius: '50%',
                 background: activeStrikeModal.strike === 2 ? 'var(--warning-bg)' : 'var(--danger-bg)',
                 border: `1px solid ${activeStrikeModal.strike === 2 ? 'var(--warning-border)' : 'var(--danger-border)'}`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                margin: '0 auto 14px'
+                margin: '0 auto 10px',
+                flexShrink: 0
               }}
             >
               {activeStrikeModal.strike === 2 ? (
-                <AlertTriangle size={26} color="var(--warning)" />
+                <AlertTriangle size={20} color="var(--warning)" />
               ) : (
-                <ShieldAlert size={26} color="var(--danger)" />
+                <ShieldAlert size={20} color="var(--danger)" />
               )}
             </div>
 
@@ -3600,17 +3992,19 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px',
-                padding: '3px 12px',
-                borderRadius: 'var(--radius-pill)',
+                justifyContent: 'center',
+                alignSelf: 'center',
+                gap: '5px',
+                padding: '2px 9px',
+                borderRadius: '4px',
                 background: activeStrikeModal.strike === 2 ? 'var(--warning-bg)' : 'var(--danger-bg)',
                 border: `1px solid ${activeStrikeModal.strike === 2 ? 'var(--warning-border)' : 'var(--danger-border)'}`,
                 color: activeStrikeModal.strike === 2 ? 'var(--warning)' : 'var(--danger)',
-                fontSize: '11px',
-                fontWeight: 800,
+                fontSize: '10.5px',
+                fontWeight: 700,
                 textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                marginBottom: '12px'
+                letterSpacing: '0.06em',
+                marginBottom: '8px'
               }}
             >
               <span>
@@ -3622,46 +4016,47 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
             <h3
               style={{
-                fontSize: '19px',
-                fontWeight: 800,
+                fontSize: '15px',
+                fontWeight: 700,
                 color: 'var(--text-primary)',
-                margin: '0 0 10px',
-                letterSpacing: '-0.01em'
+                margin: '0 0 8px',
+                letterSpacing: '-0.01em',
+                lineHeight: 1.3
               }}
             >
               {activeStrikeModal.strike === 2
-                ? 'Critical Warning: Workstation Terminal at Risk'
+                ? 'Critical Warning: Terminal at Risk'
                 : 'Examination Proctor Integrity Notice'}
             </h3>
 
             <div
               style={{
-                fontSize: '13px',
+                fontSize: '12px',
                 color: 'var(--text-secondary)',
-                lineHeight: 1.6,
-                margin: '0 0 20px',
+                lineHeight: 1.5,
+                margin: '0 0 14px',
                 textAlign: 'left',
                 background: 'var(--bg-surface)',
                 border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-md)',
-                padding: '14px 16px'
+                borderRadius: '8px',
+                padding: '10px 12px'
               }}
             >
               {activeStrikeModal.strike === 2 ? (
                 <>
-                  <div style={{ color: 'var(--danger)', fontWeight: 700, marginBottom: '6px' }}>
-                    ONE MORE VIOLATION WILL IMMEDIATELY FREEZE YOUR TERMINAL.
+                  <div style={{ color: 'var(--danger)', fontWeight: 700, marginBottom: '4px', fontSize: '11.5px' }}>
+                    ONE MORE VIOLATION WILL FREEZE YOUR TERMINAL.
                   </div>
                   <div>
-                    You have now left or unfocused the examination window <strong>2 times</strong>. All focus departures are logged in real time to the invigilator station.
+                    You have now left or unfocused the examination window <strong>2 times</strong>. All focus departures are logged in real time.
                   </div>
-                  <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                  <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>
                     Maintain strict focus on this examination tab. Do not switch applications or tabs.
                   </div>
                 </>
               ) : (
                 <>
-                  <div style={{ color: 'var(--text-primary)', fontWeight: 700, marginBottom: '6px' }}>
+                  <div style={{ color: 'var(--text-primary)', fontWeight: 700, marginBottom: '4px', fontSize: '11.5px' }}>
                     Window / Tab Departure Recorded (Strike 1 of 3)
                   </div>
                   <div>
@@ -3669,7 +4064,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                     {activeStrikeModal.awaySeconds > 0 ? ` (away for ${activeStrikeModal.awaySeconds}s)` : ''}.
                     This infraction has been recorded in the central examination ledger.
                   </div>
-                  <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                  <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>
                     You have <strong>2 strikes remaining</strong>. Upon 3 infractions, your workstation locks automatically.
                   </div>
                 </>
@@ -3678,6 +4073,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
             <button
               type="button"
+              className="no-touch-expand"
               data-proctor-unlock-exempt="true"
               onClick={() => {
                 playSound('click');
@@ -3686,19 +4082,25 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
               }}
               style={{
                 width: '100%',
-                padding: '12px 20px',
-                fontSize: '13px',
-                fontWeight: 700,
-                borderRadius: 'var(--radius-sm)',
+                padding: '0 16px',
+                height: '36px',
+                minHeight: '36px',
+                fontSize: '12px',
+                fontWeight: 600,
+                borderRadius: '6px',
                 background: activeStrikeModal.strike === 2 ? 'var(--warning)' : 'var(--accent)',
                 color: activeStrikeModal.strike === 2 ? '#000000' : 'var(--accent-contrast)',
                 border: 'none',
                 cursor: 'pointer',
-                transition: 'opacity 0.15s ease'
+                transition: 'opacity 0.15s ease',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
               }}
             >
               {activeStrikeModal.strike === 2
-                ? 'I Acknowledge the Final Warning & Resume Exam'
+                ? 'I Acknowledge Warning & Resume Exam'
                 : 'I Understand & Resume Examination'}
             </button>
           </div>
@@ -3710,68 +4112,72 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
         <div style={{
           position: 'fixed', inset: 0, zIndex: 2147483640,
           background: 'rgba(9, 9, 11, 0.98)', backdropFilter: 'blur(16px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px',
-          userSelect: 'none', cursor: 'not-allowed'
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '12px', boxSizing: 'border-box'
         }}>
           <div
             data-proctor-unlock-exempt="true"
             style={{
-            maxWidth: '540px', width: '100%',
-            background: 'var(--bg-elevated)', border: '1px solid var(--danger)',
-            borderRadius: 'var(--radius-lg)', padding: '32px', textAlign: 'center',
-            boxShadow: '0 25px 60px rgba(0,0,0,0.85)',
-            cursor: 'default'
-          }}>
+              maxWidth: '460px', width: '100%',
+              maxHeight: 'min(94dvh, 580px)',
+              overflowY: 'auto',
+              background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+              borderRadius: '12px', padding: 'clamp(16px, 4vw, 24px)', textAlign: 'center',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.85)',
+              boxSizing: 'border-box',
+              cursor: 'default'
+            }}
+          >
             <div style={{
-              width: '60px', height: '60px', borderRadius: '50%',
+              width: '44px', height: '44px', borderRadius: '50%',
               background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              margin: '0 auto 16px'
+              margin: '0 auto 10px'
             }}>
-              <ShieldAlert size={30} color="var(--danger)" />
+              <ShieldAlert size={22} color="var(--danger)" />
             </div>
 
             <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '3px 12px', borderRadius: 'var(--radius-pill)',
+              display: 'inline-flex', alignItems: 'center', gap: '5px',
+              padding: '2px 9px', borderRadius: '4px',
               background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
-              color: 'var(--danger)', fontSize: '11px', fontWeight: 800,
-              textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px'
+              color: 'var(--danger)', fontSize: '10.5px', fontWeight: 700,
+              textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px'
             }}>
-              <span>STRICT ACADEMIC LOCKDOWN · {attempt.tabSwitchCount >= 3 ? `${attempt.tabSwitchCount}/3 INFRACTIONS EXCEEDED` : 'PROCTOR INTERVENTION'}</span>
+              <span>STRICT LOCKDOWN · {attempt.tabSwitchCount >= 3 ? `${attempt.tabSwitchCount}/3 INFRACTIONS` : 'PROCTOR INTERVENTION'}</span>
             </div>
 
-            <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 10px' }}>
+            <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 8px', letterSpacing: '-0.01em' }}>
               Workstation Hardware Locked
             </h2>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 18px' }}>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0 0 14px', padding: '0 4px', textAlign: 'center' }}>
               {attempt.tabSwitchCount >= 3
                 ? `Academic integrity violation: Candidate switched tabs or left the active examination window ${attempt.tabSwitchCount} times. Physical keyboard and mouse interactions are frozen.`
-                : 'Your examination terminal has been frozen by the central proctor. All mouse and keyboard inputs are locked until released by authorized faculty.'}
+                : 'Your examination terminal has been frozen by the central proctor. All inputs are locked until authorized by faculty.'}
             </p>
 
-            {/* Candidate Dossier Summary */}
+            {/* Candidate Dossier Summary (Symmetrical 2x2 grid) */}
             <div style={{
               background: 'var(--bg-surface)', border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)', padding: '14px 18px', marginBottom: '20px',
-              display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '10px', textAlign: 'left',
-              fontSize: '12px'
+              borderRadius: '8px', padding: '10px 14px', marginBottom: '14px',
+              display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px 12px', textAlign: 'left',
+              fontSize: '11.5px', boxSizing: 'border-box'
             }}>
               <div>
-                <span style={{ color: 'var(--text-muted)' }}>Candidate: </span>
-                <strong style={{ color: 'var(--text-primary)' }}>{attempt.studentName}</strong>
+                <div style={{ color: 'var(--text-muted)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Candidate</div>
+                <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{attempt.studentName}</div>
               </div>
               <div>
-                <span style={{ color: 'var(--text-muted)' }}>Roll / USN: </span>
-                <strong style={{ color: 'var(--text-primary)' }}>{attempt.studentRoll}</strong>
+                <div style={{ color: 'var(--text-muted)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Roll / USN</div>
+                <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{attempt.studentRoll}</div>
               </div>
               <div>
-                <span style={{ color: 'var(--text-muted)' }}>Workstation: </span>
-                <strong style={{ color: 'var(--text-primary)' }}>{student.stationNumber || 'Station #01'}</strong>
+                <div style={{ color: 'var(--text-muted)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Workstation</div>
+                <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{student.stationNumber || 'Station #01'}</div>
               </div>
               <div>
-                <span style={{ color: 'var(--text-muted)' }}>Violations: </span>
-                <strong style={{ color: 'var(--danger)' }}>{attempt.tabSwitchCount} Violations Logged</strong>
+                <div style={{ color: 'var(--text-muted)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Violations</div>
+                <div style={{ color: 'var(--danger)', fontWeight: 700, marginTop: '1px' }}>{attempt.tabSwitchCount} / 3 Strikes</div>
               </div>
             </div>
 
@@ -3781,30 +4187,36 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
               style={{
                 background: 'var(--bg-surface)',
                 border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-md)',
-                padding: '16px',
-                marginBottom: '16px',
-                textAlign: 'left'
+                borderRadius: '8px',
+                padding: '12px 14px',
+                marginBottom: '14px',
+                textAlign: 'left',
+                boxSizing: 'border-box'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Unlock size={14} color="var(--accent)" />
-                  <span>Invigilator Terminal Authorization</span>
-                </span>
-                <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                  Code: AXENT-UNLOCK or PIN
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                  <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Unlock size={11} color="var(--accent)" />
+                  </div>
+                  <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                    Invigilator Authorization
+                  </span>
+                </div>
+                <span style={{ fontSize: '9.5px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', background: 'var(--bg-elevated)', padding: '2px 5px', borderRadius: '4px', border: '1px solid var(--border)', flexShrink: 0 }}>
+                  PIN Required
                 </span>
               </div>
               <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 10px', lineHeight: 1.4 }}>
-                If this lockout was caused by an accidental browser prompt, system dialog, or invigilator pardon, enter the proctor authorization PIN to resume the examination immediately.
+                Enter the proctor authorization PIN to resume the examination immediately.
               </p>
 
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                 <input
                   type="text"
+                  className="no-touch-expand mcq-lockdown-pin-input"
                   data-proctor-unlock-exempt="true"
-                  placeholder="Enter PIN (e.g. 1234 or AXENT-UNLOCK)"
+                  placeholder="Enter PIN (e.g. 1234 or AXENT)"
                   value={proctorUnlockCodeInput}
                   onChange={(e) => {
                     setProctorUnlockCodeInput(e.target.value);
@@ -3820,26 +4232,29 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                         setProctorUnlockCodeInput('');
                         handlePardonUnlock();
                       } else {
-                        setUnlockError('Invalid authorization PIN. Contact the invigilator for the unlock code.');
+                        setUnlockError('Invalid authorization PIN.');
                         playSound('warning');
                       }
                     }
                   }}
                   style={{
                     flex: 1,
-                    minWidth: '180px',
+                    minWidth: 0,
+                    height: '34px',
                     background: 'var(--bg-elevated)',
                     border: unlockError ? '1px solid var(--danger)' : '1px solid var(--border)',
-                    borderRadius: 'var(--radius-sm)',
-                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    padding: '0 10px',
                     fontSize: '12px',
                     color: 'var(--text-primary)',
                     fontFamily: 'var(--font-mono)',
-                    outline: 'none'
+                    outline: 'none',
+                    boxSizing: 'border-box'
                   }}
                 />
                 <button
                   type="button"
+                  className="no-touch-expand"
                   data-proctor-unlock-exempt="true"
                   onClick={() => {
                     const code = proctorUnlockCodeInput.trim().toUpperCase();
@@ -3849,21 +4264,29 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                       setProctorUnlockCodeInput('');
                       handlePardonUnlock();
                     } else {
-                      setUnlockError('Invalid authorization PIN. Contact the invigilator for the unlock code.');
+                      setUnlockError('Invalid authorization PIN.');
                       playSound('warning');
                     }
                   }}
-                  className="btn btn-primary btn-sm"
                   style={{
-                    height: '35px',
-                    padding: '0 16px',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    gap: '6px'
+                    height: '34px',
+                    minHeight: '34px',
+                    padding: '0 14px',
+                    fontSize: '11.5px',
+                    fontWeight: 600,
+                    background: 'var(--accent)',
+                    color: 'var(--accent-contrast)',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    flexShrink: 0
                   }}
                 >
-                  <Unlock size={13} />
-                  <span>Authorize & Resume</span>
+                  <Unlock size={12} />
+                  <span>Authorize</span>
                 </button>
               </div>
 
@@ -3874,9 +4297,11 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
               )}
 
               {/* Instant One-Click Invigilator Quick Unlock */}
-              <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end' }}>
+              <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>Proctor Override</span>
                 <button
                   type="button"
+                  className="no-touch-expand"
                   data-proctor-unlock-exempt="true"
                   onClick={() => {
                     setUnlockError(null);
@@ -3887,14 +4312,13 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                     background: 'none',
                     border: 'none',
                     color: 'var(--accent)',
-                    fontSize: '11px',
+                    fontSize: '10.5px',
                     fontWeight: 600,
                     cursor: 'pointer',
-                    textDecoration: 'underline',
                     padding: '2px 4px'
                   }}
                 >
-                  Invigilator Quick Unlock (Pardon & Clear Strikes)
+                  Quick Unlock & Clear Strikes →
                 </button>
               </div>
             </div>
@@ -3904,15 +4328,16 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
               data-proctor-unlock-exempt="true"
               style={{
                 borderTop: '1px solid var(--border)',
-                paddingTop: '20px',
+                paddingTop: '12px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '10px',
+                gap: '6px',
                 alignItems: 'center'
               }}
             >
               <button
                 type="button"
+                className="no-touch-expand"
                 data-proctor-unlock-exempt="true"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -3923,23 +4348,22 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                   background: 'var(--danger)',
                   color: '#ffffff',
                   border: 'none',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '12px 24px',
-                  fontSize: '13px',
-                  fontWeight: 700,
+                  borderRadius: '6px',
+                  height: '34px',
+                  minHeight: '34px',
+                  padding: '0 16px',
+                  fontSize: '12px',
+                  fontWeight: 600,
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '8px'
+                  gap: '6px'
                 }}
               >
-                <LogOut size={16} />
+                <LogOut size={13} />
                 <span>Conclude Exam & Free Device</span>
               </button>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                Submits all answered questions for final evaluation, exits fullscreen lockdown, and restores physical mouse and keyboard access to this workstation.
-              </div>
             </div>
           </div>
         </div>
@@ -3947,39 +4371,103 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
       {/* Top bar */}
       <div className="mcq-exam-topbar">
+        {/* Left identity cluster: Icon locked directly next to title & candidate */}
         <div className="mcq-exam-topbar-info">
-          <BookOpen size={16} color="var(--text-muted)" />
-          <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{exam.title}</span>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{attempt.studentName}</span>
+          <div
+            className="mcq-exam-topbar-icon"
+            style={{
+              width: '28px',
+              height: '28px',
+              minWidth: '28px',
+              borderRadius: '6px',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}
+          >
+            <BookOpen size={13} color="var(--text-secondary)" />
+          </div>
+          <div className="mcq-exam-topbar-title-block">
+            <h1
+              style={{
+                margin: 0,
+                fontSize: '13px',
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+                letterSpacing: '-0.01em',
+                lineHeight: 1.25,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+            >
+              {exam.title}
+            </h1>
+            <div
+              style={{
+                fontSize: '10.5px',
+                fontWeight: 500,
+                color: 'var(--text-muted)',
+                lineHeight: 1.2,
+                marginTop: '1px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <span>{attempt.studentName}</span>
+              {attempt.studentRoll && (
+                <>
+                  <span style={{ opacity: 0.4 }}>•</span>
+                  <span>{attempt.studentRoll}</span>
+                </>
+              )}
+            </div>
+          </div>
         </div>
 
+        {/* Right actions cluster */}
         <div className="mcq-exam-topbar-actions">
           {/* Anti-cheat indicator */}
           {attempt.tabSwitchCount > 0 && (
-            <span style={{
-              fontSize: '11px',
-              fontWeight: 700,
-              color: attempt.tabSwitchCount >= 3 ? 'var(--danger)' : 'var(--warning)',
-              background: attempt.tabSwitchCount >= 3 ? 'var(--danger-bg)' : 'var(--warning-bg)',
-              border: `1px solid ${attempt.tabSwitchCount >= 3 ? 'var(--danger-border)' : 'var(--warning-border)'}`,
-              padding: '3px 8px',
-              borderRadius: 'var(--radius-pill)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}>
+            <span
+              className="no-touch-expand"
+              style={{
+                fontSize: '11px',
+                fontWeight: 700,
+                color: attempt.tabSwitchCount >= 3 ? 'var(--danger)' : 'var(--warning)',
+                background: attempt.tabSwitchCount >= 3 ? 'var(--danger-bg)' : 'var(--warning-bg)',
+                border: `1px solid ${attempt.tabSwitchCount >= 3 ? 'var(--danger-border)' : 'var(--warning-border)'}`,
+                padding: '0 8px',
+                height: '28px',
+                borderRadius: '6px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                flexShrink: 0
+              }}
+            >
               <AlertTriangle size={11} />
-              <span>{attempt.tabSwitchCount}/3 {attempt.tabSwitchCount >= 3 ? 'VIOLATIONS (FROZEN)' : 'Strikes'}</span>
+              <span>{attempt.tabSwitchCount}/3 {attempt.tabSwitchCount >= 3 ? 'VIOLATIONS' : 'Strikes'}</span>
             </span>
           )}
 
           {/* Timer */}
-          <TimerBadge deadline={attempt.deadline} onExpire={handleTimerExpire} />
+          <div className="mcq-exam-topbar-timer-slot">
+            <TimerBadge deadline={attempt.deadline} onExpire={handleTimerExpire} />
+          </div>
 
           {/* Live CCTV Proctor Screen Share Toggle (Desktop/Supported browsers only) */}
           {typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && (typeof window !== 'undefined' && !('ontouchstart' in window || navigator.maxTouchPoints > 0 || window.innerWidth < 768)) && (
             <button
               type="button"
+              className="no-touch-expand mcq-topbar-btn"
               onClick={() => {
                 if (isScreenSharing) {
                   stopScreenProctoring();
@@ -3989,29 +4477,30 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
               }}
               title={isScreenSharing ? 'Stop CCTV Screen Stream' : 'Share Screen (CCTV Proctoring)'}
               style={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px',
-                padding: '7px 12px',
-                background: isScreenSharing ? 'var(--bg-surface)' : 'rgba(239, 68, 68, 0.1)',
-                border: isScreenSharing ? '1px solid var(--border)' : '1px solid rgba(239, 68, 68, 0.35)',
-                borderRadius: 'var(--radius-sm)',
+                gap: '5px',
+                padding: '0 10px',
+                height: '28px',
+                minHeight: '28px',
+                background: isScreenSharing ? 'var(--bg-surface)' : 'rgba(239, 68, 68, 0.08)',
+                border: isScreenSharing ? '1px solid var(--border)' : '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: '6px',
                 color: isScreenSharing ? 'var(--text-secondary)' : 'var(--danger)',
-                fontSize: '12px',
+                fontSize: '11.5px',
                 fontWeight: 600,
                 cursor: 'pointer',
-                transition: 'all 0.15s ease'
+                transition: 'all 0.15s ease',
+                flexShrink: 0
               }}
             >
-              {isScreenSharing ? <VideoOff size={13} /> : <Video size={13} />}
-              <span style={{ fontSize: '11px', fontWeight: 700 }}>
-                {isScreenSharing ? 'CCTV On' : 'Share Screen (CCTV)'}
-              </span>
+              {isScreenSharing ? <VideoOff size={12} /> : <Video size={12} />}
+              <span>{isScreenSharing ? 'CCTV On' : 'CCTV'}</span>
               {isScreenSharing && (
                 <span
                   style={{
-                    width: '6px',
-                    height: '6px',
+                    width: '5px',
+                    height: '5px',
                     borderRadius: '50%',
                     background: 'var(--success)',
                     display: 'inline-block'
@@ -4025,6 +4514,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           {typeof document !== 'undefined' && Boolean(document.fullscreenEnabled || (document as any).webkitFullscreenEnabled) && (
             <button
               type="button"
+              className="no-touch-expand mcq-topbar-btn"
               onClick={async () => {
                 if (isFullscreen) {
                   await exitExamFullscreen();
@@ -4036,39 +4526,55 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
               }}
               title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen Examination Mode'}
               style={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px',
-                padding: '7px 12px',
-                background: isFullscreen ? 'var(--bg-surface)' : 'rgba(239, 68, 68, 0.1)',
-                border: isFullscreen ? '1px solid var(--border)' : '1px solid rgba(239, 68, 68, 0.35)',
-                borderRadius: 'var(--radius-sm)',
+                gap: '5px',
+                padding: '0 10px',
+                height: '28px',
+                minHeight: '28px',
+                background: isFullscreen ? 'var(--bg-surface)' : 'rgba(239, 68, 68, 0.08)',
+                border: isFullscreen ? '1px solid var(--border)' : '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: '6px',
                 color: isFullscreen ? 'var(--text-secondary)' : 'var(--danger)',
-                fontSize: '12px',
+                fontSize: '11.5px',
                 fontWeight: 600,
                 cursor: 'pointer',
-                transition: 'all 0.15s ease'
+                transition: 'all 0.15s ease',
+                flexShrink: 0
               }}
             >
-              {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-              <span style={{ fontSize: '11px', fontWeight: 700 }}>
-                {isFullscreen ? 'Fullscreen' : 'Full Screen'}
-              </span>
+              {isFullscreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+              <span>Fullscreen</span>
             </button>
           )}
 
+          {/* End & Submit Button */}
           <button
+            type="button"
+            className="no-touch-expand mcq-topbar-btn mcq-topbar-submit-btn"
             onClick={() => setShowSubmitConfirm(true)}
             title="End examination and finalize submission"
             style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              background: 'var(--accent)', border: 'none',
-              borderRadius: 'var(--radius-sm)', padding: '8px 16px',
-              cursor: 'pointer', color: 'var(--accent-contrast)', fontSize: '12px', fontWeight: 700,
-              boxShadow: 'var(--shadow-sm)'
-            }}>
-            <Send size={13} />
-            <span>End & Submit Exam</span>
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'var(--accent)',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '0 12px',
+              height: '28px',
+              minHeight: '28px',
+              cursor: 'pointer',
+              color: 'var(--accent-contrast)',
+              fontSize: '11.5px',
+              fontWeight: 600,
+              boxShadow: 'var(--shadow-sm)',
+              flexShrink: 0
+            }}
+          >
+            <Send size={11} />
+            <span className="mcq-submit-text-full">End & Submit Exam</span>
+            <span className="mcq-submit-text-short">Submit</span>
           </button>
         </div>
       </div>
@@ -4218,20 +4724,20 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
               return (
                 <>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                       Question {currentIdx + 1} of {totalQ}
                     </span>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '12px', color: 'var(--text-muted)', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '4px', padding: '2px 8px' }}>
                         {safeAQSnapshot.marks ?? 1}pt
                       </span>
                       {(safeAQSnapshot.negativeMarks ?? 0) > 0 && (
-                        <span style={{ fontSize: '12px', color: 'var(--warning)', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--warning)', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: '4px', padding: '2px 8px' }}>
                           -{safeAQSnapshot.negativeMarks} penalty
                         </span>
                       )}
-                      <span style={{ fontSize: '11px', color: 'var(--text-dim)', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
+                      <span style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--text-muted)', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '4px', padding: '2px 8px' }}>
                         {safeAQSnapshot.difficulty || 'Medium'}
                       </span>
                     </div>
@@ -4240,11 +4746,11 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                   {/* Question text */}
                   <FormattedQuestionContent
                     content={safeAQSnapshot.text}
-                    style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 24px' }}
+                    style={{ fontSize: '14.5px', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.55, margin: '0 0 18px' }}
                   />
 
                   {/* Options */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {safeShuffledOptionIds.map((optId, optIdx) => {
                       const opt = safeAQOptions.find((o) => o?.id === optId);
                       if (!opt) return null;
@@ -4253,30 +4759,66 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                       return (
                         <button
                           key={optId || `opt-${optIdx}`}
+                          type="button"
+                          className="no-touch-expand mcq-option-card-btn"
                           onClick={() => qId && handleSelectOption(qId, optId)}
                           style={{
-                            display: 'flex', alignItems: 'flex-start', gap: '12px', width: '100%', textAlign: 'left',
-                            padding: '14px 16px', cursor: 'pointer',
-                            borderRadius: 'var(--radius-md)',
-                            border: `2px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '10px',
+                            width: '100%',
+                            textAlign: 'left',
+                            padding: '9px 12px',
+                            minHeight: '38px',
+                            cursor: 'pointer',
+                            borderRadius: '8px',
+                            border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
                             background: isSelected ? 'var(--accent-subtle)' : 'var(--bg-surface)',
-                            transition: 'border-color 0.15s ease, background 0.15s ease',
-                          }}>
+                            boxShadow: isSelected ? '0 0 0 1px var(--accent)' : 'none',
+                            transition: 'all 0.15s cubic-bezier(0.16, 1, 0.3, 1)',
+                            boxSizing: 'border-box'
+                          }}
+                        >
                           {/* Option letter */}
-                          <div style={{
-                            width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', flexShrink: 0,
-                            border: `2px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
-                            background: isSelected ? 'var(--accent)' : 'var(--bg-elevated)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '12px', fontWeight: 800,
-                            color: isSelected ? 'var(--accent-contrast)' : 'var(--text-muted)',
-                          }}>
+                          <div
+                            style={{
+                              width: '24px',
+                              height: '24px',
+                              minWidth: '24px',
+                              borderRadius: '5px',
+                              flexShrink: 0,
+                              border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
+                              background: isSelected ? 'var(--accent)' : 'var(--bg-elevated)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              color: isSelected ? 'var(--accent-contrast)' : 'var(--text-muted)',
+                              marginTop: '1px'
+                            }}
+                          >
                             {String.fromCharCode(65 + optIdx)}
                           </div>
-                          <div style={{ fontSize: '14px', color: 'var(--text-primary)', lineHeight: 1.5, flex: 1 }}>
+                          <div
+                            style={{
+                              fontSize: '13px',
+                              color: 'var(--text-primary)',
+                              lineHeight: 1.45,
+                              flex: 1,
+                              minWidth: 0,
+                              wordBreak: 'break-word'
+                            }}
+                          >
                             <FormattedQuestionContent content={opt.text} />
                           </div>
-                          {isSelected && <CheckCircle size={18} color="var(--accent)" style={{ flexShrink: 0, marginTop: '3px' }} />}
+                          {isSelected && (
+                            <CheckCircle
+                              size={15}
+                              color="var(--accent)"
+                              style={{ flexShrink: 0, marginTop: '3px' }}
+                            />
+                          )}
                         </button>
                       );
                     })}
@@ -4408,16 +4950,24 @@ const TimerBadge: React.FC<{ deadline: number; onExpire: () => void }> = ({ dead
   return (
     <div
       title="NTP Server-Synchronized Clock · Accuracy < 100ms"
+      className="no-touch-expand mcq-timer-badge"
       style={{
-        display: 'flex', alignItems: 'center', gap: '6px',
-        padding: '5px 11px', borderRadius: 'var(--radius-sm)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '5px',
+        padding: '0 8px',
+        height: '28px',
+        minHeight: '28px',
+        boxSizing: 'border-box',
+        borderRadius: '6px',
         border: `1px solid ${isCritical ? 'var(--danger-border)' : isLow ? 'var(--warning-border)' : 'var(--border)'}`,
         background: isCritical ? 'var(--danger-bg)' : isLow ? 'var(--warning-bg)' : 'var(--bg-surface)',
-        transition: 'all 0.15s ease'
+        transition: 'all 0.15s ease',
+        flexShrink: 0
       }}
     >
-      <Clock size={13} color={color} />
-      <span style={{ fontSize: '13px', fontWeight: 700, color, fontFamily: 'var(--font-mono)' }}>
+      <Clock size={12} color={color} />
+      <span style={{ fontSize: '12px', fontWeight: 700, color, fontFamily: 'var(--font-mono)' }}>
         {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
       </span>
       <span
@@ -4703,107 +5253,172 @@ export const MCQExamSelector: React.FC = () => {
         </div>
       )}
 
-      {/* Clean Header with Search & Filter Toolbar */}
-      <div style={{ marginBottom: '22px' }}>
-        <div style={{ marginBottom: exams.length > 0 ? '16px' : '0' }}>
-          <h2
+      {/* Classic Architectural Header - Authoritative & Refined */}
+      <div
+        style={{
+          marginBottom: '20px'
+        }}
+      >
+        <div
+          style={{
+            borderLeft: '2.5px solid var(--accent)',
+            paddingLeft: '12px',
+            marginBottom: exams.length > 0 ? '16px' : '0'
+          }}
+        >
+          <div
             style={{
-              fontSize: '20px',
-              fontWeight: 800,
-              color: 'var(--text-primary)',
-              margin: '0 0 4px',
-              letterSpacing: '-0.02em'
+              fontSize: '10px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.14em',
+              color: 'var(--accent)',
+              fontFamily: 'var(--font-mono, monospace)',
+              marginBottom: '3px',
+              lineHeight: 1.2
             }}
           >
-            Available MCQ Examinations
+            Candidate Examination Hall
+          </div>
+          <h2
+            style={{
+              fontSize: '17px',
+              fontWeight: 700,
+              color: 'var(--text-primary)',
+              margin: '0 0 3px',
+              letterSpacing: '-0.02em',
+              lineHeight: 1.25
+            }}
+          >
+            Available Examinations
           </h2>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-            Select your assigned examination session to commence or review your past sittings.
+          <p
+            style={{
+              fontSize: '11.5px',
+              color: 'var(--text-muted)',
+              margin: 0,
+              lineHeight: 1.5
+            }}
+          >
+            Select your scheduled sitting or enter a candidate access ticket below.
           </p>
         </div>
 
         {exams.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-            {/* Search Input Box */}
-            <div style={{ position: 'relative', flex: 1, minWidth: 'min(100%, 280px)', maxWidth: '440px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '10px', flexWrap: 'wrap', width: '100%' }}>
+            {/* Slim Centered Search Input Box */}
+            <div
+              className="mcq-search-container"
+              style={{
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                flex: '1 1 140px',
+                minWidth: 0,
+                maxWidth: '280px',
+                height: '30px',
+                boxSizing: 'border-box',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+                padding: '0 8px 0 10px',
+                transition: 'border-color 0.15s ease'
+              }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+            >
               <Search
-                size={14}
+                size={13}
+                className="mcq-search-icon"
                 style={{
-                  position: 'absolute',
-                  left: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
                   color: 'var(--text-muted)',
-                  pointerEvents: 'none'
+                  pointerEvents: 'none',
+                  opacity: 0.7,
+                  marginRight: '7px',
+                  flexShrink: 0,
+                  display: 'block'
                 }}
               />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search examinations by title, topic, subject..."
+                placeholder="Search examinations..."
+                className="mcq-search-input"
                 style={{
-                  width: '100%',
-                  boxSizing: 'border-box',
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-pill)',
-                  color: 'var(--text-primary)',
-                  padding: '7px 32px 7px 34px',
-                  fontSize: '13px',
+                  flex: 1,
+                  minWidth: 0,
+                  height: '100%',
+                  background: 'transparent',
+                  border: 'none',
                   outline: 'none',
-                  transition: 'border-color 0.15s ease'
+                  color: 'var(--text-primary)',
+                  padding: 0,
+                  margin: 0,
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  lineHeight: 'normal'
                 }}
-                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--border-strong)'; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
                   style={{
-                    position: 'absolute',
-                    right: '10px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
                     background: 'none',
                     border: 'none',
                     cursor: 'pointer',
                     color: 'var(--text-muted)',
                     padding: '2px',
                     display: 'flex',
-                    alignItems: 'center'
+                    alignItems: 'center',
+                    flexShrink: 0,
+                    marginLeft: '4px'
                   }}
                   title="Clear search"
                 >
-                  <X size={13} />
+                  <X size={11} />
                 </button>
               )}
             </div>
 
-            {/* Filter Pills */}
+            {/* Filter Buttons Segmented Control */}
             <div
               style={{
                 display: 'inline-flex',
+                alignItems: 'center',
                 background: 'var(--bg-surface)',
                 border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-pill)',
+                borderRadius: '6px',
                 padding: '3px',
-                gap: '2px'
+                gap: '3px',
+                height: '30px',
+                boxSizing: 'border-box',
+                overflow: 'hidden',
+                flexShrink: 0
               }}
             >
               <button
                 type="button"
                 onClick={() => setFilterTab('all')}
                 style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '22px',
+                  padding: '0 8px',
+                  margin: 0,
+                  boxSizing: 'border-box',
                   background: filterTab === 'all' ? 'var(--bg-elevated)' : 'transparent',
                   color: filterTab === 'all' ? 'var(--text-primary)' : 'var(--text-muted)',
-                  fontWeight: filterTab === 'all' ? 700 : 500,
-                  fontSize: '12px',
-                  padding: '4px 12px',
-                  borderRadius: 'var(--radius-pill)',
+                  fontWeight: filterTab === 'all' ? 600 : 500,
+                  fontSize: '11px',
+                  lineHeight: 1,
+                  borderRadius: '4px',
                   border: 'none',
                   cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  boxShadow: filterTab === 'all' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
                   transition: 'all 0.15s ease'
                 }}
               >
@@ -4813,14 +5428,23 @@ export const MCQExamSelector: React.FC = () => {
                 type="button"
                 onClick={() => setFilterTab('active')}
                 style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '22px',
+                  padding: '0 8px',
+                  margin: 0,
+                  boxSizing: 'border-box',
                   background: filterTab === 'active' ? 'var(--bg-elevated)' : 'transparent',
                   color: filterTab === 'active' ? 'var(--text-primary)' : 'var(--text-muted)',
-                  fontWeight: filterTab === 'active' ? 700 : 500,
-                  fontSize: '12px',
-                  padding: '4px 12px',
-                  borderRadius: 'var(--radius-pill)',
+                  fontWeight: filterTab === 'active' ? 600 : 500,
+                  fontSize: '11px',
+                  lineHeight: 1,
+                  borderRadius: '4px',
                   border: 'none',
                   cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  boxShadow: filterTab === 'active' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
                   transition: 'all 0.15s ease'
                 }}
               >
@@ -4830,14 +5454,23 @@ export const MCQExamSelector: React.FC = () => {
                 type="button"
                 onClick={() => setFilterTab('concluded')}
                 style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '22px',
+                  padding: '0 8px',
+                  margin: 0,
+                  boxSizing: 'border-box',
                   background: filterTab === 'concluded' ? 'var(--bg-elevated)' : 'transparent',
                   color: filterTab === 'concluded' ? 'var(--text-primary)' : 'var(--text-muted)',
-                  fontWeight: filterTab === 'concluded' ? 700 : 500,
-                  fontSize: '12px',
-                  padding: '4px 12px',
-                  borderRadius: 'var(--radius-pill)',
+                  fontWeight: filterTab === 'concluded' ? 600 : 500,
+                  fontSize: '11px',
+                  lineHeight: 1,
+                  borderRadius: '4px',
                   border: 'none',
                   cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  boxShadow: filterTab === 'concluded' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
                   transition: 'all 0.15s ease'
                 }}
               >
@@ -4851,92 +5484,218 @@ export const MCQExamSelector: React.FC = () => {
       {exams.length === 0 ? (
         <div
           style={{
-            textAlign: 'center',
-            padding: '48px 24px',
+            maxWidth: '440px',
+            margin: '52px auto 36px',
             background: 'var(--bg-elevated)',
             border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md)',
-            maxWidth: '680px',
-            margin: '0 auto'
+            borderRadius: '10px',
+            overflow: 'hidden',
+            boxShadow: '0 2px 12px -2px rgba(0, 0, 0, 0.06)'
           }}
         >
-          <BookOpen size={36} style={{ marginBottom: '14px', opacity: 0.35, color: 'var(--text-muted)' }} />
-          <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px' }}>
-            No Public Examinations Scheduled
-          </h3>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 24px', lineHeight: 1.5 }}>
-            There are currently no open public examinations in the institutional catalog. If you were issued a direct Exam ID or Candidate Ticket by your invigilator, enter it below to commence your sitting.
-          </p>
-
-          {/* Direct Exam ID / Candidate Access Box */}
-          <form
-            onSubmit={handleLaunchDirectExam}
+          {/* Architectural Card Header */}
+          <div
             style={{
+              padding: '10px 16px',
+              background: 'var(--bg-surface)',
+              borderBottom: '1px solid var(--border)',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              maxWidth: '460px',
-              margin: '0 auto 20px',
-              flexWrap: 'wrap'
+              gap: '6px'
             }}
           >
-            <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
-              <KeyRound
-                size={14}
-                style={{
-                  position: 'absolute',
-                  left: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: 'var(--text-muted)'
-                }}
-              />
-              <input
-                type="text"
-                value={directExamInput}
-                onChange={(e) => setDirectExamInput(e.target.value)}
-                placeholder="Enter Exam ID (e.g. exam_ai_...)"
-                style={{
-                  width: '100%',
-                  boxSizing: 'border-box',
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-sm)',
-                  color: 'var(--text-primary)',
-                  padding: '9px 12px 9px 34px',
-                  fontSize: '13px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={!directExamInput.trim()}
-              className="btn btn-primary"
+            <KeyRound size={12} color="var(--accent)" />
+            <span
               style={{
-                padding: '9px 16px',
-                fontSize: '13px',
+                fontSize: '10px',
                 fontWeight: 700,
-                borderRadius: 'var(--radius-sm)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px'
+                textTransform: 'uppercase',
+                letterSpacing: '0.14em',
+                color: 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono, monospace)'
               }}
             >
-              <span>Launch</span>
-              <ArrowRight size={14} />
-            </button>
-          </form>
+              Direct Access Portal
+            </span>
+          </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Form and Controls - Small Crisp Font Size */}
+          <div style={{ padding: '16px' }}>
+            <h3
+              style={{
+                fontSize: '13.5px',
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                margin: '0 0 4px',
+                letterSpacing: '-0.01em'
+              }}
+            >
+              Direct Examination Entry
+            </h3>
+            <p
+              style={{
+                fontSize: '11px',
+                color: 'var(--text-muted)',
+                margin: '0 0 14px',
+                lineHeight: 1.5
+              }}
+            >
+              No public examinations are scheduled in the open catalog. Enter your assigned Exam ID or candidate passkey below to begin.
+            </p>
+
+            <form
+              onSubmit={handleLaunchDirectExam}
+              style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}
+            >
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '9.5px',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.12em',
+                    color: 'var(--text-muted)',
+                    fontFamily: 'var(--font-mono, monospace)',
+                    marginBottom: '5px'
+                  }}
+                >
+                  Exam ID or Candidate Ticket
+                </label>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <KeyRound
+                    size={12}
+                    style={{
+                      position: 'absolute',
+                      left: '11px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      color: 'var(--text-muted)',
+                      pointerEvents: 'none',
+                      flexShrink: 0
+                    }}
+                  />
+                  <input
+                    type="text"
+                    className="exam-direct-input"
+                    value={directExamInput}
+                    onChange={(e) => setDirectExamInput(e.target.value)}
+                    placeholder="e.g. exam_ai_... or ticket passkey"
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: 'var(--text-primary)',
+                      padding: '7px 11px 7px 32px',
+                      fontSize: '11px',
+                      fontFamily: 'var(--font-mono, monospace)',
+                      outline: 'none',
+                      transition: 'border-color 0.15s ease, box-shadow 0.15s ease'
+                    }}
+                    onFocus={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--accent)';
+                      e.currentTarget.style.boxShadow = '0 0 0 2px var(--accent-subtle)';
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--border)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={!directExamInput.trim()}
+                className="btn btn-primary"
+                style={{
+                  width: '100%',
+                  height: '34px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  borderRadius: 'var(--radius-sm)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '5px',
+                  opacity: directExamInput.trim() ? 1 : 0.45,
+                  cursor: directExamInput.trim() ? 'pointer' : 'not-allowed',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span>Access Examination</span>
+                <ArrowRight size={12} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  playSound('click');
+                  setSelectedExamId('demo-test-3q');
+                  setSearchParams({ examId: 'demo-test-3q' }, { replace: true });
+                }}
+                className="btn btn-secondary"
+                style={{
+                  width: '100%',
+                  height: '32px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  borderRadius: 'var(--radius-sm)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '5px',
+                  border: '1px solid var(--border)'
+                }}
+              >
+                <span>Launch 3-Question Demo Test</span>
+                <ArrowRight size={12} />
+              </button>
+            </form>
+          </div>
+
+          {/* Micro Footer Bar */}
+          <div
+            style={{
+              padding: '8px 16px',
+              background: 'var(--bg-surface)',
+              borderTop: '1px solid var(--border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px'
+            }}
+          >
+            <span
+              style={{
+                fontSize: '9.5px',
+                fontFamily: 'var(--font-mono, monospace)',
+                color: 'var(--text-muted)',
+                letterSpacing: '0.03em'
+              }}
+            >
+              Catalog: 0 active sessions
+            </span>
             <button
               type="button"
               onClick={handleManualSync}
               disabled={isRefreshing}
-              className="btn btn-secondary btn-sm"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '6px 14px' }}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: isRefreshing ? 'wait' : 'pointer',
+                padding: '2px 4px',
+                color: 'var(--text-secondary)',
+                fontSize: '10.5px',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
             >
-              <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
+              <RefreshCw size={10} className={isRefreshing ? 'animate-spin' : ''} />
               <span>{isRefreshing ? 'Checking...' : 'Check Again'}</span>
             </button>
           </div>
@@ -4983,7 +5742,7 @@ export const MCQExamSelector: React.FC = () => {
           ) : null}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 360px))', gap: '16px', width: '100%' }}>
           {displayedExams.map((exam) => {
             const isScheduledFuture = exam.status === 'PUBLISHED' && Boolean(exam.startTime && currentTime < exam.startTime);
             const isConcluded = exam.status === 'CLOSED' || Boolean(exam.endTime && currentTime > exam.endTime);
@@ -5012,200 +5771,205 @@ export const MCQExamSelector: React.FC = () => {
                 style={{
                   background: isConcluded ? 'var(--bg-surface)' : 'var(--bg-elevated)',
                   border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-md)',
+                  borderRadius: '10px',
                   boxSizing: 'border-box',
                   width: '100%',
                   cursor: 'pointer',
-                  opacity: isConcluded ? 0.8 : 1,
-                  transition: 'border-color 0.15s ease, background 0.15s ease'
+                  opacity: isConcluded ? 0.75 : 1,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                  transition: 'all 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: '14px'
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = 'var(--border-strong)';
+                  e.currentTarget.style.boxShadow = '0 3px 8px rgba(0,0,0,0.04)';
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.borderColor = 'var(--border)';
+                  e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.02)';
                 }}
               >
-                {/* Left Side: Category, Title, Topic & Metric Chips */}
-                <div className="mcq-card-main">
-                  {/* Category Micro-Badge */}
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      color: 'var(--text-secondary)',
-                      background: 'var(--bg-surface)',
-                      border: '1px solid var(--border)',
-                      padding: '3px 8px',
-                      borderRadius: 'var(--radius-xs)',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.04em',
-                      flexShrink: 0
-                    }}
-                  >
-                    {exam.examCategory || exam.subject || 'Assessment'}
-                  </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                  {/* Top Badges Row */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span
+                      style={{
+                        fontSize: '9.5px',
+                        fontWeight: 600,
+                        fontFamily: 'var(--font-mono, monospace)',
+                        color: 'var(--text-muted)',
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border)',
+                        padding: '2px 7px',
+                        borderRadius: '4px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.12em',
+                        flexShrink: 0,
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {exam.examCategory || exam.subject || 'Assessment'}
+                    </span>
 
-                  {/* Title + Metadata Cluster */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0, flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <h3
+                    {isLive && (
+                      <span
                         style={{
-                          margin: 0,
-                          fontSize: '14.5px',
-                          fontWeight: 700,
-                          color: 'var(--text-primary)',
-                          lineHeight: 1.3
-                        }}
-                      >
-                        {exam.title}
-                      </h3>
-                      {exam.topic && (
-                        <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>
-                          · {exam.topic}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Inline Metric Chips Row */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                      <div
-                        style={{
+                          fontSize: '9.5px',
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.12em',
+                          fontFamily: 'var(--font-mono, monospace)',
+                          padding: '2px 7px',
+                          borderRadius: '4px',
+                          background: 'rgba(197, 160, 89, 0.08)',
+                          color: '#C5A059',
+                          border: '1px solid rgba(197, 160, 89, 0.25)',
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '4px',
-                          padding: '2px 7px',
-                          borderRadius: 'var(--radius-xs)',
-                          background: 'var(--bg-surface)',
-                          border: '1px solid var(--border)',
-                          fontSize: '11px',
-                          color: 'var(--text-secondary)'
+                          gap: '5px',
+                          flexShrink: 0,
+                          whiteSpace: 'nowrap'
                         }}
                       >
-                        <BookOpen size={11} color="var(--text-muted)" />
-                        <span>{exam.questionCount} Questions</span>
-                      </div>
-
-                      <div
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          padding: '2px 7px',
-                          borderRadius: 'var(--radius-xs)',
-                          background: 'var(--bg-surface)',
-                          border: '1px solid var(--border)',
-                          fontSize: '11px',
-                          color: 'var(--text-secondary)'
-                        }}
-                      >
-                        <Clock size={11} color="var(--text-muted)" />
-                        <span>{exam.durationMinutes} Mins</span>
-                      </div>
-
-                      <div
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          padding: '2px 7px',
-                          borderRadius: 'var(--radius-xs)',
-                          background: 'var(--bg-surface)',
-                          border: '1px solid var(--border)',
-                          fontSize: '11px',
-                          color: 'var(--text-secondary)'
-                        }}
-                      >
-                        <Award size={11} color="var(--text-muted)" />
-                        <span>{exam.totalMarks} Marks</span>
-                      </div>
-
-                      <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginLeft: '4px' }}>
-                        {exam.negativeMarkingEnabled ? 'Negative: -0.25' : 'No negative marking'}
+                        <span style={{ width: '4.5px', height: '4px', borderRadius: '50%', background: '#C5A059' }} />
+                        Live Session
                       </span>
+                    )}
 
-                      {isScheduledFuture && exam.startTime && (
-                        <span style={{ fontSize: '11px', color: 'var(--warning)', display: 'inline-flex', alignItems: 'center', gap: '4px', marginLeft: '6px' }}>
-                          <Calendar size={11} />
-                          Starts: {formatScheduleTime(exam.startTime)}
-                        </span>
-                      )}
-                      {!isScheduledFuture && exam.endTime && (
-                        <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginLeft: '6px' }}>
-                          Closes: {formatScheduleTime(exam.endTime)}
-                        </span>
-                      )}
-                    </div>
+                    {isScheduledFuture && (
+                      <span
+                        style={{
+                          fontSize: '9.5px',
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.1em',
+                          fontFamily: 'var(--font-mono, monospace)',
+                          padding: '2px 7px',
+                          borderRadius: '4px',
+                          background: 'var(--bg-surface)',
+                          color: 'var(--warning)',
+                          border: '1px solid var(--border)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          flexShrink: 0,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        <Clock size={10} /> Opens in {countdownStr}
+                      </span>
+                    )}
+
+                    {isConcluded && (
+                      <span
+                        style={{
+                          fontSize: '9.5px',
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.1em',
+                          fontFamily: 'var(--font-mono, monospace)',
+                          padding: '2px 7px',
+                          borderRadius: '4px',
+                          background: 'var(--bg-surface)',
+                          color: 'var(--text-muted)',
+                          border: '1px solid var(--border)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          flexShrink: 0,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        Concluded
+                      </span>
+                    )}
                   </div>
+
+                  {/* Title & Topic */}
+                  <div>
+                    <h3
+                      style={{
+                        margin: '0 0 3px',
+                        fontSize: '14.5px',
+                        fontWeight: 700,
+                        color: 'var(--text-primary)',
+                        letterSpacing: '-0.015em',
+                        lineHeight: 1.3
+                      }}
+                    >
+                      {exam.title}
+                    </h3>
+                    {exam.topic && (
+                      <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 400 }}>
+                        · {exam.topic}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Telemetry Row */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono, monospace)' }}>
+                      <BookOpen size={11} color="var(--accent)" style={{ opacity: 0.6 }} />
+                      <span>{exam.questionCount} Questions</span>
+                    </span>
+                    <span style={{ color: 'var(--border-strong)', fontSize: '10px' }}>·</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono, monospace)' }}>
+                      <Clock size={11} color="var(--accent)" style={{ opacity: 0.6 }} />
+                      <span>{exam.durationMinutes} Mins</span>
+                    </span>
+                    <span style={{ color: 'var(--border-strong)', fontSize: '10px' }}>·</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono, monospace)' }}>
+                      <Award size={11} color="var(--accent)" style={{ opacity: 0.6 }} />
+                      <span>{exam.totalMarks} Marks</span>
+                    </span>
+                  </div>
+
+                  {/* Penalty row */}
+                  <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '1px' }}>
+                    {exam.negativeMarkingEnabled ? 'Penalty: -0.25' : 'No Negative Penalty'}
+                  </div>
+
+                  {isScheduledFuture && exam.startTime && (
+                    <div style={{ fontSize: '11px', color: 'var(--warning)', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '1px' }}>
+                      <Calendar size={11} />
+                      <span>Starts: {formatScheduleTime(exam.startTime)}</span>
+                    </div>
+                  )}
+                  {!isScheduledFuture && exam.endTime && (
+                    <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '1px' }}>
+                      Closes: {formatScheduleTime(exam.endTime)}
+                    </div>
+                  )}
                 </div>
 
-                {/* Right Side: Status Badge & Action CTA */}
-                <div className="mcq-horizontal-card-actions">
-                  {isLive && (
-                    <span
-                      style={{
-                        fontSize: '10.5px',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                        padding: '3px 10px',
-                        borderRadius: 'var(--radius-pill)',
-                        background: 'var(--success-bg)',
-                        color: 'var(--success)',
-                        border: '1px solid var(--success-border)',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}
-                    >
-                      <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--success)' }} />
-                      Live Examination
-                    </span>
-                  )}
-
-                  {isScheduledFuture && (
-                    <span
-                      style={{
-                        fontSize: '10.5px',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                        padding: '3px 10px',
-                        borderRadius: 'var(--radius-pill)',
-                        background: 'var(--warning-bg)',
-                        color: 'var(--warning)',
-                        border: '1px solid var(--warning-border)',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '5px'
-                      }}
-                    >
-                      <Clock size={11} /> Opens in {countdownStr}
-                    </span>
-                  )}
-
-                  {isConcluded && (
-                    <span
-                      style={{
-                        fontSize: '10.5px',
-                        fontWeight: 600,
-                        textTransform: 'uppercase',
-                        padding: '3px 9px',
-                        borderRadius: 'var(--radius-pill)',
-                        background: 'var(--bg-surface)',
-                        color: 'var(--text-muted)',
-                        border: '1px solid var(--border)'
-                      }}
-                    >
-                      Concluded
-                    </span>
-                  )}
-
+                {/* Bottom Action CTA */}
+                <div style={{ paddingTop: '12px', borderTop: '1px solid var(--border)', width: '100%' }}>
                   {isLive && (
                     <button
                       type="button"
-                      className="btn btn-primary btn-sm"
-                      style={{ height: '32px', padding: '0 16px', fontSize: '12px', gap: '5px', fontWeight: 700 }}
+                      style={{
+                        width: '100%',
+                        height: '36px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        letterSpacing: '0.01em',
+                        background: 'var(--accent)',
+                        color: 'var(--accent-contrast)',
+                        border: '1px solid transparent',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
                     >
                       <span>Start Exam</span>
                       <ChevronRight size={13} />
@@ -5215,8 +5979,22 @@ export const MCQExamSelector: React.FC = () => {
                   {isScheduledFuture && (
                     <button
                       type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ height: '32px', padding: '0 14px', fontSize: '12px', gap: '5px' }}
+                      style={{
+                        width: '100%',
+                        height: '36px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        background: 'var(--bg-surface)',
+                        color: 'var(--text-primary)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '5px',
+                        transition: 'all 0.15s ease'
+                      }}
                     >
                       <Clock size={12} color="var(--warning)" />
                       <span>Waiting Room</span>
@@ -5225,7 +6003,9 @@ export const MCQExamSelector: React.FC = () => {
                   )}
 
                   {isConcluded && (
-                    <span style={{ fontSize: '11.5px', color: 'var(--text-dim)', paddingRight: '4px' }}>Session Closed</span>
+                    <div style={{ textAlign: 'center', fontSize: '11.5px', color: 'var(--text-dim)', padding: '6px 0' }}>
+                      Session Closed
+                    </div>
                   )}
                 </div>
               </div>

@@ -204,6 +204,7 @@ export const AuthorityInvitePortal: React.FC = () => {
       }}
     >
       <div
+        className="invite-portal-card"
         style={{
           maxWidth: '580px',
           width: '100%',

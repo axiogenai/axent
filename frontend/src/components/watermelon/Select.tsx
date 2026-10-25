@@ -87,10 +87,11 @@ export function SimpleSelect<T extends string | number>({
     const estimatedHeight = Math.min(320, filteredOptions.length * 36 + (isSearchActive ? 42 : 12));
     const placeAbove = spaceBelow < estimatedHeight && spaceAbove > spaceBelow;
 
+    const menuWidth = Math.min(window.innerWidth - 16, Math.max(rect.width, 180));
     setCoords({
       top: placeAbove ? rect.top - 4 : rect.bottom + 4,
-      left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)),
-      width: rect.width,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - menuWidth - 8)),
+      width: menuWidth,
       placeAbove
     });
   }, [filteredOptions.length, isSearchActive]);
@@ -266,8 +267,9 @@ export function SimpleSelect<T extends string | number>({
               top: coords.placeAbove ? 'auto' : `${coords.top}px`,
               bottom: coords.placeAbove ? `${window.innerHeight - coords.top}px` : 'auto',
               left: `${coords.left}px`,
-              width: `${Math.max(coords.width, 180)}px`,
-              maxHeight: '300px',
+              width: `${coords.width}px`,
+              maxWidth: 'calc(100vw - 16px)',
+              maxHeight: 'min(300px, 60vh)',
               zIndex: 9999999,
               background: 'var(--bg-surface)',
               border: '1px solid var(--border-strong)',

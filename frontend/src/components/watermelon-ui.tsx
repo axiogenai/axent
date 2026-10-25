@@ -69,17 +69,24 @@ export const WatermelonStatCard: React.FC<WatermelonStatCardProps> = ({
   return (
     <div
       onClick={onClick}
+      className="card-elevated"
       style={{
         background: 'var(--bg-elevated)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-md)',
-        padding: '16px 18px',
+        padding: '14px 16px',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
         cursor: onClick ? 'pointer' : 'default',
         boxShadow: 'var(--shadow-sm)',
         transition: 'border-color 0.15s ease',
+        boxSizing: 'border-box',
+        width: '100%',
+        maxWidth: '100%',
+        minWidth: 0,
+        overflow: 'hidden',
+        wordBreak: 'break-word'
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -191,7 +198,12 @@ export const ContinuousTabs: React.FC<ContinuousTabsProps> = ({
         padding: '3px',
         borderRadius: '9px',
         background: 'var(--bg-surface)',
-        border: '1px solid var(--border)'
+        border: '1px solid var(--border)',
+        maxWidth: '100%',
+        overflowX: 'auto',
+        scrollbarWidth: 'none',
+        WebkitOverflowScrolling: 'touch',
+        boxSizing: 'border-box'
       }}
     >
       {tabs.map((tab) => {
@@ -218,6 +230,8 @@ export const ContinuousTabs: React.FC<ContinuousTabsProps> = ({
               fontWeight: isActive ? 700 : 500,
               cursor: 'pointer',
               outline: 'none',
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
               transition: 'all 0.18s cubic-bezier(0.22, 1, 0.36, 1)'
             }}
           >

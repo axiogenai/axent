@@ -309,7 +309,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({ initial, onSave, onClos
         </div>
 
         {/* Footer */}
-        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
+        <div className="question-editor-footer" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap', borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
           <button type="button" onClick={onClose} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '9px 20px', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: 500 }}>
             Cancel
           </button>
@@ -506,12 +506,12 @@ const AiGeneratorModal: React.FC<AiGeneratorModalProps> = ({ onAddQuestions, onC
               })}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
               <button type="button" onClick={() => setGeneratedList([])}
                 style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 16px', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '12px' }}>
                 Regenerate
               </button>
-              <div style={{ display: 'flex', gap: '10px' }}>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 <button type="button" onClick={onClose} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 16px', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '13px' }}>Cancel</button>
                 <button type="button" onClick={handleCommit} disabled={selectedIndices.length === 0}
                   style={{ background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 18px', color: 'var(--accent-contrast)', cursor: selectedIndices.length === 0 ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 700 }}>
@@ -689,7 +689,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ onImportComplete, onClose }) 
           </div>
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: '10px', marginTop: '20px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
           <button type="button" onClick={onClose} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 16px', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '13px' }}>Cancel</button>
           <button type="button" onClick={handleCommit} disabled={!parseResult || parseResult.valid.length === 0}
             style={{ background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 18px', color: 'var(--accent-contrast)', cursor: !parseResult || parseResult.valid.length === 0 ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 700 }}>
@@ -895,7 +895,7 @@ export const MCQQuestionBank: React.FC = () => {
           <option value="ARCHIVED">Archived</option>
         </select>
 
-        <div style={{ display: 'flex', gap: '6px' }}>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           <button type="button" onClick={() => setIsAiModalOpen(true)} title="Generate questions using Autonomous Engine"
             style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '12.5px', fontWeight: 600 }}>
             <GraduationCap size={13} color="var(--accent)" />

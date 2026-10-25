@@ -258,7 +258,7 @@ export const AutoViva: React.FC<AutoVivaProps> = ({
   // ---- Empty state ----
   if (!code || code.trim().length === 0) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div className="autoviva-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         <PanelHeader />
         <div
           style={{
@@ -302,7 +302,7 @@ export const AutoViva: React.FC<AutoVivaProps> = ({
   // ---- Loading questions ----
   if (isLoadingQuestions) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div className="autoviva-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         <PanelHeader />
         <div
           style={{
@@ -333,7 +333,7 @@ export const AutoViva: React.FC<AutoVivaProps> = ({
   // ---- Evaluating ----
   if (isEvaluating) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div className="autoviva-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         <PanelHeader />
         <div
           style={{
@@ -373,7 +373,7 @@ export const AutoViva: React.FC<AutoVivaProps> = ({
     const ScoreIcon = isPassing ? ShieldCheck : ShieldAlert;
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div className="autoviva-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         <PanelHeader />
         <div
           style={{
@@ -588,7 +588,7 @@ export const AutoViva: React.FC<AutoVivaProps> = ({
   const isLastQuestion = currentQuestionIndex === questions.length - 1;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div className="autoviva-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <PanelHeader />
 
       {/* Locked overlay */}

@@ -1180,13 +1180,14 @@ export const Workspace: React.FC<WorkspaceProps> = ({
         display: 'flex',
         flexDirection: 'column',
         flex: 1,
-        height: 'calc(100vh - 52px)',
+        height: 'calc(100dvh - 52px)',
         background: 'var(--bg-main)',
         overflow: 'hidden'
       }}
     >
       {/* ── UNIFIED FULL-WIDTH WORKSPACE CONTROL BAR ── */}
       <div
+        className="workspace-toolbar"
         style={{
           height: '46px',
           minHeight: '46px',
@@ -1200,7 +1201,9 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           zIndex: 10,
           gap: '12px',
           overflowX: 'auto',
-          overflowY: 'hidden'
+          overflowY: 'hidden',
+          scrollbarWidth: 'none',
+          WebkitOverflowScrolling: 'touch'
         }}
       >
         {/* Left Sub-Group: Candidate info, Exam, Language, Station, Strikes */}

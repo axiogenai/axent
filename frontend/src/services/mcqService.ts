@@ -160,15 +160,118 @@ if (typeof window !== 'undefined') {
   purgeStaleSharedAttemptKeys();
 }
 
+// ── 3-QUESTION RESPONSIVE DEMO TEST ──────────────────────────────────────────
+export const DEMO_3Q_QUESTIONS: MCQQuestion[] = [
+  {
+    id: 'demo-q1',
+    text: 'Which CSS Grid property and declaration enables fluid, auto-wrapping columns without requiring explicit media query breakpoints?\n\n```css\n.card-grid {\n  display: grid;\n  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));\n  gap: 16px;\n}\n```',
+    options: [
+      { id: 'opt-q1-1', text: 'grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));', isCorrect: true },
+      { id: 'opt-q1-2', text: 'grid-auto-flow: dense row nowrap;', isCorrect: false },
+      { id: 'opt-q1-3', text: 'display: flex; flex-direction: wrap-grid;', isCorrect: false },
+      { id: 'opt-q1-4', text: 'grid-columns: fluid(auto, 100%, 280px);', isCorrect: false }
+    ],
+    explanation: 'The repeat(auto-fit, minmax(min-width, 1fr)) pattern automatically fits as many columns as possible into the container and expands them to fill available space.',
+    subject: 'Frontend Engineering',
+    topic: 'CSS Grid & Flexbox Architecture',
+    difficulty: 'MEDIUM',
+    marks: 5,
+    negativeMarks: 0,
+    status: 'PUBLISHED',
+    tags: ['CSS', 'Responsive', 'Grid'],
+    createdBy: 'system-demo',
+    createdAt: 1700000000000,
+    updatedAt: 1700000000000
+  },
+  {
+    id: 'demo-q2',
+    text: 'What are the average-case and worst-case asymptotic search complexities for an AVL Tree maintaining strict self-balancing invariant with $n$ nodes?',
+    options: [
+      { id: 'opt-q2-1', text: 'Average: $\\mathcal{O}(\\log n)$, Worst: $\\mathcal{O}(\\log n)$', isCorrect: true },
+      { id: 'opt-q2-2', text: 'Average: $\\mathcal{O}(1)$, Worst: $\\mathcal{O}(n)$', isCorrect: false },
+      { id: 'opt-q2-3', text: 'Average: $\\mathcal{O}(\\log n)$, Worst: $\\mathcal{O}(n)$', isCorrect: false },
+      { id: 'opt-q2-4', text: 'Average: $\\mathcal{O}(n)$, Worst: $\\mathcal{O}(n^2)$', isCorrect: false }
+    ],
+    explanation: 'Because AVL trees enforce a height balance factor of at most 1 at every node, the height is strictly bounded by 1.44 log2(n), guaranteeing O(log n) worst-case time complexity.',
+    subject: 'Algorithms',
+    topic: 'Self-Balancing Trees',
+    difficulty: 'HARD',
+    marks: 5,
+    negativeMarks: 0,
+    status: 'PUBLISHED',
+    tags: ['Algorithms', 'Trees', 'Complexity'],
+    createdBy: 'system-demo',
+    createdAt: 1700000000000,
+    updatedAt: 1700000000000
+  },
+  {
+    id: 'demo-q3',
+    text: 'In standard JavaScript event loop semantics (HTML5 Event Loop Spec), what is the exact console log output order for the following asynchronous script?\n\n```javascript\nconsole.log("Alpha");\nsetTimeout(() => console.log("Beta"), 0);\nPromise.resolve().then(() => console.log("Gamma"));\nconsole.log("Delta");\n```',
+    options: [
+      { id: 'opt-q3-1', text: 'Alpha, Delta, Gamma, Beta', isCorrect: true },
+      { id: 'opt-q3-2', text: 'Alpha, Beta, Gamma, Delta', isCorrect: false },
+      { id: 'opt-q3-3', text: 'Alpha, Delta, Beta, Gamma', isCorrect: false },
+      { id: 'opt-q3-4', text: 'Gamma, Alpha, Delta, Beta', isCorrect: false }
+    ],
+    explanation: 'Synchronous statements execute first (Alpha, Delta). Microtasks queued by Promise.resolve() drain before the next macrotask (Gamma). Finally, macrotasks like setTimeout execute (Beta).',
+    subject: 'JavaScript Runtime',
+    topic: 'Event Loop & Microtask Queue',
+    difficulty: 'MEDIUM',
+    marks: 5,
+    negativeMarks: 0,
+    status: 'PUBLISHED',
+    tags: ['JavaScript', 'Async', 'EventLoop'],
+    createdBy: 'system-demo',
+    createdAt: 1700000000000,
+    updatedAt: 1700000000000
+  }
+];
+
+export const DEMO_3Q_EXAM: MCQExamConfig = {
+  id: 'demo-test-3q',
+  title: 'Responsive Engineering & Systems Architecture (Demo)',
+  description: 'Demonstration 3-question assessment to verify viewport responsiveness, typography scale, code block rendering, and mobile layout physics.',
+  instructions: 'This is an institutional demo examination. You have 30 minutes to answer 3 questions. Navigate freely between items and submit upon completion.',
+  subject: 'Frontend Engineering',
+  topic: 'Responsive Systems & Algorithms',
+  examCategory: 'Internal',
+  durationMinutes: 30,
+  totalMarks: 15,
+  questionCount: 3,
+  questionIds: ['demo-q1', 'demo-q2', 'demo-q3'],
+  shuffleQuestions: false,
+  shuffleOptions: false,
+  negativeMarkingEnabled: false,
+  allowReview: true,
+  showExplanationsAfterSubmit: true,
+  status: 'PUBLISHED',
+  isPrivate: false,
+  maxAttempts: 999,
+  createdBy: 'system-demo',
+  createdAt: 1700000000000,
+  updatedAt: 1700000000000,
+  assignedLabId: 'LAB-DEMO',
+  assignedLabName: 'Responsive Testing Lab'
+};
+
 // ── QUESTION BANK (Authoritative Real Questions Only) ─────────────────────────
 
 export function getAllQuestions(): MCQQuestion[] {
   const loaded = load<MCQQuestion[]>(MCQ_STORAGE_KEYS.QUESTIONS, []);
-  // Return loaded real questions (clean, zero fake seed fallback)
-  return (loaded || []).filter((q): q is MCQQuestion => 
+  const realList = (loaded || []).filter((q): q is MCQQuestion => 
     Boolean(q && typeof q === 'object' && q.id) && 
     !String(q.id || '').startsWith('seed-')
   );
+  
+  // Always ensure the 3 demo questions are present
+  const existingIds = new Set(realList.map((q) => q.id));
+  DEMO_3Q_QUESTIONS.forEach((demoQ) => {
+    if (!existingIds.has(demoQ.id)) {
+      realList.push(demoQ);
+    }
+  });
+
+  return realList;
 }
 
 export function getQuestionById(id: string): MCQQuestion | undefined {
@@ -353,6 +456,12 @@ export function getAllExams(): MCQExamConfig[] {
       saveQuietly(MCQ_STORAGE_KEYS.EXAMS, list);
     } catch {}
   }
+
+  // Always include the 3-question demo exam for responsiveness testing
+  if (!list.some((e) => e.id === DEMO_3Q_EXAM.id)) {
+    list.unshift(DEMO_3Q_EXAM);
+  }
+
   return list;
 }
 

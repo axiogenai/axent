@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowUpRight, ArrowDown } from "lucide-react";
+import { ArrowUpRight, ArrowDown, BookOpen, Film, Download, ShieldCheck, ArrowRight, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface NavLink {
@@ -60,6 +60,45 @@ const DEFAULT_SOCIAL: SocialLink[] = [
     { label: "Instructions", href: "#features" },
     { label: "Security Ledger", href: "#security" },
 ];
+
+const getLinkDetails = (label: string, index: number, active?: boolean) => {
+    const num = `0${index + 1}`;
+    const lower = label.toLowerCase();
+    if (lower.includes("exam") || lower.includes("hall")) {
+        return {
+            num,
+            title: label,
+            tag: "PRIMARY SUITE",
+            desc: "Autonomous proctored candidate testing environment",
+            isPrimary: true,
+        };
+    }
+    if (lower.includes("film") || lower.includes("launch") || lower.includes("video")) {
+        return {
+            num,
+            title: label,
+            tag: "4K CINEMATIC",
+            desc: "25-second architectural runtime & integrity showcase",
+            isPrimary: false,
+        };
+    }
+    if (lower.includes("install") || lower.includes("app") || lower.includes("pwa")) {
+        return {
+            num,
+            title: label,
+            tag: "STANDALONE",
+            desc: "Zero-latency offline testing terminal client",
+            isPrimary: false,
+        };
+    }
+    return {
+        num,
+        title: label,
+        tag: "SYSTEM",
+        desc: "Institutional platform navigation portal",
+        isPrimary: !!active,
+    };
+};
 
 export default function Hero1({
     brand = (
@@ -238,14 +277,14 @@ export default function Hero1({
 
                 <button
                     onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                    className="md:hidden flex flex-col justify-center items-center w-9 h-9 rounded-full border border-white/15 bg-white/5 hover:bg-white/10 transition-colors z-50 relative"
+                    className="md:hidden flex flex-col justify-center items-center w-9 h-9 rounded-lg border border-white/[0.14] bg-[#121215] hover:bg-[#161619] transition-all duration-150 active:scale-[0.985] z-50 relative shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]"
                     aria-label="Toggle navigation menu"
                 >
                     <div className="w-4 h-4 flex flex-col justify-between items-center relative">
                         <span
                             className={cn(
                                 "w-full h-[1.5px] bg-white transition-all duration-300 absolute left-0",
-                                isMobileMenuOpen ? "rotate-45 top-[7px]" : "top-[2px]"
+                                isMobileMenuOpen ? "rotate-45 top-[7px] bg-[#C5A059]" : "top-[2px]"
                             )}
                         />
                         <span
@@ -257,7 +296,7 @@ export default function Hero1({
                         <span
                             className={cn(
                                 "w-full h-[1.5px] bg-white transition-all duration-300 absolute left-0",
-                                isMobileMenuOpen ? "-rotate-45 top-[7px]" : "top-[12px]"
+                                isMobileMenuOpen ? "-rotate-45 top-[7px] bg-[#C5A059]" : "top-[12px]"
                             )}
                         />
                     </div>
@@ -270,46 +309,106 @@ export default function Hero1({
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        transition={{ duration: 0.25 }}
-                        className="fixed inset-0 bg-[#06060c]/98 backdrop-blur-md z-40 flex flex-col justify-between px-6 py-24 md:hidden"
+                        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                        className="fixed inset-0 bg-[#07070A]/98 backdrop-blur-2xl z-40 flex flex-col justify-between px-6 pt-24 pb-8 md:hidden overflow-y-auto"
                     >
-                        <nav className="flex flex-col gap-6 mt-8">
-                            {links.map((link, idx) => (
-                                <motion.div
-                                    key={link.label}
-                                    initial={{ opacity: 0, x: -20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: idx * 0.05 }}
-                                >
-                                    <a
-                                        href={link.href}
-                                        onClick={(e) => handleNavLinkClick(link, e)}
-                                        className={cn(
-                                            "text-2xl font-semibold transition-colors duration-200 block",
-                                            link.active ? "text-white" : "text-white/50"
-                                        )}
+                        {/* Ambient subtle champagne radial glow */}
+                        <div
+                            className="pointer-events-none absolute inset-0 -z-10"
+                            style={{
+                                background:
+                                    "radial-gradient(circle at 50% 12%, rgba(197, 160, 89, 0.05) 0%, transparent 65%)",
+                            }}
+                        />
+
+                        {/* Top Masthead Row */}
+                        <div className="flex items-center justify-between pb-3.5 border-b border-white/[0.08]">
+                            <span className="text-[10px] font-mono uppercase tracking-[0.22em] text-[#8E8E93]">
+                                Navigation Index
+                            </span>
+                            <span className="text-[10px] font-mono tracking-widest text-[#C5A059]">
+                                [ 0{links.length} PORTALS ]
+                            </span>
+                        </div>
+
+                        {/* Luxury Editorial Navigation Items */}
+                        <nav className="flex flex-col my-auto divide-y divide-white/[0.06]">
+                            {links.map((link, idx) => {
+                                const details = getLinkDetails(link.label, idx, link.active);
+                                return (
+                                    <motion.div
+                                        key={link.label}
+                                        initial={{ opacity: 0, y: 16 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{
+                                            delay: 0.04 + idx * 0.05,
+                                            duration: 0.28,
+                                            ease: [0.16, 1, 0.3, 1],
+                                        }}
                                     >
-                                        {link.label}
-                                    </a>
-                                </motion.div>
-                            ))}
+                                        <a
+                                            href={link.href}
+                                            onClick={(e) => handleNavLinkClick(link, e)}
+                                            className="group relative flex items-center justify-between py-6 px-2 -mx-2 rounded-xl transition-all duration-200 active:scale-[0.99]"
+                                        >
+                                            <div className="flex items-start gap-4 min-w-0 pr-3">
+                                                <span className="font-mono text-xs tracking-wider text-[#C5A059] pt-1 select-none shrink-0">
+                                                    {details.num}
+                                                </span>
+                                                <div className="flex flex-col gap-1.5 min-w-0">
+                                                    <div className="flex items-center gap-2.5 flex-wrap">
+                                                        <span className="text-xl sm:text-2xl font-light tracking-tight text-white group-hover:text-[#C5A059] transition-colors duration-200">
+                                                            {details.title}
+                                                        </span>
+                                                        {details.isPrimary && (
+                                                            <span className="text-[9px] font-mono tracking-widest uppercase px-2 py-0.5 rounded-full bg-[#C5A059]/15 border border-[#C5A059]/30 text-[#C5A059] shrink-0">
+                                                                {details.tag}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-xs text-[#8E8E93] font-normal leading-relaxed">
+                                                        {details.desc}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center pl-2 shrink-0">
+                                                <div
+                                                    className={cn(
+                                                        "w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200",
+                                                        details.isPrimary
+                                                            ? "bg-[#C5A059]/15 text-[#C5A059] group-hover:bg-[#C5A059] group-hover:text-black shadow-[0_0_12px_rgba(197,160,89,0.2)]"
+                                                            : "border border-white/10 text-white/40 group-hover:text-white group-hover:border-white/30"
+                                                    )}
+                                                >
+                                                    <ArrowUpRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                                                </div>
+                                            </div>
+                                        </a>
+                                    </motion.div>
+                                );
+                            })}
                         </nav>
 
-                        {signInLabel && signInHref && (
-                            <motion.div
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.25 }}
-                                className="flex flex-col gap-6"
-                            >
+                        {/* Rich Institutional Status Footer (Zero duplicate buttons) */}
+                        <div className="pt-6 border-t border-white/[0.08] flex flex-col gap-3">
+                            {signInLabel && signInHref && (
                                 <a
                                     href={signInHref}
-                                    className="w-full py-3.5 rounded-full border border-white/20 text-white text-center text-base font-medium bg-white/5 hover:bg-white/10 transition-colors"
+                                    onClick={() => setIsMobileMenuOpen(false)}
+                                    className="w-full py-2.5 rounded-lg border border-white/[0.12] bg-[#121215] hover:bg-[#161619] text-white/90 hover:text-white text-xs font-mono tracking-widest uppercase transition-all text-center active:scale-[0.985]"
                                 >
                                     {signInLabel}
                                 </a>
-                            </motion.div>
-                        )}
+                            )}
+                            <div className="flex items-center justify-between text-[10px] font-mono text-[#71717A] tracking-wider">
+                                <div className="flex items-center gap-2">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[#C5A059] animate-pulse" />
+                                    <span className="uppercase tracking-[0.16em]">Zero-Tamper Ledger Active</span>
+                                </div>
+                                <span className="text-[#C5A059]/80 uppercase">Axent OS 2026.4</span>
+                            </div>
+                        </div>
                     </motion.div>
                 )}
             </AnimatePresence>
