@@ -316,18 +316,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               onChange={(newModel) => setSelectedModel(newModel)}
               options={[
                 {
-                  value: 'openai/gpt-oss-120b',
-                  label: 'openai/gpt-oss-120b — Flagship Reasoning & Accuracy (Recommended)',
+                  value: 'qwen/qwen3.8-27b',
+                  label: 'qwen/qwen3.8-27b — High-Speed Structured JSON Generation (Recommended)',
                   badge: 'FLAGSHIP'
+                },
+                {
+                  value: 'openai/gpt-oss-120b',
+                  label: 'openai/gpt-oss-120b — Deep Reasoning & Analysis',
+                  badge: 'REASONING'
                 },
                 {
                   value: 'openai/gpt-oss-20b',
                   label: 'openai/gpt-oss-20b — Fast Generation, Low Latency',
                   badge: 'FAST'
-                },
-                {
-                  value: 'qwen/qwen3.8-27b',
-                  label: 'qwen/qwen3.8-27b — Multi-Lingual Reasoning'
                 }
               ]}
               size="md"

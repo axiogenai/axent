@@ -4438,7 +4438,7 @@ export const MCQExamSelector: React.FC = () => {
   };
 
   const [exams, setExams] = useState<MCQExamConfig[]>(loadEligibleExams);
-  const [filterTab, setFilterTab] = useState<'all' | 'active' | 'concluded'>('all');
+  const [filterTab, setFilterTab] = useState<'all' | 'active' | 'concluded'>('active');
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {

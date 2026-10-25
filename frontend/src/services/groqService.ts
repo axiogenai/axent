@@ -17,8 +17,8 @@ import { MCQQuestion, MCQExamConfig } from '../types/mcq';
 import { saveQuestion, saveExam } from './mcqService';
 
 const DEFAULT_KEY_POOL: string[] = [];
-const PRIMARY_MODEL = 'openai/gpt-oss-120b';
-const FALLBACK_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b'];
+const PRIMARY_MODEL = 'qwen/qwen3.8-27b';
+const FALLBACK_MODELS = ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
 
 let keyRoundRobinCounter = 0;
 
@@ -86,10 +86,16 @@ export function getStoredModel(): string {
     const customModel = localStorage.getItem('codedna_groq_model');
     if (customModel && customModel.trim()) {
       const trimmed = customModel.trim();
-      // Auto-migrate unstable or 404 models to the rock-solid flagship openai/gpt-oss-120b
-      if (trimmed === 'openai/gpt-oss-20b' || trimmed.startsWith('llama-') || trimmed.includes('versatile') || trimmed.includes('instant')) {
-        localStorage.setItem('codedna_groq_model', 'openai/gpt-oss-120b');
-        return 'openai/gpt-oss-120b';
+      // Auto-migrate reasoning models or legacy models to high-reliability structured qwen/qwen3.8-27b
+      if (
+        trimmed === 'openai/gpt-oss-120b' ||
+        trimmed === 'openai/gpt-oss-20b' ||
+        trimmed.startsWith('llama-') ||
+        trimmed.includes('versatile') ||
+        trimmed.includes('instant')
+      ) {
+        localStorage.setItem('codedna_groq_model', 'qwen/qwen3.8-27b');
+        return 'qwen/qwen3.8-27b';
       }
       return trimmed;
     }
@@ -150,7 +156,8 @@ async function callGroqChat(
         const payload: Record<string, unknown> = {
           model,
           messages,
-          temperature
+          temperature,
+          max_tokens: 4096
         };
 
         // openai/gpt-oss-20b fails Groq server grammar validator (json_validate_failed) because it outputs reasoning tokens first.
@@ -200,12 +207,21 @@ async function callGroqChat(
               });
               if (retryRes.ok) {
                 const retryData = await retryRes.json();
-                const rawContent: string =
-                  retryData.choices?.[0]?.message?.content ||
-                  retryData.choices?.[0]?.message?.reasoning ||
-                  '';
-                if (rawContent.trim()) {
-                  return { content: rawContent.trim(), modelUsed: model };
+                const choice = retryData.choices?.[0];
+                let contentStr = (choice?.message?.content || '').trim();
+                const reasoningStr = (choice?.message?.reasoning || '').trim();
+                if (contentStr.includes('<think>')) {
+                  contentStr = contentStr.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+                }
+                if (!contentStr && reasoningStr) {
+                  const firstBrace = reasoningStr.indexOf('{');
+                  const lastBrace = reasoningStr.lastIndexOf('}');
+                  if (firstBrace !== -1 && lastBrace > firstBrace) {
+                    contentStr = reasoningStr.slice(firstBrace, lastBrace + 1).trim();
+                  }
+                }
+                if (contentStr) {
+                  return { content: contentStr, modelUsed: model };
                 }
               }
             } catch (retryErr) {
@@ -217,11 +233,29 @@ async function callGroqChat(
         }
 
         const data = await res.json();
-        const rawContent: string =
-          data.choices?.[0]?.message?.content ||
-          data.choices?.[0]?.message?.reasoning ||
-          '';
-        return { content: rawContent.trim(), modelUsed: model };
+        const choice = data.choices?.[0];
+        let contentStr = (choice?.message?.content || '').trim();
+        const reasoningStr = (choice?.message?.reasoning || '').trim();
+
+        if (contentStr.includes('<think>')) {
+          contentStr = contentStr.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+        }
+
+        // If content is empty or contains no JSON, check if reasoning has a JSON structure:
+        if (!contentStr && reasoningStr) {
+          const firstBrace = reasoningStr.indexOf('{');
+          const lastBrace = reasoningStr.lastIndexOf('}');
+          if (firstBrace !== -1 && lastBrace > firstBrace) {
+            contentStr = reasoningStr.slice(firstBrace, lastBrace + 1).trim();
+          }
+        }
+
+        // If content is still empty, throw to failover to the next fallback model (e.g. qwen/qwen3.8-27b)
+        if (!contentStr) {
+          throw new Error(`Model ${model} produced empty content (reasoning exhausted without JSON). Failing over...`);
+        }
+
+        return { content: contentStr, modelUsed: model };
       } catch (err: unknown) {
         lastError = err instanceof Error ? err : new Error(String(err));
         console.warn(`[Dual-Key AI Engine] Key ...${activeKey.slice(-6)} on ${model} attempt failed:`, lastError.message);
@@ -288,13 +322,19 @@ function extractJsonObjects(raw: string): any[] {
       escapeNext = true;
       continue;
     }
-    if (ch === '"') {
-      inString = !inString;
-      continue;
+    // Only track string bounds inside an active JSON object
+    if (startIdx !== -1) {
+      if (ch === '"') {
+        inString = !inString;
+        continue;
+      }
     }
     if (!inString) {
       if (ch === '{') {
-        if (depth === 0) startIdx = i;
+        if (depth === 0) {
+          startIdx = i;
+          inString = false;
+        }
         depth++;
       } else if (ch === '}') {
         depth--;
@@ -312,6 +352,7 @@ function extractJsonObjects(raw: string): any[] {
             // continue scanning
           }
           startIdx = -1;
+          inString = false;
         }
       }
     }
@@ -323,11 +364,24 @@ function extractJsonObjects(raw: string): any[] {
  * Highly resilient parser that recovers questions from any AI output shape:
  * 1. Standard { "questions": [...] }
  * 2. Top-level array [ {...}, {...} ]
- * 3. NDJSON / multiple separate JSON objects (which triggered the unexpected non-whitespace error)
- * 4. Markdown wrapped JSON with trailing commas
+ * 3. Enclosed markdown ```json ... ``` blocks
+ * 4. Reasoned output with leading <think>...</think> or thoughts
+ * 5. NDJSON / multiple separate JSON objects
  */
 export function parseQuestionsFromAIOutput(content: string): any[] {
-  let cleaned = content.trim();
+  let cleaned = (content || '').trim();
+
+  // Strip <think>...</think> blocks completely
+  if (cleaned.includes('<think>')) {
+    cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  }
+
+  // If there is a markdown code fence anywhere in the string, extract its inner contents first
+  const jsonFenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (jsonFenceMatch && jsonFenceMatch[1]) {
+    cleaned = jsonFenceMatch[1].trim();
+  }
+
   if (cleaned.startsWith('```json')) cleaned = cleaned.slice(7);
   else if (cleaned.startsWith('```')) cleaned = cleaned.slice(3);
   if (cleaned.endsWith('```')) cleaned = cleaned.slice(0, -3);
@@ -342,12 +396,29 @@ export function parseQuestionsFromAIOutput(content: string): any[] {
     if (parsed && typeof parsed === 'object') {
       const arr = Object.values(parsed).find((v) => Array.isArray(v));
       if (arr) return arr as any[];
+      if (parsed.text && Array.isArray(parsed.options)) return [parsed];
     }
   } catch {
     // Continue to next strategy
   }
 
-  // Strategy 2: Array bracket slice
+  // Strategy 2: Extract from "questions" key inside object
+  const questionsIdx = cleaned.indexOf('"questions"');
+  if (questionsIdx !== -1) {
+    const braceBefore = cleaned.lastIndexOf('{', questionsIdx);
+    const braceAfter = cleaned.lastIndexOf('}');
+    if (braceBefore !== -1 && braceAfter > braceBefore) {
+      try {
+        const slice = cleaned.slice(braceBefore, braceAfter + 1).replace(/,\s*([}\]])/g, '$1');
+        const parsed = JSON.parse(slice);
+        if (parsed && Array.isArray(parsed.questions) && parsed.questions.length > 0) {
+          return parsed.questions;
+        }
+      } catch {}
+    }
+  }
+
+  // Strategy 3: Array bracket slice [ ... ]
   const firstBracket = cleaned.indexOf('[');
   const lastBracket = cleaned.lastIndexOf(']');
   if (firstBracket !== -1 && lastBracket > firstBracket) {
@@ -360,11 +431,11 @@ export function parseQuestionsFromAIOutput(content: string): any[] {
     }
   }
 
-  // Strategy 3: Balanced stream extraction (Handles NDJSON / multiple JSON objects without throwing position errors)
+  // Strategy 4: Balanced stream extraction (Handles NDJSON / multiple JSON objects without throwing position errors)
   const extracted = extractJsonObjects(cleaned);
   if (extracted.length > 0) return extracted;
 
-  // Strategy 4: Single object slice fallback
+  // Strategy 5: Single object slice fallback { ... }
   const firstBrace = cleaned.indexOf('{');
   const lastBrace = cleaned.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace > firstBrace) {
@@ -376,6 +447,7 @@ export function parseQuestionsFromAIOutput(content: string): any[] {
       if (parsedObj && typeof parsedObj === 'object') {
         const arr = Object.values(parsedObj).find((v) => Array.isArray(v));
         if (arr) return arr as any[];
+        if (parsedObj.text && Array.isArray(parsedObj.options)) return [parsedObj];
       }
     } catch {
       // Return empty array

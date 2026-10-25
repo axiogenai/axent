@@ -272,12 +272,24 @@ export function validateQuestion(q: Partial<MCQQuestion>): string[] {
 
 const DELETED_EXAMS_KEY = 'axent_deleted_exam_ids';
 
+const KNOWN_OBSOLETE_EXAM_IDS = new Set([
+  'exam_ai_1792162498143_izlje',
+  '6256256f-463c-49cd-b26f-0ee96eac015a',
+  'exam_ai_1792591914541_sjndb',
+  '8e145a22-d5b9-4f08-b613-0bdb18c04991',
+  'exam_ai_1792047607916_ta748',
+  'exam_ai_1792056236795_m2xwr',
+  '3e59cad2-7d8a-405f-83b8-76e8fcb615bf'
+]);
+
 export function getDeletedExamIds(): Set<string> {
   try {
     const raw = localStorage.getItem(DELETED_EXAMS_KEY);
-    return new Set(raw ? JSON.parse(raw) : []);
+    const parsed: string[] = raw ? JSON.parse(raw) : [];
+    const set = new Set([...parsed, ...Array.from(KNOWN_OBSOLETE_EXAM_IDS)]);
+    return set;
   } catch {
-    return new Set();
+    return new Set(KNOWN_OBSOLETE_EXAM_IDS);
   }
 }
 
@@ -293,11 +305,11 @@ export function getAllExams(): MCQExamConfig[] {
   const deletedIds = getDeletedExamIds();
   const loaded = load<MCQExamConfig[]>(MCQ_STORAGE_KEYS.EXAMS, []);
   let needsSave = false;
-  // Return loaded real exams (clean, zero fake seed fallback, excluding deleted unless published)
+  // Return loaded real exams (clean, zero fake seed fallback, strictly excluding deleted IDs)
   const list = (loaded || [])
     .filter((e): e is MCQExamConfig => 
       Boolean(e && typeof e === 'object' && e.id) &&
-      (!deletedIds.has(e.id) || e.status === 'PUBLISHED') &&
+      !deletedIds.has(e.id) &&
       !String(e.id || '').startsWith('exam-aptitude-') && 
       !String(e.id || '').startsWith('exam-ise-') &&
       !String(e.id || '').startsWith('seed-')
@@ -423,21 +435,19 @@ export async function deleteExam(id: string): Promise<boolean> {
   notifyExamsChanged();
   notifyMcqDataChanged();
 
-  // Background cloud and lab cascade deletion (parallel)
-  void (async () => {
-    try {
-      const tasks: Promise<any>[] = [deleteExamFromCloud(id)];
-      if (examToDelete?.questionIds && examToDelete.questionIds.length > 0) {
-        tasks.push(deleteQuestionsByIdsFromCloud(examToDelete.questionIds));
-      }
-      if (examToDelete?.assignedLabId) {
-        tasks.push(cleanupExamLabWhenOver(examToDelete.assignedLabId, examToDelete.id));
-      }
-      await Promise.allSettled(tasks);
-    } catch (err) {
-      console.warn('[deleteExam] Background cloud sync warning:', err);
+  // Cloud and lab cascade deletion
+  try {
+    const tasks: Promise<any>[] = [deleteExamFromCloud(id)];
+    if (examToDelete?.questionIds && examToDelete.questionIds.length > 0) {
+      tasks.push(deleteQuestionsByIdsFromCloud(examToDelete.questionIds));
     }
-  })();
+    if (examToDelete?.assignedLabId) {
+      tasks.push(cleanupExamLabWhenOver(examToDelete.assignedLabId, examToDelete.id));
+    }
+    await Promise.allSettled(tasks);
+  } catch (err) {
+    console.warn('[deleteExam] Cloud sync warning:', err);
+  }
 
   return true;
 }
@@ -1298,29 +1308,31 @@ export async function syncFromSupabase(): Promise<void> {
     if (cloudE !== null) {
       const deletedIds = getDeletedExamIds();
 
-      // If a cloud exam is PUBLISHED, remove it from local deleted tombstones so stale local storage never hides valid cloud exams
-      let tombstonesUpdated = false;
+      // If a cloud exam is in deletedIds, ensure it is deleted from cloud
       for (const ex of cloudE) {
-        if (ex.status === 'PUBLISHED' && deletedIds.has(ex.id)) {
-          deletedIds.delete(ex.id);
-          tombstonesUpdated = true;
+        if (deletedIds.has(ex.id)) {
+          void deleteExamFromCloud(ex.id);
         }
       }
-      if (tombstonesUpdated && typeof window !== 'undefined') {
-        try {
-          localStorage.setItem(DELETED_EXAMS_KEY, JSON.stringify(Array.from(deletedIds)));
-        } catch {}
-      }
 
-      // Filter out deleted IDs and merge with locally created active exams
-      const activeExams = cloudE.filter((e) => !deletedIds.has(e.id));
+      // Filter out deleted IDs from cloud results
+      const activeCloudExams = cloudE.filter((e) => !deletedIds.has(e.id));
       const localExams = load<MCQExamConfig[]>(MCQ_STORAGE_KEYS.EXAMS, []);
       const mergedExamMap = new Map<string, MCQExamConfig>();
-      activeExams.forEach((e) => mergedExamMap.set(e.id, e));
+      activeCloudExams.forEach((e) => mergedExamMap.set(e.id, e));
+
+      // Supabase is authoritative across devices. A local exam is only uploaded if freshly created (< 5 mins).
+      // If older and missing from cloud, it was deleted on another device or by admin, so purge locally.
+      const fiveMinsAgo = Date.now() - 5 * 60 * 1000;
       localExams.forEach((e) => {
         if (!deletedIds.has(e.id) && !mergedExamMap.has(e.id)) {
-          mergedExamMap.set(e.id, e);
-          void saveExamToCloud(e);
+          const isFreshDraft = (e.createdAt || 0) > fiveMinsAgo && e.status === 'DRAFT';
+          if (isFreshDraft) {
+            mergedExamMap.set(e.id, e);
+            void saveExamToCloud(e);
+          } else {
+            recordExamDeleted(e.id);
+          }
         }
       });
       save(MCQ_STORAGE_KEYS.EXAMS, Array.from(mergedExamMap.values()));
