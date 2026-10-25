@@ -149,6 +149,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     >
       {/* Modal card */}
       <div
+        className="modal-dialog"
         style={{
           width: '100%',
           maxWidth: '520px',
@@ -369,6 +370,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* ---- Footer actions ---- */}
         <div
+          className="mcq-modal-actions"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -376,7 +378,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             padding: '14px 20px',
             borderTop: '1px solid var(--border)',
             background: 'var(--bg-surface)',
-            gap: '8px'
+            gap: '8px',
+            flexWrap: 'wrap'
           }}
         >
           {/* Test connection button */}
@@ -400,7 +403,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
 
           {/* Cancel / Save */}
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <button className="btn btn-ghost btn-sm" onClick={onClose}>
               Cancel
             </button>

@@ -161,6 +161,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-modal-title"
+        className="modal-dialog"
         style={{
           width: '100%',
           maxWidth: '460px',
@@ -320,6 +321,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
 
         {/* Modal Actions Footer */}
         <div
+          className="mcq-modal-actions"
           style={{
             padding: '14px 22px',
             borderTop: '1px solid var(--border)',

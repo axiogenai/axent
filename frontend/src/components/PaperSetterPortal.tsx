@@ -66,10 +66,6 @@ export const PaperSetterPortal: React.FC = () => {
     const unsubExams = onExamsChanged(loadData);
     window.addEventListener('storage', loadData);
 
-    void syncFromSupabase().then(() => {
-      loadData();
-    });
-
     return () => {
       unsubData();
       unsubExams();

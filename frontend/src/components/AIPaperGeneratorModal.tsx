@@ -909,6 +909,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
       }}
     >
       <div
+        className="modal-dialog"
         style={{
           width: '100%',
           maxWidth: step === 'review' ? '1060px' : '820px',

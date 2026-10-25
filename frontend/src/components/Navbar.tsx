@@ -11,7 +11,9 @@ import {
   ListChecks,
   ExternalLink,
   LogOut,
-  LucideIcon
+  LucideIcon,
+  Menu,
+  X
 } from 'lucide-react';
 import { ThemeMode } from '../types/dna';
 import {
@@ -69,6 +71,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const [examMode, setExamMode] = useState<'MCQ' | 'CODING'>(() => getActiveExamMode());
   const [authorityRole, setAuthorityRole] = useState<AuthorityRole | null>(() => getCurrentAuthorityRole());
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isAdmin = authorityRole === 'admin' || isAuthorityAdmin();
 
   // Listen to profile/mode and authority role changes in storage/auth
@@ -84,6 +87,11 @@ export const Navbar: React.FC<NavbarProps> = ({
       unsub();
       window.removeEventListener('storage', checkState);
     };
+  }, [location.pathname]);
+
+  // Close mobile drawer on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
   }, [location.pathname]);
 
   const isLandingRoute = location.pathname === '/';
@@ -109,8 +117,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       { path: '/paper-setter', label: 'Paper Setter Portal', icon: Layers }
     ];
   } else if (isPaperSetterRoute) {
-    // If the authority logged in with Admin credentials, allow full bidirectional switching
-    // But if logged in with Paper Setter credentials, DO NOT show the Admin CCTV portal!
     if (isAdmin) {
       activeNavItems = [
         { path: '/admin', label: 'CCTV Live Proctoring', icon: ShieldAlert, badge: 'PROCTOR', badgeColor: 'danger' },
@@ -122,7 +128,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       ];
     }
   } else if (isMcqRoute || examMode === 'MCQ') {
-    // Registered MCQ Examination — Clean view, no redundant pill in navbar
     activeNavItems = [];
   } else {
     activeNavItems = [];
@@ -131,181 +136,314 @@ export const Navbar: React.FC<NavbarProps> = ({
   const activeId = activeNavItems.find((item) => location.pathname.startsWith(item.path))?.path ?? location.pathname;
 
   return (
-    <header
-      className="no-print"
-      style={{
-        height: '52px',
-        minHeight: '52px',
-        background: 'var(--bg-elevated)',
-        borderBottom: '1px solid var(--border)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 16px',
-        flexShrink: 0,
-        zIndex: 50,
-        userSelect: 'none'
-      }}
-    >
-      {/* ── Brand Title ── */}
-      <div
+    <>
+      <header
+        className="no-print"
         style={{
+          height: '52px',
+          minHeight: '52px',
+          background: 'var(--bg-elevated)',
+          borderBottom: '1px solid var(--border)',
           display: 'flex',
           alignItems: 'center',
-          gap: '10px',
-          cursor: 'pointer'
+          justifyContent: 'space-between',
+          padding: '0 16px',
+          flexShrink: 0,
+          zIndex: 50,
+          userSelect: 'none'
         }}
-        onClick={() => {
-          if (isRunning) return;
-          navigate('/');
-        }}
-        title="Axent Platform Home"
       >
-        <img
-          src={theme === 'dark' ? '/axent-logo.png' : '/axent-lightmode.png'}
-          alt="Axent"
+        {/* ── Brand Title ── */}
+        <div
           style={{
-            height: '24px',
-            width: 'auto',
-            display: 'block',
-            objectFit: 'contain'
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            cursor: 'pointer'
           }}
-        />
-      </div>
-
-      {/* ── Navigation Tabs (Filtered strictly by Role and Registered Exam Type) ── */}
-      {activeNavItems.length > 1 ? (
-        <div style={{ overflowX: 'auto', scrollbarWidth: 'none', maxWidth: '60vw', display: 'flex', alignItems: 'center' }}>
-          <ContinuousTabs
-            layoutId="navbar-primary-tabs"
-            size="md"
-            activeId={activeId}
-            onChange={(path) => navigate(path)}
-            tabs={activeNavItems.map(({ path, label, icon: Icon, badge, badgeColor }) => ({
-              id: path,
-              label,
-              icon: <Icon size={13} />,
-              badge,
-              badgeTone: badgeColor === 'danger' ? 'danger' : badgeColor === 'warning' ? 'warning' : 'neutral'
-            }))}
+          onClick={() => {
+            if (isRunning) return;
+            navigate('/');
+          }}
+          title="Axent Platform Home"
+        >
+          <img
+            src={theme === 'dark' ? '/axent-logo.png' : '/axent-lightmode.png'}
+            alt="Axent"
+            style={{
+              height: '24px',
+              width: 'auto',
+              display: 'block',
+              objectFit: 'contain'
+            }}
           />
         </div>
-      ) : null}
 
-      {/* ── Controls & Mode ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        {/* If on Login route, show button to return to Candidate Examination */}
-        {isLoginRoute ? (
+        {/* ── Navigation Tabs (Desktop only: Filtered strictly by Role) ── */}
+        {activeNavItems.length > 1 ? (
+          <div className="hidden md:flex" style={{ overflowX: 'auto', scrollbarWidth: 'none', maxWidth: '60vw', alignItems: 'center' }}>
+            <ContinuousTabs
+              layoutId="navbar-primary-tabs"
+              size="md"
+              activeId={activeId}
+              onChange={(path) => navigate(path)}
+              tabs={activeNavItems.map(({ path, label, icon: Icon, badge, badgeColor }) => ({
+                id: path,
+                label,
+                icon: <Icon size={13} />,
+                badge,
+                badgeTone: badgeColor === 'danger' ? 'danger' : badgeColor === 'warning' ? 'warning' : 'neutral'
+              }))}
+            />
+          </div>
+        ) : null}
+
+        {/* ── Desktop Controls & Mode ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* Desktop Authority Links */}
+          <div className="hidden md:flex items-center gap-2">
+            {/* If on Login route, show button to return to Candidate Examination */}
+            {isLoginRoute && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => navigate('/mcq')}
+                title="Candidate Examination Portal"
+                style={{
+                  height: '30px',
+                  padding: '0 10px',
+                  gap: '5px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-surface)',
+                  color: 'var(--text-secondary)'
+                }}
+              >
+                <ExternalLink size={12} />
+                <span>Candidate Portal</span>
+              </button>
+            )}
+
+            {/* If in Paper Setter AND user has Admin privileges, provide 1-click switch back to Admin CCTV */}
+            {isPaperSetterRoute && isAdmin && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => navigate('/admin')}
+                title="Switch to Chief Proctor CCTV Live Surveillance"
+                style={{
+                  height: '30px',
+                  padding: '0 10px',
+                  gap: '5px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  color: '#ef4444'
+                }}
+              >
+                <ShieldAlert size={13} color="#ef4444" />
+                <span>Admin CCTV</span>
+              </button>
+            )}
+
+            {/* If in Admin, provide 1-click switch to Paper Setter */}
+            {isAdminRoute && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => navigate('/paper-setter')}
+                title="Open Paper Setter & Examination Builder Portal"
+                style={{
+                  height: '30px',
+                  padding: '0 10px',
+                  gap: '5px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-surface)',
+                  color: 'var(--text-secondary)'
+                }}
+              >
+                <Layers size={13} />
+                <span>Paper Setter</span>
+              </button>
+            )}
+
+            {/* Authority Sign Out */}
+            {(isAdminRoute || isPaperSetterRoute) && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={async () => {
+                  await signOut();
+                  navigate('/login', { replace: true });
+                }}
+                title="Sign out of Authority Portal"
+                style={{
+                  height: '28px',
+                  padding: '0 10px',
+                  gap: '5px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-surface)',
+                  color: 'var(--text-secondary)'
+                }}
+              >
+                <LogOut size={12} />
+                <span>Sign Out</span>
+              </button>
+            )}
+          </div>
+
+          {/* Theme Toggle (Always Accessible on all screen sizes) */}
           <button
             className="btn btn-ghost btn-sm"
-            onClick={() => navigate('/mcq')}
-            title="Candidate Examination Portal"
+            onClick={onToggleTheme}
+            title={`Switch to ${theme === 'dark' ? 'Daylight Slate' : 'Matte Black'} Theme`}
             style={{
-              height: '30px',
-              padding: '0 10px',
-              gap: '5px',
-              fontSize: '11px',
-              fontWeight: 600,
+              width: '32px',
+              height: '32px',
+              padding: 0,
               borderRadius: 'var(--radius-sm)',
               border: '1px solid var(--border)',
               background: 'var(--bg-surface)',
-              color: 'var(--text-secondary)'
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
             }}
           >
-            <ExternalLink size={12} />
-            <span>Candidate Portal</span>
+            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
           </button>
-        ) : null}
 
-        {/* If in Paper Setter AND user has Admin privileges, provide 1-click switch back to Admin CCTV */}
-        {isPaperSetterRoute && isAdmin ? (
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => navigate('/admin')}
-            title="Switch to Chief Proctor CCTV Live Surveillance"
-            style={{
-              height: '30px',
-              padding: '0 10px',
-              gap: '5px',
-              fontSize: '11px',
-              fontWeight: 600,
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid rgba(239, 68, 68, 0.4)',
-              background: 'rgba(239, 68, 68, 0.08)',
-              color: '#ef4444'
-            }}
-          >
-            <ShieldAlert size={13} color="#ef4444" />
-            <span>Admin CCTV</span>
-          </button>
-        ) : null}
+          {/* Mobile Hamburger Menu Toggle (Screens < 768px) */}
+          {(activeNavItems.length > 0 || isAdminRoute || isPaperSetterRoute || isLoginRoute) && (
+            <button
+              className="md:hidden btn btn-ghost btn-sm"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              aria-label="Toggle Navigation Drawer"
+              style={{
+                width: '32px',
+                height: '32px',
+                padding: 0,
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--border)',
+                background: mobileMenuOpen ? 'var(--accent)' : 'var(--bg-surface)',
+                color: mobileMenuOpen ? 'var(--accent-contrast)' : 'var(--text-primary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              {mobileMenuOpen ? <X size={15} /> : <Menu size={15} />}
+            </button>
+          )}
+        </div>
+      </header>
 
-        {/* If in Admin, provide 1-click switch to Paper Setter */}
-        {isAdminRoute ? (
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => navigate('/paper-setter')}
-            title="Open Paper Setter & Examination Builder Portal"
-            style={{
-              height: '30px',
-              padding: '0 10px',
-              gap: '5px',
-              fontSize: '11px',
-              fontWeight: 600,
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--border)',
-              background: 'var(--bg-surface)',
-              color: 'var(--text-secondary)'
-            }}
-          >
-            <Layers size={13} />
-            <span>Paper Setter</span>
-          </button>
-        ) : null}
-
-        {/* Authority Sign Out */}
-        {(isAdminRoute || isPaperSetterRoute) && (
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={async () => {
-              await signOut();
-              navigate('/login', { replace: true });
-            }}
-            title="Sign out of Authority Portal"
-            style={{
-              height: '28px',
-              padding: '0 10px',
-              gap: '5px',
-              fontSize: '11px',
-              fontWeight: 600,
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--border)',
-              background: 'var(--bg-surface)',
-              color: 'var(--text-secondary)'
-            }}
-          >
-            <LogOut size={12} />
-            <span className="hidden sm:inline">Sign Out</span>
-          </button>
-        )}
-
-        {/* Theme Toggle */}
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={onToggleTheme}
-          title={`Switch to ${theme === 'dark' ? 'Daylight Slate' : 'Matte Black'} Theme`}
+      {/* ── Mobile Navigation Drawer Overlay (< 768px) ── */}
+      {mobileMenuOpen && (
+        <div
+          className="md:hidden fixed inset-x-0 top-[52px] bottom-0 z-40 bg-[var(--bg-main)]/95 backdrop-blur-md flex flex-col p-5 overflow-y-auto"
           style={{
-            width: '32px',
-            height: '32px',
-            padding: 0,
-            borderRadius: 'var(--radius-sm)',
-            border: '1px solid var(--border)',
-            background: 'var(--bg-surface)'
+            borderBottom: '1px solid var(--border)',
+            animation: 'fadeIn 0.15s ease-out'
           }}
         >
-          {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-        </button>
-      </div>
-    </header>
+          <div className="flex flex-col gap-2 mb-6">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+              Navigation &amp; Controls
+            </span>
+
+            {/* Exam Hall Link */}
+            <button
+              onClick={() => navigate('/mcq')}
+              className="w-full flex items-center justify-between p-3.5 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-primary)] text-sm font-semibold text-left transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <ListChecks size={16} className="text-[var(--accent)]" />
+                <span>Candidate Exam Hall</span>
+              </div>
+              <ExternalLink size={14} className="text-[var(--text-muted)]" />
+            </button>
+
+            {/* Admin CCTV Portal */}
+            {(isAdmin || isAdminRoute || isPaperSetterRoute) && (
+              <button
+                onClick={() => navigate('/admin')}
+                className={`w-full flex items-center justify-between p-3.5 rounded-lg border text-sm font-semibold text-left transition-colors ${
+                  isAdminRoute
+                    ? 'border-red-500/40 bg-red-500/10 text-red-500'
+                    : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-primary)]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <ShieldAlert size={16} className={isAdminRoute ? 'text-red-500' : 'text-[var(--accent)]'} />
+                  <span>Admin CCTV Live Proctoring</span>
+                </div>
+                {isAdminRoute && (
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">
+                    Active
+                  </span>
+                )}
+              </button>
+            )}
+
+            {/* Paper Setter Portal */}
+            {(isAdmin || isAdminRoute || isPaperSetterRoute) && (
+              <button
+                onClick={() => navigate('/paper-setter')}
+                className={`w-full flex items-center justify-between p-3.5 rounded-lg border text-sm font-semibold text-left transition-colors ${
+                  isPaperSetterRoute
+                    ? 'border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-primary)]'
+                    : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-primary)]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Layers size={16} className="text-[var(--accent)]" />
+                  <span>Paper Setter &amp; Question Matrix</span>
+                </div>
+                {isPaperSetterRoute && (
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border)]">
+                    Active
+                  </span>
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* Theme & Session Utilities in Mobile Drawer */}
+          <div className="mt-auto pt-4 border-t border-[var(--border)] flex flex-col gap-3">
+            <button
+              onClick={onToggleTheme}
+              className="w-full flex items-center justify-between p-3 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] text-xs font-semibold text-[var(--text-primary)]"
+            >
+              <div className="flex items-center gap-2">
+                {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+                <span>Active Theme: {theme === 'dark' ? 'Matte Obsidian' : 'Daylight Slate'}</span>
+              </div>
+              <span className="text-[11px] text-[var(--text-muted)]">Toggle</span>
+            </button>
+
+            {(isAdminRoute || isPaperSetterRoute) && (
+              <button
+                onClick={async () => {
+                  await signOut();
+                  navigate('/login', { replace: true });
+                }}
+                className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border border-red-500/30 bg-red-500/10 text-red-500 text-xs font-bold"
+              >
+                <LogOut size={14} />
+                <span>Sign Out of Authority Session</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 };

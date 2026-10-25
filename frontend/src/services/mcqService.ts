@@ -54,9 +54,15 @@ export function onMcqDataChanged(listener: McqDataListener): () => void {
   return () => { mcqDataListeners.delete(listener); };
 }
 
+let notifyMcqScheduled = false;
 function notifyMcqDataChanged(): void {
-  mcqDataListeners.forEach((listener) => {
-    try { listener(); } catch (error) { console.warn('[mcqService] Data listener failed:', error); }
+  if (notifyMcqScheduled) return;
+  notifyMcqScheduled = true;
+  queueMicrotask(() => {
+    notifyMcqScheduled = false;
+    mcqDataListeners.forEach((listener) => {
+      try { listener(); } catch (error) { console.warn('[mcqService] Data listener failed:', error); }
+    });
   });
 }
 
@@ -67,6 +73,14 @@ function load<T>(key: string, fallback: T): T {
     return JSON.parse(raw) as T;
   } catch {
     return fallback;
+  }
+}
+
+function saveQuietly(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.error('[mcqService] localStorage write failed:', e);
   }
 }
 
@@ -336,7 +350,7 @@ export function getAllExams(): MCQExamConfig[] {
 
   if (needsSave && typeof window !== 'undefined') {
     try {
-      save(MCQ_STORAGE_KEYS.EXAMS, list);
+      saveQuietly(MCQ_STORAGE_KEYS.EXAMS, list);
     } catch {}
   }
   return list;
@@ -1173,9 +1187,15 @@ export function onExamsChanged(cb: Listener): () => void {
   return () => { examListeners.delete(cb); };
 }
 
+let notifyExamsScheduled = false;
 function notifyExamsChanged() {
-  examListeners.forEach((cb) => {
-    try { cb(); } catch {}
+  if (notifyExamsScheduled) return;
+  notifyExamsScheduled = true;
+  queueMicrotask(() => {
+    notifyExamsScheduled = false;
+    examListeners.forEach((cb) => {
+      try { cb(); } catch {}
+    });
   });
 }
 
@@ -1283,25 +1303,28 @@ export async function persistAttemptToCloud(attemptId: string): Promise<boolean>
   return saveAttemptToCloud(latest);
 }
 
+let isSyncingFromCloud = false;
+
 export async function syncFromSupabase(): Promise<void> {
+  if (isSyncingFromCloud) return;
+  isSyncingFromCloud = true;
   try {
     const [cloudQ, cloudE, cloudA] = await Promise.all([
       fetchQuestionsFromCloud(), fetchExamsFromCloud(), fetchAttemptsFromCloud()
     ]);
 
-    // 1. Reconcile Questions: Intelligently merge so local unsynced questions are never lost
+    // 1. Reconcile Questions: Intelligently merge so local unsynced questions are preserved
     if (cloudQ !== null) {
       const localQ = load<MCQQuestion[]>(MCQ_STORAGE_KEYS.QUESTIONS, []);
       const mergedQMap = new Map<string, MCQQuestion>();
       cloudQ.forEach((q) => mergedQMap.set(q.id, q));
+      // Keep any local questions that haven't been fetched, but do not flood cloud API on sync
       localQ.forEach((q) => {
         if (!mergedQMap.has(q.id)) {
           mergedQMap.set(q.id, q);
-          void saveQuestionToCloud(q);
         }
       });
       save(MCQ_STORAGE_KEYS.QUESTIONS, Array.from(mergedQMap.values()));
-      notifyMcqDataChanged();
     }
 
     // 2. Reconcile Exams: Intelligently merge so local unsynced exams are never lost
@@ -1337,7 +1360,6 @@ export async function syncFromSupabase(): Promise<void> {
       });
       save(MCQ_STORAGE_KEYS.EXAMS, Array.from(mergedExamMap.values()));
       notifyExamsChanged();
-      notifyMcqDataChanged();
     }
 
     // 3. Reconcile Attempts: Supabase cloud is authoritative (2-day retention window)
@@ -1349,13 +1371,14 @@ export async function syncFromSupabase(): Promise<void> {
       const localAttempts = getAllAttempts();
       const reconciled = mergeAttempts(localAttempts, recentCloudAttempts);
       save(MCQ_STORAGE_KEYS.ATTEMPTS, reconciled);
-      notifyMcqDataChanged();
     }
 
     // 4. Prune expired attempts and concluded exam questions
     pruneExpiredLocalData();
   } catch (err) {
     console.warn('[mcqService] Background Supabase sync notice:', err);
+  } finally {
+    isSyncingFromCloud = false;
   }
 }
 
@@ -1365,7 +1388,7 @@ if (typeof window !== 'undefined') {
   let syncTimer: ReturnType<typeof setTimeout> | undefined;
   subscribeToMcqCloudChanges(() => {
     if (syncTimer) clearTimeout(syncTimer);
-    syncTimer = setTimeout(() => { void syncFromSupabase(); }, 350);
+    syncTimer = setTimeout(() => { void syncFromSupabase(); }, 1200);
   });
 }
 

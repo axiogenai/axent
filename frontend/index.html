@@ -25,13 +25,15 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="icon" href="/favicon.ico" />
-    <link rel="manifest" href="/site.webmanifest" />
 
-    <!-- Pure Browser Execution: Suppress native PWA Install prompts -->
+    <!-- Pure Web Execution: Never prompt PWA installation on any browser or device -->
     <script>
       window.addEventListener('beforeinstallprompt', function(e) {
         e.preventDefault();
         return false;
+      });
+      window.addEventListener('appinstalled', function(e) {
+        e.preventDefault();
       });
     </script>
 

@@ -244,6 +244,7 @@ exit
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
+        className="modal-dialog"
         style={{
           width: '100%',
           maxWidth: '960px',

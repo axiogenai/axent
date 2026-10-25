@@ -65,7 +65,6 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
     const unsubExams = onExamsChanged(refresh);
     window.addEventListener('storage', refresh);
     refresh();
-    void syncFromSupabase().then(refresh);
     return () => {
       unsubData();
       unsubExams();
