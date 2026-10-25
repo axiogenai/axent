@@ -102,7 +102,7 @@ export function Footer16({
       {/* 1. Giant atmospheric watermark text UNDER/BEHIND the mountains */}
       <motion.div
         variants={wordmarkVariants}
-        className="pointer-events-none absolute inset-x-0 top-3 sm:top-5 lg:top-7 flex w-full justify-center overflow-hidden z-0 px-4"
+        className="pointer-events-none absolute inset-x-0 top-7 sm:top-5 lg:top-7 flex w-full justify-center overflow-hidden z-0 px-4"
         aria-hidden="true"
       >
         <div className="w-full max-w-[1380px] flex justify-center">
@@ -137,7 +137,7 @@ export function Footer16({
 
       {/* 2. Mountains background layer IN FRONT OF the text */}
       <div
-        className="absolute inset-0 z-10 bg-cover bg-center pointer-events-none translate-y-1 sm:translate-y-2"
+        className="absolute inset-0 z-10 bg-cover bg-center pointer-events-none sm:translate-y-2"
         style={{ backgroundImage: `url(${backgroundImage})` }}
         aria-hidden="true"
       />
@@ -152,10 +152,10 @@ export function Footer16({
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, amount: 0.22 }}
-        className="relative z-20 w-full mx-auto flex flex-col justify-end pt-28 sm:pt-40 min-h-[460px] sm:min-h-[540px]"
+        className="relative z-20 w-full mx-auto flex flex-col justify-end pt-5 sm:pt-28 lg:pt-36 min-h-[250px] sm:min-h-[460px] lg:min-h-[520px]"
       >
         {/* Backdrop blur glass container */}
-        <div className="relative z-10 border-t border-white/10 bg-black/40 px-5 pt-7 pb-7 backdrop-blur-md sm:px-12 sm:pt-8 sm:pb-8">
+        <div className="relative z-10 border-t border-white/10 bg-black/40 px-5 pt-6 pb-6 backdrop-blur-md sm:px-12 sm:pt-8 sm:pb-8">
           <div className={columns && columns.length > 0 ? "grid gap-8 sm:gap-10 lg:grid-cols-[minmax(240px,1fr)_minmax(500px,1.2fr)] lg:gap-x-16" : "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6"}>
             {/* Brand column */}
             <motion.div variants={riseVariants} className="max-w-xl">
