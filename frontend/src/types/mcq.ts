@@ -90,6 +90,7 @@ export interface MCQExamConfig {
   publishedAt?: number;
   assignedLabId?: string;     // Dedicated Lab ID auto-created for this paper (e.g. "LAB-01", "LAB-02")
   assignedLabName?: string;   // Dedicated Lab Name (e.g. "Exam: Operating Systems Mid-Term")
+  proctorPin?: string;        // Dedicated invigilator emergency PIN to unlock terminals frozen during this paper
 }
 
 export type MCQResultDeclarationMode = 'IMMEDIATE' | 'WHATSAPP_GROUP';

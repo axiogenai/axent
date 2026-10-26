@@ -3107,17 +3107,30 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       }
     };
 
+    // Anti-cheat: fullscreen departure detection
+    const handleFsChange = () => {
+      const isFs = isCurrentlyFullscreen();
+      setIsFullscreen(isFs);
+      if (!isFs && !submitted) {
+        triggerFocusLossInfraction('Fullscreen examination mode exited / window restored');
+      }
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleBlur);
     window.addEventListener('focus', handleFocus);
     window.addEventListener('contextmenu', handleContextMenu);
     window.addEventListener('keydown', handleKeyDown, true);
+    document.addEventListener('fullscreenchange', handleFsChange);
+    document.addEventListener('webkitfullscreenchange', handleFsChange);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleBlur);
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('contextmenu', handleContextMenu);
       window.removeEventListener('keydown', handleKeyDown, true);
+      document.removeEventListener('fullscreenchange', handleFsChange);
+      document.removeEventListener('webkitfullscreenchange', handleFsChange);
     };
   }, [attempt, submitted, exam, student, currentIdx]);
 

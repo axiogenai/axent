@@ -148,6 +148,12 @@ export const getEffectiveMaxMarks = (station: CandidateStation): number => {
 };
 
 export const isStationEffectiveLocked = (station: CandidateStation): boolean => {
+  if (
+    (station.metrics?.tabSwitchViolations || 0) >= 3 ||
+    (station.mcqProgress?.tabSwitches || 0) >= 3
+  ) {
+    return true;
+  }
   if (typeof window !== 'undefined') {
     const explicit = localStorage.getItem(`codedna_lock_station_${station.id}`);
     if (explicit === 'false') return false; // Proctor explicitly pardoned and unlocked!
@@ -156,10 +162,7 @@ export const isStationEffectiveLocked = (station: CandidateStation): boolean => 
   if (station.isLockedByProctor === false && (station.metrics?.tabSwitchViolations || 0) === 0) {
     return false;
   }
-  return isStationLocked(station.id, station.labId) ||
-    Boolean(station.isLockedByProctor) ||
-    (station.metrics?.tabSwitchViolations || 0) >= 3 ||
-    (station.mcqProgress?.tabSwitches || 0) >= 3;
+  return isStationLocked(station.id, station.labId) || Boolean(station.isLockedByProctor);
 };
 
 interface AdminDashboardProps {

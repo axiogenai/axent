@@ -512,6 +512,7 @@ const DEFAULT_EXAM: Omit<MCQExamConfig, 'id' | 'createdAt' | 'updatedAt'> = {
   resultDeclarationMode: 'WHATSAPP_GROUP',
   status: 'DRAFT',
   createdBy: 'admin',
+  proctorPin: '',
 };
 
 const ExamEditor: React.FC<ExamEditorProps> = ({ initial, onSave, onBack }) => {
@@ -797,6 +798,39 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ initial, onSave, onBack }) => {
                 </p>
               </div>
             </div>
+          </div>
+
+          {/* Custom Invigilator Security Unlock PIN */}
+          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              <Lock size={15} color="var(--accent)" />
+              <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                Invigilator Emergency Unlock PIN (Optional)
+              </label>
+            </div>
+            <p style={{ margin: '0 0 10px', fontSize: '12px', color: 'var(--text-muted)' }}>
+              Set a dedicated on-site secret PIN to authorize and unlock terminals frozen during this specific exam. If blank, system defaults to institutional master PIN.
+            </p>
+            <input
+              type="text"
+              value={form.proctorPin || ''}
+              onChange={(e) => set('proctorPin', e.target.value.toUpperCase().trim())}
+              placeholder="e.g. CSE-EXAM-2026"
+              style={{
+                width: '100%',
+                maxWidth: '320px',
+                padding: '8px 12px',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                outline: 'none',
+                boxSizing: 'border-box'
+              }}
+            />
           </div>
 
           {/* Result Declaration Option */}
