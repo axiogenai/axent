@@ -15,6 +15,7 @@ import {
 import { playSound } from '../utils/sounds';
 import { parseExamToken } from '../utils/tokenParser';
 import { syncMcqLiveStation, subscribeToCctvBroadcast, isStationLocked } from '../services/adminService';
+import { validateAndConsumeEmergencyKey } from '../services/emergencyKeyService';
 import { fetchSingleStationLockStatus, updateStationLockInCloud, subscribeToCloudStations } from '../services/supabaseService';
 import { startAntiCheatingShield } from '../services/antiCheatingGuard';
 import { StudentInfo, ExamCategory } from '../types/dna';
@@ -4202,18 +4203,18 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                   <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Unlock size={11} color="var(--accent)" />
+                    <KeyRound size={11} color="var(--accent)" />
                   </div>
                   <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                    Invigilator Authorization
+                    Invigilator Emergency Authorization
                   </span>
                 </div>
                 <span style={{ fontSize: '9.5px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', background: 'var(--bg-elevated)', padding: '2px 5px', borderRadius: '4px', border: '1px solid var(--border)', flexShrink: 0 }}>
-                  PIN Required
+                  1-Time Key
                 </span>
               </div>
               <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 10px', lineHeight: 1.4 }}>
-                Enter the proctor authorization PIN to resume the examination immediately.
+                Enter today's single-use emergency unlock voucher to resume the exam. Key expires permanently once consumed today.
               </p>
 
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -4221,7 +4222,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                   type="password"
                   className="no-touch-expand mcq-lockdown-pin-input"
                   data-proctor-unlock-exempt="true"
-                  placeholder="Enter Invigilator Master PIN"
+                  placeholder="Enter 1-Time Emergency Key"
                   value={proctorUnlockCodeInput}
                   onChange={(e) => {
                     setProctorUnlockCodeInput(e.target.value);
@@ -4231,20 +4232,39 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                     if (e.key === 'Enter') {
                       e.preventDefault();
                       const code = proctorUnlockCodeInput.trim().toUpperCase();
-                      const configuredPin = (
-                        (exam as any)?.proctorPin ||
-                        (typeof window !== 'undefined' ? localStorage.getItem('codedna_proctor_security_pin') : null) ||
-                        'CSE-PROCTOR-2026'
-                      ).trim().toUpperCase();
+                      if (!code) {
+                        setUnlockError('Please enter the emergency unlock key.');
+                        playSound('warning');
+                        return;
+                      }
 
-                      if (code && (code === configuredPin || ((exam as any)?.proctorPin && code === (exam as any).proctorPin.trim().toUpperCase()))) {
+                      const cleanStationNum = (student.stationNumber || '01').replace(/[^0-9]/g, '') || '01';
+                      const stationId = `${student.labId || 'LAB-01'}-WS-${cleanStationNum.padStart(2, '0')}`;
+
+                      const result = validateAndConsumeEmergencyKey(code, stationId, {
+                        name: student?.name,
+                        roll: student?.rollNumber,
+                        labId: student?.labId,
+                        examTitle: exam?.title
+                      });
+
+                      if (result.valid) {
                         setUnlockError(null);
                         setProctorUnlockCodeInput('');
                         handlePardonUnlock();
-                      } else {
-                        setUnlockError('Invalid Invigilator Security PIN. Terminal remains locked.');
-                        playSound('warning');
+                        return;
                       }
+
+                      const configuredExamPin = (exam as any)?.proctorPin?.trim()?.toUpperCase();
+                      if (configuredExamPin && code === configuredExamPin) {
+                        setUnlockError(null);
+                        setProctorUnlockCodeInput('');
+                        handlePardonUnlock();
+                        return;
+                      }
+
+                      setUnlockError(result.message || 'Invalid Invigilator Security Key. Terminal remains locked.');
+                      playSound('warning');
                     }
                   }}
                   style={{
@@ -4268,20 +4288,39 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                   data-proctor-unlock-exempt="true"
                   onClick={() => {
                     const code = proctorUnlockCodeInput.trim().toUpperCase();
-                    const configuredPin = (
-                      (exam as any)?.proctorPin ||
-                      (typeof window !== 'undefined' ? localStorage.getItem('codedna_proctor_security_pin') : null) ||
-                      'CSE-PROCTOR-2026'
-                    ).trim().toUpperCase();
+                    if (!code) {
+                      setUnlockError('Please enter the emergency unlock key.');
+                      playSound('warning');
+                      return;
+                    }
 
-                    if (code && (code === configuredPin || ((exam as any)?.proctorPin && code === (exam as any).proctorPin.trim().toUpperCase()))) {
+                    const cleanStationNum = (student.stationNumber || '01').replace(/[^0-9]/g, '') || '01';
+                    const stationId = `${student.labId || 'LAB-01'}-WS-${cleanStationNum.padStart(2, '0')}`;
+
+                    const result = validateAndConsumeEmergencyKey(code, stationId, {
+                      name: student?.name,
+                      roll: student?.rollNumber,
+                      labId: student?.labId,
+                      examTitle: exam?.title
+                    });
+
+                    if (result.valid) {
                       setUnlockError(null);
                       setProctorUnlockCodeInput('');
                       handlePardonUnlock();
-                    } else {
-                      setUnlockError('Invalid Invigilator Security PIN. Terminal remains locked.');
-                      playSound('warning');
+                      return;
                     }
+
+                    const configuredExamPin = (exam as any)?.proctorPin?.trim()?.toUpperCase();
+                    if (configuredExamPin && code === configuredExamPin) {
+                      setUnlockError(null);
+                      setProctorUnlockCodeInput('');
+                      handlePardonUnlock();
+                      return;
+                    }
+
+                    setUnlockError(result.message || 'Invalid Invigilator Security Key. Terminal remains locked.');
+                    playSound('warning');
                   }}
                   style={{
                     height: '34px',

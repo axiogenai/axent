@@ -73,6 +73,7 @@ import {
   getAllCollegeLabs,
   getLabInfoOrDefault
 } from '../services/adminService';
+import { validateAndConsumeEmergencyKey } from '../services/emergencyKeyService';
 import { DEFAULT_LANGUAGE_TEMPLATES } from './CodeEditor';
 import { RunActionButton } from './watermelon/RunActionButton';
 import { fetchSingleStationLockStatus } from '../services/supabaseService';
@@ -158,6 +159,42 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const [tabSwitchCount, setTabSwitchCount] = useState<number>(0);
   const [unfocusedSeconds, setUnfocusedSeconds] = useState<number>(0);
   const [infractionNotice, setInfractionNotice] = useState<{ strike: number; message: string; duration: number } | null>(null);
+  const [showEmergencyUnlockPrompt, setShowEmergencyUnlockPrompt] = useState<boolean>(false);
+  const [emergencyUnlockCode, setEmergencyUnlockCode] = useState<string>('');
+  const [emergencyUnlockError, setEmergencyUnlockError] = useState<string | null>(null);
+
+  const handleEmergencyUnlockSubmit = () => {
+    const code = emergencyUnlockCode.trim().toUpperCase();
+    if (!code) {
+      setEmergencyUnlockError('Please enter the invigilator emergency key.');
+      playSound('warning');
+      return;
+    }
+    const activeLab = student.labId || getActiveLabId() || 'LAB-01';
+    const myStationId = buildWorkstationId(activeLab, student.stationNumber);
+
+    const result = validateAndConsumeEmergencyKey(code, myStationId, {
+      name: student.name,
+      roll: student.rollNumber,
+      labId: activeLab,
+      examTitle: student.examType || 'Coding Examination'
+    });
+
+    if (result.valid) {
+      setEmergencyUnlockError(null);
+      setShowEmergencyUnlockPrompt(false);
+      setEmergencyUnlockCode('');
+      handleUnlockStation();
+      return;
+    }
+
+    if (result.reason === 'ALREADY_CONSUMED' || result.reason === 'EXPIRED_DATE') {
+      setEmergencyUnlockError(result.message);
+    } else {
+      setEmergencyUnlockError('Invalid Invigilator Security Key. Workstation remains locked.');
+    }
+    playSound('warning');
+  };
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [showResetCandidateConfirm, setShowResetCandidateConfirm] = useState<boolean>(false);
   const [showFinalSubmitConfirm, setShowFinalSubmitConfirm] = useState<boolean>(false);
@@ -1512,9 +1549,31 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span className="badge badge-sm badge-danger">FROZEN</span>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                Awaiting invigilator authorization from Central Console
-              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  playSound('click');
+                  setShowEmergencyUnlockPrompt(true);
+                  setEmergencyUnlockError(null);
+                  setEmergencyUnlockCode('');
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '4px 10px',
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '4px',
+                  color: 'var(--text-primary)',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                <KeyRound size={12} />
+                <span>Invigilator Emergency Unlock</span>
+              </button>
             </div>
           </div>
         )}
@@ -2780,6 +2839,149 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           onCancel={() => setWorkspaceNoticeMessage(null)}
         />
       )}
+    
+      {/* ── INVIGILATOR EMERGENCY KEY UNLOCK MODAL ── */}
+      {showEmergencyUnlockPrompt && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 999999,
+            background: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowEmergencyUnlockPrompt(false);
+            }
+          }}
+        >
+          <div
+            className="card"
+            style={{
+              width: '100%',
+              maxWidth: '440px',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '6px',
+                  background: 'rgba(59, 130, 246, 0.12)',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  color: '#3b82f6',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <KeyRound size={16} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '13.5px', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                  Invigilator Emergency Authorization
+                </h3>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                  1-Time Daily Key Required · Expires Immediately Upon Use
+                </span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
+              Enter today's single-use emergency authorization voucher to unlock workstation {buildWorkstationId(student.labId, student.stationNumber)}. This key can only be used once today.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <input
+                type="password"
+                placeholder="Enter 1-Time Emergency Key (e.g. CSE-XXXX)"
+                value={emergencyUnlockCode}
+                onChange={(e) => {
+                  setEmergencyUnlockCode(e.target.value);
+                  setEmergencyUnlockError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleEmergencyUnlockSubmit();
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  fontSize: '12px',
+                  background: 'var(--bg-surface)',
+                  border: emergencyUnlockError ? '1px solid var(--danger)' : '1px solid var(--border)',
+                  borderRadius: '6px',
+                  color: 'var(--text-primary)',
+                  fontFamily: 'var(--font-mono)',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+
+              {emergencyUnlockError && (
+                <div style={{ fontSize: '11px', color: 'var(--danger)', fontWeight: 600 }}>
+                  {emergencyUnlockError}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}>
+              <button
+                type="button"
+                onClick={() => setShowEmergencyUnlockPrompt(false)}
+                style={{
+                  padding: '7px 14px',
+                  background: 'transparent',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  fontSize: '11.5px',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleEmergencyUnlockSubmit}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 16px',
+                  background: 'var(--accent)',
+                  color: 'var(--accent-contrast)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                <Unlock size={13} />
+                <span>Authorize & Unlock</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

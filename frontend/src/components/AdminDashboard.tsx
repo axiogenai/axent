@@ -54,6 +54,8 @@ import { fetchStationsFromCloud, subscribeToCloudStations } from '../services/su
 import { InstituteLabManagerModal } from './InstituteLabManagerModal';
 import { SupabaseMigrationModal } from './SupabaseMigrationModal';
 import { ConfirmationModal } from './ConfirmationModal';
+import { EmergencyKeyModal } from './admin/EmergencyKeyModal';
+import { DailyEmergencyKey, getTodayEmergencyKey, subscribeToEmergencyKeyChanges } from '../services/emergencyKeyService';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -80,6 +82,7 @@ import {
   AlertTriangle,
   Lock,
   Unlock,
+  KeyRound,
   LogOut,
   Radio,
   Building,
@@ -217,6 +220,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [showSupabaseModal, setShowSupabaseModal] = useState(false);
   const [showResetRoomConfirm, setShowResetRoomConfirm] = useState(false);
   const [showClearSubmittedConfirm, setShowClearSubmittedConfirm] = useState(false);
+  const [showEmergencyKeyModal, setShowEmergencyKeyModal] = useState<boolean>(false);
+  const [activeEmergencyKey, setActiveEmergencyKey] = useState<DailyEmergencyKey>(getTodayEmergencyKey());
+
+  useEffect(() => {
+    const unsub = subscribeToEmergencyKeyChanges((key) => {
+      setActiveEmergencyKey(key);
+    });
+    return () => unsub();
+  }, []);
   const [noticeModalMessage, setNoticeModalMessage] = useState<string | null>(null);
   const [warningStationTarget, setWarningStationTarget] = useState<CandidateStation | null>(null);
   const [warningMessageInput, setWarningMessageInput] = useState<string>('Maintain your visual focus on the examination screen at all times.');
@@ -903,6 +915,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             onUnlockStation={(id) => handleUnlockStation(id)}
             onConnectTestStation={handleConnectTestStation}
             onConnectTestMcqStation={handleConnectTestMcqStation}
+            onOpenEmergencyKeys={() => setShowEmergencyKeyModal(true)}
             theme={theme}
           />
         )}
@@ -1001,6 +1014,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             onTriggerResetRoom={() => setShowResetRoomConfirm(true)}
             onClearSubmitted={() => setShowClearSubmittedConfirm(true)}
             onOpenSupabaseModal={() => setShowSupabaseModal(true)}
+            onOpenEmergencyKeys={() => setShowEmergencyKeyModal(true)}
           />
         )}
 
@@ -1333,6 +1347,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               >
                 <Trash2 size={13} />
                 <span>Reset Grid</span>
+              </button>
+
+              <button
+                className="btn btn-secondary btn-sm admin-btn-full"
+                onClick={() => { setShowEmergencyKeyModal(true); playSound('click'); }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: activeEmergencyKey.status === 'CONSUMED' ? 'rgba(239, 68, 68, 0.1)' : 'var(--bg-surface)',
+                  border: activeEmergencyKey.status === 'CONSUMED' ? '1px solid rgba(239, 68, 68, 0.35)' : '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '11px',
+                  color: activeEmergencyKey.status === 'CONSUMED' ? '#f87171' : 'var(--text-primary)',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+                title="Inspect or manage today's single-use emergency unlock PIN"
+              >
+                <KeyRound size={13} color={activeEmergencyKey.status === 'CONSUMED' ? '#f87171' : 'var(--accent)'} />
+                <span>Emergency Key: <strong>{activeEmergencyKey.code}</strong></span>
+                <span
+                  style={{
+                    fontSize: '9px',
+                    padding: '1px 5px',
+                    borderRadius: '3px',
+                    background: activeEmergencyKey.status === 'CONSUMED' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                    color: activeEmergencyKey.status === 'CONSUMED' ? '#f87171' : '#10b981',
+                    fontWeight: 700
+                  }}
+                >
+                  {activeEmergencyKey.status === 'CONSUMED' ? 'CONSUMED' : '1x TODAY'}
+                </span>
               </button>
 
               <button
@@ -3720,7 +3767,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
       </div>
-    </div>
+
+      {/* ── EMERGENCY ONE-TIME UNLOCK KEY MANAGER MODAL ── */}
+      <EmergencyKeyModal
+        isOpen={showEmergencyKeyModal}
+        onClose={() => setShowEmergencyKeyModal(false)}
+      />
+
+        </div>
   );
 };
 

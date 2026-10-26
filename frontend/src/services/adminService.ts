@@ -31,13 +31,14 @@ const CURRENT_LAB_KEY = 'codedna_active_lab_id';
 const BROADCAST_BUS_NAME = 'codedna_cctv_proctor_bus';
 
 export interface CctvBroadcastMessage {
-  type: 'STATION_UPDATE' | 'STATION_SUBMIT' | 'LOCK_COMMAND' | 'PROCTOR_MESSAGE' | 'HEARTBEAT' | 'RESET_ALL' | 'CONCLUDE_AND_FREE';
+  type: 'STATION_UPDATE' | 'STATION_SUBMIT' | 'LOCK_COMMAND' | 'PROCTOR_MESSAGE' | 'HEARTBEAT' | 'RESET_ALL' | 'CONCLUDE_AND_FREE' | 'EMERGENCY_KEY_CONSUMED' | 'EMERGENCY_KEY_UPDATE';
   stationId?: string;
   labId?: string;
   station?: CandidateStation;
   isLocked?: boolean;
   warningMessage?: string;
   pardon?: boolean;
+  emergencyKey?: any;
 }
 
 // ── WORKSTATION IDENTIFIER GENERATOR ──
