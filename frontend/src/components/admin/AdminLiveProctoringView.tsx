@@ -21,8 +21,6 @@ import {
 } from 'lucide-react';
 import { CandidateStation, CollegeLabInfo, ThemeMode } from '../../types/dna';
 import { playSound } from '../../utils/sounds';
-import { EmergencyKeyModal } from './EmergencyKeyModal';
-import { DailyEmergencyKey, getTodayEmergencyKey, subscribeToEmergencyKeyChanges } from '../../services/emergencyKeyService';
 
 interface AdminLiveProctoringViewProps {
   stations: CandidateStation[];
@@ -35,7 +33,6 @@ interface AdminLiveProctoringViewProps {
   onUnlockStation: (stationId: string) => void;
   onConnectTestStation: () => void;
   onConnectTestMcqStation: () => void;
-  onOpenEmergencyKeys?: () => void;
   theme?: ThemeMode;
 }
 
@@ -50,18 +47,8 @@ export const AdminLiveProctoringView: React.FC<AdminLiveProctoringViewProps> = (
   onUnlockStation,
   onConnectTestStation,
   onConnectTestMcqStation,
-  onOpenEmergencyKeys
 }) => {
   const [streamMode, setStreamMode] = useState<'camera' | 'screen'>('camera');
-  const [showInternalModal, setShowInternalModal] = useState<boolean>(false);
-  const [activeEmergencyKey, setActiveEmergencyKey] = useState<DailyEmergencyKey>(getTodayEmergencyKey());
-
-  React.useEffect(() => {
-    const unsub = subscribeToEmergencyKeyChanges((key) => {
-      setActiveEmergencyKey(key);
-    });
-    return () => unsub();
-  }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const [density, setDensity] = useState<'3' | '4'>('3');
 
@@ -294,44 +281,6 @@ export const AdminLiveProctoringView: React.FC<AdminLiveProctoringViewProps> = (
           >
             <PlusCircle size={13} />
             <span>Connect MCQ Station</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              playSound('click');
-              if (onOpenEmergencyKeys) onOpenEmergencyKeys();
-              else setShowInternalModal(true);
-            }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              background: activeEmergencyKey.status === 'CONSUMED' ? 'rgba(239, 68, 68, 0.12)' : 'var(--bg-elevated)',
-              border: activeEmergencyKey.status === 'CONSUMED' ? '1px solid rgba(239, 68, 68, 0.35)' : '1px solid var(--border)',
-              borderRadius: '6px',
-              fontSize: '11.5px',
-              fontWeight: 600,
-              color: activeEmergencyKey.status === 'CONSUMED' ? '#f87171' : 'var(--text-primary)',
-              cursor: 'pointer'
-            }}
-            title="Today's single-use emergency unlock voucher for locked workstations"
-          >
-            <KeyRound size={13} color={activeEmergencyKey.status === 'CONSUMED' ? '#f87171' : 'var(--accent)'} />
-            <span>Emergency Key: <strong>{activeEmergencyKey.code}</strong></span>
-            <span
-              style={{
-                fontSize: '9.5px',
-                padding: '1px 5px',
-                borderRadius: '4px',
-                background: activeEmergencyKey.status === 'CONSUMED' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)',
-                color: activeEmergencyKey.status === 'CONSUMED' ? '#f87171' : '#10b981',
-                fontWeight: 700
-              }}
-            >
-              {activeEmergencyKey.status === 'CONSUMED' ? 'CONSUMED' : '1x TODAY'}
-            </span>
           </button>
         </div>
       </div>
@@ -650,11 +599,7 @@ export const AdminLiveProctoringView: React.FC<AdminLiveProctoringViewProps> = (
         </div>
       )}
 
-      {/* ── INTERNAL EMERGENCY KEY MODAL ── */}
-      <EmergencyKeyModal
-        isOpen={showInternalModal}
-        onClose={() => setShowInternalModal(false)}
-      />
+
 
         </div>
   );

@@ -20,37 +20,19 @@ import {
   FileText
 } from 'lucide-react';
 import { playSound } from '../../utils/sounds';
-import { EmergencyKeyModal } from './EmergencyKeyModal';
-import {
-  DailyEmergencyKey,
-  getTodayEmergencyKey,
-  subscribeToEmergencyKeyChanges,
-  updateActiveEmergencyKeyCode
-} from '../../services/emergencyKeyService';
 
 interface AdminSettingsViewProps {
   onTriggerResetRoom: () => void;
   onClearSubmitted: () => void;
   onOpenSupabaseModal: () => void;
-  onOpenEmergencyKeys?: () => void;
 }
 
 export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   onTriggerResetRoom,
   onClearSubmitted,
   onOpenSupabaseModal,
-  onOpenEmergencyKeys
 }) => {
-  const [showInternalModal, setShowInternalModal] = useState<boolean>(false);
-  const [activeEmergencyKey, setActiveEmergencyKey] = useState<DailyEmergencyKey>(getTodayEmergencyKey());
 
-  useEffect(() => {
-    const unsub = subscribeToEmergencyKeyChanges((key) => {
-      setActiveEmergencyKey(key);
-      setProctorPin(key.code);
-    });
-    return () => unsub();
-  }, []);
   const [faceRigor, setFaceRigor] = useState<'standard' | 'strict' | 'relaxed'>('standard');
   const [tabLimit, setTabLimit] = useState<number>(3);
   const [pasteLimit, setPasteLimit] = useState<number>(50);
@@ -68,7 +50,6 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
     if (typeof window !== 'undefined') {
       localStorage.setItem('codedna_proctor_security_pin', cleanPin);
     }
-    updateActiveEmergencyKeyCode(cleanPin, 'Admin Settings');
     playSound('success');
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
@@ -222,92 +203,32 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             </select>
           </div>
 
-          {/* Single-Use Daily Emergency Unlock Key */}
-          <div
-            style={{
-              gridColumn: '1 / -1',
-              background: 'var(--bg-surface)',
-              border: activeEmergencyKey.status === 'CONSUMED' ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid var(--border)',
-              borderRadius: '8px',
-              padding: '14px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <KeyRound size={15} color={activeEmergencyKey.status === 'CONSUMED' ? '#f87171' : 'var(--accent)'} />
-                <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  Daily Single-Use Emergency Unlock Key
-                </span>
-                <span
-                  style={{
-                    fontSize: '9.5px',
-                    fontWeight: 700,
-                    padding: '2px 6px',
-                    borderRadius: '4px',
-                    background: activeEmergencyKey.status === 'CONSUMED' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                    color: activeEmergencyKey.status === 'CONSUMED' ? '#f87171' : '#10b981'
-                  }}
-                >
-                  {activeEmergencyKey.status === 'CONSUMED' ? 'CONSUMED TODAY' : '1-USE AVAILABLE TODAY'}
-                </span>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  playSound('click');
-                  if (onOpenEmergencyKeys) onOpenEmergencyKeys();
-                  else setShowInternalModal(true);
-                }}
-                className="btn btn-secondary btn-sm"
-                style={{ fontSize: '11px', gap: '5px' }}
-              >
-                <KeyRound size={12} />
-                <span>Open Key Voucher Manager</span>
-              </button>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', alignItems: 'center' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                  Current Active Key Code ({activeEmergencyKey.dateStr}):
-                </label>
-                <input
-                  type="text"
-                  value={proctorPin}
-                  onChange={(e) => setProctorPin(e.target.value.toUpperCase())}
-                  placeholder="e.g. CSE-7492"
-                  disabled={activeEmergencyKey.status === 'CONSUMED'}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '6px',
-                    color: 'var(--text-primary)',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                {activeEmergencyKey.status === 'CONSUMED' && activeEmergencyKey.usageRecord ? (
-                  <span style={{ color: '#f87171' }}>
-                    Consumed at {new Date(activeEmergencyKey.usageRecord.timestamp).toLocaleTimeString()} on workstation {activeEmergencyKey.usageRecord.stationId} by {activeEmergencyKey.usageRecord.candidateName}. Expired for today.
-                  </span>
-                ) : (
-                  <span>
-                    Strict single-use policy: Once an invigilator enters this key on any student terminal, it is immediately marked as consumed and cannot be reused anywhere today.
-                  </span>
-                )}
-              </div>
+          {/* Master Emergency Proctor PIN */}
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+              Master Proctor Authorization Fallback PIN
+            </label>
+            <input
+              type="text"
+              value={proctorPin}
+              onChange={(e) => setProctorPin(e.target.value.toUpperCase())}
+              placeholder="e.g. CSE-PROCTOR-2026"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '12px',
+                fontWeight: 600,
+                outline: 'none',
+                boxSizing: 'border-box'
+              }}
+            />
+            <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              Individual 5-character unlock keys for locked students are issued directly from the Cheating Alerts panel.
             </div>
           </div>
         </div>
@@ -493,11 +414,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
         </div>
       </div>
 
-      {/* ── INTERNAL EMERGENCY KEY MODAL ── */}
-      <EmergencyKeyModal
-        isOpen={showInternalModal}
-        onClose={() => setShowInternalModal(false)}
-      />
+
 
         </div>
   );
