@@ -245,7 +245,7 @@ exit
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '20px'
+        padding: 'clamp(8px, 2vw, 16px)'
       }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
@@ -315,7 +315,7 @@ exit
         </div>
 
         {/* Tab Navigation */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)', padding: '0 20px' }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)', padding: '0 clamp(10px, 2.5vw, 20px)', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           {[
             { id: 'inventory', label: 'Physical Labs Inventory', icon: Layers, count: labs.length },
             { id: 'kiosk', label: 'Workstation Kiosk Script Generator', icon: Terminal },
@@ -410,7 +410,7 @@ exit
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '10px', marginBottom: '14px' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
                         Official Laboratory Name *
@@ -499,8 +499,8 @@ exit
                   </button>
                 </div>
 
-                <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                  <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', fontSize: '12px' }}>
                     <thead>
                       <tr style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)', textAlign: 'left', color: 'var(--text-muted)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                         <th style={{ padding: '8px 12px' }}>Lab ID</th>

@@ -190,7 +190,44 @@ export function subscribeToCctvBroadcast(
 }
 
 // ── REAL INSTITUTE LABORATORIES (Zero Hardcoded / Seed Data Enforcement) ──
-export const DEFAULT_INSTITUTE_LABS: CollegeLabInfo[] = [];
+export const DEFAULT_INSTITUTE_LABS: CollegeLabInfo[] = [
+  {
+    labId: 'CSE-LAB-01',
+    labCode: 'CSE-LAB-1',
+    labName: 'CSE Lab 1: Alan Turing Systems & Computing Lab',
+    department: 'Computer Science & Engineering',
+    block: 'Ramanujan Academic Block - Floor 3',
+    totalStations: 60,
+    invigilatorName: 'Dr. K. Ramanathan (Professor & HOD)'
+  },
+  {
+    labId: 'CSE-LAB-02',
+    labCode: 'CSE-LAB-2',
+    labName: 'CSE Lab 2: Ada Lovelace Software Engineering Lab',
+    department: 'Computer Science & Engineering',
+    block: 'Ramanujan Academic Block - Floor 3',
+    totalStations: 60,
+    invigilatorName: 'Prof. S. Sharma (Associate Professor)'
+  },
+  {
+    labId: 'CSE-LAB-03',
+    labCode: 'CSE-LAB-3',
+    labName: 'CSE Lab 3: John von Neumann Architecture & AI Lab',
+    department: 'Computer Science & Engineering',
+    block: 'Turing Technology Wing - Floor 2',
+    totalStations: 60,
+    invigilatorName: 'Dr. A. Varma (Associate Professor)'
+  },
+  {
+    labId: 'CSE-LAB-04',
+    labCode: 'CSE-LAB-4',
+    labName: 'CSE Lab 4: Grace Hopper Network & Cloud Lab',
+    department: 'Computer Science & Engineering',
+    block: 'Turing Technology Wing - Floor 2',
+    totalStations: 60,
+    invigilatorName: 'Prof. M. Iyer (Assistant Professor)'
+  }
+];
 export const COLLEGE_LABS: CollegeLabInfo[] = [];
 
 export const LAB_LOCK_PREFIX = 'codedna_lock_lab_';
@@ -334,6 +371,15 @@ export function getAllCollegeLabs(): CollegeLabInfo[] {
       }
     }
   } catch {}
+
+  if (labMap.size === 0) {
+    DEFAULT_INSTITUTE_LABS.forEach((l) => {
+      const cleanId = String(l.labId).toUpperCase().trim();
+      if (!deletedIds.has(cleanId)) {
+        labMap.set(cleanId, l);
+      }
+    });
+  }
 
   return Array.from(labMap.values());
 }

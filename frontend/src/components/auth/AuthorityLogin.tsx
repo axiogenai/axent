@@ -865,6 +865,8 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole, theme
                 )}
               </button>
 
+
+
               {/* Security Trust Seal */}
               <div
                 style={{

@@ -843,7 +843,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
   const duplicateCount = parsedStudents.filter(p => p.isDuplicate).length;
 
   return (
-    <main className="min-h-screen bg-[var(--bg-main)] text-[var(--text-primary)] px-4 py-8 antialiased">
+    <main className="w-full bg-[var(--bg-main)] text-[var(--text-primary)] px-1 sm:px-4 py-2 sm:py-6 antialiased">
       <div className="max-w-4xl mx-auto space-y-6">
 
         {/* Top Header Card */}
@@ -915,7 +915,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
                 >
                   {exams.map((exam) => (
                     <option key={exam.id} value={exam.id}>
-                      {exam.isPrivate ? '🔒 [PRIVATE] ' : '🌐 [PUBLIC] '}{exam.title} ({exam.durationMinutes}m · {exam.questionCount} Questions)
+                      {exam.isPrivate ? '[PRIVATE] ' : '[PUBLIC] '}{exam.title} ({exam.durationMinutes}m · {exam.questionCount} Questions)
                     </option>
                   ))}
                 </select>
@@ -1180,8 +1180,8 @@ export const AdminMCQTicketIssuer: React.FC = () => {
                   </div>
 
                   {/* Scrollable Preview Table */}
-                  <div className="max-h-64 overflow-y-auto border border-[var(--border)] rounded-xl bg-[var(--bg-main)]">
-                    <table className="w-full text-left text-xs">
+                  <div className="max-h-64 overflow-auto border border-[var(--border)] rounded-xl bg-[var(--bg-main)]">
+                    <table className="w-full min-w-[500px] text-left text-xs">
                       <thead className="bg-[var(--bg-elevated)] border-b border-[var(--border)] sticky top-0">
                         <tr>
                           <th className="py-2.5 px-3 font-semibold text-[var(--text-secondary)] w-10">#</th>
@@ -1568,7 +1568,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
             </div>
           ) : (
             <div className="overflow-x-auto border border-[var(--border)] rounded-xl bg-[var(--bg-main)]">
-              <table className="w-full text-left text-xs">
+              <table className="w-full min-w-[620px] text-left text-xs">
                 <thead className="bg-[var(--bg-elevated)] border-b border-[var(--border)]">
                   <tr>
                     <th className="py-3 px-3.5 font-semibold text-[var(--text-secondary)]">Candidate</th>

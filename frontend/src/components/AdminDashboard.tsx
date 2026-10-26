@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { AdminLiveProctoringView } from './admin/AdminLiveProctoringView';
+import { AdminCandidatesView } from './admin/AdminCandidatesView';
+import { AdminTestStationsView } from './admin/AdminTestStationsView';
+import { AdminReportsView } from './admin/AdminReportsView';
+import { AdminCheatingAlertsView } from './admin/AdminCheatingAlertsView';
+import { AdminAuditLedgerView } from './admin/AdminAuditLedgerView';
+import { AdminInstitutionsView } from './admin/AdminInstitutionsView';
+import { AdminSettingsView } from './admin/AdminSettingsView';
 import {
   CandidateStation,
   AnalysisReport,
@@ -210,8 +218,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [warningStationTarget, setWarningStationTarget] = useState<CandidateStation | null>(null);
   const [warningMessageInput, setWarningMessageInput] = useState<string>('Maintain your visual focus on the examination screen at all times.');
   const [stationViewMode, setStationViewMode] = useState<Record<string, 'camera' | 'activity'>>({});
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [activeSidebarItem, setActiveSidebarItem] = useState(initialTab || 'control_room');
+  const [activeSidebarItem, setActiveSidebarItem] = useState<string>(tabFromUrl || initialTab || 'control_room');
+
+  useEffect(() => {
+    if (tabFromUrl && tabFromUrl !== activeSidebarItem) {
+      setActiveSidebarItem(tabFromUrl);
+    }
+  }, [tabFromUrl]);
 
   useEffect(() => {
     const handleToggle = () => setMobileSidebarOpen((prev) => !prev);
@@ -655,8 +671,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     { id: 'settings', label: 'Settings', icon: Settings }
   ];
 
+  const handleLockStation = (stationId: string) => {
+    const target = stations.find((s) => s.id === stationId);
+    if (target) handleToggleLockStation(target);
+  };
+
+  const handleUnlockStation = (stationId: string) => {
+    const target = stations.find((s) => s.id === stationId);
+    if (target) handleToggleLockStation(target);
+  };
+
+  const handleDisqualifyCandidate = (station: CandidateStation) => {
+    playSound('warning');
+    sendProctorLockCommand(station.id, true, station.labId);
+    setStations((prev) =>
+      prev.map((s) => {
+        if (s.id !== station.id) return s;
+        return {
+          ...s,
+          isLockedByProctor: true,
+          status: 'Terminated' as any,
+          cheatingRisk: 'Critical' as const,
+          integrityStatus: 'Confirmed Policy Violation' as any
+        };
+      })
+    );
+  };
+
+  const handleSendProctorConcludeAndFree = (station: CandidateStation) => {
+    sendProctorConcludeAndFreeCommand(station.id, station.labId);
+    loadData();
+    playSound('click');
+  };
+
   const handleSidebarSelect = (itemId: string) => {
     setActiveSidebarItem(itemId);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', itemId);
+      return next;
+    }, { replace: true });
     playSound('click');
     if (itemId === 'control_room') {
       setViewMode('cctv');
@@ -664,26 +718,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setSelectedLabId('all');
     } else if (itemId === 'live_proctoring') {
       setViewMode('cctv');
-    } else if (itemId === 'candidates') {
-      setViewMode('cctv');
-      setFilter('active');
-    } else if (itemId === 'examinations') {
-      // In-dashboard Examinations view — maintains full sidebar and proctor control
-    } else if (itemId === 'test_stations') {
-      setViewMode('cctv');
-      setFilter('all');
-    } else if (itemId === 'reports') {
-      setViewMode('ledger');
-      setFilter('submitted');
-    } else if (itemId === 'cheating_alerts') {
-      setViewMode('cctv');
-      setFilter('cheating');
     } else if (itemId === 'audit_ledger') {
       setViewMode('ledger');
-    } else if (itemId === 'institutions') {
-      setShowLabManager(true);
-    } else if (itemId === 'settings') {
-      setShowResetRoomConfirm(true);
     }
     setMobileSidebarOpen(false);
   };
@@ -843,17 +879,135 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           minHeight: '100%'
         }}
       >
-        {activeSidebarItem === 'examinations' ? (
+        {activeSidebarItem === 'examinations' && (
           <div style={{ width: '100%' }}>
             <AdminMCQTicketIssuer />
           </div>
-        ) : (
+        )}
+
+        {activeSidebarItem === 'live_proctoring' && (
+          <AdminLiveProctoringView
+            stations={stations}
+            allLabs={allLabs}
+            selectedLabId={selectedLabId}
+            setSelectedLabId={setSelectedLabId}
+            onInspectStation={(s) => setSelectedStationId(s.id)}
+            onSendWarning={(s) => {
+              setWarningStationTarget(s);
+              setWarningMessageInput('Maintain your visual focus on the examination screen at all times.');
+            }}
+            onLockStation={(id) => handleLockStation(id)}
+            onUnlockStation={(id) => handleUnlockStation(id)}
+            onConnectTestStation={handleConnectTestStation}
+            onConnectTestMcqStation={handleConnectTestMcqStation}
+            theme={theme}
+          />
+        )}
+
+        {activeSidebarItem === 'candidates' && (
+          <AdminCandidatesView
+            stations={stations}
+            allLabs={allLabs}
+            selectedLabId={selectedLabId}
+            setSelectedLabId={setSelectedLabId}
+            onInspectStation={(s) => setSelectedStationId(s.id)}
+            onInspectReport={handleViewStudentReport}
+            onSendWarning={(s) => {
+              setWarningStationTarget(s);
+              setWarningMessageInput('Maintain your visual focus on the examination screen at all times.');
+            }}
+            onConcludeAndFree={(s) => handleSendProctorConcludeAndFree(s)}
+            onConnectTestStation={handleConnectTestStation}
+            onConnectTestMcqStation={handleConnectTestMcqStation}
+          />
+        )}
+
+        {activeSidebarItem === 'test_stations' && (
+          <AdminTestStationsView
+            stations={stations}
+            allLabs={allLabs}
+            selectedLabId={selectedLabId}
+            setSelectedLabId={setSelectedLabId}
+            onInspectStation={(s) => setSelectedStationId(s.id)}
+            onLockStation={(id) => handleLockStation(id)}
+            onUnlockStation={(id) => handleUnlockStation(id)}
+            onConcludeAndFree={(s) => handleSendProctorConcludeAndFree(s)}
+            onConnectTestStation={handleConnectTestStation}
+            onConnectTestMcqStation={handleConnectTestMcqStation}
+          />
+        )}
+
+        {activeSidebarItem === 'reports' && (
+          <AdminReportsView
+            stations={stations}
+            allLabs={allLabs}
+            selectedLabId={selectedLabId}
+            setSelectedLabId={setSelectedLabId}
+            onInspectReport={handleViewStudentReport}
+            onInspectStation={(s) => setSelectedStationId(s.id)}
+            onExportCSV={handleExportCSV}
+          />
+        )}
+
+        {activeSidebarItem === 'cheating_alerts' && (
+          <AdminCheatingAlertsView
+            stations={stations}
+            allLabs={allLabs}
+            selectedLabId={selectedLabId}
+            setSelectedLabId={setSelectedLabId}
+            onInspectStation={(s) => setSelectedStationId(s.id)}
+            onSendWarning={(s) => {
+              setWarningStationTarget(s);
+              setWarningMessageInput('Maintain your visual focus on the examination screen at all times.');
+            }}
+            onLockStation={(id) => handleLockStation(id)}
+            onUnlockStation={(id) => handleUnlockStation(id)}
+            onDisqualify={(s) => handleDisqualifyCandidate(s)}
+            onConnectTestStation={handleConnectTestStation}
+          />
+        )}
+
+        {activeSidebarItem === 'audit_ledger' && (
+          <AdminAuditLedgerView
+            stations={stations}
+            allLabs={allLabs}
+            selectedLabId={selectedLabId}
+            setSelectedLabId={setSelectedLabId}
+            onInspectStation={(s) => setSelectedStationId(s.id)}
+            onInspectReport={handleViewStudentReport}
+            onExportCSV={handleExportCSV}
+            onClearSubmitted={() => setShowClearSubmittedConfirm(true)}
+            onRemoveSingleStation={handleRemoveSingleStation}
+          />
+        )}
+
+        {activeSidebarItem === 'institutions' && (
+          <AdminInstitutionsView
+            allLabs={allLabs}
+            stations={stations}
+            isLabLocked={isLabLocked}
+            onOpenLabManager={() => setShowLabManager(true)}
+            onLockLab={(id) => setLabLock(id, true)}
+            onUnlockLab={(id) => setLabLock(id, false)}
+            onClearSubmitted={() => setShowClearSubmittedConfirm(true)}
+          />
+        )}
+
+        {activeSidebarItem === 'settings' && (
+          <AdminSettingsView
+            onTriggerResetRoom={() => setShowResetRoomConfirm(true)}
+            onClearSubmitted={() => setShowClearSubmittedConfirm(true)}
+            onOpenSupabaseModal={() => setShowSupabaseModal(true)}
+          />
+        )}
+
+        {activeSidebarItem === 'control_room' && (
           <>
             {/* ── TOP CAMPUS MACRO KPI RIBBON (Exact axent.axiogen.in matching) ── */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))',
             gap: '14px',
             width: '100%'
           }}
@@ -2568,8 +2722,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             style={{
               width: '100%',
               maxWidth: '920px',
-              maxHeight: '92vh',
-              overflow: 'hidden',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              overflowX: 'hidden',
               background: 'var(--bg-main)',
               border: '1px solid var(--border)',
               borderRadius: 'var(--radius-md)',
@@ -2656,7 +2811,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               }}
             >
               {/* Tab Selector */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                 {(selectedStation.status === 'Submitted & Done' || Boolean(matchingAttempt) || selectedStation.marks || selectedStation.mcqProgress?.score !== undefined) && (
                   <button
                     className={`btn btn-sm ${modalTab === 'submission' ? 'btn-primary' : 'btn-ghost'}`}
@@ -2717,7 +2872,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               {/* Proctor Interventions */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                 {/* Lock/Unlock Toggle */}
                 {(() => {
                   const isStationCurrentlyLocked = isStationEffectiveLocked(selectedStation);
@@ -3434,8 +3589,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         >
           <div
             style={{
-              maxWidth: '480px',
+              maxWidth: 'min(480px, calc(100vw - 24px))',
               width: '100%',
+              boxSizing: 'border-box',
               background: 'var(--bg-elevated)',
               border: '1px solid var(--border)',
               borderRadius: 'var(--radius-md)',
@@ -3465,8 +3621,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 onClick={() => setWarningStationTarget(null)}
                 className="btn btn-ghost btn-sm"
                 style={{ padding: '2px 6px' }}
+                aria-label="Close dialog"
               >
-                ✕
+                <X size={14} />
               </button>
             </div>
 

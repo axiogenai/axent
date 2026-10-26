@@ -131,38 +131,7 @@ export async function signInWithPassword(
   if (!trimmedEmail) return { user: null, session: null, error: 'Institutional email address is required.' };
   if (!pass) return { user: null, session: null, error: 'Password is required.' };
 
-  // ── Temporary Instant Credentials for Authority Portals ───────────────────────
-  const tempCredentials: Record<string, { pass: string; role: AuthorityRole; name: string }> = {
-    'admin@axent.edu': { pass: 'admin123', role: 'admin', name: 'Chief Proctor Admin' },
-    'setter@axent.edu': { pass: 'setter123', role: 'paper_setter', name: 'Faculty Paper Setter' },
-    'professor@institution.edu': { pass: 'setter123', role: 'paper_setter', name: 'Faculty Examiner' }
-  };
 
-  const matchedTemp = tempCredentials[trimmedEmail];
-  if (matchedTemp && pass === matchedTemp.pass) {
-    const effectiveRole = role === 'admin' ? 'admin' : matchedTemp.role;
-    const mockUser: any = {
-      id: `usr_${trimmedEmail.replace(/[^a-z0-9]/g, '_')}`,
-      email: trimmedEmail,
-      app_metadata: { role: effectiveRole },
-      user_metadata: { role: effectiveRole, full_name: matchedTemp.name },
-      aud: 'authenticated',
-      created_at: new Date().toISOString()
-    };
-    const mockSession: any = {
-      access_token: `mock_jwt_${Date.now()}`,
-      token_type: 'bearer',
-      expires_in: 86400,
-      user: mockUser
-    };
-    try {
-      sessionStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(mockSession));
-      sessionStorage.setItem(LOCAL_ROLE_KEY, effectiveRole);
-      localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(mockSession));
-      localStorage.setItem(LOCAL_ROLE_KEY, effectiveRole);
-    } catch {}
-    return { user: mockUser, session: mockSession, error: null };
-  }
 
   // Attempt Supabase authentication if available
   if (isSupabaseConnected()) {

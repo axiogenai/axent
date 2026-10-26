@@ -173,17 +173,17 @@ export const Navbar: React.FC<NavbarProps> = ({
       >
         {/* ── Brand Title ── */}
         <div
+          onClick={() => {
+            if (isRunning || isMcqRoute) return;
+            navigate('/');
+          }}
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
-            cursor: 'pointer'
+            cursor: isMcqRoute ? 'default' : 'pointer'
           }}
-          onClick={() => {
-            if (isRunning) return;
-            navigate('/');
-          }}
-          title="Axent Platform Home"
+          title={isMcqRoute ? "Candidate Examination Hall" : "Axent Platform Home"}
         >
           <div style={{ display: 'flex', alignItems: 'center', height: '24px' }}>
             <img
@@ -375,8 +375,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
           </button>
 
-          {/* Mobile Hamburger Menu Toggle (Screens < 768px) */}
-          {(() => {
+          {/* Mobile Hamburger Menu Toggle (Screens < 768px, non-mcq only) */}
+          {!isMcqRoute && (() => {
             const isMenuOpen = isAdminRoute ? adminSidebarOpen : mobileMenuOpen;
             return (
               <button
@@ -411,7 +411,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       </header>
 
       {/* ── Mobile Navigation Drawer Overlay (< 768px, non-admin only) ── */}
-      {mobileMenuOpen && !isAdminRoute && (
+      {mobileMenuOpen && !isAdminRoute && !isMcqRoute && (
         <div
           className="md:hidden fixed inset-x-0 top-[52px] bottom-0 z-40 bg-[var(--bg-main)]/95 backdrop-blur-md flex flex-col p-5 overflow-y-auto"
           style={{

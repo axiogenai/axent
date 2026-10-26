@@ -297,15 +297,16 @@ CREATE POLICY "Allow public read-write for code_submissions" ON public.code_subm
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '20px'
+        padding: 'clamp(8px, 2vw, 16px)'
       }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
         style={{
           width: '100%',
-          maxWidth: '820px',
+          maxWidth: 'min(820px, calc(100vw - 16px))',
           maxHeight: '90vh',
+          boxSizing: 'border-box',
           background: 'var(--bg-elevated)',
           border: '1px solid var(--border)',
           borderRadius: 'var(--radius-lg)',
