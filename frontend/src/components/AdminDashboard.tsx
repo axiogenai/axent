@@ -717,7 +717,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           justifyContent: 'space-between',
           padding: '16px 12px 14px',
           boxSizing: 'border-box',
-          overflowY: 'auto',
+          overflow: 'hidden',
           flexShrink: 0
         }}
       >
@@ -818,9 +818,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           onClick={() => setMobileSidebarOpen(false)}
           style={{
             position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.5)',
-            zIndex: 999
+            top: '52px',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.4)',
+            backdropFilter: 'blur(2px)',
+            zIndex: 998
           }}
         />
       )}
@@ -2565,7 +2569,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               width: '100%',
               maxWidth: '920px',
               maxHeight: '92vh',
-              overflowY: 'auto',
+              overflow: 'hidden',
               background: 'var(--bg-main)',
               border: '1px solid var(--border)',
               borderRadius: 'var(--radius-md)',
@@ -2960,7 +2964,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           lineHeight: 1.6,
                           color: '#e2e8f0',
                           maxHeight: '260px',
-                          overflowY: 'auto',
+                          overflow: 'hidden',
                           whiteSpace: 'pre-wrap',
                           background: '#050505',
                           padding: '10px',
@@ -3124,7 +3128,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     lineHeight: 1.6,
                     color: '#e2e8f0',
                     maxHeight: '340px',
-                    overflowY: 'auto',
+                    overflow: 'hidden',
                     whiteSpace: 'pre-wrap'
                   }}
                 >
@@ -3211,7 +3215,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     lineHeight: 1.6,
                     color: selectedStation.lastTerminalOutput ? '#38bdf8' : 'var(--text-muted)',
                     maxHeight: '320px',
-                    overflowY: 'auto',
+                    overflow: 'hidden',
                     whiteSpace: 'pre-wrap'
                   }}
                 >

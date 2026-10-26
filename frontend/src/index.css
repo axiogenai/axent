@@ -2102,9 +2102,16 @@ header.no-print {
     max-height: calc(100vh - 52px) !important;
     min-height: calc(100vh - 52px) !important;
     flex-shrink: 0 !important;
-    overflow-y: auto !important;
+    overflow: hidden !important;
+    overflow-y: hidden !important;
+    scrollbar-width: none !important;
     z-index: 40 !important;
     box-sizing: border-box !important;
+  }
+
+  .admin-left-sidebar::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
   }
 
   .admin-dashboard-content {
@@ -2125,16 +2132,28 @@ header.no-print {
     display: none !important;
     position: fixed !important;
     top: 52px !important;
-    left: 0 !important;
+    right: 0 !important;
+    left: auto !important;
     bottom: 0 !important;
+    width: 250px !important;
+    max-width: 82vw !important;
     height: calc(100vh - 52px) !important;
     max-height: calc(100vh - 52px) !important;
+    background: var(--bg-elevated) !important;
+    border-top: none !important;
+    border-right: none !important;
+    border-bottom: none !important;
+    border-left: 1px solid var(--border) !important;
+    padding: 8px 12px 14px !important;
     z-index: 1000 !important;
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5) !important;
+    box-shadow: -4px 12px 24px rgba(0, 0, 0, 0.25) !important;
+    overflow: hidden !important;
+    overflow-y: hidden !important;
+    scrollbar-width: none !important;
   }
   .admin-left-sidebar.admin-sidebar-mobile-open {
     display: flex !important;
-    animation: drawerSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    animation: drawerSlideInRight 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
   }
   .admin-dashboard-content {
     margin-left: 0 !important;
@@ -2146,9 +2165,9 @@ header.no-print {
   }
 }
 
-@keyframes drawerSlideIn {
+@keyframes drawerSlideInRight {
   from {
-    transform: translateX(-100%);
+    transform: translateX(100%);
   }
   to {
     transform: translateX(0);
