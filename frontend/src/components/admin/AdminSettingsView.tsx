@@ -39,8 +39,14 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const [blockDevtools, setBlockDevtools] = useState<boolean>(true);
   const [autoSubmitOnExpire, setAutoSubmitOnExpire] = useState<boolean>(true);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
+  const [proctorPin, setProctorPin] = useState<string>(() => {
+    return (typeof window !== 'undefined' ? localStorage.getItem('codedna_proctor_security_pin') : null) || 'CSE-PROCTOR-2026';
+  });
 
   const handleSaveSettings = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('codedna_proctor_security_pin', proctorPin.trim().toUpperCase() || 'CSE-PROCTOR-2026');
+    }
     playSound('success');
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
@@ -192,6 +198,35 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
               <option value={50}>Flag if {'>'} 50% external pasted characters (Standard)</option>
               <option value={75}>Flag if {'>'} 75% external pasted characters</option>
             </select>
+          </div>
+
+          {/* Master Invigilator Security PIN */}
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+              Invigilator Master Unlock PIN
+            </label>
+            <input
+              type="text"
+              value={proctorPin}
+              onChange={(e) => setProctorPin(e.target.value.toUpperCase())}
+              placeholder="e.g. CSE-PROCTOR-2026"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '12px',
+                fontWeight: 600,
+                outline: 'none',
+                boxSizing: 'border-box'
+              }}
+            />
+            <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              Used by invigilators on-site to authorize & unlock frozen terminals
+            </div>
           </div>
         </div>
       </div>

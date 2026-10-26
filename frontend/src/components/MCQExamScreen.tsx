@@ -2601,9 +2601,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
   const cleanStationNum = (student.stationNumber || '01').replace(/[^0-9]/g, '') || '01';
   const stationId = `${student.labId || 'LAB-01'}-WS-${cleanStationNum.padStart(2, '0')}`;
-  const isExplicitPardoned = typeof window !== 'undefined' ? localStorage.getItem(`codedna_lock_station_${stationId}`) === 'false' : false;
   const isStrictLocked = Boolean(
-    !isExplicitPardoned &&
     (isLockedByProctor || (attempt && attempt.tabSwitchCount >= 3)) &&
     attempt &&
     attempt.status === 'IN_PROGRESS' &&
@@ -2694,7 +2692,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       onInfraction: (reason: string) => {
         const infractionNow = Date.now();
         // Cooldown: Ignore rapid consecutive triggers within 5000ms
-        if (infractionNow - lastStrikeTimestampRef.current < 5000) {
+        if (infractionNow - lastStrikeTimestampRef.current < 1000) {
           return;
         }
         lastStrikeTimestampRef.current = infractionNow;
@@ -2975,12 +2973,68 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     const cleanStationNum = (student.stationNumber || '01').replace(/[^0-9]/g, '') || '01';
     const stationId = `${student.labId || 'LAB-01'}-WS-${cleanStationNum.padStart(2, '0')}`;
 
+    const triggerFocusLossInfraction = (reason: string) => {
+      const now = Date.now();
+      // Grace period: ignore initial settling within 2s of start, or while choosing screen
+      if (isSelectingScreenRef.current || (attempt.startTime && (now - attempt.startTime < 2000))) {
+        return;
+      }
+
+      // Enforce 1000ms cooldown so rapid double-events (e.g. blur + visibilitychange) never double-count
+      if (now - lastStrikeTimestampRef.current < 1000) {
+        return;
+      }
+      lastStrikeTimestampRef.current = now;
+
+      recordInfraction(attempt.id, reason);
+      playSound('warning');
+
+      setAttempt((prev) => {
+        if (!prev) return null;
+        const newCount = prev.tabSwitchCount + 1;
+        const updated: MCQAttempt = {
+          ...prev,
+          tabSwitchCount: newCount,
+        };
+
+        if (newCount === 1) {
+          setActiveStrikeModal({
+            strike: 1,
+            awaySeconds: 0,
+            reason
+          });
+          setProctorWarning(`PROCTOR WARNING (Strike 1/3): ${reason}! Tab switching is logged to the invigilator dashboard.`);
+          if (exam) syncMcqLiveStation(updated, exam, student, currentIdx, false);
+        } else if (newCount === 2) {
+          setActiveStrikeModal({
+            strike: 2,
+            awaySeconds: 0,
+            reason
+          });
+          setProctorWarning(`CRITICAL WARNING (Strike 2/3): FINAL STRIKE WARNING! ${reason}! One more violation will freeze your workstation.`);
+          if (exam) syncMcqLiveStation(updated, exam, student, currentIdx, false);
+        } else if (newCount >= 3) {
+          setActiveStrikeModal(null);
+          setProctorWarning(`ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded! Workstation frozen. Contact Invigilator.`);
+          setIsLockedByProctor(true);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`codedna_lock_station_${stationId}`, 'true');
+          }
+          updateStationLockInCloud(stationId, true, `ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded.`, student.labId || 'LAB-01');
+          if (exam) syncMcqLiveStation(updated, exam, student, currentIdx, true);
+        }
+
+        return updated;
+      });
+    };
+
     const handleVisibilityChange = () => {
       if (document.hidden) {
         if (!isAwayRef.current) {
           isAwayRef.current = true;
           unfocusedStartRef.current = Date.now();
         }
+        triggerFocusLossInfraction('Tab switch detected: Navigated away from examination tab');
       } else {
         if (isAwayRef.current || unfocusedStartRef.current !== null) {
           isAwayRef.current = false;
@@ -2989,94 +3043,46 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           const elapsedMs = now - startTime;
           unfocusedStartRef.current = null;
 
-          // Grace period: ignore initial settling within 2s of start, or while choosing screen
-          if (isSelectingScreenRef.current || (attempt.startTime && (now - attempt.startTime < 2000))) {
-            return;
-          }
-
-          // Ignore momentary focus flickers (< 300ms)
-          if (elapsedMs < 300) {
-            return;
-          }
-
-          // Enforce 1500ms cooldown so rapid double-events never trigger multiple strikes
-          if (now - lastStrikeTimestampRef.current < 1500) {
-            return;
-          }
-          lastStrikeTimestampRef.current = now;
-
           const awayDuration = Math.max(1, Math.round(elapsedMs / 1000));
           totalUnfocusedRef.current += awayDuration;
           updateUnfocusedTime(attempt.id, totalUnfocusedRef.current);
-
-          recordInfraction(attempt.id, `Tab/Window focus lost for ${awayDuration}s`);
-
-          setAttempt((prev) => {
-            if (!prev) return null;
-            const newCount = prev.tabSwitchCount + 1;
-            const updated: MCQAttempt = {
-              ...prev,
-              tabSwitchCount: newCount,
-              unfocusedSeconds: totalUnfocusedRef.current,
-            };
-
-            playSound('warning');
-
-            if (newCount === 1) {
-              setActiveStrikeModal({
-                strike: 1,
-                awaySeconds: awayDuration,
-                reason: `Window or tab focus lost for ${awayDuration}s`
-              });
-              setProctorWarning(`PROCTOR WARNING (Strike 1/3): Window focus lost for ${awayDuration}s! Tab switching is logged to the invigilator dashboard.`);
-              if (exam) syncMcqLiveStation(updated, exam, student, currentIdx, false);
-            } else if (newCount === 2) {
-              setActiveStrikeModal({
-                strike: 2,
-                awaySeconds: awayDuration,
-                reason: `Window or tab focus lost for ${awayDuration}s`
-              });
-              setProctorWarning(`CRITICAL WARNING (Strike 2/3): FINAL STRIKE WARNING! Window left for ${awayDuration}s! One more tab switch or Alt+Tab will automatically freeze your workstation.`);
-              if (exam) syncMcqLiveStation(updated, exam, student, currentIdx, false);
-            } else if (newCount >= 3) {
-              setActiveStrikeModal(null);
-              setProctorWarning(`ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded! Workstation frozen. Contact Invigilator.`);
-              setIsLockedByProctor(true);
-              if (typeof window !== 'undefined') {
-                localStorage.setItem(`codedna_lock_station_${stationId}`, 'true');
-              }
-              updateStationLockInCloud(stationId, true, `ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded.`, student.labId || 'LAB-01');
-              if (exam) syncMcqLiveStation(updated, exam, student, currentIdx, true);
-            }
-
-            return updated;
-          });
+          playSound('warning');
+          setActiveStrikeModal((prev) => prev ? { ...prev, awaySeconds: awayDuration } : null);
         }
       }
     };
 
     const handleBlur = () => {
-      // Grace period: ignore blur during initial 2 seconds of starting exam or while selecting screen
-      if (isSelectingScreenRef.current || (attempt.startTime && (Date.now() - attempt.startTime < 2000))) {
+      const now = Date.now();
+      if (isSelectingScreenRef.current || (attempt.startTime && (now - attempt.startTime < 2000))) {
         return;
       }
-      // On mobile / touch devices, virtual keyboard toggles, elastic scroll bounce, and address bar movements trigger blur.
-      // We strictly rely on document.hidden (visibilitychange) on touch devices to completely eliminate phantom mobile strikes!
       const isTouch = typeof window !== 'undefined' && ('ontouchstart' in window || (navigator && navigator.maxTouchPoints > 0));
       if (isTouch) {
         return;
       }
       if (!isAwayRef.current && !submitted) {
         isAwayRef.current = true;
-        unfocusedStartRef.current = Date.now();
+        unfocusedStartRef.current = now;
       }
+      triggerFocusLossInfraction('Window focus lost: Application or window switch detected');
     };
 
     const handleFocus = () => {
-      handleVisibilityChange();
+      if (isAwayRef.current || unfocusedStartRef.current !== null) {
+        isAwayRef.current = false;
+        const now = Date.now();
+        const startTime = unfocusedStartRef.current || now;
+        const elapsedMs = now - startTime;
+        unfocusedStartRef.current = null;
+        const awayDuration = Math.max(1, Math.round(elapsedMs / 1000));
+        totalUnfocusedRef.current += awayDuration;
+        updateUnfocusedTime(attempt.id, totalUnfocusedRef.current);
+        playSound('warning');
+        setActiveStrikeModal((prev) => prev ? { ...prev, awaySeconds: awayDuration } : null);
+      }
     };
 
-    // Anti-cheat: prevent right-click context menu
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault();
       recordInfraction(attempt.id, 'Proctor Security: Right-click context menu attempt blocked');
@@ -4199,10 +4205,10 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                 <input
-                  type="text"
+                  type="password"
                   className="no-touch-expand mcq-lockdown-pin-input"
                   data-proctor-unlock-exempt="true"
-                  placeholder="Enter PIN (e.g. 1234 or AXENT)"
+                  placeholder="Enter Invigilator Master PIN"
                   value={proctorUnlockCodeInput}
                   onChange={(e) => {
                     setProctorUnlockCodeInput(e.target.value);
@@ -4212,13 +4218,18 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                     if (e.key === 'Enter') {
                       e.preventDefault();
                       const code = proctorUnlockCodeInput.trim().toUpperCase();
-                      const validCodes = ['AXENT-UNLOCK', 'AXENT', '1234', 'PROCTOR', 'ADMIN', 'UNLOCK', '0000', 'PASS'];
-                      if (validCodes.includes(code) || code.length >= 4) {
+                      const configuredPin = (
+                        (exam as any)?.proctorPin ||
+                        (typeof window !== 'undefined' ? localStorage.getItem('codedna_proctor_security_pin') : null) ||
+                        'CSE-PROCTOR-2026'
+                      ).trim().toUpperCase();
+
+                      if (code && (code === configuredPin || ((exam as any)?.proctorPin && code === (exam as any).proctorPin.trim().toUpperCase()))) {
                         setUnlockError(null);
                         setProctorUnlockCodeInput('');
                         handlePardonUnlock();
                       } else {
-                        setUnlockError('Invalid authorization PIN.');
+                        setUnlockError('Invalid Invigilator Security PIN. Terminal remains locked.');
                         playSound('warning');
                       }
                     }
@@ -4244,13 +4255,18 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                   data-proctor-unlock-exempt="true"
                   onClick={() => {
                     const code = proctorUnlockCodeInput.trim().toUpperCase();
-                    const validCodes = ['AXENT-UNLOCK', 'AXENT', '1234', 'PROCTOR', 'ADMIN', 'UNLOCK', '0000', 'PASS'];
-                    if (validCodes.includes(code) || code.length >= 4) {
+                    const configuredPin = (
+                      (exam as any)?.proctorPin ||
+                      (typeof window !== 'undefined' ? localStorage.getItem('codedna_proctor_security_pin') : null) ||
+                      'CSE-PROCTOR-2026'
+                    ).trim().toUpperCase();
+
+                    if (code && (code === configuredPin || ((exam as any)?.proctorPin && code === (exam as any).proctorPin.trim().toUpperCase()))) {
                       setUnlockError(null);
                       setProctorUnlockCodeInput('');
                       handlePardonUnlock();
                     } else {
-                      setUnlockError('Invalid authorization PIN.');
+                      setUnlockError('Invalid Invigilator Security PIN. Terminal remains locked.');
                       playSound('warning');
                     }
                   }}
@@ -4282,30 +4298,10 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                 </div>
               )}
 
-              {/* Instant One-Click Invigilator Quick Unlock */}
-              <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>Proctor Override</span>
-                <button
-                  type="button"
-                  className="no-touch-expand"
-                  data-proctor-unlock-exempt="true"
-                  onClick={() => {
-                    setUnlockError(null);
-                    setProctorUnlockCodeInput('');
-                    handlePardonUnlock();
-                  }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--accent)',
-                    fontSize: '10.5px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    padding: '2px 4px'
-                  }}
-                >
-                  Quick Unlock & Clear Strikes →
-                </button>
+              {/* Invigilator Remote Clearance Notice (Zero Student Self-Bypass) */}
+              <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                <Shield size={12} color="var(--accent)" />
+                <span>Invigilator can also unlock remotely from Central Control Room</span>
               </div>
             </div>
 

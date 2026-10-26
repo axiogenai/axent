@@ -1383,12 +1383,11 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
           {/* 4. Infraction Strikes Pill (Shown ONLY if strikes > 0 or station locked) */}
           {(tabSwitchCount > 0 || isLockedByProctor) && (
-            <button
-              onClick={isLockedByProctor || tabSwitchCount >= 3 ? handleUnlockStation : undefined}
+            <div
               className={`badge ${tabSwitchCount >= 3 || isLockedByProctor ? 'badge-danger' : 'badge-warning'}`}
               title={
                 isLockedByProctor || tabSwitchCount >= 3
-                  ? 'Workstation locked by invigilator due to focus loss! Click to pardon.'
+                  ? 'Workstation locked due to examination protocol infractions. Invigilator clearance required.'
                   : `Focus Integrity Alert: ${tabSwitchCount}/3 Tab Switch Strikes recorded (${unfocusedSeconds}s total unfocused)`
               }
               style={{
@@ -1397,19 +1396,21 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                 gap: '4px',
                 fontWeight: 700,
                 fontSize: '11px',
-                cursor: isLockedByProctor || tabSwitchCount >= 3 ? 'pointer' : 'default',
-                background: 'rgba(239, 68, 68, 0.15)',
-                border: '1px solid var(--danger)',
-                color: 'var(--danger)'
+                cursor: 'default',
+                background: tabSwitchCount >= 3 || isLockedByProctor ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                border: tabSwitchCount >= 3 || isLockedByProctor ? '1px solid var(--danger)' : '1px solid var(--warning)',
+                color: tabSwitchCount >= 3 || isLockedByProctor ? 'var(--danger)' : 'var(--warning)',
+                display: 'inline-flex',
+                alignItems: 'center'
               }}
             >
-              {isLockedByProctor || tabSwitchCount >= 3 ? <Unlock size={11} /> : <AlertTriangle size={11} />}
+              {tabSwitchCount >= 3 || isLockedByProctor ? <Lock size={11} /> : <AlertTriangle size={11} />}
               <span>
-                {isLockedByProctor || tabSwitchCount >= 3
-                  ? 'Locked (Unlock)'
+                {tabSwitchCount >= 3 || isLockedByProctor
+                  ? 'Station Frozen'
                   : `${tabSwitchCount}/3 Strikes`}
               </span>
-            </button>
+            </div>
           )}
         </div>
 
@@ -1511,28 +1512,9 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span className="badge badge-sm badge-danger">FROZEN</span>
-              <button
-                className="btn btn-sm"
-                onClick={handleUnlockStation}
-                style={{
-                  height: '24px',
-                  padding: '0 10px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  background: 'var(--bg-surface)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border-strong)',
-                  borderRadius: 'var(--radius-sm)',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  cursor: 'pointer'
-                }}
-                title="Pardon all infractions and immediately unlock this workstation"
-              >
-                <Unlock size={12} />
-                <span>Pardon & Unlock</span>
-              </button>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                Awaiting invigilator authorization from Central Console
+              </span>
             </div>
           </div>
         )}

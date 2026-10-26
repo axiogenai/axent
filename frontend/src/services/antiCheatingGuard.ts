@@ -42,7 +42,7 @@ export function startAntiCheatingShield(config: AntiCheatingConfig): AntiCheatin
   let wakeLockSentinel: any = null;
   let currentAudioLevel = 0;
   const shieldStartTime = Date.now();
-  const STARTUP_GRACE_PERIOD_MS = 20000;
+  const STARTUP_GRACE_PERIOD_MS = 1500;
 
   // ── 1. SCREEN WAKE LOCK (Prevents Mobile Device Sleep) ─────────────────────
   const initWakeLock = async () => {
@@ -66,19 +66,42 @@ export function startAntiCheatingShield(config: AntiCheatingConfig): AntiCheatin
   const reportedInfractions = new Set<string>();
 
   // ── 2. CURSOR DEPARTURE & FLOATING AI DETECTION (Desktop & Tablets) ─────────
+  const triggerCursorDepartureInfraction = () => {
+    if (!isRunning || config.enableCursorDepartureGuard === false) return;
+    if (Date.now() - shieldStartTime < STARTUP_GRACE_PERIOD_MS) return;
+    playSound('warning');
+    config.onWarningBanner('PROCTOR SECURITY: Cursor departed examination window. External hover detected.');
+    config.onInfraction('Cursor left examination window / external hover detected');
+    if (config.onAiAlert) config.onAiAlert('Cursor departure outside viewport');
+  };
+
   const handleMouseLeave = (e: MouseEvent) => {
     if (!isRunning || config.enableCursorDepartureGuard === false) return;
     if (Date.now() - shieldStartTime < STARTUP_GRACE_PERIOD_MS) return;
-    // Check if mouse genuinely left the client window viewport
-    if (e.clientY <= 0 || e.clientX <= 0 || (e.clientX >= window.innerWidth || e.clientY >= window.innerHeight)) {
+    // Check if mouse genuinely left the client window viewport or relatedTarget is null
+    if (
+      !e.relatedTarget ||
+      e.clientY <= 0 ||
+      e.clientX <= 0 ||
+      e.clientX >= window.innerWidth ||
+      e.clientY >= window.innerHeight
+    ) {
       if (cursorDepartureTimeout) clearTimeout(cursorDepartureTimeout);
       cursorDepartureTimeout = setTimeout(() => {
-        if (!isRunning) return;
-        if (Date.now() - shieldStartTime < STARTUP_GRACE_PERIOD_MS) return;
-        playSound('warning');
-        config.onWarningBanner('AI GUARD: Cursor departed exam window. Maintain visual focus on your examination terminal.');
-        if (config.onAiAlert) config.onAiAlert('Cursor departure outside viewport');
-      }, 7000);
+        triggerCursorDepartureInfraction();
+      }, 700);
+    }
+  };
+
+  const handleWindowMouseOut = (e: MouseEvent) => {
+    if (!isRunning || config.enableCursorDepartureGuard === false) return;
+    if (Date.now() - shieldStartTime < STARTUP_GRACE_PERIOD_MS) return;
+    // If relatedTarget is null, the cursor has moved out of the browser window entirely
+    if (!e.relatedTarget) {
+      if (cursorDepartureTimeout) clearTimeout(cursorDepartureTimeout);
+      cursorDepartureTimeout = setTimeout(() => {
+        triggerCursorDepartureInfraction();
+      }, 700);
     }
   };
 
@@ -91,6 +114,7 @@ export function startAntiCheatingShield(config: AntiCheatingConfig): AntiCheatin
 
   document.documentElement.addEventListener('mouseleave', handleMouseLeave);
   document.documentElement.addEventListener('mouseenter', handleMouseEnter);
+  window.addEventListener('mouseout', handleWindowMouseOut);
 
   // ── 3. EXTENSION & DOM INJECTION SCANNER (Gemini / Copilot / Sider / Harpa) ───
   const scanForAiExtensions = () => {
@@ -263,6 +287,7 @@ export function startAntiCheatingShield(config: AntiCheatingConfig): AntiCheatin
 
       document.documentElement.removeEventListener('mouseleave', handleMouseLeave);
       document.documentElement.removeEventListener('mouseenter', handleMouseEnter);
+      window.removeEventListener('mouseout', handleWindowMouseOut);
       window.removeEventListener('touchstart', preventMobileLongPress);
       window.removeEventListener('contextmenu', preventContextMenu);
       window.removeEventListener('dragstart', preventDragDrop);
