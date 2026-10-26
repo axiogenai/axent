@@ -2902,13 +2902,13 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             </div>
 
             <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
-              Enter today's single-use emergency authorization voucher to unlock workstation {buildWorkstationId(student.labId, student.stationNumber)}. This key can only be used once today.
+              Enter the 5-character emergency unlock key issued specifically for candidate {student.name} ({student.rollNumber || 'N/A'}) on workstation {buildWorkstationId(student.labId, student.stationNumber)}. Keys cannot be shared.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <input
                 type="password"
-                placeholder="Enter 1-Time Emergency Key (e.g. CSE-XXXX)"
+                placeholder="Enter 5-Character Student Key (e.g. X7K9P)"
                 value={emergencyUnlockCode}
                 onChange={(e) => {
                   setEmergencyUnlockCode(e.target.value);

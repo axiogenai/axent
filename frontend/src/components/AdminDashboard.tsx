@@ -56,7 +56,7 @@ import { InstituteLabManagerModal } from './InstituteLabManagerModal';
 import { SupabaseMigrationModal } from './SupabaseMigrationModal';
 import { ConfirmationModal } from './ConfirmationModal';
 import { EmergencyKeyModal } from './admin/EmergencyKeyModal';
-import { DailyEmergencyKey, getTodayEmergencyKey, subscribeToEmergencyKeyChanges } from '../services/emergencyKeyService';
+import { DailyEmergencyKey, getTodayEmergencyKey, subscribeToEmergencyKeyChanges, issueStudentEmergencyKey, getStudentBoundKey } from '../services/emergencyKeyService';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -2449,6 +2449,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {isLocked ? <Unlock size={11} /> : <Lock size={11} />}
                       <span>{isLocked ? 'Unlock' : 'Lock'}</span>
                     </button>
+
+                    {/* Issue 5-Char Student-Bound Key (Strictly valid for this kid only) */}
+                    {isLocked && (() => {
+                      const stKey = getStudentBoundKey(station.student?.rollNumber, station.id);
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playSound('click');
+                            const newK = issueStudentEmergencyKey({
+                              studentRoll: station.student?.rollNumber,
+                              studentName: station.student?.name,
+                              stationId: station.id,
+                              labId: station.labId,
+                              issuedBy: 'Control Room'
+                            });
+                            try {
+                              navigator.clipboard.writeText(newK.code);
+                            } catch {}
+                            playSound('success');
+                          }}
+                          style={{
+                            width: '100%',
+                            background: stKey?.status === 'ACTIVE' ? 'rgba(59, 130, 246, 0.18)' : 'rgba(255, 255, 255, 0.05)',
+                            border: stKey?.status === 'ACTIVE' ? '1px solid rgba(59, 130, 246, 0.45)' : '1px solid rgba(255, 255, 255, 0.14)',
+                            color: stKey?.status === 'ACTIVE' ? '#60a5fa' : '#e4e4e7',
+                            borderRadius: '6px',
+                            padding: '5px 4px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '3px',
+                            boxSizing: 'border-box'
+                          }}
+                          title="Generate 5-character key valid ONLY for this candidate"
+                        >
+                          <KeyRound size={11} />
+                          <span>{stKey?.status === 'ACTIVE' ? `Key: ${stKey.code}` : 'Issue 5-Char Key'}</span>
+                        </button>
+                      );
+                    })()}
 
                     {/* Broadcast Warning */}
                     <button

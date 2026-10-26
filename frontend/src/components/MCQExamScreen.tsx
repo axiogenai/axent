@@ -4214,7 +4214,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                 </span>
               </div>
               <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 10px', lineHeight: 1.4 }}>
-                Enter today's single-use emergency unlock voucher to resume the exam. Key expires permanently once consumed today.
+                Enter the 5-character emergency unlock key issued specifically for your terminal by the proctor. Valid strictly for your workstation only.
               </p>
 
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -4222,7 +4222,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                   type="password"
                   className="no-touch-expand mcq-lockdown-pin-input"
                   data-proctor-unlock-exempt="true"
-                  placeholder="Enter 1-Time Emergency Key"
+                  placeholder="Enter 5-Character Student Key (e.g. X7K9P)"
                   value={proctorUnlockCodeInput}
                   onChange={(e) => {
                     setProctorUnlockCodeInput(e.target.value);

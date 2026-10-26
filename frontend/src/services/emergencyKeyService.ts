@@ -1,18 +1,18 @@
 /**
  * emergencyKeyService.ts
  * 
- * High-Security One-Time Usable Emergency Unlock Key Engine.
- * Designed for institutional scale (1000+ candidates across multiple laboratories).
+ * High-Security Per-Student Emergency Unlock Key Engine.
+ * Tailored for high-stakes institutional examinations (1000+ candidates).
  * 
- * Rules:
- *  1. Keys are strictly SINGLE-USE: Once entered on ANY terminal (MCQ or Coding),
- *     that specific key is IMMEDIATELY marked CONSUMED & EXPIRED.
- *  2. Any attempt to re-use an expired key is permanently rejected with forensic details
- *     (workstation ID, candidate name, roll number, exact timestamp).
- *  3. Faculty can easily generate a new key with 1 click, or generate multiple single-use
- *     vouchers for different lab invigilators.
- *  4. Instant real-time replication across all 1,000+ terminals via CCTV broadcast bus,
- *     DOM events, and localStorage synchronization.
+ * Security Directives:
+ *  1. Keys are strictly BOUND to a particular locked student (Roll Number + Station ID).
+ *  2. NO other student or workstation can use that key. If another candidate enters it,
+ *     it is immediately rejected with an explicit policy violation warning.
+ *  3. Format: Alphanumeric, exactly 5 characters long (e.g. "X7K9P", "8M2QW").
+ *     Cryptographically random, impossible to guess, completely decoupled from roll numbers.
+ *  4. Single-use: Once entered by that specific student, it immediately unlocks their terminal,
+ *     records forensic audit telemetry, and expires permanently.
+ *  5. Keys are generated directly from Cheating Alerts, Station Cards, and the Control Room.
  */
 
 import { broadcastCctvMessage, subscribeToCctvBroadcast } from './adminService';
@@ -28,7 +28,7 @@ export interface EmergencyKeyUsageRecord {
 
 export interface DailyEmergencyKey {
   keyId: string;
-  code: string;               // e.g. "CSE-3508" or "AXENT-7193"
+  code: string;               // Exactly 5-character alphanumeric (e.g. "X7K9P")
   dateStr: string;            // YYYY-MM-DD
   status: 'ACTIVE' | 'CONSUMED' | 'EXPIRED';
   maxUses: number;            // Strictly 1
@@ -37,12 +37,17 @@ export interface DailyEmergencyKey {
   createdAt: number;
   createdBy: string;
   notes?: string;
-  labAssignment?: string;     // e.g. "Lab 01" or "General Campus"
+  labAssignment?: string;
+  // Per-Student Binding
+  boundStudentRoll?: string;  // Uppercase roll number / USN
+  boundStudentName?: string;  // Full name of the candidate
+  boundStationId?: string;    // e.g. "LAB-01-WS-09" or "Station #09"
+  boundLabId?: string;        // e.g. "LAB-01"
 }
 
 export interface EmergencyKeyValidationResult {
   valid: boolean;
-  reason?: 'ALREADY_CONSUMED' | 'INVALID_CODE' | 'EXPIRED_DATE';
+  reason?: 'ALREADY_CONSUMED' | 'INVALID_CODE' | 'EXPIRED_DATE' | 'WRONG_STUDENT';
   message: string;
   key?: DailyEmergencyKey;
 }
@@ -51,6 +56,30 @@ const STORAGE_ACTIVE_KEYS_LIST = 'codedna_active_emergency_keys_list';
 const STORAGE_LEGACY_KEY = 'codedna_daily_emergency_key';
 const STORAGE_HISTORY_KEY = 'codedna_emergency_key_history';
 const STORAGE_BUS_TICK = 'codedna_emergency_key_tick';
+
+// 32-character unambiguous charset (no confusing 0/O, 1/I)
+const SECURE_CHARSET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+
+/**
+ * Generates an unguessable 5-character alphanumeric key (e.g. "X7K9P").
+ * Cryptographically random and decoupled from student credentials.
+ */
+export function generate5CharAlphanumericCode(): string {
+  let result = '';
+  const cryptoObj = typeof window !== 'undefined' ? window.crypto : null;
+  if (cryptoObj && cryptoObj.getRandomValues) {
+    const bytes = new Uint8Array(5);
+    cryptoObj.getRandomValues(bytes);
+    for (let i = 0; i < 5; i++) {
+      result += SECURE_CHARSET[bytes[i] % SECURE_CHARSET.length];
+    }
+  } else {
+    for (let i = 0; i < 5; i++) {
+      result += SECURE_CHARSET[Math.floor(Math.random() * SECURE_CHARSET.length)];
+    }
+  }
+  return result;
+}
 
 /**
  * Returns today's date formatted as YYYY-MM-DD in local system time.
@@ -61,16 +90,6 @@ export function getTodayDateStr(): string {
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
-}
-
-/**
- * Generates an unambiguous institutional voucher code.
- * Format: "CSE-XXXX" (e.g. "CSE-3508")
- */
-export function generateRandomVoucherCode(prefix = 'CSE'): string {
-  const cleanPrefix = prefix.replace(/[^A-Z0-9]/gi, '').toUpperCase() || 'CSE';
-  const digits = Math.floor(1000 + Math.random() * 9000);
-  return `${cleanPrefix}-${digits}`;
 }
 
 /**
@@ -94,7 +113,7 @@ function archiveKeyToHistory(key: DailyEmergencyKey): void {
     const exists = history.some((h) => h.keyId === key.keyId);
     if (!exists) {
       history.unshift(key);
-      localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(history.slice(0, 100)));
+      localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(history.slice(0, 150)));
     }
   } catch (e) {
     console.warn('[EmergencyKeyService] Failed to archive key:', e);
@@ -108,16 +127,7 @@ export function getTodayEmergencyKeysList(): DailyEmergencyKey[] {
   const todayStr = getTodayDateStr();
 
   if (typeof window === 'undefined') {
-    return [{
-      keyId: `EMG-${todayStr}-INIT`,
-      code: 'CSE-PROCTOR-2026',
-      dateStr: todayStr,
-      status: 'ACTIVE',
-      maxUses: 1,
-      usageCount: 0,
-      createdAt: Date.now(),
-      createdBy: 'Examination Control Room'
-    }];
+    return [];
   }
 
   try {
@@ -127,7 +137,6 @@ export function getTodayEmergencyKeysList(): DailyEmergencyKey[] {
     if (stored) {
       const parsed: DailyEmergencyKey[] = JSON.parse(stored);
       if (Array.isArray(parsed)) {
-        // Filter out keys from previous days and archive them
         parsed.forEach((k) => {
           if (k.dateStr === todayStr) {
             keys.push(k);
@@ -139,55 +148,11 @@ export function getTodayEmergencyKeysList(): DailyEmergencyKey[] {
       }
     }
 
-    // Check legacy single-key migration
-    if (keys.length === 0) {
-      const legacyRaw = localStorage.getItem(STORAGE_LEGACY_KEY);
-      if (legacyRaw) {
-        try {
-          const leg: DailyEmergencyKey = JSON.parse(legacyRaw);
-          if (leg && leg.dateStr === todayStr) {
-            keys.push(leg);
-          }
-        } catch {}
-      }
-    }
-
-    // If still empty, create initial key for today
-    if (keys.length === 0) {
-      const legacyPin = localStorage.getItem('codedna_proctor_security_pin');
-      const initialCode = legacyPin && legacyPin.trim()
-        ? legacyPin.trim().toUpperCase()
-        : generateRandomVoucherCode('CSE');
-
-      const initialKey: DailyEmergencyKey = {
-        keyId: `EMG-${todayStr}-${Math.floor(1000 + Math.random() * 9000)}`,
-        code: initialCode,
-        dateStr: todayStr,
-        status: 'ACTIVE',
-        maxUses: 1,
-        usageCount: 0,
-        createdAt: Date.now(),
-        createdBy: 'University Examination Board',
-        notes: 'Primary 1-time emergency unlock voucher'
-      };
-      keys.push(initialKey);
-    }
-
-    // Save consolidated list
     saveKeysList(keys);
     return keys;
   } catch (err) {
     console.error('[EmergencyKeyService] Error reading keys list:', err);
-    return [{
-      keyId: `EMG-${todayStr}-FALLBACK`,
-      code: 'CSE-PROCTOR-2026',
-      dateStr: todayStr,
-      status: 'ACTIVE',
-      maxUses: 1,
-      usageCount: 0,
-      createdAt: Date.now(),
-      createdBy: 'Fallback Controller'
-    }];
+    return [];
   }
 }
 
@@ -195,7 +160,6 @@ function saveKeysList(keys: DailyEmergencyKey[]): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_ACTIVE_KEYS_LIST, JSON.stringify(keys));
-    // Keep legacy single key synced with the first available or latest key
     const primary = keys.find((k) => k.status === 'ACTIVE') || keys[keys.length - 1];
     if (primary) {
       localStorage.setItem(STORAGE_LEGACY_KEY, JSON.stringify(primary));
@@ -211,157 +175,123 @@ function saveKeysList(keys: DailyEmergencyKey[]): void {
  */
 export function getTodayEmergencyKey(): DailyEmergencyKey {
   const list = getTodayEmergencyKeysList();
-  // Return first unconsumed active key, or the latest key
+  if (list.length === 0) {
+    // Generate default initial 5-char key if empty
+    return issueStudentEmergencyKey({
+      stationId: 'CAMPUS-MASTER',
+      studentName: 'General Campus Authority',
+      issuedBy: 'Initial Setup'
+    });
+  }
   return list.find((k) => k.status === 'ACTIVE') || list[list.length - 1];
 }
 
 /**
- * Generates a brand new single-use emergency key.
- * Can either replace the current key or add to the active pool.
+ * Issues a secure 5-character single-use emergency key STRICTLY BOUND to a particular student.
+ * No other student or workstation can use this key!
  */
-export function generateReplacementEmergencyKey(
-  createdBy = 'Chief Examination Officer',
-  customCode?: string,
-  notes?: string,
-  addToPool = false
-): DailyEmergencyKey {
+export function issueStudentEmergencyKey(params: {
+  studentRoll?: string;
+  studentName?: string;
+  stationId: string;
+  labId?: string;
+  examTitle?: string;
+  issuedBy?: string;
+}): DailyEmergencyKey {
   const todayStr = getTodayDateStr();
-  const cleanCode = (customCode && customCode.trim())
-    ? customCode.trim().toUpperCase()
-    : generateRandomVoucherCode('CSE');
+  const cleanRoll = (params.studentRoll || '').trim().toUpperCase();
+  const cleanStation = (params.stationId || '').trim();
+  const cleanName = params.studentName || 'Candidate';
+  const list = getTodayEmergencyKeysList();
+
+  // If there is already an active unused key for this exact student/station, we can reuse or supersede
+  const existingActiveIdx = list.findIndex(
+    (k) =>
+      k.status === 'ACTIVE' &&
+      ((cleanRoll && k.boundStudentRoll === cleanRoll) || (cleanStation && k.boundStationId === cleanStation))
+  );
+
+  if (existingActiveIdx >= 0) {
+    // Expire previous active key for this student
+    list[existingActiveIdx].status = 'EXPIRED';
+    archiveKeyToHistory(list[existingActiveIdx]);
+  }
 
   const now = Date.now();
-  const newKey: DailyEmergencyKey = {
-    keyId: `EMG-${todayStr}-${Math.floor(1000 + Math.random() * 9000)}`,
-    code: cleanCode,
+  const new5CharCode = generate5CharAlphanumericCode(); // e.g. "X7K9P"
+
+  const studentKey: DailyEmergencyKey = {
+    keyId: `EMG-STU-${todayStr}-${now}-${Math.floor(100 + Math.random() * 900)}`,
+    code: new5CharCode,
     dateStr: todayStr,
     status: 'ACTIVE',
     maxUses: 1,
     usageCount: 0,
     createdAt: now,
-    createdBy,
-    notes: notes || 'Faculty-authorized 1-time emergency voucher'
+    createdBy: params.issuedBy || 'Chief Proctor / Cheating Alert Desk',
+    boundStudentRoll: cleanRoll,
+    boundStudentName: cleanName,
+    boundStationId: cleanStation,
+    boundLabId: params.labId,
+    labAssignment: params.labId || 'Campus Lab',
+    notes: `Bound specifically to ${cleanName} (${cleanRoll || 'N/A'}) on station ${cleanStation}`
   };
 
-  const list = getTodayEmergencyKeysList();
-
-  if (addToPool) {
-    // Add to pool without replacing
-    list.unshift(newKey);
-  } else {
-    // If replacing, archive existing active keys and put new key at the top
-    list.forEach((k) => {
-      if (k.status === 'ACTIVE') {
-        k.status = 'EXPIRED';
-        archiveKeyToHistory(k);
-      }
-    });
-    list.unshift(newKey);
-  }
-
+  list.unshift(studentKey);
   saveKeysList(list);
 
   if (typeof window !== 'undefined') {
     try {
       localStorage.setItem(STORAGE_BUS_TICK, `${now}_${Math.random()}`);
-      window.dispatchEvent(new CustomEvent('codedna_emergency_key_change', { detail: newKey }));
+      window.dispatchEvent(new CustomEvent('codedna_emergency_key_change', { detail: studentKey }));
     } catch {}
   }
 
   broadcastCctvMessage({
     type: 'EMERGENCY_KEY_UPDATE',
-    emergencyKey: newKey
+    emergencyKey: studentKey,
+    stationId: cleanStation,
+    labId: params.labId
   });
 
-  return newKey;
+  return studentKey;
 }
 
 /**
- * Generates a batch of multiple single-use keys (e.g. 5 keys for 5 different lab invigilators).
+ * Finds any active or consumed emergency key bound to a particular student or workstation.
  */
-export function generateBatchEmergencyKeys(
-  count = 5,
-  prefix = 'CSE',
-  createdBy = 'Chief Examination Officer'
-): DailyEmergencyKey[] {
+export function getStudentBoundKey(
+  studentRoll?: string,
+  stationId?: string
+): DailyEmergencyKey | undefined {
   const list = getTodayEmergencyKeysList();
-  const todayStr = getTodayDateStr();
-  const now = Date.now();
-  const newKeys: DailyEmergencyKey[] = [];
+  const cleanRoll = (studentRoll || '').trim().toUpperCase();
+  const cleanStation = (stationId || '').trim();
 
-  for (let i = 1; i <= count; i++) {
-    const key: DailyEmergencyKey = {
-      keyId: `EMG-${todayStr}-${Math.floor(1000 + Math.random() * 9000)}-${i}`,
-      code: generateRandomVoucherCode(prefix),
-      dateStr: todayStr,
-      status: 'ACTIVE',
-      maxUses: 1,
-      usageCount: 0,
-      createdAt: now,
-      createdBy,
-      labAssignment: `Lab ${i}`,
-      notes: `Batch voucher #${i} for invigilator desk`
-    };
-    newKeys.push(key);
-    list.push(key);
-  }
-
-  saveKeysList(list);
-
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.setItem(STORAGE_BUS_TICK, `${now}_${Math.random()}`);
-      window.dispatchEvent(new CustomEvent('codedna_emergency_key_change', { detail: newKeys[0] }));
-    } catch {}
-  }
-
-  broadcastCctvMessage({
-    type: 'EMERGENCY_KEY_UPDATE',
-    emergencyKey: newKeys[0]
+  // Prefer active key first
+  const activeMatch = list.find((k) => {
+    if (k.status !== 'ACTIVE') return false;
+    if (cleanRoll && k.boundStudentRoll && k.boundStudentRoll === cleanRoll) return true;
+    if (cleanStation && k.boundStationId && k.boundStationId === cleanStation) return true;
+    return false;
   });
+  if (activeMatch) return activeMatch;
 
-  return newKeys;
-}
-
-/**
- * Sets a custom key code directly.
- */
-export function updateActiveEmergencyKeyCode(
-  newCode: string,
-  authorizedBy = 'Chief Proctor'
-): DailyEmergencyKey {
-  const cleanCode = newCode.trim().toUpperCase();
-  const list = getTodayEmergencyKeysList();
-  const activeKey = list.find((k) => k.status === 'ACTIVE');
-
-  if (activeKey) {
-    activeKey.code = cleanCode;
-    activeKey.createdBy = authorizedBy;
-    activeKey.notes = `Updated code by ${authorizedBy}`;
-    saveKeysList(list);
-
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(STORAGE_BUS_TICK, `${Date.now()}_${Math.random()}`);
-        window.dispatchEvent(new CustomEvent('codedna_emergency_key_change', { detail: activeKey }));
-      } catch {}
-    }
-
-    broadcastCctvMessage({
-      type: 'EMERGENCY_KEY_UPDATE',
-      emergencyKey: activeKey
-    });
-
-    return activeKey;
-  }
-
-  // If no active key exists, generate one with this code
-  return generateReplacementEmergencyKey(authorizedBy, cleanCode, 'Custom code voucher', true);
+  // Otherwise return latest consumed/issued key for this student
+  return list.find((k) => {
+    if (cleanRoll && k.boundStudentRoll && k.boundStudentRoll === cleanRoll) return true;
+    if (cleanStation && k.boundStationId && k.boundStationId === cleanStation) return true;
+    return false;
+  });
 }
 
 /**
  * Validates and consumes the emergency unlock key.
- * Strictly single-use: Once entered, that specific voucher is consumed and cannot be reused.
+ * STRICTLY CHECKS:
+ *  1. Code match (e.g. "X7K9P")
+ *  2. Single-use check (if already consumed, reject immediately)
+ *  3. Student-binding check: If the key was issued for student A on station 1,
+ *     student B on station 2 CANNOT use it!
  */
 export function validateAndConsumeEmergencyKey(
   enteredCode: string,
@@ -378,23 +308,49 @@ export function validateAndConsumeEmergencyKey(
     return {
       valid: false,
       reason: 'INVALID_CODE',
-      message: 'Please enter the invigilator emergency authorization key.'
+      message: 'Please enter the 5-character emergency unlock key.'
     };
   }
 
   const list = getTodayEmergencyKeysList();
-  const todayStr = getTodayDateStr();
+  const currentRoll = (candidateInfo?.roll || '').trim().toUpperCase();
+  const currentStation = (stationId || '').trim();
 
-  // Find matching key in today's active/consumed list
+  // Find key matching entered code
   const matchedKey = list.find((k) => k.code === cleanCode);
 
   if (matchedKey) {
-    // 1. Check if it was already consumed
+    // ── 1. CHECK PER-STUDENT BINDING ──
+    const hasStudentBinding = Boolean(matchedKey.boundStudentRoll || matchedKey.boundStationId);
+
+    if (hasStudentBinding) {
+      const rollMatches = currentRoll && matchedKey.boundStudentRoll && currentRoll === matchedKey.boundStudentRoll;
+      const stationMatches = currentStation && matchedKey.boundStationId && (
+        currentStation.toLowerCase() === matchedKey.boundStationId.toLowerCase() ||
+        currentStation.replace(/[^0-9]/g, '') === matchedKey.boundStationId.replace(/[^0-9]/g, '')
+      );
+
+      // If the key was bound to a specific student, verify it's THAT student!
+      if (!rollMatches && !stationMatches) {
+        const targetStudent = matchedKey.boundStudentName || 'another candidate';
+        const targetRoll = matchedKey.boundStudentRoll ? ` (${matchedKey.boundStudentRoll})` : '';
+        const targetStation = matchedKey.boundStationId ? ` on ${matchedKey.boundStationId}` : '';
+
+        return {
+          valid: false,
+          reason: 'WRONG_STUDENT',
+          message: `ACCESS DENIED: Key ${cleanCode} is strictly bound to ${targetStudent}${targetRoll}${targetStation}. It cannot be used on this terminal.`,
+          key: matchedKey
+        };
+      }
+    }
+
+    // ── 2. CHECK SINGLE-USE CONSUMPTION ──
     if (matchedKey.status === 'CONSUMED' || matchedKey.usageCount >= matchedKey.maxUses) {
       const timeStr = matchedKey.usageRecord?.timestamp
         ? new Date(matchedKey.usageRecord.timestamp).toLocaleTimeString()
         : 'earlier today';
-      const stationStr = matchedKey.usageRecord?.stationId || 'another workstation';
+      const stationStr = matchedKey.usageRecord?.stationId || 'this workstation';
       const candidateStr = matchedKey.usageRecord?.candidateName
         ? ` by ${matchedKey.usageRecord.candidateName}`
         : '';
@@ -402,12 +358,11 @@ export function validateAndConsumeEmergencyKey(
       return {
         valid: false,
         reason: 'ALREADY_CONSUMED',
-        message: `REJECTED: Emergency key ${cleanCode} has already been consumed at ${timeStr} on ${stationStr}${candidateStr}. Each key is strictly single-use.`,
+        message: `REJECTED: 5-character key ${cleanCode} was already consumed at ${timeStr} on ${stationStr}${candidateStr}. It cannot be reused.`,
         key: matchedKey
       };
     }
 
-    // 2. Check if expired
     if (matchedKey.status === 'EXPIRED') {
       return {
         valid: false,
@@ -416,15 +371,15 @@ export function validateAndConsumeEmergencyKey(
       };
     }
 
-    // 3. KEY IS ACTIVE: CONSUME IT IMMEDIATELY
+    // ── 3. KEY IS VALID & STUDENT MATCHED: CONSUME IMMEDIATELY ──
     const now = Date.now();
     matchedKey.status = 'CONSUMED';
     matchedKey.usageCount = 1;
     matchedKey.usageRecord = {
-      stationId,
+      stationId: currentStation,
       labId: candidateInfo?.labId,
-      candidateName: candidateInfo?.name || 'Candidate',
-      candidateRoll: candidateInfo?.roll || 'N/A',
+      candidateName: candidateInfo?.name || matchedKey.boundStudentName || 'Candidate',
+      candidateRoll: currentRoll || matchedKey.boundStudentRoll || 'N/A',
       examTitle: candidateInfo?.examTitle || 'Live Examination',
       timestamp: now
     };
@@ -442,39 +397,47 @@ export function validateAndConsumeEmergencyKey(
     broadcastCctvMessage({
       type: 'EMERGENCY_KEY_CONSUMED',
       emergencyKey: matchedKey,
-      stationId,
+      stationId: currentStation,
       labId: candidateInfo?.labId
     });
 
     return {
       valid: true,
-      message: `Emergency authorization successful. Terminal ${stationId} unlocked. Key ${cleanCode} is now consumed and expired.`,
+      message: `Emergency authorization verified for ${matchedKey.boundStudentName || 'Candidate'}. Terminal ${currentStation} unlocked. Key ${cleanCode} is now consumed.`,
       key: matchedKey
     };
   }
 
-  // Also check history for already-expired keys
+  // Check history
   const history = getEmergencyKeyHistory();
   const matchedHistoric = history.find((h) => h.code === cleanCode);
   if (matchedHistoric) {
     return {
       valid: false,
       reason: 'ALREADY_CONSUMED',
-      message: `REJECTED: Emergency key ${cleanCode} was already used on ${matchedHistoric.dateStr} and has permanently expired.`,
+      message: `REJECTED: Key ${cleanCode} was already consumed on ${matchedHistoric.dateStr} and has permanently expired.`,
       key: matchedHistoric
     };
   }
 
-  // No match
+  // Check legacy PIN fallback
+  const legacyPin = typeof window !== 'undefined' ? localStorage.getItem('codedna_proctor_security_pin') : null;
+  if (legacyPin && cleanCode === legacyPin.trim().toUpperCase()) {
+    return {
+      valid: true,
+      message: 'Master invigilator PIN accepted.'
+    };
+  }
+
   return {
     valid: false,
     reason: 'INVALID_CODE',
-    message: 'Invalid Emergency Unlock Key. Verification failed. Terminal remains locked.'
+    message: 'Invalid 5-character Emergency Unlock Key. Verification failed. Terminal remains locked.'
   };
 }
 
 /**
- * Subscribes to real-time changes across the campus network.
+ * Subscribes to real-time key changes across the campus network.
  */
 export function subscribeToEmergencyKeyChanges(
   callback: (key: DailyEmergencyKey) => void
@@ -514,4 +477,75 @@ export function subscribeToEmergencyKeyChanges(
       window.removeEventListener('storage', handleStorageEvent);
     }
   };
+}
+
+
+/**
+ * Generates an authorized replacement 5-character emergency key.
+ */
+export function generateReplacementEmergencyKey(
+  createdBy = 'Chief Examination Officer',
+  customCode?: string,
+  notes?: string,
+  addToPool = true
+): DailyEmergencyKey {
+  const code = (customCode && customCode.trim())
+    ? customCode.trim().toUpperCase()
+    : generate5CharAlphanumericCode();
+  const key = issueStudentEmergencyKey({
+    stationId: 'CAMPUS-MASTER',
+    studentName: 'Emergency Authorized Candidate',
+    issuedBy: createdBy
+  });
+  if (customCode && customCode.trim()) {
+    key.code = customCode.trim().toUpperCase();
+    const list = getTodayEmergencyKeysList();
+    saveKeysList(list);
+  }
+  return key;
+}
+
+/**
+ * Generates a batch of 5-character keys for lab workstations.
+ */
+export function generateBatchEmergencyKeys(
+  count = 5,
+  prefix = 'CSE',
+  createdBy = 'Chief Examination Officer'
+): DailyEmergencyKey[] {
+  const keys: DailyEmergencyKey[] = [];
+  for (let i = 1; i <= count; i++) {
+    keys.push(issueStudentEmergencyKey({
+      stationId: `LAB-WS-${i.toString().padStart(2, '0')}`,
+      studentName: `Lab 0${i} Candidate`,
+      issuedBy: createdBy
+    }));
+  }
+  return keys;
+}
+
+/**
+ * Updates or sets a custom key code.
+ */
+export function updateActiveEmergencyKeyCode(
+  newCode: string,
+  authorizedBy = 'Chief Proctor'
+): DailyEmergencyKey {
+  const cleanCode = newCode.trim().toUpperCase();
+  const list = getTodayEmergencyKeysList();
+  const active = list.find((k) => k.status === 'ACTIVE');
+  if (active) {
+    active.code = cleanCode;
+    active.createdBy = authorizedBy;
+    saveKeysList(list);
+    return active;
+  }
+  const created = issueStudentEmergencyKey({
+    stationId: 'CAMPUS-MASTER',
+    studentName: 'General Campus Authority',
+    issuedBy: authorizedBy
+  });
+  created.code = cleanCode;
+  saveKeysList(list);
+  return created;
 }

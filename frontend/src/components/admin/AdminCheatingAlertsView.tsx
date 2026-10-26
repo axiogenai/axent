@@ -12,8 +12,18 @@ import {
   Clock,
   Building,
   UserX,
-  PlusCircle
+  PlusCircle,
+  KeyRound,
+  Copy,
+  Check,
+  RefreshCw
 } from 'lucide-react';
+import {
+  issueStudentEmergencyKey,
+  getStudentBoundKey,
+  subscribeToEmergencyKeyChanges,
+  DailyEmergencyKey
+} from '../../services/emergencyKeyService';
 import { CandidateStation, CollegeLabInfo } from '../../types/dna';
 import { playSound } from '../../utils/sounds';
 
@@ -44,6 +54,42 @@ export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = (
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [severityFilter, setSeverityFilter] = useState<'all' | 'critical' | 'high'>('all');
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [, setKeyUpdateTick] = useState<number>(0);
+
+  React.useEffect(() => {
+    const unsub = subscribeToEmergencyKeyChanges(() => {
+      setKeyUpdateTick((t) => t + 1);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleIssueKey = (station: CandidateStation) => {
+    playSound('click');
+    const newKey = issueStudentEmergencyKey({
+      studentRoll: station.student?.rollNumber,
+      studentName: station.student?.name,
+      stationId: station.id,
+      labId: station.labId,
+      examTitle: station.student?.examType || 'Examination',
+      issuedBy: 'Cheating Alert Proctors'
+    });
+    try {
+      navigator.clipboard.writeText(newKey.code);
+      setCopiedKey(newKey.code);
+      setTimeout(() => setCopiedKey(null), 2500);
+    } catch {}
+    playSound('success');
+  };
+
+  const handleCopy = (code: string) => {
+    try {
+      navigator.clipboard.writeText(code);
+      setCopiedKey(code);
+      playSound('success');
+      setTimeout(() => setCopiedKey(null), 2000);
+    } catch {}
+  };
 
   // Filter stations that have cheating risk or elevated metrics
   const flaggedStations = stations.filter((s) => {
@@ -204,6 +250,7 @@ export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = (
               (station.metrics?.pasteRatio || 0) >= 60 ||
               (station.metrics?.tabSwitchViolations || 0) >= 3;
             const isLocked = Boolean(station.isLockedByProctor);
+            const studentKey = getStudentBoundKey(station.student?.rollNumber, station.id);
 
             return (
               <div
@@ -301,8 +348,105 @@ export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = (
                   </div>
                 </div>
 
+                {/* 5-Character Student-Bound Unlock Key Banner */}
+                {studentKey && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      background: studentKey.status === 'CONSUMED' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(59, 130, 246, 0.08)',
+                      border: studentKey.status === 'CONSUMED' ? '1px solid rgba(239, 68, 68, 0.25)' : '1px solid rgba(59, 130, 246, 0.25)',
+                      borderRadius: '6px',
+                      fontSize: '11.5px',
+                      flexWrap: 'wrap',
+                      gap: '8px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <KeyRound size={13} color={studentKey.status === 'CONSUMED' ? '#f87171' : '#3b82f6'} />
+                      <span style={{ color: 'var(--text-secondary)' }}>
+                        {studentKey.status === 'CONSUMED' ? 'Student Key Expired:' : 'Locked Student Unlock Key:'}
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 800,
+                          fontSize: '14px',
+                          color: studentKey.status === 'CONSUMED' ? 'var(--text-muted)' : 'var(--text-primary)',
+                          letterSpacing: '0.08em',
+                          textDecoration: studentKey.status === 'CONSUMED' ? 'line-through' : 'none'
+                        }}
+                      >
+                        {studentKey.code}
+                      </span>
+                      <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                        (Bound strictly to {station.student?.name || 'this candidate'} · No other kid can use it)
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {studentKey.status === 'ACTIVE' && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(studentKey.code)}
+                          style={{
+                            padding: '3px 8px',
+                            fontSize: '10.5px',
+                            background: copiedKey === studentKey.code ? 'rgba(16, 185, 129, 0.2)' : 'var(--bg-elevated)',
+                            color: copiedKey === studentKey.code ? '#10b981' : 'var(--text-primary)',
+                            border: '1px solid var(--border)',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {copiedKey === studentKey.code ? 'Copied' : 'Copy'}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleIssueKey(station)}
+                        style={{
+                          padding: '3px 8px',
+                          fontSize: '10.5px',
+                          background: 'var(--bg-elevated)',
+                          color: 'var(--text-primary)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '4px',
+                          cursor: 'pointer'
+                        }}
+                        title="Issue fresh 5-character key for this student"
+                      >
+                        Re-issue
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Action Buttons */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleIssueKey(station)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '6px 12px',
+                      background: studentKey?.status === 'ACTIVE' ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-surface)',
+                      border: studentKey?.status === 'ACTIVE' ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid var(--border)',
+                      borderRadius: '6px',
+                      color: studentKey?.status === 'ACTIVE' ? '#3b82f6' : 'var(--text-primary)',
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                    title="Generate an unguessable 5-character unlock key valid strictly for this student only"
+                  >
+                    <KeyRound size={12} />
+                    <span>{studentKey?.status === 'ACTIVE' ? `Student Key: ${studentKey.code}` : 'Issue 5-Char Key'}</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => onSendWarning(station)}
