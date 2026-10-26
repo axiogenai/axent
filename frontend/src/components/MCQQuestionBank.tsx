@@ -862,13 +862,14 @@ export const MCQQuestionBank: React.FC = () => {
         <div style={{ flex: 1, minWidth: '220px', position: 'relative' }}>
           <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
           <input
+            className="admin-refined-input admin-search-input"
             value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Search questions, subjects, tags..."
             style={{
               width: '100%', boxSizing: 'border-box',
               paddingLeft: '32px', paddingRight: '12px', paddingTop: '8px', paddingBottom: '8px',
               background: 'var(--bg-surface)', border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '13px', outline: 'none',
+              borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none',
             }}
           />
         </div>

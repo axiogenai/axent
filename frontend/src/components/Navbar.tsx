@@ -74,7 +74,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [examMode, setExamMode] = useState<'MCQ' | 'CODING'>(() => getActiveExamMode());
   const [authorityRole, setAuthorityRole] = useState<AuthorityRole | null>(() => getCurrentAuthorityRole());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [adminSidebarOpen, setAdminSidebarOpen] = useState(false);
   const isAdmin = authorityRole === 'admin' || isAuthorityAdmin();
+
+  // Listen to Admin Sidebar mobile state
+  useEffect(() => {
+    const handleAdminSidebar = (e: any) => {
+      setAdminSidebarOpen(Boolean(e.detail?.isOpen));
+    };
+    window.addEventListener('admin-sidebar-state', handleAdminSidebar);
+    return () => window.removeEventListener('admin-sidebar-state', handleAdminSidebar);
+  }, []);
 
   // Listen to profile/mode and authority role changes in storage/auth
   useEffect(() => {
@@ -142,6 +152,11 @@ export const Navbar: React.FC<NavbarProps> = ({
       <header
         className="no-print"
         style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          width: '100%',
           height: '52px',
           minHeight: '52px',
           background: 'var(--bg-elevated)',
@@ -151,8 +166,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           justifyContent: 'space-between',
           padding: '0 16px',
           flexShrink: 0,
-          zIndex: 50,
-          userSelect: 'none'
+          zIndex: 1000,
+          userSelect: 'none',
+          boxSizing: 'border-box'
         }}
       >
         {/* ── Brand Title ── */}
@@ -360,31 +376,42 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
 
           {/* Mobile Hamburger Menu Toggle (Screens < 768px) */}
-          <button
-            className="md:hidden btn btn-ghost btn-sm"
-            onClick={() => setMobileMenuOpen((prev) => !prev)}
-            aria-label="Toggle Navigation Drawer"
-            style={{
-              width: '32px',
-              height: '32px',
-              padding: 0,
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--border)',
-              background: mobileMenuOpen ? 'var(--accent)' : 'var(--bg-surface)',
-              color: mobileMenuOpen ? 'var(--accent-contrast)' : 'var(--text-primary)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0
-            }}
-          >
-            {mobileMenuOpen ? <X size={15} /> : <Menu size={15} />}
-          </button>
+          {(() => {
+            const isMenuOpen = isAdminRoute ? adminSidebarOpen : mobileMenuOpen;
+            return (
+              <button
+                className="md:hidden btn btn-ghost btn-sm"
+                onClick={() => {
+                  if (isAdminRoute) {
+                    window.dispatchEvent(new CustomEvent('toggle-admin-sidebar'));
+                  } else {
+                    setMobileMenuOpen((prev) => !prev);
+                  }
+                }}
+                aria-label="Toggle Navigation Drawer"
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  padding: 0,
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: isMenuOpen ? 'var(--accent)' : 'var(--bg-surface)',
+                  color: isMenuOpen ? 'var(--accent-contrast)' : 'var(--text-primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                {isMenuOpen ? <X size={15} /> : <Menu size={15} />}
+              </button>
+            );
+          })()}
         </div>
       </header>
 
-      {/* ── Mobile Navigation Drawer Overlay (< 768px) ── */}
-      {mobileMenuOpen && (
+      {/* ── Mobile Navigation Drawer Overlay (< 768px, non-admin only) ── */}
+      {mobileMenuOpen && !isAdminRoute && (
         <div
           className="md:hidden fixed inset-x-0 top-[52px] bottom-0 z-40 bg-[var(--bg-main)]/95 backdrop-blur-md flex flex-col p-5 overflow-y-auto"
           style={{

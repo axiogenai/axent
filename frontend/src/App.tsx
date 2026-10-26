@@ -370,7 +370,14 @@ export const App: React.FC = () => {
         />
       )}
 
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <main
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          paddingTop: location.pathname !== '/' && location.pathname !== '/launch' && !location.pathname.startsWith('/mcq') ? '52px' : 0
+        }}
+      >
         <Routes>
           <Route path="/" element={<LandingPage theme={theme} />} />
           <Route
@@ -465,7 +472,23 @@ export const App: React.FC = () => {
             path="/admin/mcq-tickets"
             element={
               <ProtectedRoute requiredRole="admin">
-                <AdminMCQTicketIssuer />
+                <AdminDashboard
+                  theme={theme}
+                  initialTab="examinations"
+                  onSelectReportForStudent={(rep, sub) => {
+                    setAnalysisResults(rep);
+                    try {
+                      localStorage.setItem('codedna_last_report', JSON.stringify(rep));
+                    } catch {}
+                    if (sub) {
+                      setCodeData(sub);
+                      try {
+                        localStorage.setItem('codedna_last_submission', JSON.stringify(sub));
+                      } catch {}
+                    }
+                    navigate('/report');
+                  }}
+                />
               </ProtectedRoute>
             }
           />

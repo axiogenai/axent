@@ -134,6 +134,7 @@ export const PaperSetterPortal: React.FC = () => {
 
   return (
     <div
+      className="paper-setter-portal-layout"
       style={{
         minHeight: 'calc(100vh - 52px)',
         background: 'var(--bg-main)',
@@ -213,38 +214,44 @@ export const PaperSetterPortal: React.FC = () => {
           maxWidth: '100%'
         }}
       >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-                padding: '3px 8px',
-                borderRadius: '4px',
-                background: 'var(--accent-subtle)',
-                border: '1px solid var(--border-strong)',
-                color: 'var(--accent)',
-                fontSize: '11px',
-                fontWeight: 700,
-                letterSpacing: '0.04em',
-                textTransform: 'uppercase'
-              }}
-            >
-              <GraduationCap size={11} />
-              <span>FACULTY &amp; PAPER SETTER COMMAND</span>
-            </span>
-            <span style={{ fontSize: '11px', color: 'var(--border-strong)' }}>/</span>
-            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              Academic Board &amp; Question Synthesis Matrix
+        <div style={{ maxWidth: '100%', minWidth: 0, width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', width: '100%', marginBottom: '4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                  background: 'var(--accent-subtle)',
+                  border: '1px solid var(--border-strong)',
+                  color: 'var(--accent)',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                  flexShrink: 0
+                }}
+              >
+                <GraduationCap size={11} />
+                <span>PAPER SETTER</span>
+              </span>
+              <span className="hidden sm:inline" style={{ fontSize: '11px', color: 'var(--border-strong)' }}>/</span>
+              <span className="hidden sm:inline" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                Academic Board Matrix
+              </span>
+            </div>
+            <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+              Updated: {lastRefreshed || 'Just now'}
             </span>
           </div>
 
-          <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '4px 0 2px', color: 'var(--text-primary)' }}>
-            Faculty Examination &amp; Question Authoring Matrix
+          <h2 style={{ fontSize: 'clamp(16px, 2.5vw, 19px)', fontWeight: 800, margin: '2px 0 3px', color: 'var(--text-primary)', lineHeight: 1.25 }}>
+            Faculty Question Matrix
           </h2>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            Author questions, configure exam papers, and schedule examination sittings • Bloom&apos;s Cognitive Taxonomy • Last updated: {lastRefreshed || 'Just now'}
+          <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+            Author questions, configure papers, and schedule examination sittings
           </div>
         </div>
 
@@ -369,41 +376,46 @@ export const PaperSetterPortal: React.FC = () => {
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: '12px'
+          gap: '12px',
+          width: '100%',
+          maxWidth: '100%'
         }}
       >
-        <ContinuousTabs
-          layoutId="paper-setter-portal-tabs"
-          size="sm"
-          activeId={activeTab}
-          onChange={(id: string) => {
-            playSound('click');
-            setActiveTab(id as PaperSetterTab);
-          }}
-          tabs={[
-            {
-              id: 'exams',
-              label: 'Manage & Schedule Exams',
-              icon: <FileEdit size={12} />,
-              badge: exams.length,
-              badgeTone: 'accent'
-            },
-            {
-              id: 'bank',
-              label: 'Question Bank & Blueprints',
-              icon: <BookOpen size={12} />,
-              badge: questions.length,
-              badgeTone: 'neutral'
-            },
-            {
-              id: 'results',
-              label: 'Results, Ledgers & Analytics',
-              icon: <BarChart2 size={12} />,
-              badge: attempts.length,
-              badgeTone: 'success'
-            }
-          ]}
-        />
+        <div className="admin-tabs-scroll-wrapper" style={{ maxWidth: '100%', width: '100%' }}>
+          <ContinuousTabs
+            className="continuous-tabs-mobile-stack"
+            layoutId="paper-setter-portal-tabs"
+            size="sm"
+            activeId={activeTab}
+            onChange={(id: string) => {
+              playSound('click');
+              setActiveTab(id as PaperSetterTab);
+            }}
+            tabs={[
+              {
+                id: 'exams',
+                label: 'Manage & Schedule Exams',
+                icon: <FileEdit size={12} />,
+                badge: exams.length,
+                badgeTone: 'accent'
+              },
+              {
+                id: 'bank',
+                label: 'Question Bank & Blueprints',
+                icon: <BookOpen size={12} />,
+                badge: questions.length,
+                badgeTone: 'neutral'
+              },
+              {
+                id: 'results',
+                label: 'Results, Ledgers & Analytics',
+                icon: <BarChart2 size={12} />,
+                badge: attempts.length,
+                badgeTone: 'success'
+              }
+            ]}
+          />
+        </div>
       </div>
 
       {/* ── 5. MAIN TAB CONTENT AREA ── */}

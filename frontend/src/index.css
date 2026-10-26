@@ -1941,24 +1941,103 @@ pre, code {
   }
 }
 
-/* ── Input font-size ≥ 16px on iOS (prevents zoom-on-focus) ──────────────── */
+/* ── Input font-size on iOS (prevents zoom-on-focus for candidate test inputs) ── */
 @media (max-width: 640px) {
-  input[type="text"]:not(.mcq-search-input):not(.exam-direct-input):not(.authority-auth-input),
+  input[type="text"]:not(.mcq-search-input):not(.exam-direct-input):not(.authority-auth-input):not(.admin-search-input):not(.admin-refined-input),
   input[type="email"]:not(.authority-auth-input),
   input[type="password"]:not(.authority-auth-input),
-  input[type="number"],
-  input[type="search"],
+  input[type="number"]:not(.admin-refined-input),
+  input[type="search"]:not(.admin-search-input),
   input[type="tel"],
   input[type="url"],
   input[type="datetime-local"],
   input[type="date"],
-  textarea:not(.mcq-token-textarea),
-  select {
+  textarea:not(.mcq-token-textarea):not(.admin-refined-input),
+  select:not(.admin-refined-input) {
     font-size: 16px !important;
   }
 
   input.exam-direct-input {
     font-size: 12px !important;
+  }
+}
+
+/* ── Refined Medium Input Typography for Admin & Paper Setter Portals ── */
+.admin-dashboard-layout input,
+.admin-dashboard-layout select,
+.admin-dashboard-layout textarea,
+.paper-setter-portal-layout input,
+.paper-setter-portal-layout select,
+.paper-setter-portal-layout textarea,
+.admin-search-input,
+input.admin-search-input,
+.admin-refined-input,
+input.admin-refined-input,
+.admin-search-box input,
+input[placeholder="Filter options..."],
+input[placeholder*="Filter"],
+input[placeholder*="Search"] {
+  font-size: 12px !important;
+  line-height: normal !important;
+  font-family: var(--font-sans) !important;
+}
+
+.admin-dashboard-layout input::placeholder,
+.paper-setter-portal-layout input::placeholder,
+.admin-search-input::placeholder,
+input.admin-search-input::placeholder,
+.admin-refined-input::placeholder,
+input.admin-refined-input::placeholder,
+.admin-search-box input::placeholder,
+input[placeholder="Filter options..."]::placeholder,
+input[placeholder*="Filter"]::placeholder,
+input[placeholder*="Search"]::placeholder {
+  font-size: 11.5px !important;
+  line-height: normal !important;
+  color: var(--text-muted) !important;
+  opacity: 0.8 !important;
+}
+
+@media (max-width: 767px) {
+  .admin-dashboard-layout input,
+  .admin-dashboard-layout select,
+  .paper-setter-portal-layout input,
+  .paper-setter-portal-layout select,
+  .admin-search-input,
+  input.admin-search-input,
+  .admin-refined-input,
+  input.admin-refined-input,
+  .admin-search-box input,
+  input[placeholder="Filter options..."],
+  input[placeholder*="Filter"],
+  input[placeholder*="Search"] {
+    font-size: 12px !important;
+    line-height: normal !important;
+  }
+
+  .admin-dashboard-layout input::placeholder,
+  .paper-setter-portal-layout input::placeholder,
+  .admin-search-input::placeholder,
+  input.admin-search-input::placeholder,
+  .admin-refined-input::placeholder,
+  input.admin-refined-input::placeholder,
+  .admin-search-box input::placeholder,
+  input[placeholder="Filter options..."]::placeholder,
+  input[placeholder*="Filter"]::placeholder,
+  input[placeholder*="Search"]::placeholder {
+    font-size: 11.5px !important;
+    line-height: normal !important;
+  }
+
+  .admin-search-wrap {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .admin-search-box {
+    width: 100% !important;
+    height: 36px !important;
   }
 }
 
@@ -1975,30 +2054,104 @@ pre, code {
   opacity: 0.72 !important;
 }
 
-/* ── Admin Dashboard Left Sidebar & Responsive Layout ── */
-.admin-left-sidebar {
-  display: flex !important;
+/* ── Locked Top Navigation Bar (Fixed to Viewport) ── */
+header.no-print {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  height: 52px !important;
+  min-height: 52px !important;
+  max-height: 52px !important;
+  z-index: 1000 !important;
+  background: var(--bg-elevated) !important;
+  box-sizing: border-box !important;
+}
+
+/* ── Admin Dashboard Layout & Left Sidebar ── */
+.admin-dashboard-layout {
+  min-height: calc(100vh - 52px) !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  width: 100% !important;
+}
+
+.admin-dashboard-content {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  min-height: 100% !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+
+@media (min-width: 768px) {
+  .admin-left-sidebar {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    position: fixed !important;
+    top: 52px !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    width: 230px !important;
+    min-width: 230px !important;
+    max-width: 230px !important;
+    height: calc(100vh - 52px) !important;
+    max-height: calc(100vh - 52px) !important;
+    min-height: calc(100vh - 52px) !important;
+    flex-shrink: 0 !important;
+    overflow-y: auto !important;
+    z-index: 40 !important;
+    box-sizing: border-box !important;
+  }
+
+  .admin-dashboard-content {
+    margin-left: 230px !important;
+    width: calc(100% - 230px) !important;
+    max-width: calc(100% - 230px) !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
 }
 
 .admin-mobile-nav-toggle {
   display: none !important;
 }
 
-@media (max-width: 1023px) {
+@media (max-width: 767px) {
   .admin-left-sidebar {
     display: none !important;
     position: fixed !important;
     top: 52px !important;
     left: 0 !important;
     bottom: 0 !important;
+    height: calc(100vh - 52px) !important;
+    max-height: calc(100vh - 52px) !important;
     z-index: 1000 !important;
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4) !important;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5) !important;
   }
   .admin-left-sidebar.admin-sidebar-mobile-open {
     display: flex !important;
+    animation: drawerSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  }
+  .admin-dashboard-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
   .admin-mobile-nav-toggle {
-    display: flex !important;
+    display: none !important;
+  }
+}
+
+@keyframes drawerSlideIn {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
   }
 }
 
@@ -2117,8 +2270,328 @@ textarea.mcq-token-textarea::placeholder {
   .card {
     max-width: 100% !important;
     box-sizing: border-box !important;
-    word-break: break-word;
     overflow-wrap: break-word;
+    word-break: normal;
+  }
+
+  /* Admin Header Card & Action Bar on Mobile */
+  .admin-header-card {
+    padding: 14px 12px !important;
+  }
+
+  .admin-header-title-row {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+
+  .admin-header-actions,
+  .admin-action-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .admin-header-actions button,
+  .admin-header-actions a,
+  .admin-action-grid button,
+  .admin-action-grid a {
+    width: 100% !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    max-height: 38px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    white-space: nowrap !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    padding: 0 8px !important;
+    border-radius: var(--radius-sm) !important;
+    box-sizing: border-box !important;
+    text-align: center !important;
+  }
+
+  .admin-header-actions .admin-btn-full,
+  .admin-action-grid .admin-btn-full {
+    grid-column: span 2 !important;
+  }
+
+  /* Prevent tabs from going outside the screen on mobile */
+  .admin-tabs-scroll-wrapper {
+    max-width: 100% !important;
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+  }
+
+  .admin-tabs-scroll-wrapper::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  /* Full-width responsive tab layout on mobile: zero clipped text */
+  .continuous-tabs-mobile-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    width: 100% !important;
+    gap: 4px !important;
+    padding: 4px !important;
+    box-sizing: border-box !important;
+  }
+
+  .continuous-tabs-mobile-grid button {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 36px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 5px !important;
+    padding: 0 6px !important;
+    font-size: 11px !important;
+    white-space: nowrap !important;
+    box-sizing: border-box !important;
+  }
+
+  .continuous-tabs-mobile-stack {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    gap: 6px !important;
+    padding: 4px !important;
+    box-sizing: border-box !important;
+  }
+
+  .continuous-tabs-mobile-stack button {
+    width: 100% !important;
+    height: 38px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 8px !important;
+    padding: 0 12px !important;
+    font-size: 12px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* View mode row on mobile */
+  .admin-view-mode-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+}
+
+/* ── Luxury Examination Concluded Card (Universal) ── */
+.admin-concluded-card {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  padding: 18px 20px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.03) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 14px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  position: relative !important;
+  flex-shrink: 0 !important;
+  min-height: fit-content !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+
+[data-theme='dark'] .admin-concluded-card {
+  background: #121215 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06), 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+}
+
+.admin-concluded-header {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 14px !important;
+  width: 100% !important;
+}
+
+.admin-concluded-icon-wrap {
+  width: 40px !important;
+  height: 40px !important;
+  min-width: 40px !important;
+  min-height: 40px !important;
+  border-radius: 50% !important;
+  background: rgba(34, 197, 94, 0.12) !important;
+  border: 1.5px solid rgba(34, 197, 94, 0.35) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  color: var(--success, #22c55e) !important;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.1) !important;
+}
+
+.admin-concluded-title {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  line-height: 1.35 !important;
+  color: var(--text-primary) !important;
+  letter-spacing: -0.01em !important;
+}
+
+.admin-concluded-desc {
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+  color: var(--text-secondary) !important;
+  margin-top: 4px !important;
+}
+
+.admin-concluded-actions {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 10px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.admin-concluded-actions button,
+.admin-concluded-btn {
+  height: 38px !important;
+  min-height: 38px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  padding: 0 16px !important;
+  box-sizing: border-box !important;
+  border-radius: var(--radius-sm) !important;
+  cursor: pointer !important;
+}
+
+@media (min-width: 769px) {
+  .admin-concluded-actions {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 10px !important;
+    width: auto !important;
+  }
+
+  .admin-concluded-actions button,
+  .admin-concluded-btn {
+    width: auto !important;
+  }
+}
+
+/* ── Mobile Strict Override for Examination Concluded Card ── */
+@media (max-width: 768px) {
+  .admin-concluded-card {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    padding: 18px 16px !important;
+    gap: 14px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    flex-shrink: 0 !important;
+    min-height: fit-content !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .admin-concluded-header {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    gap: 12px !important;
+    width: 100% !important;
+  }
+
+  /* Centered checkmark icon in the middle of the card */
+  .admin-concluded-icon-wrap {
+    margin: 0 auto !important;
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .admin-concluded-text-wrap {
+    width: 100% !important;
+    text-align: center !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .admin-concluded-title {
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    line-height: 1.4 !important;
+    text-align: center !important;
+    width: 100% !important;
+  }
+
+  .admin-concluded-desc {
+    font-size: 12px !important;
+    line-height: 1.5 !important;
+    margin-top: 6px !important;
+    text-align: center !important;
+    width: 100% !important;
+  }
+
+  /* Full-width stacked buttons centered inside card boundary */
+  .admin-concluded-actions {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    margin-top: 2px !important;
+  }
+
+  .admin-concluded-actions button,
+  .admin-concluded-btn {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    max-height: 40px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+    padding: 0 16px !important;
+    box-sizing: border-box !important;
+    border-radius: var(--radius-sm) !important;
+  }
+
+  .admin-concluded-actions button span,
+  .admin-concluded-btn span {
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
   }
 }
 

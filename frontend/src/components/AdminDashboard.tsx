@@ -107,6 +107,7 @@ import {
   MetricTag,
   SimpleSelect
 } from './watermelon-ui';
+import { AdminMCQTicketIssuer } from './AdminMCQTicketIssuer';
 
 export const getEffectiveMaxMarks = (station: CandidateStation): number => {
   if (station.mcqProgress?.maxScore && station.mcqProgress.maxScore > 0) return station.mcqProgress.maxScore;
@@ -156,18 +157,20 @@ export const isStationEffectiveLocked = (station: CandidateStation): boolean => 
 interface AdminDashboardProps {
   theme?: ThemeMode;
   onSelectReportForStudent?: (report: AnalysisReport, codeSubmission?: CodeSubmission) => void;
+  initialTab?: string;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   theme = 'dark',
-  onSelectReportForStudent
+  onSelectReportForStudent,
+  initialTab
 }) => {
   const navigate = useNavigate();
 
   // Selected Lab: 'all' or specific lab ID
   const [allLabs, setAllLabs] = useState<CollegeLabInfo[]>(() => getAllCollegeLabs());
   const [selectedLabId, setSelectedLabId] = useState<string>('all');
-  const [stations, setStations] = useState<CandidateStation[]>([]);
+  const [stations, setStations] = useState<CandidateStation[]>(() => getLiveStations());
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [modalTab, setModalTab] = useState<'screen' | 'code' | 'terminal' | 'mcq' | 'submission'>('screen');
   const selectedStation = stations.find((s) => s.id === selectedStationId) || null;
@@ -208,7 +211,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [warningMessageInput, setWarningMessageInput] = useState<string>('Maintain your visual focus on the examination screen at all times.');
   const [stationViewMode, setStationViewMode] = useState<Record<string, 'camera' | 'activity'>>({});
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [activeSidebarItem, setActiveSidebarItem] = useState('control_room');
+  const [activeSidebarItem, setActiveSidebarItem] = useState(initialTab || 'control_room');
+
+  useEffect(() => {
+    const handleToggle = () => setMobileSidebarOpen((prev) => !prev);
+    window.addEventListener('toggle-admin-sidebar', handleToggle);
+    return () => window.removeEventListener('toggle-admin-sidebar', handleToggle);
+  }, []);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('admin-sidebar-state', { detail: { isOpen: mobileSidebarOpen } }));
+  }, [mobileSidebarOpen]);
 
   const loadData = () => {
     purgeDemoStations();
@@ -652,14 +665,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } else if (itemId === 'live_proctoring') {
       setViewMode('cctv');
     } else if (itemId === 'candidates') {
+      setViewMode('cctv');
       setFilter('active');
     } else if (itemId === 'examinations') {
-      navigate('/admin/mcq-tickets');
+      // In-dashboard Examinations view — maintains full sidebar and proctor control
     } else if (itemId === 'test_stations') {
+      setViewMode('cctv');
       setFilter('all');
     } else if (itemId === 'reports') {
-      navigate('/report');
+      setViewMode('ledger');
+      setFilter('submitted');
     } else if (itemId === 'cheating_alerts') {
+      setViewMode('cctv');
       setFilter('cheating');
     } else if (itemId === 'audit_ledger') {
       setViewMode('ledger');
@@ -673,6 +690,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   return (
     <div
+      className="admin-dashboard-layout"
       style={{
         flex: 1,
         display: 'flex',
@@ -681,7 +699,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         minHeight: 'calc(100vh - 52px)',
         width: '100%',
         maxWidth: '100vw',
-        overflow: 'hidden',
         position: 'relative'
       }}
     >
@@ -691,6 +708,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         style={{
           width: '230px',
           minWidth: '230px',
+          height: 'calc(100vh - 52px)',
+          maxHeight: 'calc(100vh - 52px)',
           background: 'var(--bg-surface)',
           borderRight: '1px solid var(--border)',
           display: 'flex',
@@ -698,7 +717,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           justifyContent: 'space-between',
           padding: '16px 12px 14px',
           boxSizing: 'border-box',
-          overflowY: 'auto'
+          overflowY: 'auto',
+          flexShrink: 0
         }}
       >
         {/* Navigation Items List */}
@@ -754,6 +774,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* Sidebar Footer Branding & Status */}
         <div
           style={{
+            marginTop: 'auto',
             paddingTop: '16px',
             borderTop: '1px solid var(--border)',
             display: 'flex',
@@ -806,34 +827,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* ── RIGHT MAIN DASHBOARD CONTENT AREA ── */}
       <div
+        className="admin-dashboard-content"
         style={{
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
           padding: 'clamp(12px, 2.5vw, 24px)',
-          overflowY: 'auto',
-          overflowX: 'hidden',
           boxSizing: 'border-box',
           gap: 'clamp(14px, 2vw, 18px)',
-          minWidth: 0
+          minWidth: 0,
+          minHeight: '100%'
         }}
       >
-        {/* Mobile Navigation Toggle Bar */}
-        <div className="admin-mobile-nav-toggle" style={{ alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-elevated)', borderRadius: '8px', border: '1px solid var(--border)' }}>
-          <button
-            type="button"
-            onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
-          >
-            <Menu size={16} />
-            <span>Navigation Menu</span>
-          </button>
-          <span style={{ fontSize: '11px', color: 'var(--accent)', fontWeight: 600 }}>
-            {sidebarNavItems.find(i => i.id === activeSidebarItem)?.label || 'Control Room'}
-          </span>
-        </div>
-
-        {/* ── TOP CAMPUS MACRO KPI RIBBON (Exact axent.axiogen.in matching) ── */}
+        {activeSidebarItem === 'examinations' ? (
+          <div style={{ width: '100%' }}>
+            <AdminMCQTicketIssuer />
+          </div>
+        ) : (
+          <>
+            {/* ── TOP CAMPUS MACRO KPI RIBBON (Exact axent.axiogen.in matching) ── */}
         <div
           style={{
             display: 'grid',
@@ -1033,7 +1045,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* ── TOP INVIGILATOR COMMAND & LAB SELECTOR BAR ── */}
       <div
-        className="card-elevated"
+        className="card-elevated admin-header-card"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -1047,123 +1059,144 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           maxWidth: '100%'
         }}
       >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span className="badge badge-danger">
-              <Radio size={11} />
-              <span>LIVE CCTV SURVEILLANCE</span>
-            </span>
-            <span style={{ fontSize: '11px', color: 'var(--border-strong)' }}>/</span>
-            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              Chief Superintendent & Invigilation Control Room
+        <div style={{ maxWidth: '100%', minWidth: 0, width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', width: '100%', marginBottom: '4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span className="badge badge-danger" style={{ flexShrink: 0 }}>
+                <Radio size={11} />
+                <span>LIVE CCTV</span>
+              </span>
+              <span className="hidden sm:inline" style={{ fontSize: '11px', color: 'var(--border-strong)' }}>/</span>
+              <span className="hidden sm:inline" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                Invigilation Control Room
+              </span>
+            </div>
+            <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+              Updated: {lastRefreshed}
             </span>
           </div>
 
-          <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '4px 0 2px', color: 'var(--text-primary)' }}>
-            College Multi-Laboratory Examination Grid
+          <h2 style={{ fontSize: 'clamp(16px, 2.5vw, 19px)', fontWeight: 800, margin: '2px 0 3px', color: 'var(--text-primary)', lineHeight: 1.25 }}>
+            College Examination Grid
           </h2>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            Monitoring {selectedLabId === 'all' ? (allLabs.length > 0 ? `All Laboratories (${allLabs.length} Active Labs)` : `All Active Workstations (${stations.length} Online)`) : currentLabInfo?.labName} • Instant Live CCTV Telemetry Sync • Last updated: {lastRefreshed}
+          <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+            {selectedLabId === 'all' ? (allLabs.length > 0 ? `All Laboratories (${allLabs.length} Active)` : 'All Laboratories') : currentLabInfo?.labName} • {stations.length} Active Workstations
           </div>
         </div>
 
         {/* Action Controls & Emergency Lockdown */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={handleConnectTestStation}
-            style={{ gap: '5px', fontSize: '11px' }}
-            title="Connect an active functional coding test workstation to this laboratory"
-          >
-            <PlusCircle size={12} color="var(--accent)" />
-            <span>+ Test Station</span>
-          </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
+          {/* Section 1: Live Exam Operations */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
+            <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
+              Examination Controls
+            </div>
+            <div className="admin-action-grid" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => handleSidebarSelect('examinations')}
+                style={{ gap: '6px', fontSize: '11px', whiteSpace: 'nowrap' }}
+                title="Issue a server-verified, candidate-specific MCQ exam link"
+              >
+                <BookOpen size={13} />
+                <span>Issue Exam Tickets</span>
+              </button>
 
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={handleConnectTestMcqStation}
-            style={{ gap: '5px', fontSize: '11px' }}
-            title="Connect an active MCQ test candidate with real-time question answering telemetry"
-          >
-            <BookOpen size={12} color="var(--accent)" />
-            <span>+ MCQ Test Station</span>
-          </button>
+              <button
+                className={`btn ${isCurrentLabLocked ? 'btn-danger' : 'btn-secondary'} btn-sm`}
+                onClick={handleToggleEmergencyLock}
+                title={isCurrentLabLocked ? 'Lift lockdown on workstations' : 'Freeze workstations to prevent typing or pasting'}
+                style={{ fontWeight: 700, whiteSpace: 'nowrap', gap: '6px' }}
+              >
+                {isCurrentLabLocked ? <Unlock size={13} /> : <Lock size={13} />}
+                <span>{isCurrentLabLocked ? 'Unlock Labs' : 'Lockdown Labs'}</span>
+              </button>
 
-          <a
-            href={`/workspace?lab=${selectedLabId === 'all' ? 'LAB-01' : selectedLabId}&station=${(getLiveStations().filter((s) => s.labId === (selectedLabId === 'all' ? 'LAB-01' : selectedLabId)).length + 1).toString().padStart(2, '0')}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-secondary btn-sm"
-            style={{ textDecoration: 'none', gap: '5px', fontSize: '11px' }}
-            title="Open Student Examination Terminal in a new browser tab to test live streaming"
-          >
-            <ExternalLink size={12} />
-            <span>Launch Student Tab</span>
-          </a>
+              <button className="btn btn-secondary btn-sm" onClick={loadData} style={{ whiteSpace: 'nowrap', gap: '6px' }} title="Fetch latest station screen captures and metrics">
+                <RefreshCw size={13} />
+                <span>Refresh Data</span>
+              </button>
 
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => navigate('/admin/mcq-tickets')}
-            style={{ gap: '5px', fontSize: '11px' }}
-            title="Issue a server-verified, candidate-specific MCQ exam link"
-          >
-            <BookOpen size={12} />
-            <span>Issue MCQ Ticket</span>
-          </button>
+              <button className="btn btn-secondary btn-sm" onClick={handleExportCSV} style={{ whiteSpace: 'nowrap', gap: '6px' }} title="Download candidate marks and logs as CSV">
+                <Download size={13} />
+                <span>Export CSV</span>
+              </button>
+            </div>
+          </div>
 
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => {
-              setShowResetRoomConfirm(true);
-            }}
-            style={{ fontSize: '11px', gap: '5px', color: 'var(--danger)' }}
-            title="Wipe stored workstations and reset to live listening mode"
-          >
-            <Trash2 size={12} />
-            <span>Reset Room</span>
-          </button>
+          {/* Section 2: Lab Simulator & Testing Tools */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%', paddingTop: '10px', borderTop: '1px solid var(--border)' }}>
+            <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
+              Simulation &amp; Testing Tools
+            </div>
+            <div className="admin-action-grid" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={handleConnectTestStation}
+                style={{ gap: '5px', fontSize: '11px', whiteSpace: 'nowrap' }}
+                title="Connect a mock functional coding workstation to this lab"
+              >
+                <PlusCircle size={13} color="var(--accent)" />
+                <span>+ Mock Coding Student</span>
+              </button>
 
-          <button
-            className={`btn ${isCurrentLabLocked ? 'btn-danger' : 'btn-secondary'} btn-sm`}
-            onClick={handleToggleEmergencyLock}
-            title={isCurrentLabLocked ? 'Lift lockdown on workstations' : 'Freeze workstations to prevent typing or pasting'}
-            style={{ fontWeight: 700 }}
-          >
-            {isCurrentLabLocked ? <Unlock size={13} /> : <Lock size={13} />}
-            <span>{isCurrentLabLocked ? `Unlock ${selectedLabId === 'all' ? 'All Labs' : selectedLabId}` : `Lockdown ${selectedLabId === 'all' ? 'All Labs' : selectedLabId}`}</span>
-          </button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={handleConnectTestMcqStation}
+                style={{ gap: '5px', fontSize: '11px', whiteSpace: 'nowrap' }}
+                title="Connect a mock MCQ candidate with answering telemetry"
+              >
+                <BookOpen size={13} color="var(--accent)" />
+                <span>+ Mock MCQ Student</span>
+              </button>
 
-          <button className="btn btn-secondary btn-sm" onClick={loadData}>
-            <RefreshCw size={13} />
-            <span>Refresh</span>
-          </button>
+              <a
+                href={`/workspace?lab=${selectedLabId === 'all' ? 'LAB-01' : selectedLabId}&station=${(getLiveStations().filter((s) => s.labId === (selectedLabId === 'all' ? 'LAB-01' : selectedLabId)).length + 1).toString().padStart(2, '0')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-secondary btn-sm"
+                style={{ textDecoration: 'none', gap: '5px', fontSize: '11px', whiteSpace: 'nowrap' }}
+                title="Open Student Examination Terminal in a new browser tab to test live streaming"
+              >
+                <ExternalLink size={13} />
+                <span>Open Student Screen</span>
+              </a>
 
-          {/* Supabase Cloud DB Connected Pill / Button */}
-          <button
-            onClick={() => { setShowSupabaseModal(true); playSound('click'); }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '5px 10px',
-              fontSize: '11px',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer'
-            }}
-            title="Click to inspect central cloud database schema status, copy SQL migration, or trigger bulk cloud sync"
-          >
-            <Database size={12} color="var(--accent)" />
-            <span>Cloud Database: <strong>Active</strong></span>
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }} />
-          </button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => {
+                  setShowResetRoomConfirm(true);
+                }}
+                style={{ fontSize: '11px', gap: '5px', color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.3)', background: 'rgba(239, 68, 68, 0.08)', whiteSpace: 'nowrap' }}
+                title="Wipe stored workstations and reset to live listening mode"
+              >
+                <Trash2 size={13} />
+                <span>Reset Grid</span>
+              </button>
 
-          <button className="btn btn-primary btn-sm" onClick={handleExportCSV}>
-            <Download size={13} />
-            <span>Export CSV</span>
-          </button>
+              <button
+                className="btn btn-secondary btn-sm admin-btn-full"
+                onClick={() => { setShowSupabaseModal(true); playSound('click'); }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '11px',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+                title="Inspect central cloud database schema status or trigger bulk cloud sync"
+              >
+                <Database size={13} color="var(--accent)" />
+                <span>Cloud Database: <strong>Active</strong></span>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }} />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1221,8 +1254,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
 
         {/* Quick Search */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '240px' }}>
+        <div className="admin-search-wrap" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '220px', flex: 1, maxWidth: '340px' }}>
           <div
+            className="admin-search-box"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -1230,13 +1264,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               background: 'var(--bg-elevated)',
               border: '1px solid var(--border)',
               borderRadius: 'var(--radius-sm)',
-              padding: '5px 10px',
-              width: '100%'
+              padding: '6px 10px',
+              width: '100%',
+              boxSizing: 'border-box'
             }}
           >
-            <Search size={13} color="var(--text-muted)" />
+            <Search size={13} color="var(--text-muted)" style={{ flexShrink: 0 }} />
             <input
               type="text"
+              className="admin-search-input"
               placeholder="Search candidate, USN, station..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -1246,11 +1282,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 outline: 'none',
                 color: 'var(--text-primary)',
                 fontSize: '12px',
-                width: '100%'
+                width: '100%',
+                lineHeight: 'normal'
               }}
             />
             {searchQuery && (
-              <X size={12} color="var(--text-muted)" style={{ cursor: 'pointer' }} onClick={() => setSearchQuery('')} />
+              <X size={12} color="var(--text-muted)" style={{ cursor: 'pointer', flexShrink: 0 }} onClick={() => setSearchQuery('')} />
             )}
           </div>
         </div>
@@ -1331,48 +1368,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: '12px'
+          gap: '12px',
+          width: '100%',
+          maxWidth: '100%'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <ContinuousTabs
-            layoutId="admin-filter-tabs"
-            size="sm"
-            activeId={filter}
-            onChange={(id: string) => {
-              playSound('click');
-              setFilter(id as 'all' | 'cheating' | 'submitted' | 'active');
-            }}
-            tabs={[
-              {
-                id: 'all',
-                label: 'All Stations',
-                badge: stations.length,
-                badgeTone: 'neutral'
-              },
-              {
-                id: 'active',
-                label: 'In-Progress',
-                icon: <Clock size={12} />,
-                badge: activeCount,
-                badgeTone: 'warning'
-              },
-              {
-                id: 'submitted',
-                label: 'Submitted',
-                icon: <CheckCircle2 size={12} />,
-                badge: submittedCount,
-                badgeTone: 'success'
-              },
-              {
-                id: 'cheating',
-                label: 'Cheating Alerts',
-                icon: <ShieldAlert size={12} />,
-                badge: cheatingCount,
-                badgeTone: cheatingCount > 0 ? 'danger' : 'neutral'
-              }
-            ]}
-          />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', maxWidth: '100%', minWidth: 0, width: '100%' }}>
+          <div className="admin-tabs-scroll-wrapper" style={{ maxWidth: '100%', width: '100%' }}>
+            <ContinuousTabs
+              className="continuous-tabs-mobile-grid"
+              layoutId="admin-filter-tabs"
+              size="sm"
+              activeId={filter}
+              onChange={(id: string) => {
+                playSound('click');
+                setFilter(id as 'all' | 'cheating' | 'submitted' | 'active');
+              }}
+              tabs={[
+                {
+                  id: 'all',
+                  label: 'All Stations',
+                  badge: stations.length,
+                  badgeTone: 'neutral'
+                },
+                {
+                  id: 'active',
+                  label: 'In-Progress',
+                  icon: <Clock size={12} />,
+                  badge: activeCount,
+                  badgeTone: 'warning'
+                },
+                {
+                  id: 'submitted',
+                  label: 'Submitted',
+                  icon: <CheckCircle2 size={12} />,
+                  badge: submittedCount,
+                  badgeTone: 'success'
+                },
+                {
+                  id: 'cheating',
+                  label: 'Cheating Alerts',
+                  icon: <ShieldAlert size={12} />,
+                  badge: cheatingCount,
+                  badgeTone: cheatingCount > 0 ? 'danger' : 'neutral'
+                }
+              ]}
+            />
+          </div>
 
           {submittedCount > 0 && (
             <button
@@ -1383,51 +1425,56 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 setShowClearSubmittedConfirm(true);
               }}
               style={{
-                height: '30px',
+                height: '34px',
                 fontSize: '11px',
                 padding: '0 10px',
                 display: 'inline-flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: '5px',
                 border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-sm)',
                 color: 'var(--text-secondary)',
                 background: 'var(--bg-elevated)',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                width: '100%'
               }}
               title="Remove finished / submitted candidates from live proctoring grid"
             >
               <Trash2 size={11} />
-              <span>Clear Submitted ({submittedCount})</span>
+              <span>Clear Completed Workstations ({submittedCount})</span>
             </button>
           )}
         </div>
 
         {/* View Mode & Count */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <ContinuousTabs
-            layoutId="admin-view-mode-tabs"
-            size="sm"
-            activeId={viewMode}
-            onChange={(id: string) => {
-              playSound('click');
-              setViewMode(id as 'cctv' | 'ledger');
-            }}
-            tabs={[
-              {
-                id: 'cctv',
-                label: 'Camera Grid',
-                icon: <LayoutGrid size={12} />
-              },
-              {
-                id: 'ledger',
-                label: 'Audit Ledger',
-                icon: <Table size={12} />
-              }
-            ]}
-          />
+        <div className="admin-view-mode-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', width: '100%', maxWidth: '100%', flexWrap: 'wrap' }}>
+          <div className="admin-tabs-scroll-wrapper" style={{ maxWidth: '100%', width: '100%' }}>
+            <ContinuousTabs
+              className="continuous-tabs-mobile-grid"
+              layoutId="admin-view-mode-tabs"
+              size="sm"
+              activeId={viewMode}
+              onChange={(id: string) => {
+                playSound('click');
+                setViewMode(id as 'cctv' | 'ledger');
+              }}
+              tabs={[
+                {
+                  id: 'cctv',
+                  label: 'Camera Grid',
+                  icon: <LayoutGrid size={12} />
+                },
+                {
+                  id: 'ledger',
+                  label: 'Audit Ledger',
+                  icon: <Table size={12} />
+                }
+              ]}
+            />
+          </div>
 
-          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+          <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
             Showing <strong>{filteredStations.length}</strong> of <strong>{stations.length}</strong> Workstations
           </div>
         </div>
@@ -1436,68 +1483,69 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* ── Examination Concluded Notification Banner ── */}
       {activeCount === 0 && submittedCount > 0 && viewMode === 'cctv' && (
         <div
+          className="admin-concluded-card"
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '12px',
-            padding: '14px 18px',
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md)'
+            flexShrink: 0,
+            minHeight: 'fit-content',
+            height: 'auto',
+            width: '100%',
+            overflow: 'visible'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                background: 'rgba(34, 197, 94, 0.12)',
-                border: '1px solid rgba(34, 197, 94, 0.3)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--success)'
-              }}
-            >
-              <CheckCircle2 size={16} />
+          {/* Header Row: Circular Icon & Structured Copy */}
+          <div className="admin-concluded-header">
+            <div className="admin-concluded-icon-wrap">
+              <CheckCircle2 size={20} strokeWidth={2.2} />
             </div>
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+
+            <div className="admin-concluded-text-wrap" style={{ flex: 1, minWidth: 0 }}>
+              <div className="admin-concluded-title">
                 Examination Concluded · All {submittedCount} Candidates Submitted
               </div>
-              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+
+              <div className="admin-concluded-desc">
                 All candidate submissions, AI proctoring telemetry, and test scores have been securely registered.
                 Switch to the Audit Ledger to inspect evaluations or clear the completed grid for the next batch.
               </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* Action Buttons: Open Audit Ledger & Clear Grid */}
+          <div
+            className="admin-concluded-actions"
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              width: '100%',
+              maxWidth: '100%',
+              boxSizing: 'border-box'
+            }}
+          >
             <button
               type="button"
-              className="btn btn-secondary btn-sm"
+              className="btn btn-secondary btn-sm admin-concluded-btn"
+              style={{ maxWidth: '100%', boxSizing: 'border-box' }}
               onClick={() => {
                 playSound('click');
                 setViewMode('ledger');
               }}
-              style={{ height: '30px', fontSize: '11px', padding: '0 12px', gap: '6px' }}
+              title="Open the official university examination audit ledger"
             >
-              <Table size={12} />
+              <Table size={14} />
               <span>Open Audit Ledger</span>
             </button>
+
             <button
               type="button"
-              className="btn btn-secondary btn-sm"
+              className="btn btn-secondary btn-sm admin-concluded-btn"
+              style={{ maxWidth: '100%', boxSizing: 'border-box' }}
               onClick={() => {
                 playSound('click');
                 setShowClearSubmittedConfirm(true);
               }}
-              style={{ height: '30px', fontSize: '11px', padding: '0 12px', gap: '6px' }}
+              title="Clear submitted workstations to prepare for next batch"
             >
-              <Trash2 size={12} />
+              <Trash2 size={14} />
               <span>Clear Completed Grid ({submittedCount})</span>
             </button>
           </div>
@@ -2489,6 +2537,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </table>
         </div>
       )}
+          </>
+        )}
 
       {/* ── WORKSTATION CCTV SURVEILLANCE & TELEMETRY INSPECTION MODAL ── */}
       {selectedStation && (

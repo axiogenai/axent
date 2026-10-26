@@ -298,6 +298,7 @@ export function SimpleSelect<T extends string | number>({
                 <input
                   ref={searchInputRef}
                   type="text"
+                  className="admin-refined-input admin-search-input"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Filter options..."
@@ -306,7 +307,7 @@ export function SimpleSelect<T extends string | number>({
                     background: 'transparent',
                     border: 'none',
                     outline: 'none',
-                    fontSize: '11.5px',
+                    fontSize: '12px',
                     color: 'var(--text-primary)',
                     fontFamily: 'inherit'
                   }}

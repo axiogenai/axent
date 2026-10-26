@@ -623,14 +623,15 @@ export const MCQResults: React.FC = () => {
             <Search size={14} color="var(--text-dim)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
             <input
               type="text"
-              placeholder="Search candidate name, USN / Roll number, or exam title..."
+              className="admin-refined-input admin-search-input"
+              placeholder="Search candidate name, USN, or exam..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
                 width: '100%',
                 height: '36px',
                 padding: '0 12px 0 34px',
-                fontSize: '12.5px',
+                fontSize: '12px',
                 background: 'var(--bg-elevated)',
                 border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-sm)',

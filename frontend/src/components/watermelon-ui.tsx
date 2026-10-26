@@ -166,13 +166,15 @@ export interface ContinuousTabsProps {
   onChange: (id: string) => void;
   layoutId?: string;
   size?: 'sm' | 'md';
+  className?: string;
 }
 
 export const ContinuousTabs: React.FC<ContinuousTabsProps> = ({
   tabs,
   activeId,
   onChange,
-  size = 'md'
+  size = 'md',
+  className = ''
 }) => {
   const getBadgeColors = (tone: ContinuousTabItem['badgeTone'] = 'neutral') => {
     switch (tone) {
@@ -191,6 +193,7 @@ export const ContinuousTabs: React.FC<ContinuousTabsProps> = ({
 
   return (
     <div
+      className={`continuous-tabs-container ${className}`.trim()}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
