@@ -20,11 +20,12 @@ let mcqChannelCounter = 0;
 
 export function subscribeToMcqCloudChanges(onChange: () => void): () => void {
   const channelName = `axent-mcq-live-sync-${Date.now()}-${++mcqChannelCounter}`;
+  // High-Scale: Do NOT subscribe to mcq_attempts globally! Candidate terminals answering questions
+  // would otherwise trigger a cascading broadcast storm across all 1000+ students.
   const channel = supabase
     .channel(channelName)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_questions' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_exams' }, onChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_attempts' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'college_labs' }, onChange)
     .subscribe();
   return () => { void supabase.removeChannel(channel); };
@@ -523,7 +524,11 @@ export async function saveStationToCloud(station: CandidateStation): Promise<boo
 
 export async function fetchStationsFromCloud(labId?: string): Promise<CandidateStation[] | null> {
   try {
-    let query = supabase.from('candidate_stations').select('*').order('last_updated_timestamp', { ascending: false });
+    let query = supabase
+      .from('candidate_stations')
+      .select('*')
+      .order('last_updated_timestamp', { ascending: false })
+      .limit(2000);
     if (labId && labId !== 'all') {
       query = query.eq('lab_id', labId);
     }
@@ -629,21 +634,156 @@ export async function updateStationWarningInCloud(
 
 export async function fetchSingleStationLockStatus(
   stationId: string
-): Promise<{ isLocked: boolean; warningMessage?: string } | null> {
+): Promise<{ isLocked: boolean; warningMessage?: string; activeUnlockKey?: any } | null> {
   try {
     const { data, error } = await supabase
       .from('candidate_stations')
-      .select('is_locked_by_proctor, proctor_warning_message')
+      .select('is_locked_by_proctor, proctor_warning_message, metrics')
       .eq('id', stationId)
       .maybeSingle();
 
     if (error || !data) return null;
     return {
       isLocked: Boolean(data.is_locked_by_proctor),
-      warningMessage: data.proctor_warning_message || undefined
+      warningMessage: data.proctor_warning_message || undefined,
+      activeUnlockKey: data.metrics?.activeUnlockKey || undefined
     };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Persists an issued 5-character emergency unlock key directly to the locked station row in Supabase.
+ * This guarantees cross-machine sync for 1000+ candidates on different physical workstations.
+ */
+export async function saveStationEmergencyKeyToCloud(stationId: string, key: any): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from('candidate_stations')
+      .select('metrics')
+      .eq('id', stationId)
+      .maybeSingle();
+
+    const currentMetrics = (data?.metrics && typeof data.metrics === 'object') ? data.metrics : {};
+    const updatedMetrics = { ...currentMetrics, activeUnlockKey: key };
+
+    const { error } = await supabase
+      .from('candidate_stations')
+      .update({
+        metrics: updatedMetrics,
+        is_locked_by_proctor: true,
+        proctor_warning_message: `EMERGENCY UNLOCK KEY: Key ${key.code} issued. Enter code to resume.`
+      })
+      .eq('id', stationId);
+
+    // Also broadcast on the real-time websocket channel so candidate screen receives it instantly (<50ms)
+    broadcastEmergencyKeyRealtime(key);
+    return !error;
+  } catch (err) {
+    console.warn('[Supabase] Failed to save emergency key to cloud:', err);
+    return false;
+  }
+}
+
+/**
+ * Retrieves the active emergency key bound to a specific station ID or student roll number from Supabase.
+ */
+export async function fetchStationEmergencyKeyFromCloud(stationId: string, studentRoll?: string): Promise<any | null> {
+  try {
+    let query = supabase.from('candidate_stations').select('metrics, student').eq('id', stationId);
+    let { data } = await query.maybeSingle();
+
+    if (!data?.metrics?.activeUnlockKey && studentRoll) {
+      const rollClean = studentRoll.trim().toUpperCase();
+      const { data: byRoll } = await supabase
+        .from('candidate_stations')
+        .select('metrics, student')
+        .ilike('student->>rollNumber', rollClean)
+        .maybeSingle();
+      if (byRoll?.metrics?.activeUnlockKey) {
+        data = byRoll;
+      }
+    }
+
+    return data?.metrics?.activeUnlockKey || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Consumes an emergency key in cloud and permanently unlocks the student terminal in Supabase.
+ */
+export async function consumeStationEmergencyKeyInCloud(stationId: string, keyId: string, studentRoll?: string): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from('candidate_stations')
+      .select('metrics')
+      .eq('id', stationId)
+      .maybeSingle();
+
+    const currentMetrics = (data?.metrics && typeof data.metrics === 'object') ? data.metrics : {};
+    const currentKey = currentMetrics.activeUnlockKey || {};
+    const updatedKey = {
+      ...currentKey,
+      status: 'CONSUMED',
+      usageCount: 1,
+      consumedAt: Date.now()
+    };
+
+    const { error } = await supabase
+      .from('candidate_stations')
+      .update({
+        metrics: { ...currentMetrics, activeUnlockKey: updatedKey },
+        is_locked_by_proctor: false,
+        tab_switch_violations: 0,
+        unfocused_time_seconds: 0,
+        proctor_warning_message: null
+      })
+      .eq('id', stationId);
+
+    return !error;
+  } catch (err) {
+    console.warn('[Supabase] Failed to consume emergency key in cloud:', err);
+    return false;
+  }
+}
+
+let emergencyBroadcastChannel: any = null;
+
+export function broadcastEmergencyKeyRealtime(key: any): void {
+  try {
+    if (!emergencyBroadcastChannel) {
+      emergencyBroadcastChannel = supabase.channel('axent_emergency_channel');
+      emergencyBroadcastChannel.subscribe();
+    }
+    emergencyBroadcastChannel.send({
+      type: 'broadcast',
+      event: 'EMERGENCY_KEY_ISSUED',
+      payload: key
+    });
+  } catch (err) {
+    console.warn('[Supabase] Emergency key realtime broadcast failed:', err);
+  }
+}
+
+export function subscribeToEmergencyKeyRealtime(onKey: (key: any) => void): () => void {
+  try {
+    const channel = supabase
+      .channel(`axent_emergency_sub_${Date.now()}_${Math.random()}`)
+      .on('broadcast', { event: 'EMERGENCY_KEY_ISSUED' }, (payload) => {
+        if (payload?.payload) {
+          onKey(payload.payload);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  } catch {
+    return () => {};
   }
 }
 

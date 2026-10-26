@@ -87,9 +87,10 @@ export function startAntiCheatingShield(config: AntiCheatingConfig): AntiCheatin
       e.clientY >= window.innerHeight
     ) {
       if (cursorDepartureTimeout) clearTimeout(cursorDepartureTimeout);
+      const delay = e.clientY <= 0 ? 120 : 250;
       cursorDepartureTimeout = setTimeout(() => {
         triggerCursorDepartureInfraction();
-      }, 700);
+      }, delay);
     }
   };
 
@@ -101,7 +102,7 @@ export function startAntiCheatingShield(config: AntiCheatingConfig): AntiCheatin
       if (cursorDepartureTimeout) clearTimeout(cursorDepartureTimeout);
       cursorDepartureTimeout = setTimeout(() => {
         triggerCursorDepartureInfraction();
-      }, 700);
+      }, 250);
     }
   };
 

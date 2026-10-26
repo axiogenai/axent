@@ -917,9 +917,16 @@ export function getLiveStations(): CandidateStation[] {
 export function saveAllStations(stations: CandidateStation[]): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STATIONS_KEY, JSON.stringify(stations));
+    // High-Scale (1000+ candidates): Strip transient base64 screenshots before persisting to localStorage
+    // to strictly prevent exceeding the browser's 5MB localStorage quota limit.
+    const sanitized = stations.map((s) => {
+      if (!s.screenImageData) return s;
+      const { screenImageData, ...rest } = s;
+      return rest as CandidateStation;
+    });
+    localStorage.setItem(STATIONS_KEY, JSON.stringify(sanitized.slice(0, 300)));
   } catch (err) {
-    console.error('Failed to save stations:', err);
+    console.warn('[saveAllStations] localStorage quota exceeded, keeping stations in memory:', err);
   }
 }
 

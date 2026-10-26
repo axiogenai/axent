@@ -16,6 +16,12 @@
  */
 
 import { broadcastCctvMessage, subscribeToCctvBroadcast } from './adminService';
+import {
+  saveStationEmergencyKeyToCloud,
+  fetchStationEmergencyKeyFromCloud,
+  consumeStationEmergencyKeyInCloud,
+  subscribeToEmergencyKeyRealtime
+} from './supabaseService';
 
 export interface EmergencyKeyUsageRecord {
   stationId: string;
@@ -254,7 +260,27 @@ export function issueStudentEmergencyKey(params: {
     labId: params.labId
   });
 
+  // Asynchronously synchronize key to Supabase cloud for cross-device validation (1000+ candidates)
+  void saveStationEmergencyKeyToCloud(cleanStation, studentKey);
+
   return studentKey;
+}
+
+/**
+ * Stores an incoming key received from cloud or real-time broadcast into local memory & storage.
+ */
+export function storeIncomingEmergencyKey(incoming: DailyEmergencyKey): void {
+  if (!incoming || !incoming.code) return;
+  const list = getTodayEmergencyKeysList();
+  const existingIdx = list.findIndex(
+    (k) => k.keyId === incoming.keyId || (k.code === incoming.code && k.dateStr === incoming.dateStr)
+  );
+  if (existingIdx >= 0) {
+    list[existingIdx] = { ...list[existingIdx], ...incoming };
+  } else {
+    list.unshift(incoming);
+  }
+  saveKeysList(list);
 }
 
 /**
@@ -420,20 +446,124 @@ export function validateAndConsumeEmergencyKey(
     };
   }
 
-  // Check legacy PIN fallback
-  const legacyPin = typeof window !== 'undefined' ? localStorage.getItem('codedna_proctor_security_pin') : null;
-  if (legacyPin && cleanCode === legacyPin.trim().toUpperCase()) {
-    return {
-      valid: true,
-      message: 'Master invigilator PIN accepted.'
-    };
-  }
-
+  // Strict Security: No hardcoded legacy PIN bypasses are permitted.
   return {
     valid: false,
     reason: 'INVALID_CODE',
     message: 'Invalid 5-character Emergency Unlock Key. Verification failed. Terminal remains locked.'
   };
+}
+
+/**
+ * High-Scale Asynchronous Key Validator.
+ * First checks local client cache. If not found, immediately queries the authoritative
+ * Supabase cloud candidate_stations row to enable instant unlocking across separate physical laptops.
+ */
+export async function validateAndConsumeEmergencyKeyAsync(
+  enteredCode: string,
+  stationId: string,
+  candidateInfo?: {
+    name?: string;
+    roll?: string;
+    labId?: string;
+    examTitle?: string;
+  }
+): Promise<EmergencyKeyValidationResult> {
+  const localResult = validateAndConsumeEmergencyKey(enteredCode, stationId, candidateInfo);
+  if (localResult.valid || localResult.reason === 'WRONG_STUDENT' || localResult.reason === 'ALREADY_CONSUMED') {
+    return localResult;
+  }
+
+  const cleanCode = (enteredCode || '').trim().toUpperCase();
+  const currentRoll = (candidateInfo?.roll || '').trim().toUpperCase();
+  const currentStation = (stationId || '').trim();
+
+  try {
+    const cloudKey: DailyEmergencyKey | null = await fetchStationEmergencyKeyFromCloud(currentStation, currentRoll);
+    if (!cloudKey || !cloudKey.code) {
+      return {
+        valid: false,
+        reason: 'INVALID_CODE',
+        message: 'Invalid Invigilator Security Key. Terminal remains locked.'
+      };
+    }
+
+    if (cloudKey.code.trim().toUpperCase() !== cleanCode) {
+      return {
+        valid: false,
+        reason: 'INVALID_CODE',
+        message: 'Invalid Invigilator Security Key. Code does not match the key issued for this terminal.'
+      };
+    }
+
+    // 1. Strict Student Binding Validation
+    const hasStudentBinding = Boolean(cloudKey.boundStudentRoll || cloudKey.boundStationId);
+    if (hasStudentBinding) {
+      const rollMatches = currentRoll && cloudKey.boundStudentRoll && currentRoll === cloudKey.boundStudentRoll;
+      const stationMatches = currentStation && cloudKey.boundStationId && (
+        currentStation.toLowerCase() === cloudKey.boundStationId.toLowerCase() ||
+        currentStation.replace(/[^0-9]/g, '') === cloudKey.boundStationId.replace(/[^0-9]/g, '')
+      );
+
+      if (!rollMatches && !stationMatches) {
+        const targetStudent = cloudKey.boundStudentName || 'another candidate';
+        const targetRoll = cloudKey.boundStudentRoll ? ` (${cloudKey.boundStudentRoll})` : '';
+        const targetStation = cloudKey.boundStationId ? ` on ${cloudKey.boundStationId}` : '';
+
+        return {
+          valid: false,
+          reason: 'WRONG_STUDENT',
+          message: `ACCESS DENIED: Key ${cleanCode} is strictly bound to ${targetStudent}${targetRoll}${targetStation}. It cannot be used on this terminal.`,
+          key: cloudKey
+        };
+      }
+    }
+
+    // 2. Single-Use Check
+    if (cloudKey.status === 'CONSUMED') {
+      return {
+        valid: false,
+        reason: 'ALREADY_CONSUMED',
+        message: `REJECTED: 5-character key ${cleanCode} was already consumed and cannot be reused.`,
+        key: cloudKey
+      };
+    }
+
+    // Key is verified and matches this student! Consume in Supabase
+    await consumeStationEmergencyKeyInCloud(currentStation, cloudKey.keyId, currentRoll);
+
+    cloudKey.status = 'CONSUMED';
+    cloudKey.usageCount = 1;
+    storeIncomingEmergencyKey(cloudKey);
+    archiveKeyToHistory(cloudKey);
+
+    broadcastCctvMessage({
+      type: 'EMERGENCY_KEY_CONSUMED',
+      emergencyKey: cloudKey,
+      stationId: currentStation,
+      labId: candidateInfo?.labId
+    });
+
+    return {
+      valid: true,
+      message: `Emergency authorization verified for ${cloudKey.boundStudentName || candidateInfo?.name || 'Candidate'}. Terminal ${currentStation} unlocked. Key ${cleanCode} is now consumed.`,
+      key: cloudKey
+    };
+  } catch (err) {
+    console.warn('[EmergencyKeyService] Cloud validation notice:', err);
+    return localResult;
+  }
+}
+
+// Global real-time listener for emergency unlock keys issued from proctor terminals
+if (typeof window !== 'undefined') {
+  try {
+    subscribeToEmergencyKeyRealtime((key) => {
+      if (key && key.code) {
+        storeIncomingEmergencyKey(key);
+      }
+    });
+  } catch {}
 }
 
 /**

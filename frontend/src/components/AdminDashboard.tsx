@@ -336,7 +336,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
     const interval = setInterval(() => {
       loadData();
-    }, 2500);
+    }, 6000);
     return () => {
       unsubscribeBroadcast();
       unsubscribeCloud();
