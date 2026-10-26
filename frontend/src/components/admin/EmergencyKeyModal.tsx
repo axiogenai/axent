@@ -18,7 +18,9 @@ import {
 import {
   DailyEmergencyKey,
   getTodayEmergencyKey,
+  getTodayEmergencyKeysList,
   generateReplacementEmergencyKey,
+  generateBatchEmergencyKeys,
   getEmergencyKeyHistory,
   subscribeToEmergencyKeyChanges
 } from '../../services/emergencyKeyService';
@@ -31,7 +33,14 @@ interface EmergencyKeyModalProps {
 
 export const EmergencyKeyModal: React.FC<EmergencyKeyModalProps> = ({ isOpen, onClose }) => {
   const [activeKey, setActiveKey] = useState<DailyEmergencyKey>(getTodayEmergencyKey());
+  const [keysList, setKeysList] = useState<DailyEmergencyKey[]>(getTodayEmergencyKeysList());
   const [history, setHistory] = useState<DailyEmergencyKey[]>(getEmergencyKeyHistory());
+
+  const refreshAll = () => {
+    setActiveKey(getTodayEmergencyKey());
+    setKeysList(getTodayEmergencyKeysList());
+    setHistory(getEmergencyKeyHistory());
+  };
   const [copied, setCopied] = useState<boolean>(false);
   const [showReissueConfirm, setShowReissueConfirm] = useState<boolean>(false);
   const [customPrefix, setCustomPrefix] = useState<string>('CSE');
@@ -41,14 +50,11 @@ export const EmergencyKeyModal: React.FC<EmergencyKeyModalProps> = ({ isOpen, on
   useEffect(() => {
     if (!isOpen) return;
 
-    // Refresh state when opened
-    setActiveKey(getTodayEmergencyKey());
-    setHistory(getEmergencyKeyHistory());
+    refreshAll();
 
     // Subscribe to live changes across CCTV bus & other windows
-    const unsubscribe = subscribeToEmergencyKeyChanges((key) => {
-      setActiveKey(key);
-      setHistory(getEmergencyKeyHistory());
+    const unsubscribe = subscribeToEmergencyKeyChanges(() => {
+      refreshAll();
     });
 
     return () => unsubscribe();
@@ -69,6 +75,29 @@ export const EmergencyKeyModal: React.FC<EmergencyKeyModalProps> = ({ isOpen, on
     } catch (err) {
       console.warn('Copy failed:', err);
     }
+  };
+
+  const handleInstantGenerate = () => {
+    playSound('click');
+    const newKey = generateReplacementEmergencyKey(
+      'Chief Examination Officer',
+      undefined,
+      'Instant 1-click generation',
+      true
+    );
+    refreshAll();
+    setReissueSuccess(true);
+    playSound('success');
+    setTimeout(() => setReissueSuccess(false), 3000);
+  };
+
+  const handleInstantBatch = () => {
+    playSound('click');
+    generateBatchEmergencyKeys(5, 'CSE', 'Chief Examination Officer');
+    refreshAll();
+    setReissueSuccess(true);
+    playSound('success');
+    setTimeout(() => setReissueSuccess(false), 3000);
   };
 
   const handleExecuteReissue = () => {
@@ -316,27 +345,51 @@ export const EmergencyKeyModal: React.FC<EmergencyKeyModalProps> = ({ isOpen, on
                 </div>
               </div>
 
-              <button
-                onClick={handleCopyCode}
-                disabled={isConsumed}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 14px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  background: copied ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-surface)',
-                  color: copied ? '#10b981' : isConsumed ? 'var(--text-muted)' : 'var(--text-primary)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '6px',
-                  cursor: isConsumed ? 'not-allowed' : 'pointer'
-                }}
-                title="Copy voucher code to clipboard"
-              >
-                {copied ? <Check size={14} /> : <Copy size={14} />}
-                <span>{copied ? 'Copied' : 'Copy Key'}</span>
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={handleCopyCode}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    background: copied ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-surface)',
+                    color: copied ? '#10b981' : 'var(--text-primary)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px',
+                    cursor: 'pointer'
+                  }}
+                  title="Copy voucher code to clipboard"
+                >
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                  <span>{copied ? 'Copied' : 'Copy'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleInstantGenerate}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    background: 'var(--accent)',
+                    color: 'var(--accent-contrast)',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer'
+                  }}
+                  title="Generate a brand new single-use key immediately"
+                >
+                  <RefreshCw size={13} />
+                  <span>Generate New Key</span>
+                </button>
+              </div>
             </div>
 
             {/* Consumption Forensic Dossier */}
@@ -390,6 +443,91 @@ export const EmergencyKeyModal: React.FC<EmergencyKeyModalProps> = ({ isOpen, on
               </div>
             )}
           </div>
+
+          {/* ── ALL ACTIVE KEYS POOL ── */}
+          {keysList.length > 1 && (
+            <div
+              style={{
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                borderRadius: '10px',
+                padding: '14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  All Active Keys for Today ({keysList.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={handleInstantBatch}
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '10.5px', padding: '3px 8px' }}
+                >
+                  + Generate 5 Lab Keys
+                </button>
+              </div>
+              <div style={{ maxHeight: '130px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {keysList.map((k) => (
+                  <div
+                    key={k.keyId}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '6px 10px',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '6px',
+                      fontSize: '11px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {k.code}
+                      </span>
+                      <span style={{ color: 'var(--text-muted)' }}>({k.labAssignment || 'General'})</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span
+                        style={{
+                          fontSize: '9px',
+                          fontWeight: 700,
+                          padding: '2px 5px',
+                          borderRadius: '3px',
+                          background: k.status === 'CONSUMED' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                          color: k.status === 'CONSUMED' ? '#f87171' : '#10b981'
+                        }}
+                      >
+                        {k.status}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(k.code);
+                          playSound('success');
+                        }}
+                        style={{
+                          padding: '2px 7px',
+                          fontSize: '10.5px',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '4px',
+                          color: 'var(--text-primary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ── FACULTY RE-ISSUE CONTROLLER ── */}
           <div

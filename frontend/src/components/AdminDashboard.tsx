@@ -8,6 +8,7 @@ import { AdminCheatingAlertsView } from './admin/AdminCheatingAlertsView';
 import { AdminAuditLedgerView } from './admin/AdminAuditLedgerView';
 import { AdminInstitutionsView } from './admin/AdminInstitutionsView';
 import { AdminSettingsView } from './admin/AdminSettingsView';
+import { AdminEmergencyKeysView } from './admin/AdminEmergencyKeysView';
 import {
   CandidateStation,
   AnalysisReport,
@@ -683,6 +684,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     { id: 'cheating_alerts', label: 'Cheating Alerts', icon: AlertTriangle, badge: cheatingCount, badgeColor: cheatingCount > 0 ? 'danger' : undefined },
     { id: 'audit_ledger', label: 'Audit Ledger', icon: Layers },
     { id: 'institutions', label: 'Institutions', icon: Building },
+    { id: 'emergency_keys', label: 'Emergency Keys', icon: KeyRound, badge: 'PIN' },
     { id: 'settings', label: 'Settings', icon: Settings }
   ];
 
@@ -1007,6 +1009,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             onUnlockLab={(id) => setLabLock(id, false)}
             onClearSubmitted={() => setShowClearSubmittedConfirm(true)}
           />
+        )}
+
+        {activeSidebarItem === 'emergency_keys' && (
+          <AdminEmergencyKeysView />
         )}
 
         {activeSidebarItem === 'settings' && (
