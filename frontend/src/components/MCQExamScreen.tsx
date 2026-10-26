@@ -2601,10 +2601,8 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
   const cleanStationNum = (student.stationNumber || '01').replace(/[^0-9]/g, '') || '01';
   const stationId = `${student.labId || 'LAB-01'}-WS-${cleanStationNum.padStart(2, '0')}`;
-  const isDemoExam = exam?.id === 'demo-test-3q';
   const isExplicitPardoned = typeof window !== 'undefined' ? localStorage.getItem(`codedna_lock_station_${stationId}`) === 'false' : false;
   const isStrictLocked = Boolean(
-    !isDemoExam &&
     !isExplicitPardoned &&
     (isLockedByProctor || (attempt && attempt.tabSwitchCount >= 3)) &&
     attempt &&
@@ -2711,35 +2709,29 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
             tabSwitchCount: newCount,
           };
           if (newCount === 1) {
-            if (!isDemoExam) {
-              setActiveStrikeModal({
-                strike: 1,
-                awaySeconds: 0,
-                reason
-              });
-            }
+            setActiveStrikeModal({
+              strike: 1,
+              awaySeconds: 0,
+              reason
+            });
             setProctorWarning(`PROCTOR WARNING (Strike 1/3): ${reason}`);
             if (exam) syncMcqLiveStation(updated, exam, student, currentIdx, false);
           } else if (newCount === 2) {
-            if (!isDemoExam) {
-              setActiveStrikeModal({
-                strike: 2,
-                awaySeconds: 0,
-                reason
-              });
-            }
+            setActiveStrikeModal({
+              strike: 2,
+              awaySeconds: 0,
+              reason
+            });
             setProctorWarning(`CRITICAL WARNING (Strike 2/3): FINAL STRIKE WARNING! ${reason}`);
             if (exam) syncMcqLiveStation(updated, exam, student, currentIdx, false);
           } else if (newCount >= 3) {
             setActiveStrikeModal(null);
             setProctorWarning(`ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded! Workstation frozen. Contact Invigilator.`);
-            if (!isDemoExam) {
-              setIsLockedByProctor(true);
-              if (typeof window !== 'undefined') {
-                localStorage.setItem(`codedna_lock_station_${stationId}`, 'true');
-              }
-              updateStationLockInCloud(stationId, true, `ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded.`, student.labId || 'LAB-01');
+            setIsLockedByProctor(true);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(`codedna_lock_station_${stationId}`, 'true');
             }
+            updateStationLockInCloud(stationId, true, `ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded.`, student.labId || 'LAB-01');
             if (exam) syncMcqLiveStation(updated, exam, student, currentIdx, true);
           }
           return updated;
@@ -2997,18 +2989,18 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           const elapsedMs = now - startTime;
           unfocusedStartRef.current = null;
 
-          // Grace period: ignore initial window settling / permission checks within 30s of start, or while choosing screen
-          if (isSelectingScreenRef.current || (attempt.startTime && (now - attempt.startTime < 30000))) {
+          // Grace period: ignore initial settling within 2s of start, or while choosing screen
+          if (isSelectingScreenRef.current || (attempt.startTime && (now - attempt.startTime < 2000))) {
             return;
           }
 
-          // Ignore momentary focus flickers (< 1500ms)
-          if (elapsedMs < 1500) {
+          // Ignore momentary focus flickers (< 300ms)
+          if (elapsedMs < 300) {
             return;
           }
 
-          // Enforce 5000ms cooldown so rapid double-events never trigger multiple strikes
-          if (now - lastStrikeTimestampRef.current < 5000) {
+          // Enforce 1500ms cooldown so rapid double-events never trigger multiple strikes
+          if (now - lastStrikeTimestampRef.current < 1500) {
             return;
           }
           lastStrikeTimestampRef.current = now;
@@ -3031,35 +3023,29 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
             playSound('warning');
 
             if (newCount === 1) {
-              if (!isDemoExam) {
-                setActiveStrikeModal({
-                  strike: 1,
-                  awaySeconds: awayDuration,
-                  reason: `Window or tab focus lost for ${awayDuration}s`
-                });
-              }
+              setActiveStrikeModal({
+                strike: 1,
+                awaySeconds: awayDuration,
+                reason: `Window or tab focus lost for ${awayDuration}s`
+              });
               setProctorWarning(`PROCTOR WARNING (Strike 1/3): Window focus lost for ${awayDuration}s! Tab switching is logged to the invigilator dashboard.`);
               if (exam) syncMcqLiveStation(updated, exam, student, currentIdx, false);
             } else if (newCount === 2) {
-              if (!isDemoExam) {
-                setActiveStrikeModal({
-                  strike: 2,
-                  awaySeconds: awayDuration,
-                  reason: `Window or tab focus lost for ${awayDuration}s`
-                });
-              }
+              setActiveStrikeModal({
+                strike: 2,
+                awaySeconds: awayDuration,
+                reason: `Window or tab focus lost for ${awayDuration}s`
+              });
               setProctorWarning(`CRITICAL WARNING (Strike 2/3): FINAL STRIKE WARNING! Window left for ${awayDuration}s! One more tab switch or Alt+Tab will automatically freeze your workstation.`);
               if (exam) syncMcqLiveStation(updated, exam, student, currentIdx, false);
             } else if (newCount >= 3) {
               setActiveStrikeModal(null);
               setProctorWarning(`ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded! Workstation frozen. Contact Invigilator.`);
-              if (!isDemoExam) {
-                setIsLockedByProctor(true);
-                if (typeof window !== 'undefined') {
-                  localStorage.setItem(`codedna_lock_station_${stationId}`, 'true');
-                }
-                updateStationLockInCloud(stationId, true, `ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded.`, student.labId || 'LAB-01');
+              setIsLockedByProctor(true);
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(`codedna_lock_station_${stationId}`, 'true');
               }
+              updateStationLockInCloud(stationId, true, `ACADEMIC FREEZE: ${newCount}/3 Violations Exceeded.`, student.labId || 'LAB-01');
               if (exam) syncMcqLiveStation(updated, exam, student, currentIdx, true);
             }
 
@@ -3070,8 +3056,8 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     };
 
     const handleBlur = () => {
-      // Grace period: ignore blur during initial 30 seconds of starting exam or while selecting screen
-      if (isSelectingScreenRef.current || (attempt.startTime && (Date.now() - attempt.startTime < 30000))) {
+      // Grace period: ignore blur during initial 2 seconds of starting exam or while selecting screen
+      if (isSelectingScreenRef.current || (attempt.startTime && (Date.now() - attempt.startTime < 2000))) {
         return;
       }
       // On mobile / touch devices, virtual keyboard toggles, elastic scroll bounce, and address bar movements trigger blur.
@@ -3902,7 +3888,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       )}
 
       {/* ── Interactive 1-by-1 Strike Warning Modal ───────────────────────── */}
-      {activeStrikeModal && !isStrictLocked && !isDemoExam && attempt && attempt.status === 'IN_PROGRESS' && (
+      {activeStrikeModal && !isStrictLocked && attempt && attempt.status === 'IN_PROGRESS' && (
         <div
           data-proctor-unlock-exempt="true"
           style={{
