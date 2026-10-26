@@ -37,7 +37,6 @@ interface AdminCheatingAlertsViewProps {
   onLockStation: (stationId: string) => void;
   onUnlockStation: (stationId: string) => void;
   onDisqualify: (station: CandidateStation) => void;
-  onConnectTestStation: () => void;
 }
 
 export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = ({
@@ -50,7 +49,6 @@ export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = (
   onLockStation,
   onUnlockStation,
   onDisqualify,
-  onConnectTestStation
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [severityFilter, setSeverityFilter] = useState<'all' | 'critical' | 'high'>('all');

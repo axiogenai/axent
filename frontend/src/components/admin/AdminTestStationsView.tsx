@@ -27,8 +27,6 @@ interface AdminTestStationsViewProps {
   onLockStation: (stationId: string) => void;
   onUnlockStation: (stationId: string) => void;
   onConcludeAndFree: (station: CandidateStation) => void;
-  onConnectTestStation: () => void;
-  onConnectTestMcqStation: () => void;
 }
 
 export const AdminTestStationsView: React.FC<AdminTestStationsViewProps> = ({
@@ -40,8 +38,6 @@ export const AdminTestStationsView: React.FC<AdminTestStationsViewProps> = ({
   onLockStation,
   onUnlockStation,
   onConcludeAndFree,
-  onConnectTestStation,
-  onConnectTestMcqStation
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'in_use' | 'locked'>('all');
@@ -259,27 +255,6 @@ export const AdminTestStationsView: React.FC<AdminTestStationsViewProps> = ({
               </option>
             ))}
           </select>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={onConnectTestStation}
-            className="btn btn-secondary btn-sm"
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px' }}
-          >
-            <PlusCircle size={13} />
-            <span>Connect Coding Station</span>
-          </button>
-          <button
-            type="button"
-            onClick={onConnectTestMcqStation}
-            className="btn btn-secondary btn-sm"
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px' }}
-          >
-            <PlusCircle size={13} />
-            <span>Connect MCQ Station</span>
-          </button>
         </div>
       </div>
 

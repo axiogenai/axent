@@ -461,9 +461,8 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
   const [mode, setMode] = useState<'manual' | 'token'>('manual');
   
   // Manual student identity state (Pre-filled for demo tests)
-  const isDemoExam = exam.id === 'demo-test-3q';
-  const [name, setName] = useState(() => (isDemoExam ? 'Candidate Alex' : ''));
-  const [roll, setRoll] = useState(() => (isDemoExam ? 'DEMO-101' : ''));
+  const [name, setName] = useState('');
+  const [roll, setRoll] = useState('');
   const [dept, setDept] = useState('CSE');
   const [sem, setSem] = useState('4th Sem');
   const [division, setDivision] = useState('A');
@@ -5645,31 +5644,6 @@ export const MCQExamSelector: React.FC = () => {
                 }}
               >
                 <span>Access Examination</span>
-                <ArrowRight size={12} />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  playSound('click');
-                  setSelectedExamId('demo-test-3q');
-                  setSearchParams({ examId: 'demo-test-3q' }, { replace: true });
-                }}
-                className="btn btn-secondary"
-                style={{
-                  width: '100%',
-                  height: '32px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  borderRadius: 'var(--radius-sm)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '5px',
-                  border: '1px solid var(--border)'
-                }}
-              >
-                <span>Launch 3-Question Demo Test</span>
                 <ArrowRight size={12} />
               </button>
             </form>

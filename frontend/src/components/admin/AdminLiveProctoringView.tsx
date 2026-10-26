@@ -31,8 +31,6 @@ interface AdminLiveProctoringViewProps {
   onSendWarning: (station: CandidateStation) => void;
   onLockStation: (stationId: string) => void;
   onUnlockStation: (stationId: string) => void;
-  onConnectTestStation: () => void;
-  onConnectTestMcqStation: () => void;
   theme?: ThemeMode;
 }
 
@@ -45,8 +43,6 @@ export const AdminLiveProctoringView: React.FC<AdminLiveProctoringViewProps> = (
   onSendWarning,
   onLockStation,
   onUnlockStation,
-  onConnectTestStation,
-  onConnectTestMcqStation,
 }) => {
   const [streamMode, setStreamMode] = useState<'camera' | 'screen'>('camera');
   const [searchQuery, setSearchQuery] = useState('');
@@ -262,27 +258,6 @@ export const AdminLiveProctoringView: React.FC<AdminLiveProctoringViewProps> = (
             }}
           />
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={onConnectTestStation}
-            className="btn btn-secondary btn-sm"
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px' }}
-          >
-            <PlusCircle size={13} />
-            <span>Connect Coding Station</span>
-          </button>
-          <button
-            type="button"
-            onClick={onConnectTestMcqStation}
-            className="btn btn-secondary btn-sm"
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px' }}
-          >
-            <PlusCircle size={13} />
-            <span>Connect MCQ Station</span>
-          </button>
-        </div>
       </div>
 
       {/* ── LIVE VIDEO/SCREEN SURVEILLANCE GRID ── */}
@@ -321,19 +296,8 @@ export const AdminLiveProctoringView: React.FC<AdminLiveProctoringViewProps> = (
             </h3>
             <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', maxWidth: '440px', margin: 0 }}>
               All candidates have submitted or no examinations are currently in session for this laboratory.
-              Connect a test station above or issue candidate exam tickets.
+              Real-time CCTV streams and candidate screen captures will appear here automatically once candidate workstations connect.
             </p>
-          </div>
-          <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
-            <button
-              type="button"
-              onClick={onConnectTestMcqStation}
-              className="btn btn-primary btn-sm"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-            >
-              <PlusCircle size={13} />
-              <span>Launch Test MCQ Stream</span>
-            </button>
           </div>
         </div>
       ) : (

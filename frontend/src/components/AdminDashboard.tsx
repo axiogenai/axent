@@ -512,116 +512,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     loadData();
   };
 
-  const handleConnectTestStation = () => {
-    const targetLab = selectedLabId === 'all' ? 'LAB-01' : selectedLabId;
-    const labInfo = allLabs.find((l) => l.labId === targetLab) || allLabs[0];
-    const existingInLab = getLiveStations().filter((s) => s.labId === targetLab);
-    const cleanIndex = existingInLab.length + 1;
-    const stationNum = `Station #${cleanIndex.toString().padStart(2, '0')}`;
-
-    const testSubmission: CodeSubmission = {
-      code: `// Practical Laboratory Solution - ${targetLab}\n#include <iostream>\nusing namespace std;\n\nint main() {\n    cout << "Testing workstation connection in ${labInfo.labName}..." << endl;\n    return 0;\n}`,
-      language: 'C++',
-      student: {
-        name: `Candidate ${cleanIndex}`,
-        rollNumber: `1MS22CS${(100 + cleanIndex).toString()}`,
-        course: labInfo.department,
-        department: labInfo.department,
-        semester: '5th Semester',
-        examType: 'Internal Assessment (CIE)',
-        assignmentTitle: `${labInfo.labName} Exam`,
-        labId: targetLab,
-        labName: labInfo.labName,
-        stationNumber: stationNum
-      },
-      metrics: {
-        typingSpeed: 45,
-        timeSpent: 120,
-        pasteCount: 0,
-        deleteCount: 4,
-        editCount: 42,
-        undoCount: 0,
-        pasteRatio: 0,
-        pastedLines: 0,
-        pastedChars: 0,
-        totalLines: 8,
-        keystrokes: 195,
-        pauseDuration: 10,
-        pasteLockViolations: 0,
-        tabSwitchViolations: 0,
-        unfocusedTimeSeconds: 0
-      },
-      snapshots: []
-    };
-
-    syncCurrentLiveStation(testSubmission, {
-      lastTerminalOutput: `Compiling main.cpp with GCC 9.2...\nTesting workstation connection in ${labInfo.labName}...\nProgram finished with exit code 0.`
-    });
-    loadData();
-    playSound('success');
-  };
-
-  const handleConnectTestMcqStation = () => {
-    const targetLab = selectedLabId === 'all' ? 'LAB-01' : selectedLabId;
-    const labInfo = allLabs.find((l) => l.labId === targetLab) || allLabs[0];
-    const existingInLab = getLiveStations().filter((s) => s.labId === targetLab);
-    const cleanIndex = existingInLab.length + 1;
-    const stationNum = `Station #${cleanIndex.toString().padStart(2, '0')}`;
-    const studentRoll = `1MS22CS${(100 + cleanIndex).toString()}`;
-    const studentName = `MCQ Candidate ${cleanIndex}`;
-
-    const mockAttempt: any = {
-      id: `mcq_test_${Date.now()}`,
-      examId: 'mcq-gate-cs',
-      examTitle: 'GATE CS - Data Structures & Algorithms',
-      ticketId: `tkt_${Date.now()}`,
-      studentName,
-      studentRoll,
-      status: 'in_progress',
-      answers: {
-        'q-1': 'A',
-        'q-2': 'C',
-        'q-3': 'B',
-        'q-4': 'D'
-      },
-      startTime: Date.now() - 15 * 60 * 1000,
-      tabSwitchCount: 0,
-      unfocusedSeconds: 0,
-      score: 16,
-      maxScore: 20,
-      assignedQuestions: Array.from({ length: 20 }, (_, i) => `q-${i + 1}`)
-    };
-
-    const mockExam: any = {
-      id: 'mcq-gate-cs',
-      title: 'GATE CS - Data Structures & Algorithms',
-      questionCount: 20,
-      totalMarks: 20
-    };
-
-    const mockStudent: StudentInfo = {
-      name: studentName,
-      rollNumber: studentRoll,
-      course: labInfo.department,
-      department: labInfo.department,
-      semester: '6th Semester',
-      examType: 'Multiple Choice Question (MCQ) Examination',
-      assignmentTitle: 'GATE CS - Data Structures & Algorithms',
-      labId: targetLab,
-      labName: labInfo.labName,
-      stationNumber: stationNum
-    };
-
-    try {
-      localStorage.setItem(`codedna_mcq_current_idx_${mockAttempt.id}`, '4');
-    } catch {}
-
-    syncMcqLiveStation(mockAttempt, mockExam, mockStudent, 4, false);
-    loadData();
-    playSound('success');
-  };
-
-  // Filter stations based on security risk & search query
+// Filter stations based on security risk & search query
   const filteredStations = stations.filter((s) => {
     if (filter === 'cheating') {
       if (!(s.cheatingRisk === 'High' || s.cheatingRisk === 'Critical' || s.metrics.pasteRatio >= 50)) {
@@ -904,8 +795,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             }}
             onLockStation={(id) => handleLockStation(id)}
             onUnlockStation={(id) => handleUnlockStation(id)}
-            onConnectTestStation={handleConnectTestStation}
-            onConnectTestMcqStation={handleConnectTestMcqStation}
             theme={theme}
           />
         )}
@@ -923,8 +812,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               setWarningMessageInput('Maintain your visual focus on the examination screen at all times.');
             }}
             onConcludeAndFree={(s) => handleSendProctorConcludeAndFree(s)}
-            onConnectTestStation={handleConnectTestStation}
-            onConnectTestMcqStation={handleConnectTestMcqStation}
           />
         )}
 
@@ -938,8 +825,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             onLockStation={(id) => handleLockStation(id)}
             onUnlockStation={(id) => handleUnlockStation(id)}
             onConcludeAndFree={(s) => handleSendProctorConcludeAndFree(s)}
-            onConnectTestStation={handleConnectTestStation}
-            onConnectTestMcqStation={handleConnectTestMcqStation}
           />
         )}
 
@@ -969,7 +854,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             onLockStation={(id) => handleLockStation(id)}
             onUnlockStation={(id) => handleUnlockStation(id)}
             onDisqualify={(s) => handleDisqualifyCandidate(s)}
-            onConnectTestStation={handleConnectTestStation}
           />
         )}
 
@@ -1291,28 +1175,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {/* Section 2: Lab Simulator & Testing Tools */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%', paddingTop: '10px', borderTop: '1px solid var(--border)' }}>
             <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
-              Simulation &amp; Testing Tools
+              Candidate Examination Terminals
             </div>
             <div className="admin-action-grid" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={handleConnectTestStation}
-                style={{ gap: '5px', fontSize: '11px', whiteSpace: 'nowrap' }}
-                title="Connect a mock functional coding workstation to this lab"
-              >
-                <PlusCircle size={13} color="var(--accent)" />
-                <span>+ Mock Coding Student</span>
-              </button>
-
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={handleConnectTestMcqStation}
-                style={{ gap: '5px', fontSize: '11px', whiteSpace: 'nowrap' }}
-                title="Connect a mock MCQ candidate with answering telemetry"
-              >
-                <BookOpen size={13} color="var(--accent)" />
-                <span>+ Mock MCQ Student</span>
-              </button>
 
               <a
                 href={`/workspace?lab=${selectedLabId === 'all' ? 'LAB-01' : selectedLabId}&station=${(getLiveStations().filter((s) => s.labId === (selectedLabId === 'all' ? 'LAB-01' : selectedLabId)).length + 1).toString().padStart(2, '0')}`}
@@ -1760,25 +1625,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             <div style={{ display: 'flex', gap: '10px', marginTop: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={handleConnectTestStation}
-                style={{ padding: '7px 18px', gap: '6px' }}
-                title="Immediately connect an active test workstation to evaluate invigilation controls"
-              >
-                <PlusCircle size={13} />
-                <span>Connect Test Candidate</span>
-              </button>
-
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={handleConnectTestMcqStation}
-                style={{ padding: '7px 18px', gap: '6px' }}
-                title="Immediately connect an active MCQ test candidate to evaluate live question telemetry"
-              >
-                <BookOpen size={13} color="var(--accent)" />
-                <span>+ Connect MCQ Test Candidate</span>
-              </button>
 
               <a
                 href={`/workspace?lab=${selectedLabId === 'all' ? 'LAB-01' : selectedLabId}&station=${(getLiveStations().filter((s) => s.labId === (selectedLabId === 'all' ? 'LAB-01' : selectedLabId)).length + 1).toString().padStart(2, '0')}`}
@@ -1790,6 +1636,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               >
                 <ExternalLink size={13} />
                 <span>Launch Student Station (New Tab)</span>
+              </a>
+
+              <a
+                href="/mcq"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-secondary btn-sm"
+                style={{ textDecoration: 'none', padding: '7px 18px', gap: '6px' }}
+                title="Open candidate MCQ examination portal in a new browser tab"
+              >
+                <BookOpen size={13} />
+                <span>Open MCQ Portal</span>
               </a>
 
               <button

@@ -191,44 +191,7 @@ export function subscribeToCctvBroadcast(
 }
 
 // ── REAL INSTITUTE LABORATORIES (Zero Hardcoded / Seed Data Enforcement) ──
-export const DEFAULT_INSTITUTE_LABS: CollegeLabInfo[] = [
-  {
-    labId: 'CSE-LAB-01',
-    labCode: 'CSE-LAB-1',
-    labName: 'CSE Lab 1: Alan Turing Systems & Computing Lab',
-    department: 'Computer Science & Engineering',
-    block: 'Ramanujan Academic Block - Floor 3',
-    totalStations: 60,
-    invigilatorName: 'Dr. K. Ramanathan (Professor & HOD)'
-  },
-  {
-    labId: 'CSE-LAB-02',
-    labCode: 'CSE-LAB-2',
-    labName: 'CSE Lab 2: Ada Lovelace Software Engineering Lab',
-    department: 'Computer Science & Engineering',
-    block: 'Ramanujan Academic Block - Floor 3',
-    totalStations: 60,
-    invigilatorName: 'Prof. S. Sharma (Associate Professor)'
-  },
-  {
-    labId: 'CSE-LAB-03',
-    labCode: 'CSE-LAB-3',
-    labName: 'CSE Lab 3: John von Neumann Architecture & AI Lab',
-    department: 'Computer Science & Engineering',
-    block: 'Turing Technology Wing - Floor 2',
-    totalStations: 60,
-    invigilatorName: 'Dr. A. Varma (Associate Professor)'
-  },
-  {
-    labId: 'CSE-LAB-04',
-    labCode: 'CSE-LAB-4',
-    labName: 'CSE Lab 4: Grace Hopper Network & Cloud Lab',
-    department: 'Computer Science & Engineering',
-    block: 'Turing Technology Wing - Floor 2',
-    totalStations: 60,
-    invigilatorName: 'Prof. M. Iyer (Assistant Professor)'
-  }
-];
+export const DEFAULT_INSTITUTE_LABS: CollegeLabInfo[] = [];
 export const COLLEGE_LABS: CollegeLabInfo[] = [];
 
 export const LAB_LOCK_PREFIX = 'codedna_lock_lab_';
@@ -647,13 +610,13 @@ export async function deleteCollegeLab(labId: string): Promise<CollegeLabInfo[]>
 }
 
 export async function resetCollegeLabs(): Promise<CollegeLabInfo[]> {
-  // 1. Clear the tombstone registry so default template labs are fully restored
+  // 1. Clear the tombstone registry
   resetDeletedLabsRegistry();
 
   // 2. Update local storage and notify immediately (0ms)
   if (typeof window !== 'undefined') {
-    localStorage.setItem(CUSTOM_LABS_KEY, JSON.stringify(DEFAULT_INSTITUTE_LABS));
-    notifyLabsChanged(DEFAULT_INSTITUTE_LABS);
+    localStorage.removeItem(CUSTOM_LABS_KEY);
+    notifyLabsChanged([]);
 
     // Clear local station keys
     localStorage.removeItem(STATIONS_KEY);
@@ -661,18 +624,14 @@ export async function resetCollegeLabs(): Promise<CollegeLabInfo[]> {
     localStorage.removeItem('codedna_mcq_answers');
     localStorage.removeItem('codedna_cctv_heartbeat_tick');
     localStorage.removeItem(CAMPUS_LOCK_KEY);
-    DEFAULT_INSTITUTE_LABS.forEach((l) => {
-      localStorage.removeItem(`${LAB_LOCK_PREFIX}${l.labId}`);
-    });
   }
 
   broadcastCctvMessage({ type: 'RESET_ALL' });
 
-  // 3. Clear cloud records and re-seed in background via parallel requests (non-blocking)
+  // 3. Clear cloud records in background via parallel requests (non-blocking)
   void (async () => {
     try {
       await clearAllCollegeLabsFromCloud();
-      await Promise.allSettled(DEFAULT_INSTITUTE_LABS.map((lab) => saveCollegeLabToCloud(lab)));
       await clearAllStationsFromCloud();
       await clearAllAttemptsFromCloud();
       await purgePhantomExamLabs();
@@ -681,7 +640,7 @@ export async function resetCollegeLabs(): Promise<CollegeLabInfo[]> {
     }
   })();
 
-  return [...DEFAULT_INSTITUTE_LABS];
+  return [];
 }
 
 // Automatically purge phantom labs and sync college labs on load
