@@ -13,10 +13,12 @@ import {
   Trash2,
   PlusCircle,
   Building,
-  RefreshCw
+  RefreshCw,
+  KeyRound
 } from 'lucide-react';
 import { CandidateStation, CollegeLabInfo } from '../../types/dna';
 import { playSound } from '../../utils/sounds';
+import { getStudentBoundKey, issueStudentEmergencyKey } from '../../services/emergencyKeyService';
 
 interface AdminTestStationsViewProps {
   stations: CandidateStation[];
@@ -41,6 +43,7 @@ export const AdminTestStationsView: React.FC<AdminTestStationsViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'in_use' | 'locked'>('all');
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const inUseCount = stations.filter((s) => s.status !== 'Submitted & Done').length;
   const lockedCount = stations.filter((s) => s.isLockedByProctor).length;
@@ -475,6 +478,48 @@ export const AdminTestStationsView: React.FC<AdminTestStationsViewProps> = ({
                             {isLocked ? <Unlock size={12} /> : <Lock size={12} />}
                             <span>{isLocked ? 'Unlock' : 'Lock'}</span>
                           </button>
+
+                          {isLocked && (() => {
+                            const stKey = getStudentBoundKey(station.student?.rollNumber, station.id);
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  playSound('click');
+                                  const newK = issueStudentEmergencyKey({
+                                    studentRoll: station.student?.rollNumber,
+                                    studentName: station.student?.name,
+                                    stationId: station.id,
+                                    labId: station.labId,
+                                    issuedBy: 'Station Manager'
+                                  });
+                                  try {
+                                    navigator.clipboard.writeText(newK.code);
+                                    setCopiedKey(newK.code);
+                                    setTimeout(() => setCopiedKey(null), 2500);
+                                  } catch {}
+                                  playSound('success');
+                                }}
+                                title="Issue / Copy 5-character emergency key strictly for this student"
+                                style={{
+                                  padding: '5px 8px',
+                                  background: stKey?.status === 'ACTIVE' ? 'rgba(59, 130, 246, 0.12)' : 'var(--bg-surface)',
+                                  border: stKey?.status === 'ACTIVE' ? '1px solid rgba(59, 130, 246, 0.35)' : '1px solid var(--border)',
+                                  borderRadius: '6px',
+                                  color: stKey?.status === 'ACTIVE' ? '#3b82f6' : 'var(--text-primary)',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: 600
+                                }}
+                              >
+                                <KeyRound size={12} />
+                                <span>{stKey?.status === 'ACTIVE' ? (copiedKey === stKey.code ? 'Copied' : stKey.code) : 'Key'}</span>
+                              </button>
+                            );
+                          })()}
 
                           {isSubmitted && (
                             <button
