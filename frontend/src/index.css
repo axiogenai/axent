@@ -242,6 +242,23 @@ html:-moz-full-screen #root {
   background: var(--text-muted);
 }
 
+/* Hide scrollbars on mobile side while preserving smooth touch scrolling */
+@media (max-width: 768px), (hover: none) and (pointer: coarse) {
+  html,
+  body,
+  * {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  ::-webkit-scrollbar,
+  *::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+  }
+}
+
 /* ═════════════════════════════════════════════════════════════════════════════
    BUTTONS (Consistent Heights: 28px sm, 34px md, 40px lg)
 ═════════════════════════════════════════════════════════════════════════════ */
