@@ -290,8 +290,29 @@ export const FinalReport: React.FC<FinalReportProps> = ({
     ? compilerResult.stdout.trim().split('\n')[0].slice(0, 56)
     : '';
 
-  // Dynamic Examination Verification Checks derived from actual execution & code telemetry
-  const testCases = [
+  // Dynamic Examination Verification Checks derived from actual execution & testcases
+  const dynamicTestCases = useMemo(() => {
+    try {
+      const stored = localStorage.getItem('codedna_last_testcases');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((tc: any, i: number) => ({
+            id: tc.id || `TC-0${i + 1}`,
+            name: tc.name || `Test Case ${i + 1}`,
+            input: tc.input || 'Standard Input',
+            expected: tc.expectedOutput || 'Expected Output',
+            actual: tc.actualOutput || (tc.passed ? 'Output verified' : 'Mismatch'),
+            passed: Boolean(tc.passed),
+            duration: tc.time || compilerResult?.time || '0.02s'
+          }));
+        }
+      }
+    } catch {}
+    return null;
+  }, [compilerResult]);
+
+  const testCases = dynamicTestCases || [
     {
       id: 'TC-01',
       name: 'Compilation & Syntax Validation',

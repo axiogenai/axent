@@ -6,7 +6,8 @@ import {
   SlidersHorizontal,
   ChevronDown,
   ChevronUp,
-  Terminal
+  Terminal,
+  CheckCircle2
 } from 'lucide-react';
 
 interface ExtendedToolbarProps {
@@ -20,6 +21,10 @@ interface ExtendedToolbarProps {
   isConsoleOpen?: boolean;
   onToggleConsole?: () => void;
   hasOutput?: boolean;
+  onToggleTestCases?: () => void;
+  isTestCasesOpen?: boolean;
+  testCount?: string | number;
+  testBadgeTone?: 'success' | 'warning' | 'neutral';
 }
 
 export const ExtendedToolbar: React.FC<ExtendedToolbarProps> = ({
@@ -33,6 +38,10 @@ export const ExtendedToolbar: React.FC<ExtendedToolbarProps> = ({
   isConsoleOpen = false,
   onToggleConsole,
   hasOutput = false,
+  onToggleTestCases,
+  isTestCasesOpen = false,
+  testCount,
+  testBadgeTone = 'neutral',
 }) => {
   return (
     <div
@@ -101,6 +110,44 @@ export const ExtendedToolbar: React.FC<ExtendedToolbarProps> = ({
                 display: 'inline-block'
               }}
             />
+          )}
+        </button>
+      )}
+
+      {/* Action: Toggle Test Cases Panel */}
+      {onToggleTestCases && (
+        <button
+          onClick={onToggleTestCases}
+          disabled={isLocked}
+          title={isTestCasesOpen ? 'Hide Test Cases Panel' : 'Show Practical Test Cases'}
+          className="btn btn-ghost btn-sm"
+          style={{
+            height: '26px',
+            padding: '0 8px',
+            fontSize: '11px',
+            gap: '4px',
+            borderRadius: '5px',
+            background: isTestCasesOpen ? 'var(--bg-surface)' : 'transparent',
+            border: isTestCasesOpen ? '1px solid var(--border-strong)' : '1px solid transparent',
+            color: isTestCasesOpen ? 'var(--accent)' : 'var(--text-secondary)',
+            fontWeight: isTestCasesOpen ? 700 : 500,
+          }}
+        >
+          <CheckCircle2 size={12} color={isTestCasesOpen ? 'var(--accent)' : 'currentColor'} />
+          <span>Tests</span>
+          {testCount !== undefined && (
+            <span
+              style={{
+                fontSize: '10px',
+                padding: '0 4px',
+                borderRadius: '3px',
+                background: testBadgeTone === 'success' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+                color: testBadgeTone === 'success' ? 'var(--success)' : 'var(--text-muted)',
+                fontWeight: 600
+              }}
+            >
+              {testCount}
+            </span>
           )}
         </button>
       )}

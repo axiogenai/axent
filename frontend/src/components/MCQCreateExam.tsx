@@ -2,7 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, Save, Trash2, ChevronLeft, ChevronRight, CheckSquare,
-  Clock, List, Settings, Eye, AlertCircle, BookOpen, X, Check, GraduationCap, MessageCircle, Copy, RefreshCw, Search, Key, Lock, Globe, Shield
+  Clock, List, Settings, Eye, AlertCircle, BookOpen, X, Check, GraduationCap, MessageCircle, Copy, RefreshCw, Search, Key, Lock, Globe, Shield,
+  Upload, CheckCircle2, FileText
 } from 'lucide-react';
 import { MCQExamConfig, MCQExamStatus } from '../types/mcq';
 import { MCQQuestion } from '../types/mcq';
@@ -12,6 +13,8 @@ import {
 } from '../services/mcqService';
 import { AIPaperGeneratorModal } from './AIPaperGeneratorModal';
 import { ConfirmationModal } from './ConfirmationModal';
+import { GoogleFormImportModal } from './mcq/GoogleFormImportModal';
+import { QuickAddQuestionModal } from './mcq/QuickAddQuestionModal';
 import { playSound } from '../utils/sounds';
 
 // ── Exam List View ────────────────────────────────────────────────────────────
@@ -410,74 +413,464 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
 interface QuestionSelectorProps {
   selectedIds: string[];
   onChange: (ids: string[]) => void;
+  examSubject?: string;
+  examTopic?: string;
 }
 
-const QuestionSelector: React.FC<QuestionSelectorProps> = ({ selectedIds, onChange }) => {
+const QuestionSelector: React.FC<QuestionSelectorProps> = ({
+  selectedIds,
+  onChange,
+  examSubject = 'Computer Science',
+  examTopic = 'Technical'
+}) => {
+  const [activeTab, setActiveTab] = useState<'selected' | 'bank'>(() =>
+    selectedIds.length > 0 ? 'selected' : 'selected'
+  );
   const [search, setSearch] = useState('');
-  const allQuestions = useMemo(() => getAllQuestions().filter((q) => q.status !== 'ARCHIVED'), []);
+  const [questionsVersion, setQuestionsVersion] = useState(0);
+  const [isGoogleFormModalOpen, setIsGoogleFormModalOpen] = useState(false);
+  const [isQuickAddModalOpen, setIsQuickAddModalOpen] = useState(false);
 
-  const filtered = useMemo(() =>
+  // Reload questions whenever questionsVersion or mcq data changes
+  const allQuestions = useMemo(() => {
+    return getAllQuestions().filter((q) => q.status !== 'ARCHIVED');
+  }, [questionsVersion]);
+
+  // Questions specifically selected for this exam
+  const selectedQuestions = useMemo(() => {
+    const map = new Map(allQuestions.map((q) => [q.id, q]));
+    return selectedIds.map((id) => map.get(id)).filter(Boolean) as MCQQuestion[];
+  }, [allQuestions, selectedIds]);
+
+  const filteredBank = useMemo(() =>
     allQuestions.filter((q) => {
       if (!search.trim()) return true;
       const s = search.toLowerCase();
-      return q.text.toLowerCase().includes(s) || q.subject.toLowerCase().includes(s) || q.topic.toLowerCase().includes(s);
-    }), [allQuestions, search]);
+      return (
+        q.text.toLowerCase().includes(s) ||
+        q.subject.toLowerCase().includes(s) ||
+        q.topic.toLowerCase().includes(s)
+      );
+    }),
+    [allQuestions, search]
+  );
 
   const toggle = (id: string) => {
-    onChange(selectedIds.includes(id)
-      ? selectedIds.filter((x) => x !== id)
-      : [...selectedIds, id]);
+    onChange(
+      selectedIds.includes(id)
+        ? selectedIds.filter((x) => x !== id)
+        : [...selectedIds, id]
+    );
   };
 
-  const totalMarks = allQuestions.filter((q) => selectedIds.includes(q.id)).reduce((s, q) => s + q.marks, 0);
+  const handleSelectAllFiltered = () => {
+    const newIds = Array.from(new Set([...selectedIds, ...filteredBank.map((q) => q.id)]));
+    onChange(newIds);
+    playSound('click');
+  };
+
+  const handleDeselectAllFiltered = () => {
+    const filteredSet = new Set(filteredBank.map((q) => q.id));
+    onChange(selectedIds.filter((id) => !filteredSet.has(id)));
+    playSound('click');
+  };
+
+  const handleRemoveSelected = (id: string) => {
+    onChange(selectedIds.filter((x) => x !== id));
+    playSound('click');
+  };
+
+  const handleQuestionsImported = (createdQuestions: MCQQuestion[]) => {
+    setQuestionsVersion((v) => v + 1);
+    const newIds = createdQuestions.map((q) => q.id);
+    const combined = Array.from(new Set([...selectedIds, ...newIds]));
+    onChange(combined);
+    setActiveTab('selected');
+    playSound('success');
+  };
+
+  const handleQuickQuestionCreated = (created: MCQQuestion) => {
+    setQuestionsVersion((v) => v + 1);
+    const combined = Array.from(new Set([...selectedIds, created.id]));
+    onChange(combined);
+    setActiveTab('selected');
+    playSound('success');
+  };
+
+  const totalMarks = selectedQuestions.reduce((s, q) => s + q.marks, 0);
 
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-          {selectedIds.length} selected · {totalMarks} marks
-        </span>
-        {selectedIds.length > 0 && (
-          <button onClick={() => onChange([])} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', fontSize: '12px' }}>
-            Clear All
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {/* Top Action Toolbar */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '10px',
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-md)',
+          padding: '10px 14px'
+        }}
+      >
+        {/* Left: View Mode Toggle */}
+        <div style={{ display: 'flex', background: 'var(--bg-elevated)', padding: '3px', borderRadius: '6px', border: '1px solid var(--border)', gap: '4px' }}>
+          <button
+            type="button"
+            onClick={() => { setActiveTab('selected'); playSound('click'); }}
+            style={{
+              padding: '6px 12px',
+              fontSize: '12px',
+              fontWeight: activeTab === 'selected' ? 700 : 500,
+              borderRadius: '4px',
+              border: activeTab === 'selected' ? '1px solid var(--border-strong)' : '1px solid transparent',
+              background: activeTab === 'selected' ? 'var(--bg-surface)' : 'transparent',
+              color: activeTab === 'selected' ? 'var(--text-primary)' : 'var(--text-muted)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <CheckCircle2 size={13} color={activeTab === 'selected' ? 'var(--success)' : 'currentColor'} />
+            <span>Questions in This Exam ({selectedIds.length})</span>
           </button>
-        )}
+
+          <button
+            type="button"
+            onClick={() => { setActiveTab('bank'); playSound('click'); }}
+            style={{
+              padding: '6px 12px',
+              fontSize: '12px',
+              fontWeight: activeTab === 'bank' ? 700 : 500,
+              borderRadius: '4px',
+              border: activeTab === 'bank' ? '1px solid var(--border-strong)' : '1px solid transparent',
+              background: activeTab === 'bank' ? 'var(--bg-surface)' : 'transparent',
+              color: activeTab === 'bank' ? 'var(--text-primary)' : 'var(--text-muted)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <BookOpen size={13} color={activeTab === 'bank' ? 'var(--accent)' : 'currentColor'} />
+            <span>Browse Question Bank ({allQuestions.length})</span>
+          </button>
+        </div>
+
+        {/* Right: Direct Import & Quick Add Buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => { setIsGoogleFormModalOpen(true); playSound('click'); }}
+            className="btn btn-primary btn-sm"
+            style={{
+              height: '30px',
+              padding: '0 12px',
+              fontSize: '12px',
+              fontWeight: 700,
+              gap: '5px',
+              display: 'inline-flex',
+              alignItems: 'center'
+            }}
+            title="Import directly from Google Form quiz copy-paste or text file"
+          >
+            <Upload size={13} />
+            <span>Import Google Form</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setIsQuickAddModalOpen(true); playSound('click'); }}
+            className="btn btn-secondary btn-sm"
+            style={{
+              height: '30px',
+              padding: '0 10px',
+              fontSize: '12px',
+              gap: '5px',
+              display: 'inline-flex',
+              alignItems: 'center'
+            }}
+            title="Add a single new question directly to this exam"
+          >
+            <Plus size={13} />
+            <span>+ Quick Add</span>
+          </button>
+        </div>
       </div>
-      <div style={{ position: 'relative', marginBottom: '10px' }}>
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter questions..."
-          style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', padding: '8px 10px', fontSize: '13px', outline: 'none' }} />
-      </div>
-      <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
-        {filtered.length === 0 ? (
-          <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-            {allQuestions.length === 0 ? 'No published questions. Create questions in the Question Bank first.' : 'No matches found.'}
+
+      {/* VIEW A: ONLY QUESTIONS IN THIS EXAM */}
+      {activeTab === 'selected' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
+            <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+              Showing only the <strong style={{ color: 'var(--text-primary)' }}>{selectedQuestions.length}</strong> questions included in this exam · <strong style={{ color: 'var(--text-primary)' }}>{totalMarks}</strong> total marks
+            </span>
+            {selectedIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--danger)',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <Trash2 size={12} /> Clear All
+              </button>
+            )}
           </div>
-        ) : (
-          filtered.map((q, i) => {
-            const sel = selectedIds.includes(q.id);
-            return (
-              <div key={q.id} onClick={() => toggle(q.id)} style={{
-                display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', cursor: 'pointer',
-                background: sel ? 'var(--accent-subtle)' : 'transparent',
-                borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none',
-              }}>
-                <div style={{ width: '18px', height: '18px', borderRadius: '4px', border: `2px solid ${sel ? 'var(--accent)' : 'var(--border)'}`, background: sel ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {sel && <Check size={11} color="var(--accent-contrast)" />}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: '13px', color: 'var(--text-primary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.text}</p>
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '2px' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{q.subject}</span>
-                    <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>· {q.difficulty}</span>
-                    <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>· {q.marks}pt</span>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: q.status === 'PUBLISHED' ? 'var(--success)' : 'var(--text-muted)' }}>{q.status}</span>
-                  </div>
-                </div>
+
+          {selectedQuestions.length === 0 ? (
+            <div
+              style={{
+                padding: '36px 20px',
+                textAlign: 'center',
+                background: 'var(--bg-surface)',
+                border: '1px dashed var(--border)',
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '12px'
+              }}
+            >
+              <FileText size={32} style={{ opacity: 0.35, color: 'var(--text-muted)' }} />
+              <div>
+                <p style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  No questions added to this exam yet
+                </p>
+                <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Import questions directly from a Google Form or choose from your question bank.
+                </p>
               </div>
-            );
-          })
-        )}
-      </div>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsGoogleFormModalOpen(true)}
+                  className="btn btn-primary btn-sm"
+                  style={{ height: '30px', padding: '0 14px', fontSize: '12px', gap: '6px' }}
+                >
+                  <Upload size={13} />
+                  <span>Import from Google Form</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('bank')}
+                  className="btn btn-secondary btn-sm"
+                  style={{ height: '30px', padding: '0 12px', fontSize: '12px', gap: '6px' }}
+                >
+                  <BookOpen size={13} />
+                  <span>Browse Question Bank</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ maxHeight: '380px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', display: 'flex', flexDirection: 'column' }}>
+              {selectedQuestions.map((q, idx) => {
+                const correctOpt = q.options.find((o) => o.isCorrect);
+                return (
+                  <div
+                    key={q.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                      padding: '12px 14px',
+                      background: 'var(--bg-elevated)',
+                      borderBottom: idx < selectedQuestions.length - 1 ? '1px solid var(--border)' : 'none'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: 1, minWidth: 0 }}>
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          color: 'var(--accent)',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '4px',
+                          padding: '2px 6px',
+                          flexShrink: 0,
+                          marginTop: '1px'
+                        }}
+                      >
+                        Q{idx + 1}
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {q.text}
+                        </p>
+                        <div style={{ display: 'flex', gap: '10px', marginTop: '3px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          {correctOpt && (
+                            <span style={{ fontSize: '11px', color: 'var(--success)', fontWeight: 600 }}>
+                              ✓ Answer: {correctOpt.text}
+                            </span>
+                          )}
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                            {q.options.length} Options
+                          </span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                            · {q.marks} pt
+                          </span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                            · {q.subject || 'General'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSelected(q.id)}
+                      className="btn btn-ghost btn-sm"
+                      style={{
+                        width: '26px',
+                        height: '26px',
+                        padding: 0,
+                        color: 'var(--danger)',
+                        flexShrink: 0
+                      }}
+                      title="Remove from this exam"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* VIEW B: BROWSE QUESTION BANK */}
+      {activeTab === 'bank' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: 'min(100%, 260px)' }}>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search question bank by keyword, subject, or topic..."
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-primary)',
+                  padding: '8px 10px',
+                  fontSize: '13px',
+                  outline: 'none'
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                type="button"
+                onClick={handleSelectAllFiltered}
+                className="btn btn-secondary btn-sm"
+                style={{ fontSize: '11.5px', height: '30px' }}
+                title="Select all filtered questions"
+              >
+                Select All Filtered ({filteredBank.length})
+              </button>
+              <button
+                type="button"
+                onClick={handleDeselectAllFiltered}
+                className="btn btn-ghost btn-sm"
+                style={{ fontSize: '11.5px', height: '30px', color: 'var(--danger)' }}
+                title="Deselect filtered questions"
+              >
+                Deselect Filtered
+              </button>
+            </div>
+          </div>
+
+          <div style={{ maxHeight: '320px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
+            {filteredBank.length === 0 ? (
+              <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+                {allQuestions.length === 0
+                  ? 'No questions in the central Question Bank yet. Click "Import Google Form" to add questions directly.'
+                  : 'No matches found.'}
+              </div>
+            ) : (
+              filteredBank.map((q, i) => {
+                const sel = selectedIds.includes(q.id);
+                return (
+                  <div
+                    key={q.id}
+                    onClick={() => toggle(q.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '10px 12px',
+                      cursor: 'pointer',
+                      background: sel ? 'var(--accent-subtle)' : 'transparent',
+                      borderBottom: i < filteredBank.length - 1 ? '1px solid var(--border)' : 'none'
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '4px',
+                        border: `2px solid ${sel ? 'var(--accent)' : 'var(--border)'}`,
+                        background: sel ? 'var(--accent)' : 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}
+                    >
+                      {sel && <Check size={11} color="var(--accent-contrast)" />}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: '13px', color: 'var(--text-primary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {q.text}
+                      </p>
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '2px', alignItems: 'center' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{q.subject}</span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>· {q.difficulty}</span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>· {q.marks}pt</span>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: q.status === 'PUBLISHED' ? 'var(--success)' : 'var(--text-muted)' }}>{q.status}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Google Form Import Modal */}
+      <GoogleFormImportModal
+        isOpen={isGoogleFormModalOpen}
+        onClose={() => setIsGoogleFormModalOpen(false)}
+        onQuestionsImported={handleQuestionsImported}
+        defaultSubject={examSubject}
+        defaultTopic={examTopic}
+      />
+
+      {/* Quick Add Question Modal */}
+      <QuickAddQuestionModal
+        isOpen={isQuickAddModalOpen}
+        onClose={() => setIsQuickAddModalOpen(false)}
+        onQuestionCreated={handleQuickQuestionCreated}
+        defaultSubject={examSubject}
+        defaultTopic={examTopic}
+      />
     </div>
   );
 };
@@ -726,6 +1119,8 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ initial, onSave, onBack }) => {
           <QuestionSelector
             selectedIds={form.questionIds}
             onChange={(ids) => set('questionIds', ids)}
+            examSubject={form.subject}
+            examTopic={form.topic}
           />
         </div>
       )}

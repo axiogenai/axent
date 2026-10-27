@@ -100,7 +100,9 @@ import {
 
   Copy,
 
-  CheckCheck
+  CheckCheck,
+
+  Plus
 
 } from 'lucide-react';
 
@@ -163,6 +165,12 @@ import { SubmitActionButton } from './watermelon/SubmitActionButton';
 import { ContinuousTabs, MetricTag, SimpleSelect } from './watermelon-ui';
 
 import { startAntiCheatingShield } from '../services/antiCheatingGuard';
+import {
+  getDefaultTestCasesForProblem,
+  runTestCases,
+  TestCaseItem,
+  TestCaseExecutionSummary
+} from '../services/compilerService';
 
 
 
@@ -246,7 +254,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
   });
 
-  const [activeTab, setActiveTab] = useState<'terminal' | 'telemetry' | 'viva'>('terminal');
+  const [activeTab, setActiveTab] = useState<'terminal' | 'testcases' | 'telemetry' | 'viva'>('terminal');
 
   const [stdinInput, setStdinInput] = useState<string>('');
 
@@ -641,6 +649,38 @@ export const Workspace: React.FC<WorkspaceProps> = ({
     return Boolean(student.name?.trim() && student.rollNumber?.trim());
 
   });
+
+  // ── TEST CASES STATE FOR CODING EXAMINATIONS ──
+  const [testCases, setTestCases] = useState<TestCaseItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('codedna_last_testcases');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return getDefaultTestCasesForProblem(student.assignmentTitle || '');
+  });
+  const [selectedTestCaseIdx, setSelectedTestCaseIdx] = useState<number>(0);
+  const [isRunningTests, setIsRunningTests] = useState<boolean>(false);
+  const [testCasesSummary, setTestCasesSummary] = useState<TestCaseExecutionSummary | null>(() => {
+    try {
+      const savedSummary = localStorage.getItem('codedna_last_testcases_summary');
+      if (savedSummary) return JSON.parse(savedSummary);
+    } catch {}
+    return null;
+  });
+
+  // Keep test cases updated if student assignment changes
+  useEffect(() => {
+    if (student.assignmentTitle) {
+      setTestCases((prev) => {
+        const isFresh = prev.every((tc) => tc.passed === undefined);
+        return isFresh ? getDefaultTestCasesForProblem(student.assignmentTitle) : prev;
+      });
+    }
+  }, [student.assignmentTitle]);
+
 
 
 
@@ -2114,7 +2154,76 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
 
 
-  const handleRun = useCallback(() => {
+    const handleRunAllTests = useCallback(async () => {
+    if (!isCandidateRegistered) {
+      playSound('warning');
+      setRegValidationError('Candidate registration is mandatory before evaluating test cases.');
+      setIsProfileModalOpen(true);
+      return;
+    }
+    if (isLockedByProctor) {
+      playSound('warning');
+      setWorkspaceNoticeMessage('Access Denied: Terminal is locked by the invigilator.');
+      return;
+    }
+    if (!editorData.code.trim()) {
+      playSound('warning');
+      setWorkspaceNoticeMessage('Please enter program code in the editor before running test cases.');
+      return;
+    }
+
+    setIsRunningTests(true);
+    setIsRightPaneOpen(true);
+    setActiveTab('testcases');
+    playSound('click');
+
+    try {
+      const summary = await runTestCases(editorData.code, editorData.language, testCases);
+      setTestCases(summary.results);
+      setTestCasesSummary(summary);
+      try {
+        localStorage.setItem('codedna_last_testcases', JSON.stringify(summary.results));
+        localStorage.setItem('codedna_last_testcases_summary', JSON.stringify(summary));
+      } catch {}
+      playSound(summary.allPassed ? 'success' : 'warning');
+    } catch (err: unknown) {
+      console.error('Failed to run test cases:', err);
+      playSound('error');
+    } finally {
+      setIsRunningTests(false);
+    }
+  }, [isCandidateRegistered, isLockedByProctor, editorData.code, editorData.language, testCases]);
+
+  const handleAddTestCase = useCallback(() => {
+    const newCase: TestCaseItem = {
+      id: `tc-${Date.now()}`,
+      name: `Custom Case ${testCases.length + 1}`,
+      input: '',
+      expectedOutput: ''
+    };
+    setTestCases((prev) => [...prev, newCase]);
+    setSelectedTestCaseIdx(testCases.length);
+    playSound('click');
+  }, [testCases.length]);
+
+  const handleDeleteTestCase = useCallback((indexToDelete: number) => {
+    if (testCases.length <= 1) return;
+    setTestCases((prev) => prev.filter((_, i) => i !== indexToDelete));
+    setSelectedTestCaseIdx((prev) => Math.max(0, Math.min(prev, testCases.length - 2)));
+    playSound('click');
+  }, [testCases.length]);
+
+  const handleUpdateTestCase = useCallback((idx: number, field: 'input' | 'expectedOutput' | 'name', value: string) => {
+    setTestCases((prev) => {
+      const updated = [...prev];
+      if (updated[idx]) {
+        updated[idx] = { ...updated[idx], [field]: value, passed: undefined, actualOutput: undefined };
+      }
+      return updated;
+    });
+  }, []);
+
+const handleRun = useCallback(() => {
 
     if (!isCandidateRegistered) {
 
@@ -2921,6 +3030,14 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             isLocked={isEffectiveLocked}
 
             isConsoleOpen={isRightPaneOpen}
+            onToggleTestCases={() => {
+              setIsRightPaneOpen(true);
+              setActiveTab('testcases');
+              playSound('click');
+            }}
+            isTestCasesOpen={isRightPaneOpen && activeTab === 'testcases'}
+            testCount={testCasesSummary ? `${testCasesSummary.totalPassed}/${testCasesSummary.totalCount}` : testCases.length}
+            testBadgeTone={testCasesSummary ? (testCasesSummary.allPassed ? 'success' : 'warning') : 'neutral'}
 
             onToggleConsole={() => setIsRightPaneOpen((prev) => !prev)}
 
@@ -3474,7 +3591,87 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
         {/* Editor Canvas */}
 
-        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
+                {/* Practical Problem Statement Banner */}
+        {student.assignmentTitle && (
+          <div
+            style={{
+              background: 'var(--bg-surface)',
+              borderBottom: '1px solid var(--border)',
+              padding: '8px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              flexShrink: 0
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+              <div
+                style={{
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '4px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid var(--border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                <Code2 size={13} color="var(--accent)" />
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 700 }}>
+                    Practical Problem
+                  </span>
+                  <span className="badge badge-sm badge-neutral" style={{ fontSize: '10px', padding: '0 5px', height: '18px' }}>
+                    {student.course || student.examType}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    fontSize: '12.5px',
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}
+                  title={student.assignmentTitle}
+                >
+                  {student.assignmentTitle}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={handleRunAllTests}
+                disabled={isRunningTests || isEffectiveLocked}
+                style={{
+                  height: '26px',
+                  padding: '0 10px',
+                  fontSize: '11px',
+                  gap: '5px',
+                  fontWeight: 600
+                }}
+                title="Execute code against all problem test cases"
+              >
+                {isRunningTests ? (
+                  <RefreshCw size={11} className="spinner-icon" />
+                ) : (
+                  <Play size={11} />
+                )}
+                <span>Run Tests ({testCases.length})</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+<div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
 
           <CodeEditor
 
@@ -3586,7 +3783,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
                 playSound('click');
 
-                setActiveTab(id as 'terminal' | 'telemetry' | 'viva');
+                setActiveTab(id as 'terminal' | 'testcases' | 'telemetry' | 'viva');
 
               }}
 
@@ -3600,6 +3797,13 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
                   icon: <Terminal size={13} />
 
+                },
+                {
+                  id: 'testcases',
+                  label: 'Test Cases',
+                  icon: <CheckCircle2 size={13} />,
+                  badge: testCasesSummary ? `${testCasesSummary.totalPassed}/${testCasesSummary.totalCount}` : `${testCases.length}`,
+                  badgeTone: testCasesSummary ? (testCasesSummary.allPassed ? 'success' : 'warning') : undefined
                 },
 
                 {
@@ -3968,7 +4172,349 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
         {/* Tab 2: Typing Activity & Telemetry */}
 
-        {activeTab === 'telemetry' && (
+                {/* Tab: Real Practical Test Cases Runner */}
+        {activeTab === 'testcases' && (
+          <div
+            style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              background: 'var(--bg-main)',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Test Cases Top Action Bar */}
+            <div
+              style={{
+                padding: '8px 14px',
+                background: 'var(--bg-surface)',
+                borderBottom: '1px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '8px',
+                flexShrink: 0
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={handleRunAllTests}
+                  disabled={isRunningTests || isEffectiveLocked}
+                  style={{
+                    height: '28px',
+                    padding: '0 10px',
+                    fontSize: '11px',
+                    gap: '5px',
+                    fontWeight: 600
+                  }}
+                  title="Run program against all test cases"
+                >
+                  {isRunningTests ? (
+                    <RefreshCw size={12} className="spinner-icon" />
+                  ) : (
+                    <Play size={12} />
+                  )}
+                  <span>{isRunningTests ? 'Evaluating...' : 'Run All Tests'}</span>
+                </button>
+
+                <div
+                  className={`badge ${
+                    testCasesSummary
+                      ? testCasesSummary.allPassed
+                        ? 'badge-success'
+                        : 'badge-warning'
+                      : 'badge-neutral'
+                  }`}
+                  style={{
+                    height: '26px',
+                    padding: '0 8px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    gap: '4px'
+                  }}
+                >
+                  {testCasesSummary ? (
+                    testCasesSummary.allPassed ? (
+                      <CheckCircle2 size={11} />
+                    ) : (
+                      <AlertTriangle size={11} />
+                    )
+                  ) : (
+                    <CheckCircle2 size={11} />
+                  )}
+                  <span>
+                    {testCasesSummary
+                      ? `${testCasesSummary.totalPassed}/${testCasesSummary.totalCount} Passed (${testCasesSummary.scorePercentage}%)`
+                      : `${testCases.length} Test Cases Ready`}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleAddTestCase}
+                  disabled={isEffectiveLocked}
+                  style={{
+                    height: '28px',
+                    padding: '0 8px',
+                    fontSize: '11px',
+                    gap: '4px'
+                  }}
+                  title="Add a custom test case"
+                >
+                  <Plus size={12} />
+                  <span>Add Case</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Test Case Tab Pill Selector */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 14px',
+                background: 'var(--bg-elevated)',
+                borderBottom: '1px solid var(--border)',
+                overflowX: 'auto',
+                flexShrink: 0
+              }}
+            >
+              {testCases.map((tc, idx) => {
+                const isSelected = selectedTestCaseIdx === idx;
+                const isPassed = tc.passed === true;
+                const isFailed = tc.passed === false;
+
+                return (
+                  <button
+                    key={tc.id || idx}
+                    onClick={() => {
+                      setSelectedTestCaseIdx(idx);
+                      playSound('click');
+                    }}
+                    style={{
+                      height: '26px',
+                      padding: '0 10px',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      fontWeight: isSelected ? 700 : 500,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      border: isSelected ? '1px solid var(--border-strong)' : '1px solid var(--border)',
+                      background: isSelected ? 'var(--bg-surface)' : 'transparent',
+                      color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {isPassed ? (
+                      <CheckCircle2 size={11} color="var(--success)" />
+                    ) : isFailed ? (
+                      <AlertTriangle size={11} color="var(--danger)" />
+                    ) : (
+                      <div
+                        style={{
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: '50%',
+                          background: 'var(--text-muted)'
+                        }}
+                      />
+                    )}
+                    <span>{tc.name || `Case ${idx + 1}`}</span>
+                    {testCases.length > 1 && (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteTestCase(idx);
+                        }}
+                        style={{
+                          marginLeft: '2px',
+                          color: 'var(--text-dim)',
+                          cursor: 'pointer',
+                          display: 'inline-flex'
+                        }}
+                        title="Delete test case"
+                      >
+                        <X size={10} />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Active Test Case Detail Pane */}
+            {testCases[selectedTestCaseIdx] && (
+              <div
+                style={{
+                  flex: 1,
+                  overflowY: 'auto',
+                  padding: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px'
+                }}
+              >
+                {/* Result Status Banner if executed */}
+                {testCases[selectedTestCaseIdx].passed !== undefined && (
+                  <div
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      border: testCases[selectedTestCaseIdx].passed
+                        ? '1px solid var(--success)'
+                        : '1px solid var(--danger)',
+                      background: testCases[selectedTestCaseIdx].passed
+                        ? 'rgba(34, 197, 94, 0.08)'
+                        : 'rgba(239, 68, 68, 0.08)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      fontSize: '11.5px',
+                      fontWeight: 600
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {testCases[selectedTestCaseIdx].passed ? (
+                        <>
+                          <CheckCircle2 size={13} color="var(--success)" />
+                          <span style={{ color: 'var(--success)' }}>Test Case Passed</span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertTriangle size={13} color="var(--danger)" />
+                          <span style={{ color: 'var(--danger)' }}>Test Case Failed — Output Mismatch</span>
+                        </>
+                      )}
+                    </div>
+                    {testCases[selectedTestCaseIdx].time && (
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                        Time: {testCases[selectedTestCaseIdx].time}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Case Name Input */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Test Case Name
+                  </label>
+                  <input
+                    type="text"
+                    value={testCases[selectedTestCaseIdx].name || ''}
+                    onChange={(e) => handleUpdateTestCase(selectedTestCaseIdx, 'name', e.target.value)}
+                    disabled={isEffectiveLocked}
+                    className="input input-sm"
+                    style={{
+                      fontSize: '12px',
+                      height: '28px',
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '4px',
+                      padding: '0 8px',
+                      color: 'var(--text-primary)'
+                    }}
+                  />
+                </div>
+
+                {/* Input (stdin) */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      Standard Input (stdin)
+                    </label>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                      Passed to program input stream
+                    </span>
+                  </div>
+                  <textarea
+                    value={testCases[selectedTestCaseIdx].input || ''}
+                    onChange={(e) => handleUpdateTestCase(selectedTestCaseIdx, 'input', e.target.value)}
+                    disabled={isEffectiveLocked}
+                    placeholder="e.g. 5&#10;10 20 30 40 50"
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '4px',
+                      padding: '6px 8px',
+                      color: 'var(--text-primary)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '11.5px',
+                      outline: 'none',
+                      resize: 'vertical'
+                    }}
+                  />
+                </div>
+
+                {/* Expected Output */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      Expected Output (stdout)
+                    </label>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                      Required program return
+                    </span>
+                  </div>
+                  <textarea
+                    value={testCases[selectedTestCaseIdx].expectedOutput || ''}
+                    onChange={(e) => handleUpdateTestCase(selectedTestCaseIdx, 'expectedOutput', e.target.value)}
+                    disabled={isEffectiveLocked}
+                    placeholder="e.g. 150"
+                    rows={2}
+                    style={{
+                      width: '100%',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '4px',
+                      padding: '6px 8px',
+                      color: 'var(--text-primary)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '11.5px',
+                      outline: 'none',
+                      resize: 'vertical'
+                    }}
+                  />
+                </div>
+
+                {/* Actual Output */}
+                {testCases[selectedTestCaseIdx].actualOutput !== undefined && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      Actual Program Output
+                    </label>
+                    <div
+                      style={{
+                        padding: '8px 10px',
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '4px',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '11.5px',
+                        color: testCases[selectedTestCaseIdx].passed ? 'var(--text-primary)' : 'var(--danger)',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-all',
+                        minHeight: '36px'
+                      }}
+                    >
+                      {testCases[selectedTestCaseIdx].actualOutput || '(No output produced)'}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+{activeTab === 'telemetry' && (
 
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
