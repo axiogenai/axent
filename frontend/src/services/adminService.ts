@@ -658,9 +658,9 @@ export function cleanCorruptedStations(): void {
     if (raw) {
       const parsed: CandidateStation[] = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        // Keep valid stations with an id and student object
+        // Keep valid stations with an id and real student details (never phantom / empty test rows)
         const cleaned = parsed.filter(
-          (s) => s && s.id && s.student
+          (s) => s && s.id && s.student && s.student.name && s.student.name.trim() !== '' && s.student.name !== 'Candidate' && s.student.name !== 'Candidate (N/A)'
         );
         if (cleaned.length !== parsed.length) {
           localStorage.setItem(STATIONS_KEY, JSON.stringify(cleaned));
@@ -861,7 +861,14 @@ export function getLiveStations(): CandidateStation[] {
       const p = JSON.parse(raw);
       if (Array.isArray(p)) parsed = p;
     }
-    const filtered = parsed.filter((s) => !deletedIds.has(String(s.labId || '').toUpperCase().trim()));
+    const filtered = parsed.filter((s) => {
+      if (!s || !s.id) return false;
+      if (deletedIds.has(String(s.labId || '').toUpperCase().trim())) return false;
+      if (!s.student || !s.student.name || s.student.name.trim() === '' || s.student.name === 'Candidate' || s.student.name === 'Candidate (N/A)') {
+        return false;
+      }
+      return true;
+    });
     const reconciled = reconcileAttemptsIntoStations(filtered);
     return reconciled.map((s) => ({
       ...s,

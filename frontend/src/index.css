@@ -1300,6 +1300,17 @@ body.codedna-kiosk-mode {
   }
 }
 
+/* Mobile Clean Mode: Hide question sidebar completely to prevent viewport clutter and touch/auto-rotate gestures */
+@media (max-width: 768px) {
+  .mcq-exam-container {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+  .mcq-exam-sidebar {
+    display: none !important;
+  }
+}
+
 /* Exam Navigation Footer */
 .mcq-exam-footer {
   display: flex;

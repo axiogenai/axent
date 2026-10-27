@@ -91,6 +91,10 @@ export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = (
 
   // Filter stations that have cheating risk or elevated metrics
   const flaggedStations = stations.filter((s) => {
+    // Only real candidate stations with actual registered student details
+    if (!s || !s.student || !s.student.name || s.student.name.trim() === '' || s.student.name === 'Candidate' || s.student.name === 'Candidate (N/A)') {
+      return false;
+    }
     const isPasteViolation = (s.metrics?.pasteRatio || 0) >= 30;
     const isTabViolation = (s.metrics?.tabSwitchViolations || 0) >= 1;
     const isRiskElevated = s.cheatingRisk === 'High' || s.cheatingRisk === 'Critical' || s.cheatingRisk === 'Medium';
