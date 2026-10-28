@@ -479,7 +479,7 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
                       alignItems: 'flex-start'
                     }}
                   >
-                    <Shield size={18} style={{ color: '#60a5fa', shrink: 0, marginTop: '2px' }} />
+                    <Shield size={18} style={{ color: '#60a5fa', flexShrink: 0, marginTop: '2px' }} />
                     <div style={{ fontSize: '12.5px', color: '#cbd5e1', lineHeight: 1.5 }}>
                       <strong style={{ color: '#ffffff', display: 'block', marginBottom: '2px' }}>
                         Round 2 Shortlisting Notice:
