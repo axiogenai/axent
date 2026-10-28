@@ -867,27 +867,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole, theme
 
 
 
-              {/* Security Trust Seal */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  marginTop: '8px',
-                  paddingTop: '10px',
-                  borderTop: '1px solid var(--border)',
-                  fontSize: '9.5px',
-                  fontFamily: 'var(--font-mono, monospace)',
-                  color: 'var(--text-muted)',
-                  letterSpacing: '0.06em',
-                  textTransform: 'uppercase',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                <Shield size={12} strokeWidth={2.2} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-                <span>EAL-6 Session Integrity &bull; 256-Bit Encrypted</span>
-              </div>
+              
             </form>
           )}
 
@@ -1025,105 +1005,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole, theme
 
         </div>
 
-        {/* ── Card Footer: Gateway Switcher & Student Portal Link ── */}
-        <div
-          style={{
-            padding: '14px 28px',
-            borderTop: '1px solid var(--border)',
-            background: 'var(--bg-surface)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '8px'
-          }}
-        >
-          {/* Switch between Admin and Paper Setter login */}
-          {role === 'admin' ? (
-            <button
-              type="button"
-              onClick={() => {
-                playSound('click');
-                navigate('/login/paper-setter');
-              }}
-              style={{
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                fontSize: '11.5px',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              <Layers size={13} color="var(--text-secondary)" style={{ flexShrink: 0 }} />
-              <span>Faculty or Examiner? <strong style={{ color: 'var(--text-primary)' }}>Open Setter Portal</strong></span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                playSound('click');
-                navigate('/login/admin');
-              }}
-              style={{
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                fontSize: '11.5px',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              <ShieldAlert size={13} color="var(--text-secondary)" style={{ flexShrink: 0 }} />
-              <span>Admin or Proctor? <strong style={{ color: 'var(--text-primary)' }}>Open CCTV Console</strong></span>
-            </button>
-          )}
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '2px' }}>
-            <button
-              type="button"
-              onClick={() => navigate('/login')}
-              style={{
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                fontSize: '11px',
-                color: 'var(--text-muted)',
-                cursor: 'pointer',
-                textDecoration: 'underline'
-              }}
-            >
-              All Gateways
-            </button>
-            <span style={{ fontSize: '11px', color: 'var(--border)' }}>•</span>
-            <button
-              type="button"
-              onClick={() => navigate('/mcq')}
-              style={{
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                fontSize: '11.5px',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px'
-              }}
-            >
-              <GraduationCap size={12} color="var(--accent)" />
-              <span>Candidate Portal</span>
-            </button>
-          </div>
         </div>
-      </div>
     </div>
   );
 };

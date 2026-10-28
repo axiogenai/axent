@@ -156,7 +156,7 @@ import { DEFAULT_LANGUAGE_TEMPLATES } from './CodeEditor';
 
 import { RunActionButton } from './watermelon/RunActionButton';
 
-import { fetchSingleStationLockStatus } from '../services/supabaseService';
+import { fetchSingleStationLockStatus, supabase } from '../services/supabaseService';
 
 import { ExtendedToolbar } from './watermelon/ExtendedToolbar';
 
@@ -322,7 +322,19 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
   const [isScreenSharing, setIsScreenSharing] = useState<boolean>(false);
 
-  const [tabSwitchCount, setTabSwitchCount] = useState<number>(0);
+  const [tabSwitchCount, setTabSwitchCount] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const activeLab = getActiveLabId() || 'LAB-01';
+        const stNum = localStorage.getItem('codedna_station_number') || 'Station #01';
+        const cleanSt = stNum.replace(/[^0-9]/g, '').padStart(2, '0') || '01';
+        const stId = `${activeLab}-WS-${cleanSt}`;
+        const saved = localStorage.getItem(`codedna_strikes_${stId}`);
+        if (saved) return Math.min(3, Math.max(0, parseInt(saved, 10)));
+      } catch {}
+    }
+    return 0;
+  });
 
   const [unfocusedSeconds, setUnfocusedSeconds] = useState<number>(0);
 
@@ -650,7 +662,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
   });
 
-  // ── TEST CASES STATE FOR CODING EXAMINATIONS ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ TEST CASES STATE FOR CODING EXAMINATIONS Ã¢â€â‚¬Ã¢â€â‚¬
   const [testCases, setTestCases] = useState<TestCaseItem[]>(() => {
     try {
       const saved = localStorage.getItem('codedna_last_testcases');
@@ -691,8 +703,11 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   // immediately intercept and redirect back to /mcq!
 
   useEffect(() => {
-
     try {
+      // CodeSpark Examination Hall conducts both Round 1 (MCQ) and Round 2 (Coding) seamlessly
+      if (typeof window !== 'undefined' && window.location.pathname.includes('/codespark-exams')) {
+        return;
+      }
 
       const mode = localStorage.getItem('codedna_active_exam_mode');
 
@@ -762,7 +777,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
 
 
-  // ── LIVE EXAM SESSION TIMER STATE ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ LIVE EXAM SESSION TIMER STATE Ã¢â€â‚¬Ã¢â€â‚¬
 
   const [examDurationMinutes, setExamDurationMinutes] = useState<number>(() => {
 
@@ -906,7 +921,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
 
 
-  // ── REMOTE CCTV PROCTORING BUS LISTENER & CONTINUOUS LOCK ENFORCEMENT ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ REMOTE CCTV PROCTORING BUS LISTENER & CONTINUOUS LOCK ENFORCEMENT Ã¢â€â‚¬Ã¢â€â‚¬
 
   useEffect(() => {
 
@@ -917,88 +932,61 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
 
     const checkLockStatus = () => {
-
       const explicit = typeof window !== 'undefined' ? localStorage.getItem(`${STATION_LOCK_PREFIX}${myStationId}`) : null;
-
       let locked = false;
-
       if (explicit === 'false') {
-
         locked = false;
-
       } else if (explicit === 'true') {
-
         locked = true;
-
       } else {
-
         locked = isStationLocked(myStationId, activeLab);
-
       }
 
+      // Check persistent strikes for this station
+      const savedStrikes = typeof window !== 'undefined'
+        ? parseInt(localStorage.getItem(`codedna_strikes_${myStationId}`) || '0', 10)
+        : 0;
 
+      // If candidate has 3 strikes and has not been explicitly unlocked, station is locked!
+      if (savedStrikes >= 3 && explicit !== 'false') {
+        locked = true;
+      }
 
       setIsLockedByProctor((prev) => {
-
         if (prev !== locked) {
-
           playSound(locked ? 'warning' : 'success');
-
         }
-
         return locked;
-
       });
 
-
-
-      if (!locked) {
-
-        setInfractionNotice((prev) => (prev?.strike && prev.strike >= 3 ? null : prev));
-
-        setTabSwitchCount((prev) => (prev >= 3 ? 0 : prev));
-
-        if (explicit === 'false') {
-
-          setTabSwitchCount(0);
-
-          setUnfocusedSeconds(0);
-
-          setInfractionNotice(null);
-
-          setProctorNotice(null);
-
-          setEditorData((prev) => {
-
-            if (prev.metrics.tabSwitchViolations === 0 && prev.metrics.unfocusedTimeSeconds === 0) return prev;
-
-            return {
-
-              ...prev,
-
-              metrics: {
-
-                ...prev.metrics,
-
-                tabSwitchViolations: 0,
-
-                unfocusedTimeSeconds: 0
-
-              }
-
-            };
-
-          });
-
+      if (locked) {
+        if (savedStrikes >= 3) {
+          setProctorNotice('TERMINAL SUSPENDED: 3/3 Infractions Exceeded! Contact Invigilator for Emergency Key.');
         }
-
+      } else {
+        setInfractionNotice((prev) => (prev?.strike && prev.strike >= 3 ? null : prev));
+        if (explicit === 'false') {
+          setTabSwitchCount(0);
+          setUnfocusedSeconds(0);
+          setInfractionNotice(null);
+          setProctorNotice(null);
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem(`codedna_strikes_${myStationId}`);
+          }
+          setEditorData((prev) => {
+            if (prev.metrics.tabSwitchViolations === 0 && prev.metrics.unfocusedTimeSeconds === 0) return prev;
+            return {
+              ...prev,
+              metrics: {
+                ...prev.metrics,
+                tabSwitchViolations: 0,
+                unfocusedTimeSeconds: 0
+              }
+            };
+          });
+        }
       }
-
     };
-
-
-
-    // Immediate initial sync
 
     checkLockStatus();
 
@@ -1177,10 +1165,10 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           if (typeof window !== 'undefined') {
 
             localStorage.setItem(`${STATION_LOCK_PREFIX}${myStationId}`, 'false');
+      localStorage.removeItem(`codedna_strikes_${myStationId}`);
+    }
 
-          }
-
-          setIsLockedByProctor(false);
+    setIsLockedByProctor(false);
 
           executeStartNewCandidate();
 
@@ -1226,6 +1214,35 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
 
 
+    // Cross-machine realtime unlock via Supabase (works across physical machines unlike BroadcastChannel)
+    const myStId = `${student.labId || ''}-WS-${(student.stationNumber || '').replace(/[^0-9]/g, '').padStart(2, '0')}`;
+    let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+    if (myStId && myStId.length > 5) {
+      realtimeChannel = supabase
+        .channel(`lock_watch_${myStId}`)
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'candidate_stations',
+          filter: `id=eq.${myStId}`,
+        }, (payload: { new: Record<string, unknown> }) => {
+          const updated = payload.new as { is_locked_by_proctor?: boolean; warning_message?: string };
+          if (updated.is_locked_by_proctor === false && isLockedByProctor) {
+            setIsLockedByProctor(false);
+            setTabSwitchCount(0);
+            setUnfocusedSeconds(0);
+            setInfractionNotice(null);
+            setProctorNotice(null);
+            playSound('success');
+          } else if (updated.is_locked_by_proctor === true && !isLockedByProctor) {
+            setIsLockedByProctor(true);
+            if (updated.warning_message) setProctorNotice(updated.warning_message as string);
+            playSound('warning');
+          }
+        })
+        .subscribe();
+    }
+
     return () => {
 
       clearInterval(lockInterval);
@@ -1233,6 +1250,8 @@ export const Workspace: React.FC<WorkspaceProps> = ({
       clearInterval(heartbeatInterval);
 
       unsubscribe();
+
+      if (realtimeChannel) supabase.removeChannel(realtimeChannel);
 
       window.removeEventListener('storage', checkLockStatus);
 
@@ -1246,7 +1265,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
 
 
-  // ── HARD KEYSTROKE INTERCEPTION: PREVENT ANY TYPING IN WORKSPACE WHEN LOCKED ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ HARD KEYSTROKE INTERCEPTION: PREVENT ANY TYPING IN WORKSPACE WHEN LOCKED Ã¢â€â‚¬Ã¢â€â‚¬
 
   useEffect(() => {
 
@@ -1300,7 +1319,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
 
 
-  // ── MULTI-VECTOR ANTI-CHEATING & AI SURVEILLANCE SHIELD (Workspace) ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ MULTI-VECTOR ANTI-CHEATING & AI SURVEILLANCE SHIELD (Workspace) Ã¢â€â‚¬Ã¢â€â‚¬
 
   useEffect(() => {
 
@@ -1321,37 +1340,28 @@ export const Workspace: React.FC<WorkspaceProps> = ({
       labId: activeLab,
 
       onInfraction: (reason: string) => {
-
         playSound('warning');
-
         setTabSwitchCount((prev) => {
-
-          const newCount = prev + 1;
-
-          setInfractionNotice({
-
-            strike: newCount,
-
-            message: `PROCTOR INFRACTION: ${reason}`,
-
-            duration: 5
-
-          });
-
-          if (newCount >= 3) {
-
-            setIsLockedByProctor(true);
-
-            setProctorNotice(`TERMINAL LOCKED: 3/3 Infractions Exceeded! Contact Invigilator.`);
-
+          const newCount = Math.min(3, prev + 1);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`codedna_strikes_${myStationId}`, String(newCount));
           }
-
+          setInfractionNotice({
+            strike: newCount,
+            message: `PROCTOR INFRACTION (${newCount}/3): ${reason}`,
+            duration: 6
+          });
+          if (newCount >= 3) {
+            setIsLockedByProctor(true);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(`${STATION_LOCK_PREFIX}${myStationId}`, 'true');
+            }
+            sendProctorLockCommand(myStationId, true, activeLab);
+            setProctorNotice('TERMINAL SUSPENDED: 3/3 Infractions Exceeded! Contact Invigilator for Emergency Key.');
+          }
           return newCount;
-
         });
-
       },
-
       onWarningBanner: (msg: string) => {
 
         setProctorNotice(msg);
@@ -1388,7 +1398,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
 
 
-  // ── ADVANCED KIOSK & TAB-SWITCH / ALT+TAB INFRACTION DETECTOR ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ ADVANCED KIOSK & TAB-SWITCH / ALT+TAB INFRACTION DETECTOR Ã¢â€â‚¬Ã¢â€â‚¬
 
   useEffect(() => {
 
@@ -1495,106 +1505,61 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
 
       setTabSwitchCount((prevCount) => {
-
-        const newCount = prevCount + 1;
-
+        const newCount = Math.min(3, prevCount + 1);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(`codedna_strikes_${myStationId}`, String(newCount));
+        }
         setUnfocusedSeconds((prevSec) => prevSec + awayDuration);
 
-
-
         // Update editorData and broadcast immediately to Admin CCTV room
-
         setEditorData((prev) => {
-
           const updatedMetrics = {
-
             ...prev.metrics,
-
             tabSwitchViolations: newCount,
-
             unfocusedTimeSeconds: (prev.metrics.unfocusedTimeSeconds || 0) + awayDuration
-
           };
-
           const updated = {
-
             ...prev,
-
             metrics: updatedMetrics
-
           };
-
           syncCurrentLiveStation(updated, {
-
             screenImageData: lastScreenFrameRef.current,
-
             hasLiveScreenStream: isScreenSharing
-
           });
-
           return updated;
-
         });
-
-
-
-        // Infraction Escalation Sound & Banners
 
         playSound('warning');
 
-
-
         if (newCount === 1) {
-
           setInfractionNotice({
-
             strike: 1,
-
             duration: awayDuration,
-
             message: `INFRACTION STRIKE 1/3: Exam window focus lost for ${awayDuration}s! Tab switching or leaving the screen is recorded in the invigilator log.`
-
           });
-
         } else if (newCount === 2) {
-
           setInfractionNotice({
-
             strike: 2,
-
             duration: awayDuration,
-
             message: `INFRACTION STRIKE 2/3: FINAL WARNING! Window left for ${awayDuration}s! One more tab switch or Alt+Tab will automatically freeze your workstation.`
-
           });
-
         } else if (newCount >= 3) {
-
           setInfractionNotice({
-
             strike: 3,
-
             duration: awayDuration,
-
-            message: `TERMINAL LOCKED: 3/3 Infractions Exceeded! You switched tabs or left the practical exam window 3 times. Workstation frozen.`
-
+            message: 'TERMINAL SUSPENDED: 3/3 Infractions Exceeded! You switched tabs or left the practical exam window 3 times. Workstation frozen.'
           });
-
           setIsLockedByProctor(true);
-
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`${STATION_LOCK_PREFIX}${myStationId}`, 'true');
+          }
           sendProctorLockCommand(myStationId, true, activeLab);
-
+          setProctorNotice('TERMINAL SUSPENDED: 3/3 Infractions Exceeded! Contact Invigilator for Emergency Key.');
         }
 
-
-
         return newCount;
-
       });
-
     };
-
-
 
     const handleVisibilityChange = () => {
 
@@ -1710,7 +1675,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
 
 
-  // ── REAL SCREEN PROCTORING CAPTURE (WEBSCREEN API) ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ REAL SCREEN PROCTORING CAPTURE (WEBSCREEN API) Ã¢â€â‚¬Ã¢â€â‚¬
 
   const startScreenProctoring = async () => {
 
@@ -2393,14 +2358,13 @@ const handleRun = useCallback(() => {
 
     }
 
-    if (isLockedByProctor) {
-
+    // Proctor-locked: still allow submission (student may be auto-suspended at 3 strikes and time is up)
+    // Show a warning but DO NOT block submission - exam must be submittable at all times
+    if (isLockedByProctor && !auto) {
       playSound('warning');
-
-      setWorkspaceNoticeMessage('Access Denied: Examination submissions are locked by the invigilator. Click "Pardon & Unlock" in the banner above to resume.');
-
+      setWorkspaceNoticeMessage('Your workstation is locked. Submitting will finalize your exam and notify the invigilator. Continue?');
+      setShowFinalSubmitConfirm(true);
       return;
-
     }
 
     if (!editorData.code.trim()) {
@@ -2429,7 +2393,7 @@ const handleRun = useCallback(() => {
 
 
 
-  // ── LIVE EXAM SESSION TIMER TICK & EXPIRATION WATCHDOG ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ LIVE EXAM SESSION TIMER TICK & EXPIRATION WATCHDOG Ã¢â€â‚¬Ã¢â€â‚¬
 
   useEffect(() => {
 
@@ -2549,7 +2513,7 @@ const handleRun = useCallback(() => {
 
     >
 
-      {/* ── UNIFIED FULL-WIDTH WORKSPACE CONTROL BAR ── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ UNIFIED FULL-WIDTH WORKSPACE CONTROL BAR Ã¢â€â‚¬Ã¢â€â‚¬ */}
 
       <div
 
@@ -2791,7 +2755,7 @@ const handleRun = useCallback(() => {
 
                         : `${formatSessionTime(sessionSecondsElapsed)} elapsed (Click to view remaining)`
 
-                    } • Limit: ${examDurationMinutes}m`
+                    } Ã¢â‚¬Â¢ Limit: ${examDurationMinutes}m`
 
                   : `Exam Session Clock: ${formatSessionTime(sessionSecondsElapsed)} elapsed`
 
@@ -2895,7 +2859,7 @@ const handleRun = useCallback(() => {
 
               {isCandidateRegistered
 
-                ? `${student.name || 'Candidate'} · ${student.stationNumber || 'St#01'}`
+                ? `${student.name || 'Candidate'} Ã‚Â· ${student.stationNumber || 'St#01'}`
 
                 : 'Register Candidate'}
 
@@ -3111,7 +3075,7 @@ const handleRun = useCallback(() => {
 
 
 
-      {/* ── SPLIT VIEW CONTAINER (Editor on Left, Diagnostics/Terminal on Right) ── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ SPLIT VIEW CONTAINER (Editor on Left, Diagnostics/Terminal on Right) Ã¢â€â‚¬Ã¢â€â‚¬ */}
 
       <div
 
@@ -3131,7 +3095,7 @@ const handleRun = useCallback(() => {
 
       >
 
-        {/* ── LEFT PANE: CODE EDITOR ── */}
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ LEFT PANE: CODE EDITOR Ã¢â€â‚¬Ã¢â€â‚¬ */}
 
         <div
 
@@ -3717,7 +3681,7 @@ const handleRun = useCallback(() => {
 
 
 
-        {/* ── RIGHT PANE: CONSOLE OUTPUT, WRITING ACTIVITY, VIVA ── */}
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ RIGHT PANE: CONSOLE OUTPUT, WRITING ACTIVITY, VIVA Ã¢â€â‚¬Ã¢â€â‚¬ */}
 
       {isRightPaneOpen && (
 
@@ -4388,7 +4352,7 @@ const handleRun = useCallback(() => {
                       ) : (
                         <>
                           <AlertTriangle size={13} color="var(--danger)" />
-                          <span style={{ color: 'var(--danger)' }}>Test Case Failed — Output Mismatch</span>
+                          <span style={{ color: 'var(--danger)' }}>Test Case Failed Ã¢â‚¬â€ Output Mismatch</span>
                         </>
                       )}
                     </div>
@@ -4570,7 +4534,7 @@ const handleRun = useCallback(() => {
 
 
 
-      {/* ── CANDIDATE PROFILE & LAB WORKSTATION REGISTRATION MODAL ── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ CANDIDATE PROFILE & LAB WORKSTATION REGISTRATION MODAL Ã¢â€â‚¬Ã¢â€â‚¬ */}
 
       {isProfileModalOpen && (
 
@@ -4898,7 +4862,7 @@ const handleRun = useCallback(() => {
 
 
 
-            {/* ── MODE 1: MANUAL REGISTRATION FORM ── */}
+            {/* Ã¢â€â‚¬Ã¢â€â‚¬ MODE 1: MANUAL REGISTRATION FORM Ã¢â€â‚¬Ã¢â€â‚¬ */}
 
             {regMode === 'manual' && (
 
@@ -5122,7 +5086,7 @@ const handleRun = useCallback(() => {
 
                             value: ex.id,
 
-                            label: `${ex.title} (${ex.questionCount} Questions · ${ex.durationMinutes} Min · ${ex.totalMarks} Marks)`,
+                            label: `${ex.title} (${ex.questionCount} Questions Ã‚Â· ${ex.durationMinutes} Min Ã‚Â· ${ex.totalMarks} Marks)`,
 
                             badge: ex.subject || 'MCQ'
 
@@ -5462,7 +5426,7 @@ const handleRun = useCallback(() => {
 
                   <KeyRound size={12} color="var(--accent)" />
 
-                  <span>Have an Exam Pass Token? Switch to Token Auto-Fill (Upcoming Feature) →</span>
+                  <span>Have an Exam Pass Token? Switch to Token Auto-Fill (Upcoming Feature) Ã¢â€ â€™</span>
 
                 </button>
 
@@ -5602,7 +5566,7 @@ const handleRun = useCallback(() => {
 
 
 
-            {/* ── MODE 2: IMPORT WITH TOKEN (UPCOMING FEATURE) ── */}
+            {/* Ã¢â€â‚¬Ã¢â€â‚¬ MODE 2: IMPORT WITH TOKEN (UPCOMING FEATURE) Ã¢â€â‚¬Ã¢â€â‚¬ */}
 
             {regMode === 'token' && (
 
@@ -5816,7 +5780,7 @@ const handleRun = useCallback(() => {
 
                         <CheckCircle2 size={13} color="var(--success)" />
 
-                        <span>Verified Token Payload — Ready to Fill</span>
+                        <span>Verified Token Payload Ã¢â‚¬â€ Ready to Fill</span>
 
                       </span>
 
@@ -6222,7 +6186,7 @@ const handleRun = useCallback(() => {
 
     
 
-      {/* ── INVIGILATOR EMERGENCY KEY UNLOCK MODAL ── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ INVIGILATOR EMERGENCY KEY UNLOCK MODAL Ã¢â€â‚¬Ã¢â€â‚¬ */}
 
       {showEmergencyUnlockPrompt && (
 
@@ -6334,7 +6298,7 @@ const handleRun = useCallback(() => {
 
                 <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
 
-                  1-Time Daily Key Required · Expires Immediately Upon Use
+                  1-Time Daily Key Required Ã‚Â· Expires Immediately Upon Use
 
                 </span>
 

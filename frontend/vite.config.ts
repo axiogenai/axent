@@ -16,6 +16,12 @@ export default defineConfig({
   server: {
     port: 4000,
     strictPort: true,
-    host: true
+    host: true,
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true
+      }
+    }
   }
 });

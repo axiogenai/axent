@@ -976,11 +976,10 @@ const FilmShotRenderer: React.FC<FilmShotRendererProps> = ({
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '0 0 2px', color: C.textPrimary }}>
-                    Aditya S.
+                    Candidate
                   </h3>
                   <div style={{ fontSize: '11.5px', color: C.textMuted }}>
-                    Roll No: <code style={{ color: C.textPrimary }}>CS2026-8841</code> · B.Tech CSE (Sem VI)
-                  </div>
+                    ID: <code style={{ color: C.textPrimary }}>AXNT-CANDIDATE</code></div>
                 </div>
                 <span style={{ fontSize: '11px', fontWeight: 700, color: C.accentBright, border: `1px solid ${C.accent}`, padding: '2px 8px', borderRadius: '4px' }}>
                   LAB-01 · Station #01
@@ -1137,7 +1136,7 @@ const FilmShotRenderer: React.FC<FilmShotRendererProps> = ({
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '11.5px', fontFamily: 'monospace' }}>
-              <span style={{ color: C.textMuted }}>CANDIDATE: Aditya S. [CS2026-8841]</span>
+              <span style={{ color: C.textMuted }}>CANDIDATE: Candidate [AXNT-001]</span>
               <span style={{ color: C.accentBright, fontWeight: 800 }}>
                 TIME: 00:29:{String(Math.max(0, 48 - elapsedSec)).padStart(2, '0')}
               </span>
@@ -1327,7 +1326,7 @@ const FilmShotRenderer: React.FC<FilmShotRendererProps> = ({
 
             {/* Telemetry Bottom Strip */}
             <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: '10px', display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: C.textMuted, fontFamily: 'monospace' }}>
-              <span>CANDIDATE: Aditya S. [Station #01]</span>
+              <span>CANDIDATE: Candidate [Station #01]</span>
               <span style={{ color: C.accentBright }}>ENCLAVE HASH: 0x7F2A...9C1D</span>
             </div>
           </div>

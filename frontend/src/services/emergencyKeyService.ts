@@ -446,7 +446,6 @@ export function validateAndConsumeEmergencyKey(
     };
   }
 
-  // Strict Security: No hardcoded legacy PIN bypasses are permitted.
   return {
     valid: false,
     reason: 'INVALID_CODE',

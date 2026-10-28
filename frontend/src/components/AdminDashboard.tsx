@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AdminLiveProctoringView } from './admin/AdminLiveProctoringView';
 import { AdminCandidatesView } from './admin/AdminCandidatesView';
@@ -8,6 +8,7 @@ import { AdminCheatingAlertsView } from './admin/AdminCheatingAlertsView';
 import { AdminAuditLedgerView } from './admin/AdminAuditLedgerView';
 import { AdminInstitutionsView } from './admin/AdminInstitutionsView';
 import { AdminSettingsView } from './admin/AdminSettingsView';
+import { AdminCodeSparkView } from './admin/AdminCodeSparkView';
 import {
   CandidateStation,
   AnalysisReport,
@@ -106,7 +107,8 @@ import {
   VideoOff,
   Bot,
   Mic,
-  Send
+  Send,
+  Zap
 } from 'lucide-react';
 import { playSound } from '../utils/sounds';
 import {
@@ -118,6 +120,24 @@ import {
   SimpleSelect
 } from './watermelon-ui';
 import { AdminMCQTicketIssuer } from './AdminMCQTicketIssuer';
+
+function isStationListEqual(a: CandidateStation[], b: CandidateStation[]): boolean {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort((x, y) => x.id.localeCompare(y.id));
+  const sortedB = [...b].sort((x, y) => x.id.localeCompare(y.id));
+  return sortedA.every((s, i) => {
+    const t = sortedB[i];
+    return (
+      s.id === t.id &&
+      s.status === t.status &&
+      Boolean(s.isLockedByProctor) === Boolean(t.isLockedByProctor) &&
+      (s.lastUpdatedTimestamp || 0) === (t.lastUpdatedTimestamp || 0) &&
+      (s.metrics?.tabSwitchViolations || 0) === (t.metrics?.tabSwitchViolations || 0) &&
+      (s.mcqProgress?.answeredCount || 0) === (t.mcqProgress?.answeredCount || 0) &&
+      (s.code?.length || 0) === (t.code?.length || 0)
+    );
+  });
+}
 
 export const getEffectiveMaxMarks = (station: CandidateStation): number => {
   if (station.mcqProgress?.maxScore && station.mcqProgress.maxScore > 0) return station.mcqProgress.maxScore;
@@ -245,19 +265,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     window.dispatchEvent(new CustomEvent('admin-sidebar-state', { detail: { isOpen: mobileSidebarOpen } }));
   }, [mobileSidebarOpen]);
 
-  const loadData = () => {
+  const loadDataRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadData = useCallback(() => {
     purgeDemoStations();
+
     let list: CandidateStation[];
     if (selectedLabId === 'all') {
       list = getLiveStations();
     } else {
       list = getStationsForLab(selectedLabId);
-      // Fallback: If station's exam title matches current lab's title, include it
       const currentLab = allLabs.find((l) => l.labId === selectedLabId);
       if (currentLab) {
         const cleanLabName = currentLab.labName.replace(/^Exam:\s*/i, '').trim().toLowerCase();
-        const all = getLiveStations();
-        const examMatches = all.filter((s) => {
+        const allS = getLiveStations();
+        const examMatches = allS.filter((s) => {
           const title = (s.student?.assignmentTitle || s.mcqProgress?.examTitle || '').trim().toLowerCase();
           return title && title === cleanLabName;
         });
@@ -268,31 +290,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
     }
 
-    // Smooth update: preserve existing workstations while cloud fetch is pending to prevent visual flickering
-    setStations((prev) => {
-      if (list.length > 0) return list;
-      if (prev.length > 0) return prev;
-      return [];
+    // Deduplicate by ID, keep latest timestamp, strip ghosts
+    const deduped = new Map<string, CandidateStation>();
+    list.forEach((s) => {
+      if (!s.student?.name?.trim() || s.student.name === 'Candidate' || s.student.name === 'Candidate (N/A)') return;
+      const existing = deduped.get(s.id);
+      if (!existing || (s.lastUpdatedTimestamp || 0) >= (existing.lastUpdatedTimestamp || 0)) {
+        deduped.set(s.id, s);
+      }
     });
-    setLastRefreshed(new Date().toLocaleTimeString());
+    const cleanList = Array.from(deduped.values());
 
-    // Asynchronous non-blocking cloud merge
-    fetchStationsFromCloud(selectedLabId === 'all' ? undefined : selectedLabId).then((cloudStations) => {
-      if (cloudStations) {
-        const stationMap = new Map<string, CandidateStation>();
-        cloudStations.forEach((cs) => stationMap.set(cs.id, cs));
-        list.forEach((s) => {
-          const existing = stationMap.get(s.id);
+    // Only update state if data actually changed (prevent flicker)
+    setStations((prev) => {
+      if (cleanList.length === 0 && prev.length > 0) return prev;
+      if (isStationListEqual(prev, cleanList)) return prev;
+      return cleanList;
+    });
+
+    // Async cloud merge
+    fetchStationsFromCloud(selectedLabId === 'all' ? undefined : selectedLabId)
+      .then((cloudStations) => {
+        if (!cloudStations || cloudStations.length === 0) return;
+        const mergeMap = new Map<string, CandidateStation>();
+        cloudStations.forEach((cs) => {
+          if (!cs.student?.name?.trim() || cs.student.name === 'Candidate' || cs.student.name === 'Candidate (N/A)') return;
+          mergeMap.set(cs.id, cs);
+        });
+        cleanList.forEach((s) => {
+          const existing = mergeMap.get(s.id);
           if (!existing || (s.lastUpdatedTimestamp || 0) >= (existing.lastUpdatedTimestamp || 0)) {
-            stationMap.set(s.id, s);
+            mergeMap.set(s.id, s);
           }
         });
-        const merged = Array.from(stationMap.values());
-        setStations(merged);
-        saveAllStations(merged);
-      }
-    }).catch(() => {});
-  };
+        const merged = Array.from(mergeMap.values());
+        setStations((prev) => {
+          if (isStationListEqual(prev, merged)) return prev;
+          setLastRefreshed(new Date().toLocaleTimeString());
+          saveAllStations(merged);
+          return merged;
+        });
+      })
+      .catch(() => {});
+  }, [selectedLabId, allLabs]);
 
   const handleToggleLockStation = (targetStation: CandidateStation) => {
     const isCurrentlyLocked = isStationEffectiveLocked(targetStation);
@@ -328,21 +368,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   useEffect(() => {
     loadData();
     void syncFromSupabase().then(() => loadData());
-    const unsubscribeBroadcast = subscribeToCctvBroadcast(() => {
-      loadData();
-    });
-    const unsubscribeCloud = subscribeToCloudStations(() => {
-      loadData();
-    });
-    const interval = setInterval(() => {
-      loadData();
-    }, 6000);
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const debouncedLoad = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => loadData(), 400);
+    };
+
+    const unsubscribeBroadcast = subscribeToCctvBroadcast(debouncedLoad);
+    const unsubscribeCloud = subscribeToCloudStations(debouncedLoad);
+    const interval = setInterval(loadData, 10000);
+
     return () => {
       unsubscribeBroadcast();
       unsubscribeCloud();
       clearInterval(interval);
+      if (debounceTimer) clearTimeout(debounceTimer);
     };
-  }, [selectedLabId]);
+  }, [selectedLabId, loadData]);
 
   // Synchronize and subscribe to college lab inventory & auto-delete finished exam labs
   useEffect(() => {
@@ -359,7 +402,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (labs) setAllLabs(labs.filter((l) => !isPhantomLab(l)));
     });
 
-    const auditInterval = setInterval(runAudit, 5000);
+    const auditInterval = setInterval(runAudit, 8000);
 
     const handleLabsChanged = (e: Event) => {
       const custom = e as CustomEvent<CollegeLabInfo[]>;
@@ -557,6 +600,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const sidebarNavItems = [
     { id: 'control_room', label: 'Control Room', icon: Home },
+    { id: 'code_spark', label: 'Code Spark (3 Nov)', icon: Zap },
     { id: 'live_proctoring', label: 'Live Proctoring', icon: Video },
     { id: 'candidates', label: 'Candidates', icon: Users, badge: activeCount > 0 ? activeCount : undefined },
     { id: 'examinations', label: 'Examinations', icon: FileText },
@@ -635,7 +679,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         position: 'relative'
       }}
     >
-      {/* ── LEFT DESKTOP NAVIGATION SIDEBAR (Exact axent.axiogen.in standard) ── */}
+      {/* â”€â”€ LEFT DESKTOP NAVIGATION SIDEBAR (Exact axent.axiogen.in standard) â”€â”€ */}
       <aside
         className={`admin-left-sidebar ${mobileSidebarOpen ? 'admin-sidebar-mobile-open' : ''}`}
         style={{
@@ -680,9 +724,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   width: '100%'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <item.icon size={16} color={isActive ? '#ffffff' : 'currentColor'} />
-                  <span>{item.label}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                  <item.icon size={16} color={isActive ? '#ffffff' : 'currentColor'} style={{ flexShrink: 0 }} />
+                  <span style={{ whiteSpace: 'nowrap' }}>{item.label}</span>
                 </div>
                 {item.badge !== undefined && (
                   <span
@@ -762,7 +806,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         />
       )}
 
-      {/* ── RIGHT MAIN DASHBOARD CONTENT AREA ── */}
+      {/* â”€â”€ RIGHT MAIN DASHBOARD CONTENT AREA â”€â”€ */}
       <div
         className="admin-dashboard-content"
         style={{
@@ -776,6 +820,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           minHeight: '100%'
         }}
       >
+        {activeSidebarItem === 'code_spark' && (
+          <div style={{ width: '100%' }}>
+            <AdminCodeSparkView
+              stations={stations}
+              allLabs={allLabs}
+              onInspectStation={(sId) => setSelectedStationId(sId)}
+              onInspectReport={handleViewStudentReport}
+              theme={theme}
+            />
+          </div>
+        )}
+
         {activeSidebarItem === 'examinations' && (
           <div style={{ width: '100%' }}>
             <AdminMCQTicketIssuer />
@@ -893,7 +949,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {activeSidebarItem === 'control_room' && (
           <>
-            {/* ── TOP CAMPUS MACRO KPI RIBBON (Exact axent.axiogen.in matching) ── */}
+            {/* â”€â”€ TOP CAMPUS MACRO KPI RIBBON (Exact axent.axiogen.in matching) â”€â”€ */}
         <div
           style={{
             display: 'grid',
@@ -1091,7 +1147,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
 
-      {/* ── TOP INVIGILATOR COMMAND & LAB SELECTOR BAR ── */}
+      {/* â”€â”€ TOP INVIGILATOR COMMAND & LAB SELECTOR BAR â”€â”€ */}
       <div
         className="card-elevated admin-header-card"
         style={{
@@ -1128,7 +1184,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             College Examination Grid
           </h2>
           <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-            {selectedLabId === 'all' ? (allLabs.length > 0 ? `All Laboratories (${allLabs.length} Active)` : 'All Laboratories') : currentLabInfo?.labName} • {stations.length} Active Workstations
+            {selectedLabId === 'all' ? (allLabs.length > 0 ? `All Laboratories (${allLabs.length} Active)` : 'All Laboratories') : currentLabInfo?.labName} â€¢ {stations.length} Active Workstations
           </div>
         </div>
 
@@ -1229,7 +1285,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
-      {/* ── 50 LAB SELECTOR DROPDOWN & SEARCH FILTER ── */}
+      {/* â”€â”€ 50 LAB SELECTOR DROPDOWN & SEARCH FILTER â”€â”€ */}
       <div
         className="card"
         style={{
@@ -1322,7 +1378,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
-      {/* ── SELECTED LAB METADATA BANNER (Watermelon UI MetaChips Pattern) ── */}
+      {/* â”€â”€ SELECTED LAB METADATA BANNER (Watermelon UI MetaChips Pattern) â”€â”€ */}
       {currentLabInfo && selectedLabId !== 'all' && (
         <div
           style={{
@@ -1354,7 +1410,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* ── LAB / CAMPUS LOCKDOWN ACTIVE NOTIFICATION ── */}
+      {/* â”€â”€ LAB / CAMPUS LOCKDOWN ACTIVE NOTIFICATION â”€â”€ */}
       {isCurrentLabLocked && (
         <div
           style={{
@@ -1390,7 +1446,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* ── Filter Tabs & View Mode Toggle (Watermelon UI ContinuousTabs) ── */}
+      {/* â”€â”€ Filter Tabs & View Mode Toggle (Watermelon UI ContinuousTabs) â”€â”€ */}
       <div
         style={{
           display: 'flex',
@@ -1509,7 +1565,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
-      {/* ── Examination Concluded Notification Banner ── */}
+      {/* â”€â”€ Examination Concluded Notification Banner â”€â”€ */}
       {activeCount === 0 && submittedCount > 0 && viewMode === 'cctv' && (
         <div
           className="admin-concluded-card"
@@ -1529,7 +1585,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             <div className="admin-concluded-text-wrap" style={{ flex: 1, minWidth: 0 }}>
               <div className="admin-concluded-title">
-                Examination Concluded · All {submittedCount} Candidates Submitted
+                Examination Concluded Â· All {submittedCount} Candidates Submitted
               </div>
 
               <div className="admin-concluded-desc">
@@ -1581,7 +1637,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* ── VIEW MODE 1: CCTV LIVE SECURITY CAMERA GRID ── */}
+      {/* â”€â”€ VIEW MODE 1: CCTV LIVE SECURITY CAMERA GRID â”€â”€ */}
       {viewMode === 'cctv' ? (
         filteredStations.length === 0 ? (
           <div
@@ -1690,7 +1746,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               const isSubmitted = station.status === 'Submitted & Done';
               const isLocked = isStationEffectiveLocked(station);
               const isMcq = station.examMode === 'MCQ' || station.language === 'MCQ';
-              const previewMode = stationViewMode[station.id] || (station.screenImageData ? 'camera' : (isMcq ? 'activity' : 'camera'));
+              // Default to 'activity' for both coding (live code) and MCQ (telemetry). Camera only if live screen stream active.
+              const previewMode = stationViewMode[station.id] || (station.screenImageData ? 'camera' : 'activity');
 
               // Format station title nicely, e.g. "Station 01" or "Station 22" (removing any stray #)
               const cleanNum = station.stationNumber.replace(/^#/, '').trim();
@@ -1720,7 +1777,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     boxSizing: 'border-box'
                   }}
                 >
-                  {/* ── CARD HEADER (Station Number on Left, Status Pill on Right) ── */}
+                  {/* â”€â”€ CARD HEADER (Station Number on Left, Status Pill on Right) â”€â”€ */}
                   <div
                     style={{
                       display: 'flex',
@@ -1812,7 +1869,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* ── CCTV / SCREEN STREAM WINDOW (Matching Screenshot) ── */}
+                  {/* â”€â”€ CCTV / SCREEN STREAM WINDOW (Matching Screenshot) â”€â”€ */}
                   <div
                     style={{
                       height: '190px',
@@ -2024,9 +2081,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
                         </div>
                       ) : (
-                        <div style={{ width: '100%', height: '100%', padding: '10px', overflow: 'hidden', textAlign: 'left', boxSizing: 'border-box' }}>
-                          <pre style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: '#a1a1aa', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: '150px' }}>
-                            {station.code || '// Awaiting student keyboard input...'}
+                        <div style={{ width: '100%', height: '100%', padding: '8px 10px', overflow: 'hidden', textAlign: 'left', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '4px', marginBottom: '2px' }}>
+                            <Code2 size={10} color="var(--accent)" />
+                            <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#a1a1aa', letterSpacing: '0.05em' }}>LIVE CODE STREAM</span>
+                            <span style={{ marginLeft: 'auto', fontSize: '9px', color: '#52525b', fontFamily: 'var(--font-mono)' }}>{station.language}</span>
+                          </div>
+                          <pre style={{ margin: 0, flex: 1, fontFamily: 'var(--font-mono)', fontSize: '10px', color: '#e4e4e7', whiteSpace: 'pre-wrap', wordBreak: 'break-all', overflow: 'hidden' }}>
+                            {station.code?.trim() || '// Awaiting keyboard input from candidate...'}
                           </pre>
                         </div>
                       )
@@ -2097,7 +2159,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     )}
                   </div>
 
-                  {/* ── CANDIDATE DETAILS (Matching Screenshot - Pure White Name & Clean Dot) ── */}
+                  {/* â”€â”€ CANDIDATE DETAILS (Matching Screenshot - Pure White Name & Clean Dot) â”€â”€ */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '14px' }}>
                     <h4
                       style={{
@@ -2111,12 +2173,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {station.student.name || 'Candidate (Unregistered)'}
                     </h4>
                     <div style={{ fontSize: '12px', color: '#a1a1aa' }}>
-                      Candidate · {station.examMode === 'MCQ' || station.language === 'MCQ' ? 'MCQ exam' : 'Practical coding'}
-                      {station.student.rollNumber ? ` · ${station.student.rollNumber.replace(/^#/, '')}` : ''}
+                      Candidate Â· {station.examMode === 'MCQ' || station.language === 'MCQ' ? 'MCQ exam' : 'Practical coding'}
+                      {station.student.rollNumber ? ` Â· ${station.student.rollNumber.replace(/^#/, '')}` : ''}
                     </div>
                   </div>
 
-                  {/* ── METRICS ROW (Strikes/Keys on Left, Marks on Right) ── */}
+                  {/* â”€â”€ METRICS ROW (Strikes/Keys on Left, Marks on Right) â”€â”€ */}
                   <div
                     style={{
                       display: 'flex',
@@ -2178,7 +2240,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* ── PRIMARY ACTION BUTTON (Differentiated: View submission vs Inspect audit) ── */}
+                  {/* â”€â”€ PRIMARY ACTION BUTTON (Differentiated: View submission vs Inspect audit) â”€â”€ */}
                   <button
                     type="button"
                     onClick={() => {
@@ -2218,7 +2280,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span>{isSubmitted ? 'View submission' : 'Inspect audit'}</span>
                   </button>
 
-                  {/* ── QUICK PROCTOR TOOLS (Integrated & High Contrast) ── */}
+                  {/* â”€â”€ QUICK PROCTOR TOOLS (Integrated & High Contrast) â”€â”€ */}
                   <div
                     style={{
                       display: 'grid',
@@ -2427,7 +2489,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )
       ) : (
-        /* ── VIEW MODE 2: UNIVERSITY EXAMINATION AUDIT LEDGER TABLE ── */
+        /* â”€â”€ VIEW MODE 2: UNIVERSITY EXAMINATION AUDIT LEDGER TABLE â”€â”€ */
         <div className="ledger-table-container" style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <table className="ledger-table">
             <thead>
@@ -2606,7 +2668,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </>
         )}
 
-      {/* ── WORKSTATION CCTV SURVEILLANCE & TELEMETRY INSPECTION MODAL ── */}
+      {/* â”€â”€ WORKSTATION CCTV SURVEILLANCE & TELEMETRY INSPECTION MODAL â”€â”€ */}
       {selectedStation && (
         <div
           style={{
@@ -2655,12 +2717,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
                     {modalTab === 'submission'
                       ? `Evaluated Exam Submission: ${selectedStation.student.name || selectedStation.stationNumber}`
-                      : `Surveillance & Telemetry Audit: ${selectedStation.stationNumber} • ${selectedStation.student.name || 'Candidate'}`}
+                      : `Surveillance & Telemetry Audit: ${selectedStation.stationNumber} â€¢ ${selectedStation.student.name || 'Candidate'}`}
                   </h3>
                   {selectedStation.screenImageData ? (
                     <span className="badge badge-danger" style={{ fontSize: '10px', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                       <Radio size={10} />
-                      <span>REC • LIVE SCREEN STREAM</span>
+                      <span>REC â€¢ LIVE SCREEN STREAM</span>
                     </span>
                   ) : (
                     <span className="badge badge-neutral" style={{ fontSize: '10px', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -2691,7 +2753,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   )}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  Lab: {selectedStation.labName || currentLabInfo?.labName || selectedStation.labId} • IP: {selectedStation.ipAddress} • Last Packet: {selectedStation.lastActive}
+                  Lab: {selectedStation.labName || currentLabInfo?.labName || selectedStation.labId} â€¢ IP: {selectedStation.ipAddress} â€¢ Last Packet: {selectedStation.lastActive}
                 </div>
               </div>
               <button
@@ -3090,7 +3152,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       }}
                     >
                       <Radio size={11} />
-                      <span>REC • CAM-{selectedStation.stationNumber} • 1080P PROCTOR FEED</span>
+                      <span>REC â€¢ CAM-{selectedStation.stationNumber} â€¢ 1080P PROCTOR FEED</span>
                     </span>
 
                     <span
@@ -3103,7 +3165,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         fontFamily: 'var(--font-mono)'
                       }}
                     >
-                      LINE L{selectedStation.activeLineNumber || 1} • {selectedStation.metrics.typingSpeed} WPM
+                      LINE L{selectedStation.activeLineNumber || 1} â€¢ {selectedStation.metrics.typingSpeed} WPM
                     </span>
                   </div>
 
@@ -3125,10 +3187,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     }}
                   >
                     <span style={{ fontWeight: 600 }}>
-                      CANDIDATE: {selectedStation.student.name || 'UNREGISTERED'} • ROLL: {selectedStation.student.rollNumber || 'N/A'}
+                      CANDIDATE: {selectedStation.student.name || 'UNREGISTERED'} â€¢ ROLL: {selectedStation.student.rollNumber || 'N/A'}
                     </span>
                     <span style={{ fontFamily: 'var(--font-mono)' }}>
-                      IP: {selectedStation.ipAddress} • {selectedStation.lastActive}
+                      IP: {selectedStation.ipAddress} â€¢ {selectedStation.lastActive}
                     </span>
                   </div>
                 </div>
@@ -3166,7 +3228,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                    Live Code Mirror ({selectedStation.language} • {selectedStation.code.split('\n').length} lines)
+                    Live Code Mirror ({selectedStation.language} â€¢ {selectedStation.code.split('\n').length} lines)
                   </div>
                   <button
                     className="btn btn-ghost btn-sm"
@@ -3566,7 +3628,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         cursor: 'pointer'
                       }}
                     >
-                      • {preset}
+                      â€¢ {preset}
                     </button>
                   ))}
                 </div>

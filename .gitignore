@@ -48,6 +48,10 @@ lerna-debug.log*
 !.vscode/extensions.json
 .idea/
 *.suo
+
+# Local dev/test scripts
+frontend/take_screenshots.cjs
+*.cjs
 *.ntvs*
 *.njsproj
 *.sln

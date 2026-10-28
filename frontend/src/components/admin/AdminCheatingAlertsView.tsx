@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   AlertTriangle,
+  Trash2,
   Search,
   Filter,
   ShieldAlert,
@@ -25,6 +26,8 @@ import {
   DailyEmergencyKey
 } from '../../services/emergencyKeyService';
 import { CandidateStation, CollegeLabInfo } from '../../types/dna';
+import { removeSingleStation, clearAllStations } from '../../services/adminService';
+import { clearAllAttemptsFromEverywhere } from '../../services/mcqService';
 import { playSound } from '../../utils/sounds';
 
 interface AdminCheatingAlertsViewProps {
@@ -53,6 +56,23 @@ export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = (
   const [searchQuery, setSearchQuery] = useState('');
   const [severityFilter, setSeverityFilter] = useState<'all' | 'critical' | 'high'>('all');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [dismissedStationIds, setDismissedStationIds] = useState<Set<string>>(() => new Set());
+
+  const handleDismissIncident = (station: CandidateStation) => {
+    playSound('click');
+    setDismissedStationIds((prev) => new Set([...prev, station.id]));
+    removeSingleStation(station.id);
+    playSound('success');
+  };
+
+  const handlePurgeAllIncidents = async () => {
+    if (!confirm('Are you sure you want to purge all flagged cheating incidents and stations from database?')) return;
+    playSound('click');
+    await clearAllStations(selectedLabId);
+    await clearAllAttemptsFromEverywhere(selectedLabId === 'all' ? undefined : selectedLabId);
+    setDismissedStationIds(new Set());
+    playSound('success');
+  };
   const [, setKeyUpdateTick] = useState<number>(0);
 
   React.useEffect(() => {
@@ -102,6 +122,7 @@ export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = (
   });
 
   const displayedAlerts = flaggedStations.filter((s) => {
+    if (dismissedStationIds.has(s.id)) return false;
     if (selectedLabId !== 'all' && s.labId !== selectedLabId) return false;
 
     const isCritical =
@@ -178,8 +199,31 @@ export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = (
           </div>
         </div>
 
-        <select
-          value={selectedLabId}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {displayedAlerts.length > 0 && (
+            <button
+              type="button"
+              onClick={handlePurgeAllIncidents}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '6px 12px',
+                background: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid rgba(239, 68, 68, 0.35)',
+                borderRadius: '8px',
+                color: '#ef4444',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              <Trash2 size={13} />
+              <span>Purge All Incidents</span>
+            </button>
+          )}
+          <select
+            value={selectedLabId}
           onChange={(e) => {
             playSound('click');
             setSelectedLabId(e.target.value);
@@ -201,7 +245,8 @@ export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = (
               {lab.labName}
             </option>
           ))}
-        </select>
+          </select>
+        </div>
       </div>
 
       {/* ── INCIDENTS LIST ── */}
@@ -498,6 +543,28 @@ export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = (
                   >
                     <Lock size={12} />
                     <span>{isLocked ? 'Unlock Station' : 'Lock Station'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDismissIncident(station)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '6px 12px',
+                      background: 'rgba(239, 68, 68, 0.08)',
+                      border: '1px solid rgba(239, 68, 68, 0.25)',
+                      borderRadius: '6px',
+                      color: '#ef4444',
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                    title="Dismiss and purge this incident from surveillance ledger"
+                  >
+                    <Trash2 size={12} />
+                    <span>Dismiss Incident</span>
                   </button>
 
                   <button

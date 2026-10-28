@@ -1,6 +1,6 @@
 // ============================================================================
 
-// MCQ SERVICE — Dual Storage: Supabase Cloud + Local Cache Persistence
+// MCQ SERVICE â€” Dual Storage: Supabase Cloud + Local Cache Persistence
 
 // Authoritative server-side grading, Fisher-Yates shuffle, and cloud sync.
 
@@ -90,7 +90,7 @@ import {
 
 
 
-// ── Persistence helpers ───────────────────────────────────────────────────────
+// â”€â”€ Persistence helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 
@@ -290,7 +290,7 @@ const LEGACY_PURGED_EXAM_IDS = new Set([
 
 
 
-// ── LEGACY MOCK DATA PURGE (Zero Hardcoded / Seed Data Enforcement) ───────────
+// â”€â”€ LEGACY MOCK DATA PURGE (Zero Hardcoded / Seed Data Enforcement) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function purgeLegacySeedData(): void {
   try {
@@ -379,7 +379,7 @@ if (typeof window !== 'undefined') {
 
 
 
-// ── ZERO HARDCODED / MOCK TEST DATA ENFORCEMENT ──────────────────────────────
+// â”€â”€ ZERO HARDCODED / MOCK TEST DATA ENFORCEMENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const DEMO_3Q_QUESTIONS: MCQQuestion[] = [];
 export const DEMO_3Q_EXAM: MCQExamConfig | null = null;
 
@@ -614,7 +614,7 @@ export function validateQuestion(q: Partial<MCQQuestion>): string[] {
 
 
 
-// ── MCQ EXAMS (Authoritative Real Exams Only) ─────────────────────────────────
+// â”€â”€ MCQ EXAMS (Authoritative Real Exams Only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 
@@ -963,7 +963,7 @@ export async function cleanupExamLabWhenOver(labId: string, examId?: string): Pr
 
   if (!labId) return;
 
-  const canonicalLabs = new Set(['LAB-01', 'LAB-02', 'LAB-03', 'LAB-04', 'LAB-05']);
+  const canonicalLabs = new Set(getAllCollegeLabs().map((l) => l.labId.toUpperCase()));
 
   const isCustomOrDedicated = !canonicalLabs.has(labId.toUpperCase());
 
@@ -1051,7 +1051,7 @@ export async function auditAndCleanFinishedExamLabs(): Promise<void> {
 
         } else if (exam.assignedLabId) {
 
-          const canonicalLabs = new Set(['LAB-01', 'LAB-02', 'LAB-03', 'LAB-04', 'LAB-05']);
+          const canonicalLabs = new Set(getAllCollegeLabs().map((l) => l.labId.toUpperCase()));
 
           if (!canonicalLabs.has(exam.assignedLabId.toUpperCase())) {
 
@@ -1241,11 +1241,11 @@ export function validateExamForPublish(exam: MCQExamConfig): string[] {
 
 
 
-// ── ATTEMPTS ──────────────────────────────────────────────────────────────────
+// â”€â”€ ATTEMPTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 
-// Permanent registry of finalized attempt IDs — survives page refresh, prevents
+// Permanent registry of finalized attempt IDs â€” survives page refresh, prevents
 
 // getActiveAttempt() from ever resurrecting a submitted/timed-out attempt.
 
@@ -1309,6 +1309,42 @@ export function getAllAttempts(): MCQAttempt[] {
   return filtered;
 }
 
+export function clearAllAttemptsLocally(): void {
+  inMemoryAttempts = [];
+  save(MCQ_STORAGE_KEYS.ATTEMPTS, []);
+  if (typeof window !== 'undefined') {
+    sessionStorage.removeItem('codedna_mcq_session_attempt');
+    sessionStorage.removeItem('codedna_mcq_last_finished_attempt');
+    sessionStorage.removeItem('codedna_mcq_active_attempt_backup');
+    localStorage.removeItem('codedna_mcq_active_attempt_backup');
+    localStorage.removeItem('codedna_mcq_active_attempt');
+  }
+  notifyMcqDataChanged();
+}
+
+export async function clearAllAttemptsFromEverywhere(labId?: string): Promise<void> {
+  clearAllAttemptsLocally();
+  try {
+    await clearAllAttemptsFromCloud(labId);
+  } catch (e) {
+    console.warn('[mcqService] Failed to clear cloud attempts:', e);
+  }
+  notifyMcqDataChanged();
+}
+
+export async function deleteSingleAttempt(attemptId: string): Promise<void> {
+  const current = getAllAttempts();
+  const updated = current.filter((a) => a.id !== attemptId);
+  inMemoryAttempts = updated;
+  save(MCQ_STORAGE_KEYS.ATTEMPTS, updated);
+  try {
+    await deleteAttemptFromCloud(attemptId);
+  } catch (e) {
+    console.warn('[mcqService] Failed to delete cloud attempt:', e);
+  }
+  notifyMcqDataChanged();
+}
+
 
 
 export function getAttemptById(id: string): MCQAttempt | undefined {
@@ -1328,61 +1364,63 @@ export function getAttemptsForExam(examId: string): MCQAttempt[] {
 
 
 export function getActiveAttempt(examId?: string): MCQAttempt | null {
-
   try {
-
     const concludedIds = getConcludedAttemptIds();
 
-
-
     // 1. Recovery ONLY from this specific active browser tab session
-
     const sessionAttemptId = sessionStorage.getItem('codedna_mcq_session_attempt');
-
     if (sessionAttemptId) {
-
       if (concludedIds.has(sessionAttemptId)) {
-
         sessionStorage.removeItem('codedna_mcq_session_attempt');
-
       } else {
-
         const attempt = getAttemptById(sessionAttemptId);
-
         if (attempt && attempt.status === 'IN_PROGRESS' && (!examId || attempt.examId === examId)) {
-
           // If deadline has elapsed, conclude it and do not restore as active
-
           if (attempt.deadline && getSynchronizedNow() >= attempt.deadline) {
-
             recordAttemptConcluded(attempt.id);
-
             sessionStorage.removeItem('codedna_mcq_session_attempt');
-
             return null;
-
           }
-
           return attempt;
-
         }
-
       }
-
     }
 
-
-
-    // Never return an unverified attempt from another student/device
+    // 2. Recovery for authenticated candidate in localStorage (e.g. CodeSpark candidate)
+    if (typeof localStorage !== 'undefined') {
+      const rawProfile = localStorage.getItem('codedna_student_profile');
+      if (rawProfile) {
+        try {
+          const profile = JSON.parse(rawProfile);
+          const pRoll = (profile.rollNumber || (profile.email ? profile.email.split('@')[0].toUpperCase() : '')).trim().toLowerCase();
+          if (pRoll) {
+            const all = examId ? getAttemptsForExam(examId) : getAllAttempts();
+            const inProgress = all.find(
+              (a) =>
+                String(a.studentRoll || '').trim().toLowerCase() === pRoll &&
+                a.status === 'IN_PROGRESS' &&
+                !concludedIds.has(a.id) &&
+                (!examId || a.examId === examId)
+            );
+            if (inProgress) {
+              if (inProgress.deadline && getSynchronizedNow() >= inProgress.deadline) {
+                recordAttemptConcluded(inProgress.id);
+                return null;
+              }
+              if (typeof sessionStorage !== 'undefined') {
+                sessionStorage.setItem('codedna_mcq_session_attempt', inProgress.id);
+              }
+              return inProgress;
+            }
+          }
+        } catch {}
+      }
+    }
 
     return null;
-
   } catch {
-
     return null;
-
   }
-
 }
 
 
@@ -1467,7 +1505,7 @@ function saveAttempt(attempt: MCQAttempt): void {
 
  * Generates the immutable shuffled assignment right here and persists it.
 
- * Subsequent reloads just restore from localStorage/cloud — no re-shuffling.
+ * Subsequent reloads just restore from localStorage/cloud â€” no re-shuffling.
 
  */
 
@@ -1549,14 +1587,18 @@ export function startAttempt(
 
 
 
-  // 2. Cross-device guard: If another terminal has an active session for this roll number, block hijacking
-
-  const activeOnOtherTerminal = candidateAttempts.find((item) => item.status === 'IN_PROGRESS');
-
-  if (activeOnOtherTerminal) {
-
-    throw new Error(`An active examination session for Roll Number / USN "${studentRoll}" is already running on another terminal.`);
-
+  // 2. Resumption & Continuity: If an active in-progress session exists for this candidate, resume it cleanly
+  const existingActive = candidateAttempts.find((item) => item.status === 'IN_PROGRESS');
+  if (existingActive) {
+    if (!existingActive.deadline || getSynchronizedNow() < existingActive.deadline) {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('codedna_mcq_session_attempt', existingActive.id);
+      }
+      return existingActive;
+    } else {
+      existingActive.status = 'TIMED_OUT';
+      saveAttempt(existingActive);
+    }
   }
 
 
@@ -1871,7 +1913,7 @@ export function startAttempt(
 
 
 
-/** Autosave an answer — called on every option selection */
+/** Autosave an answer â€” called on every option selection */
 
 export function saveAnswer(attemptId: string, questionId: string, optionId: string): boolean {
 
@@ -1989,7 +2031,7 @@ export function pardonInfractions(attemptId: string): void {
 
 
 
-// ── GRADING ENGINE ────────────────────────────────────────────────────────────
+// â”€â”€ GRADING ENGINE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 
@@ -2177,7 +2219,7 @@ export function gradeAttempt(attempt: MCQAttempt): MCQGradeResult {
 
 
 
-/** Submit attempt — grades it and persists the result to local and Supabase cloud */
+/** Submit attempt â€” grades it and persists the result to local and Supabase cloud */
 
 export function submitAttempt(
 
@@ -2309,7 +2351,7 @@ export function submitAttempt(
 
 
 
-// ── MCQ option builder helper ─────────────────────────────────────────────────
+// â”€â”€ MCQ option builder helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 
@@ -2321,7 +2363,7 @@ export function buildOption(text: string, isCorrect = false): MCQOption {
 
 
 
-// ── INITIAL BACKGROUND SUPABASE SYNC & REALTIME SUBSCRIPTION ──────────────────
+// â”€â”€ INITIAL BACKGROUND SUPABASE SYNC & REALTIME SUBSCRIPTION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 
@@ -2403,7 +2445,7 @@ function mergeAttempts(localAttempts: MCQAttempt[], cloudAttempts: MCQAttempt[])
 
       if (cloudAttempt.status === 'IN_PROGRESS' && concludedIds.has(cloudAttempt.id)) {
 
-        // We have locally concluded this attempt — don't restore it as IN_PROGRESS from cloud
+        // We have locally concluded this attempt â€” don't restore it as IN_PROGRESS from cloud
 
         continue;
 
@@ -2427,7 +2469,7 @@ function mergeAttempts(localAttempts: MCQAttempt[], cloudAttempts: MCQAttempt[])
 
     if (localFinal && !cloudFinal) {
 
-      // Local is finalized, cloud still shows IN_PROGRESS (sync lag) — keep local
+      // Local is finalized, cloud still shows IN_PROGRESS (sync lag) â€” keep local
 
       continue;
 
@@ -2439,7 +2481,7 @@ function mergeAttempts(localAttempts: MCQAttempt[], cloudAttempts: MCQAttempt[])
 
     } else if (!localFinal && !cloudFinal) {
 
-      // Both IN_PROGRESS — take the more recent/complete version
+      // Both IN_PROGRESS â€” take the more recent/complete version
 
       if ((cloudAttempt.lastActivityAt ?? cloudAttempt.submitTime ?? 0) >
 

@@ -432,15 +432,8 @@ export const AdminMCQTicketIssuer: React.FC = () => {
   };
 
   const handleDownloadTemplate = () => {
-    const headers = ['Full Name', 'Roll Number', 'Department', 'Semester', 'Division'];
-    const sampleRows = [
-      ['Aarav Sharma', '21CS001', 'CSE', '4th Sem', 'A'],
-      ['Ananya Rao', '21CS002', 'CSE', '4th Sem', 'A'],
-      ['Rohan Verma', '21CS003', 'CSE', '4th Sem', 'B'],
-      ['Priya Patel', '21CS004', 'CSE', '4th Sem', 'B'],
-      ['Kavya Nair', '21CS005', 'CSE', '4th Sem', 'C']
-    ];
-    downloadCSV('axent_candidate_import_template.csv', headers, sampleRows);
+    const headers = ['Full Name', 'Email Address'];
+    downloadCSV('axent_candidate_import_template.csv', headers, []);
   };
 
   const handleExportBatchResults = () => {
@@ -1084,7 +1077,8 @@ export const AdminMCQTicketIssuer: React.FC = () => {
                     rows={6}
                     value={pasteText}
                     onChange={(e) => setPasteText(e.target.value)}
-                    placeholder={`Full Name, Roll Number, Department, Semester, Division\nAarav Sharma, 21CS001, CSE, 4th Sem, A\nAnanya Rao, 21CS002, CSE, 4th Sem, B`}
+                    placeholder="Full Name, Email Address
+Candidate Name, candidate@example.com"
                     className="w-full p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-main)] text-xs font-mono text-[var(--text-primary)] focus:outline-none focus:border-[var(--text-primary)] transition-colors resize-y leading-relaxed"
                   />
                 </div>
@@ -1327,7 +1321,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. John Doe"
+                    placeholder="Candidate Full Name"
                     autoComplete="off"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-main)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--text-primary)]"
                   />
@@ -1341,7 +1335,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
                     required
                     value={roll}
                     onChange={(e) => setRoll(e.target.value)}
-                    placeholder="e.g. 21CS042"
+                    placeholder="Email Address / Seat ID"
                     autoComplete="off"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-main)] text-sm font-mono text-[var(--text-primary)] focus:outline-none focus:border-[var(--text-primary)]"
                   />

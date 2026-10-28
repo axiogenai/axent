@@ -12,6 +12,8 @@ import { AuthorityInvitePortal } from './components/auth/AuthorityInvitePortal';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { LandingPage } from './components/LandingPage';
 import { LaunchFilmPlayer } from './components/LaunchFilmPlayer';
+import { CodeSparkPortal } from './components/CodeSparkPortal';
+import { CodeSparkExamHall } from './components/CodeSparkExamHall';
 import { SEOUpdater } from './components/SEOUpdater';
 import {
   CodeSubmission,
@@ -42,12 +44,13 @@ const RootNavigator: React.FC = () => {
   const isMcq = () => {
     try {
       if (typeof window === 'undefined') return false;
-      if (localStorage.getItem('codedna_active_exam_mode') === 'MCQ') return true;
       const raw = localStorage.getItem('codedna_student_profile');
       if (raw) {
         const p = JSON.parse(raw);
+        if (p.course === 'Code Spark 2026' || (p.accessKey && String(p.accessKey).toUpperCase().startsWith('AXENT-'))) return false;
         if (p.examMode === 'MCQ' || p.examType === 'Multiple Choice Question (MCQ) Examination') return true;
       }
+      if (localStorage.getItem('codedna_active_exam_mode') === 'MCQ') return true;
     } catch {}
     return false;
   };
@@ -101,7 +104,7 @@ export const App: React.FC = () => {
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as any).standalone === true
     );
-    if (isStandalone && location.pathname !== '/mcq') {
+    if (isStandalone && !location.pathname.startsWith('/code-spark') && !location.pathname.startsWith('/codespark') && location.pathname !== '/mcq') {
       navigate('/mcq', { replace: true });
     }
   }, [location.pathname, navigate]);
@@ -362,7 +365,7 @@ export const App: React.FC = () => {
       <ScrollToTop />
       <SEOUpdater />
 
-      {location.pathname !== '/' && location.pathname !== '/launch' && !location.pathname.startsWith('/mcq') && (
+      {location.pathname !== '/' && location.pathname !== '/launch' && !location.pathname.startsWith('/mcq') && !location.pathname.startsWith('/code-spark') && !location.pathname.startsWith('/codespark') && (
         <Navbar
           theme={theme}
           onToggleTheme={toggleTheme}
@@ -375,7 +378,7 @@ export const App: React.FC = () => {
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
-          paddingTop: location.pathname !== '/' && location.pathname !== '/launch' && !location.pathname.startsWith('/mcq') ? '52px' : 0
+          paddingTop: location.pathname !== '/' && location.pathname !== '/launch' && !location.pathname.startsWith('/mcq') && !location.pathname.startsWith('/code-spark') && !location.pathname.startsWith('/codespark') ? '52px' : 0
         }}
       >
         <Routes>
@@ -491,6 +494,50 @@ export const App: React.FC = () => {
                 />
               </ProtectedRoute>
             }
+          />
+          <Route
+            path="/code-spark"
+            element={<CodeSparkPortal theme={theme} />}
+          />
+          <Route
+            path="/codespark"
+            element={<Navigate to="/code-spark" replace />}
+          />
+          <Route
+            path="/codespark-exams"
+            element={
+              <CodeSparkExamHall
+                theme={theme}
+                codeData={codeData}
+                onRunCode={handleRunCode}
+                onCodeChange={handleCodeChange}
+                executionHistory={executionHistory}
+                isExecuting={isExecuting}
+                compilerResult={compilerResult}
+                analysisResults={analysisResults}
+                onClearTerminal={handleClearTerminal}
+                vivaEvaluation={vivaEvaluation}
+                onVivaComplete={(ev) => {
+                  setVivaEvaluation(ev);
+                  try {
+                    localStorage.setItem('codedna_last_viva', JSON.stringify(ev));
+                  } catch {}
+                }}
+                onReset={handleReset}
+              />
+            }
+          />
+          <Route
+            path="/code-spark-exams"
+            element={<Navigate to="/codespark-exams" replace />}
+          />
+          <Route
+            path="/code-spark/exam"
+            element={<Navigate to="/codespark-exams" replace />}
+          />
+          <Route
+            path="/codespark/exam"
+            element={<Navigate to="/codespark-exams" replace />}
           />
           <Route
             path="/mcq"

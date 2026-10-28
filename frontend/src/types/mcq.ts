@@ -79,6 +79,7 @@ export interface MCQExamConfig {
   showExplanationsAfterSubmit: boolean;
   maxAttempts: number;
   isPrivate?: boolean;        // If true, hidden from public /mcq catalog; requires candidate ticket
+  isCodeSpark?: boolean;      // If true, this exam is for CodeSpark Round 1 — hidden from public /mcq catalog
   resultDeclarationMode?: MCQResultDeclarationMode; // 'IMMEDIATE' (default) or 'WHATSAPP_GROUP'
   whatsappGroupName?: string;                       // e.g. "TE Computer Div A - 2026 Batch"
   whatsappGroupLink?: string;                       // e.g. "https://chat.whatsapp.com/..."

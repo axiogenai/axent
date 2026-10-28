@@ -15,6 +15,7 @@ import { AIPaperGeneratorModal } from './AIPaperGeneratorModal';
 import { ConfirmationModal } from './ConfirmationModal';
 import { GoogleFormImportModal } from './mcq/GoogleFormImportModal';
 import { QuickAddQuestionModal } from './mcq/QuickAddQuestionModal';
+import { CodeSparkCandidateImportModal } from './codespark/CodeSparkCandidateImportModal';
 import { playSound } from '../utils/sounds';
 
 // ── Exam List View ────────────────────────────────────────────────────────────
@@ -36,6 +37,7 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [publishErrors, setPublishErrors] = useState<Record<string, string[]>>({});
   const [showAIModal, setShowAIModal] = useState(false);
+  const [codeSparkExamId, setCodeSparkExamId] = useState<string | null>(null);
   const [copiedExamId, setCopiedExamId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -395,6 +397,13 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
         onCancel={() => setConfirmDelete(null)}
       />
 
+            {codeSparkExamId !== null && (
+        <CodeSparkCandidateImportModal
+          isOpen={codeSparkExamId !== null}
+          targetExamId={codeSparkExamId || undefined}
+          onClose={() => setCodeSparkExamId(null)}
+        />
+      )}
       {/* AI Exam Paper Generator Modal */}
       {showAIModal && (
         <AIPaperGeneratorModal

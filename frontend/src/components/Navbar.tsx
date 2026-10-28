@@ -14,7 +14,8 @@ import {
   LucideIcon,
   Menu,
   X,
-  Download
+  Download,
+  Zap
 } from 'lucide-react';
 import { triggerInstallPrompt } from './ui/PWAInstallPrompt';
 import { ThemeMode } from '../types/dna';
@@ -106,6 +107,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     setMobileMenuOpen(false);
   }, [location.pathname]);
 
+  const isCodeSparkRoute = location.pathname.startsWith('/code-spark') || location.pathname.startsWith('/codespark');
   const isLandingRoute = location.pathname === '/';
   const isLoginRoute = location.pathname.startsWith('/login');
   const isAdminRoute = location.pathname.startsWith('/admin');
@@ -117,6 +119,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   if (isLandingRoute) {
     activeNavItems = [
+      { path: '/code-spark', label: 'Code Spark (3 Nov)', icon: Zap, badge: 'CONTEST' },
       { path: '/mcq', label: 'Exam Hall', icon: ListChecks }
     ];
   } else if (isLoginRoute) {

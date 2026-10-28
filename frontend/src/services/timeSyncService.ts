@@ -230,18 +230,37 @@ export function useSynchronizedClock(intervalMs: number = 1000) {
 // ── FULLSCREEN UTILITIES ──────────────────────────────────────────────────────
 
 /**
- * Check if the browser document is currently in fullscreen mode (native or CSS kiosk mode).
+ * Check if the browser document is currently in real native fullscreen mode.
  */
-export function isCurrentlyFullscreen(): boolean {
+export function isNativeFullscreen(): boolean {
   if (typeof document === 'undefined') return false;
   const doc = document as any;
-  const nativeFs = Boolean(
+  return Boolean(
     doc.fullscreenElement ||
     doc.webkitFullscreenElement ||
     doc.mozFullScreenElement ||
     doc.msFullscreenElement
   );
+}
+
+/**
+ * Check if the browser document is currently in fullscreen mode.
+ * On devices supporting native fullscreen (desktops, laptops, android), this strictly requires native fullscreen.
+ * Only on devices without native fullscreen support (e.g. iOS Safari) does it consider CSS kiosk mode.
+ */
+export function isCurrentlyFullscreen(): boolean {
+  if (typeof document === 'undefined') return false;
+  const doc = document as any;
+  const nativeFs = isNativeFullscreen();
   if (nativeFs) return true;
+
+  // If the browser supports native fullscreen, don't pretend we are in fullscreen just because of CSS kiosk fallback!
+  const supportsNative = Boolean(doc.fullscreenEnabled || doc.webkitFullscreenEnabled || doc.mozFullScreenEnabled || doc.msFullscreenEnabled);
+  if (supportsNative) {
+    return false;
+  }
+
+  // Fallback for browsers with zero native fullscreen support (e.g. mobile Safari)
   if (typeof window !== 'undefined' && (window as any).__codedna_kiosk_active) {
     return true;
   }
@@ -362,7 +381,7 @@ function getFullscreenTarget(): HTMLElement {
  */
 export async function requestExamFullscreen(): Promise<boolean> {
   if (typeof document === 'undefined') return false;
-  if (isCurrentlyFullscreen()) {
+  if (isNativeFullscreen()) {
     applyFullscreenInlineStyles();
     triggerViewportReflow();
     return true;
@@ -372,7 +391,9 @@ export async function requestExamFullscreen(): Promise<boolean> {
   try {
     const target = getFullscreenTarget() as any;
     if (target.requestFullscreen) {
-      await target.requestFullscreen();
+      await target.requestFullscreen({ navigationUI: 'hide' } as any).catch(async () => {
+        await target.requestFullscreen();
+      });
       nativeSuccess = true;
     } else if (target.webkitRequestFullscreen) {
       await target.webkitRequestFullscreen();
@@ -385,22 +406,29 @@ export async function requestExamFullscreen(): Promise<boolean> {
       nativeSuccess = true;
     }
   } catch (err) {
-    console.warn('[FullScreen] Native fullscreen was blocked or unsupported on this device:', err);
+    console.warn('[FullScreen] Native fullscreen was not granted by browser gesture:', err);
   }
 
-  // Activate CSS Fullscreen Kiosk Mode (guaranteed for iOS Safari and mobile devices)
-  if (typeof window !== 'undefined') {
-    (window as any).__codedna_kiosk_active = true;
-    document.documentElement.classList.add('codedna-kiosk-mode');
-    document.body.classList.add('codedna-kiosk-mode');
-    try {
-      window.dispatchEvent(new Event('fullscreenchange'));
-    } catch {}
+  if (nativeSuccess) {
+    if (typeof window !== 'undefined') {
+      (window as any).__codedna_kiosk_active = false;
+      document.documentElement.classList.remove('codedna-kiosk-mode');
+      document.body.classList.remove('codedna-kiosk-mode');
+    }
+  } else {
+    // Only activate CSS fallback if native fullscreen is truly unsupported
+    const doc = document as any;
+    const supportsNative = Boolean(doc.fullscreenEnabled || doc.webkitFullscreenEnabled || doc.mozFullScreenEnabled || doc.msFullscreenEnabled);
+    if (!supportsNative && typeof window !== 'undefined') {
+      (window as any).__codedna_kiosk_active = true;
+      document.documentElement.classList.add('codedna-kiosk-mode');
+      document.body.classList.add('codedna-kiosk-mode');
+    }
   }
 
   applyFullscreenInlineStyles();
   triggerViewportReflow();
-  return nativeSuccess || true;
+  return nativeSuccess;
 }
 
 /**

@@ -1,0 +1,3649 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Zap,
+  Code2,
+  Users,
+  Key,
+  CheckCircle2,
+  AlertTriangle,
+  Lock,
+  Unlock,
+  ChevronRight,
+  ChevronLeft,
+  Trophy,
+  Clock,
+  Filter,
+  Search,
+  Download,
+  FileText,
+  ShieldCheck,
+  ShieldAlert,
+  RefreshCw,
+  BarChart2,
+  Trash2,
+  Eye,
+  Check,
+  Copy,
+  Mail,
+  BookOpen,
+  X,
+  HelpCircle,
+  Award,
+  Video,
+  VideoOff,
+  Monitor,
+  ListChecks,
+  Radio,
+  Send,
+  Shield,
+  EyeOff,
+  Plus,
+  Cpu
+} from 'lucide-react';
+import { CandidateStation, CollegeLabInfo } from '../../types/dna';
+import {
+  getAllExams,
+  getAllAttempts,
+  getAllQuestions,
+  saveExam,
+  onExamsChanged,
+  onMcqDataChanged,
+  deleteSingleAttempt,
+  clearAllAttemptsFromEverywhere
+} from '../../services/mcqService';
+import { MCQExamConfig, MCQQuestion } from '../../types/mcq';
+import { getAllCodingQuestions } from '../../services/codingQuestionService';
+import { playSound } from '../../utils/sounds';
+import { sendProctorLockCommand, sendProctorWarning } from '../../services/adminService';
+import {
+  getAllCodeSparkCandidates,
+  CodeSparkCandidate,
+  saveCodeSparkCandidates,
+  ensureCodeSparkAptitudeExam,
+  shortlistCandidateForRound2,
+  getShortlistedRolls,
+  generateRound2KeyForCandidate,
+  generateCodeSparkKey,
+  isRound1ConcludedGlobally,
+  setRound1ConcludedGlobally,
+  concludeRound1AndShortlistUnified,
+  getStoredSmtpConfig,
+  saveStoredSmtpConfig,
+  testSmtpConnection,
+  dispatchRound2EmailsViaSmtp,
+  SmtpConfig,
+  isLabOverflowRetakeEnabledGlobally,
+  setLabOverflowRetakeGlobally,
+  getRound1RetakeRolls,
+  isCandidateAuthorizedForRound1Retake,
+  authorizeCandidateForRound1Retake,
+  authorizeAllRemainingCandidatesForRetake
+} from '../../services/codeSparkService';
+import { CodeSparkCandidateImportModal } from '../codespark/CodeSparkCandidateImportModal';
+import { AIPaperGeneratorModal } from '../AIPaperGeneratorModal';
+import { GoogleFormImportModal } from '../mcq/GoogleFormImportModal';
+import { AIPaperGenerationResult } from '../../services/groqService';
+import { clearAllStationsFromCloud, clearAllAttemptsFromCloud } from '../../services/supabaseService';
+
+interface AdminCodeSparkViewProps {
+  stations: CandidateStation[];
+  allLabs: CollegeLabInfo[];
+  onInspectStation?: (stationId: string) => void;
+  onInspectReport?: (submission: any) => void;
+  theme?: string;
+}
+
+const SHORTLIST_STORAGE_KEY = 'codedna_codespark_shortlist';
+
+export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
+  stations,
+  allLabs,
+  onInspectStation,
+  onInspectReport
+}) => {
+  // Navigation tabs: Round 1 MCQ CCTV, Round 1 Results, Shortlist & Keys, Round 2 Coding, Paper Blueprint, Candidate Roster, Specs
+  const [activeTab, setActiveTab] = useState<'mcq_cctv' | 'round1' | 'shortlist' | 'round2' | 'mcq_paper' | 'candidates' | 'overview'>('mcq_cctv');
+  const [registeredCandidates, setRegisteredCandidates] = useState<CodeSparkCandidate[]>(() => getAllCodeSparkCandidates());
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [copiedEmailKey, setCopiedEmailKey] = useState<string | null>(null);
+
+  // CCTV Screen View Modes, Filters & Proctor Locking
+  const [cctvFilter, setCctvFilter] = useState<'all' | 'live' | 'submitted' | 'standby'>('all');
+  const [cctvSearch, setCctvSearch] = useState<string>('');
+  const [stationViewModes, setStationViewModes] = useState<Record<string, 'telemetry' | 'screen' | 'camera'>>({});
+  const [lockedStations, setLockedStations] = useState<Record<string, boolean>>({});
+  const [proctorWarningSent, setProctorWarningSent] = useState<string | null>(null);
+
+  // Shortlist state
+  const [shortlistedRolls, setShortlistedRolls] = useState<string[]>(() => getShortlistedRolls());
+  const [cutoffScore, setCutoffScore] = useState<number>(60);
+  const [quickCutoffInput, setQuickCutoffInput] = useState<number>(30); // Top N
+
+  // Exam Papers & MCQ Data
+  const [allExams, setAllExams] = useState<MCQExamConfig[]>(() => getAllExams());
+  const [assignedExamId, setAssignedExamId] = useState<string>(() => {
+    try {
+      return localStorage.getItem('codedna_codespark_round1_exam_id') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [selectedExamToAssign, setSelectedExamToAssign] = useState<string>('');
+  const [paperSaveSuccess, setPaperSaveSuccess] = useState<string | null>(null);
+
+  // Active Question Inspector in MCQ Screens Tab
+  const [inspectedQuestionIdx, setInspectedQuestionIdx] = useState<number>(0);
+
+  // Candidate Response Screen Modal
+  const [selectedCandidateSheet, setSelectedCandidateSheet] = useState<any | null>(null);
+
+  // Email Dispatch Modal
+  const [showEmailDispatchModal, setShowEmailDispatchModal] = useState<boolean>(false);
+
+  // Institutional Multi-Lab Status & Conclude State
+  const [isRound1Concluded, setIsRound1Concluded] = useState(() => isRound1ConcludedGlobally());
+  const [showConcludeModal, setShowConcludeModal] = useState<boolean>(false);
+  const [concludeMode, setConcludeMode] = useState<'top_n' | 'cutoff'>('top_n');
+  const [concludeValue, setConcludeValue] = useState<number>(10);
+  const [concludeSuccessNotice, setConcludeSuccessNotice] = useState<string | null>(null);
+  const [showManualOverflowManager, setShowManualOverflowManager] = useState<boolean>(false);
+
+  // Real Gmail SMTP Configuration State
+  const [smtpUser, setSmtpUser] = useState<string>(() => getStoredSmtpConfig()?.smtp_user || '');
+  const [smtpPassword, setSmtpPassword] = useState<string>(() => getStoredSmtpConfig()?.smtp_password || '');
+  const [smtpFromName, setSmtpFromName] = useState<string>(
+    () => getStoredSmtpConfig()?.smtp_from_name || 'CodeSpark 2026 Examination Board'
+  );
+  const [showSmtpPassword, setShowSmtpPassword] = useState<boolean>(false);
+  const [smtpTesting, setSmtpTesting] = useState<boolean>(false);
+  const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [smtpSending, setSmtpSending] = useState<boolean>(false);
+  const [smtpSendResult, setSmtpSendResult] = useState<{
+    success: boolean;
+    message: string;
+    sent: number;
+    total: number;
+  } | null>(null);
+
+  // AI Paper Generator & Quick Candidate Key Modal State
+  const [showAIPaperModal, setShowAIPaperModal] = useState<boolean>(false);
+  const [showGoogleFormModal, setShowGoogleFormModal] = useState<boolean>(false);
+  
+  const [purgeNotice, setPurgeNotice] = useState<string | null>(null);
+
+  // Lab Overflow / Batch 2 (2nd Sitting) State
+  const [labOverflowEnabled, setLabOverflowEnabled] = useState(() => isLabOverflowRetakeEnabledGlobally());
+  const [retakeRolls, setRetakeRolls] = useState<string[]>(() => getRound1RetakeRolls());
+  const [retakeSuccessNotice, setRetakeSuccessNotice] = useState<string | null>(null);
+
+  const handleToggleLabOverflow = (enabled: boolean) => {
+    setLabOverflowRetakeGlobally(enabled);
+    setLabOverflowEnabled(enabled);
+    setRetakeSuccessNotice(
+      enabled
+        ? 'Lab Capacity Overflow Active: All remaining candidates are permitted to take Round 1 (Batch 2 / 2nd Sitting).'
+        : 'Lab Capacity Overflow Disabled: Standard 1-attempt limit restored.'
+    );
+    playSound('success');
+    setTimeout(() => setRetakeSuccessNotice(null), 6000);
+  };
+
+  const handleAuthorizeAllRemaining = () => {
+    const count = authorizeAllRemainingCandidatesForRetake();
+    setRetakeRolls(getRound1RetakeRolls());
+    setRegisteredCandidates(getAllCodeSparkCandidates());
+    setRetakeSuccessNotice(`Authorized ${count} candidates for Round 1 (Batch 2 / 2nd Sitting) due to lab station capacity.`);
+    playSound('success');
+    setTimeout(() => setRetakeSuccessNotice(null), 6000);
+  };
+
+  const handleToggleCandidateRetake = (rollOrKey: string, allow: boolean) => {
+    authorizeCandidateForRound1Retake(rollOrKey, allow);
+    setRetakeRolls(getRound1RetakeRolls());
+    setRegisteredCandidates(getAllCodeSparkCandidates());
+    setRetakeSuccessNotice(
+      allow
+        ? `Candidate "${rollOrKey}" granted 2nd sitting in Batch 2 (Lab Overflow).`
+        : `Candidate "${rollOrKey}" 2nd sitting revoked.`
+    );
+    playSound('click');
+    setTimeout(() => setRetakeSuccessNotice(null), 4000);
+  };
+
+  useEffect(() => {
+    const sync = () => {
+      setAllExams(getAllExams());
+      setAssignedExamId(localStorage.getItem('codedna_codespark_round1_exam_id') || '');
+      setShortlistedRolls(getShortlistedRolls());
+      setRegisteredCandidates(getAllCodeSparkCandidates());
+      setRetakeRolls(getRound1RetakeRolls());
+      setLabOverflowEnabled(isLabOverflowRetakeEnabledGlobally());
+    };
+    const unsub = onExamsChanged(sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      unsub();
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
+
+  const currentAssignedExam = useMemo(() => {
+    if (assignedExamId) {
+      const found = allExams.find((e) => e.id === assignedExamId);
+      if (found) return found;
+    }
+    const spark = allExams.find((e) => e.isCodeSpark);
+    if (spark) return spark;
+    return ensureCodeSparkAptitudeExam();
+  }, [assignedExamId, allExams]);
+
+  const mcqQuestions: MCQQuestion[] = useMemo(() => {
+    const all = getAllQuestions();
+    if (!currentAssignedExam) return all;
+    if (currentAssignedExam.questionIds && currentAssignedExam.questionIds.length > 0) {
+      const qMap = new Map(all.map((q) => [q.id, q]));
+      const matched = currentAssignedExam.questionIds.map((id) => qMap.get(id)).filter(Boolean) as MCQQuestion[];
+      if (matched.length > 0) return matched;
+    }
+    const apt = all.filter(
+      (q) =>
+        (q.subject || '').toLowerCase().includes('aptitude') ||
+        (q.topic || '').toLowerCase().includes('aptitude') ||
+        (q.topic || '').toLowerCase().includes('reasoning') ||
+        (q.topic || '').toLowerCase().includes('logic')
+    );
+    return apt.length > 0 ? apt : all;
+  }, [currentAssignedExam]);
+
+  const examTotalMarks = useMemo(() => {
+    if (currentAssignedExam?.totalMarks && currentAssignedExam.totalMarks > 0) {
+      return currentAssignedExam.totalMarks;
+    }
+    if (mcqQuestions && mcqQuestions.length > 0) {
+      return mcqQuestions.reduce((sum, q) => sum + (q.marks || 1), 0);
+    }
+    return 0;
+  }, [currentAssignedExam, mcqQuestions]);
+
+  // Load Round 1 Aptitude attempts
+  const [allAttempts, setAllAttempts] = useState<any[]>(() => getAllAttempts());
+  const codingQuestions = useMemo(() => getAllCodingQuestions(), []);
+
+  useEffect(() => {
+    const unsub = onMcqDataChanged(() => {
+      setAllAttempts(getAllAttempts());
+    });
+    return unsub;
+  }, []);
+
+  // Filter attempts for Code Spark Round 1
+  const aptitudeCandidates = useMemo(() => {
+    return allAttempts
+      .map((att) => {
+        const max = att.maxScore || currentAssignedExam?.totalMarks || 1;
+        const score = att.score ?? 0;
+        const pct = Math.round((score / max) * 100);
+        const roll = (att.studentRoll || '').toUpperCase();
+        const cand = registeredCandidates.find(
+          (c) =>
+            (c.rollNumber && c.rollNumber.toUpperCase() === roll) ||
+            c.accessKey.toUpperCase() === roll ||
+            c.email.toUpperCase() === (att.studentEmail || '').toUpperCase()
+        );
+        const isShortlisted = shortlistedRolls.includes(roll) || Boolean(cand?.isShortlisted);
+        return {
+          ...att,
+          candidateRecord: cand,
+          score,
+          totalMarks: max,
+          scorePct: pct,
+          isShortlisted,
+          round2Key: cand?.round2Key
+        };
+      })
+      .sort((a, b) => b.score - a.score);
+  }, [allAttempts, shortlistedRolls, registeredCandidates, currentAssignedExam]);
+
+  // AI Paper Generation handler
+  const handlePaperGenerated = (result: AIPaperGenerationResult) => {
+    try {
+      const exam = result.exam;
+      exam.isCodeSpark = true;
+      saveExam(exam);
+      localStorage.setItem('codedna_codespark_round1_exam_id', exam.id);
+      setAssignedExamId(exam.id);
+      setAllExams(getAllExams());
+      setShowAIPaperModal(false);
+      playSound('success');
+      setPaperSaveSuccess(
+        `Generated & assigned "${exam.title}" (${result.questions.length} Questions, ${exam.totalMarks} Total Marks) as official CodeSpark Round 1 Paper!`
+      );
+      setTimeout(() => setPaperSaveSuccess(null), 6000);
+    } catch (err: any) {
+      console.error('Failed to set AI paper:', err);
+    }
+  };
+
+    const handleGoogleFormQuestionsImported = (importedQuestions: MCQQuestion[]) => {
+    try {
+      if (!importedQuestions || importedQuestions.length === 0) return;
+
+      const totalMarks = importedQuestions.reduce((sum, q) => sum + (q.marks || 1), 0);
+      const questionIds = importedQuestions.map((q) => q.id);
+
+      const baseExam = currentAssignedExam || ensureCodeSparkAptitudeExam();
+      const updatedExam: MCQExamConfig = {
+        ...baseExam,
+        id: baseExam?.id || `exam_codespark_r1_${Date.now()}`,
+        title: baseExam?.title || 'CodeSpark 2026: Round 1 Aptitude & Logic Assessment',
+        description: 'Official CodeSpark Round 1 Examination (Imported from Google Form / Quiz)',
+        subject: importedQuestions[0]?.subject || 'Cognitive Aptitude & Logic',
+        topic: importedQuestions[0]?.topic || 'Problem Solving & Reasoning',
+        isCodeSpark: true,
+        status: 'PUBLISHED',
+        questionCount: importedQuestions.length,
+        totalMarks: totalMarks,
+        questionIds: questionIds,
+        updatedAt: Date.now()
+      };
+
+      saveExam(updatedExam);
+      localStorage.setItem('codedna_codespark_round1_exam_id', updatedExam.id);
+      setAssignedExamId(updatedExam.id);
+      setAllExams(getAllExams());
+      setShowGoogleFormModal(false);
+      playSound('success');
+      setPaperSaveSuccess(
+        `Imported ${importedQuestions.length} Questions (${totalMarks} Total Marks) directly into CodeSpark Round 1!`
+      );
+      setTimeout(() => setPaperSaveSuccess(null), 6000);
+    } catch (err: any) {
+      console.error('Failed to import Google Form questions:', err);
+    }
+  };
+
+  // Cloud & Local Demo Data Purge
+  const handlePurgeCloudData = async () => {
+    if (!window.confirm('Purge all demo candidate stations and test attempts from Supabase & local cache? Registered candidates and exam blueprints will be preserved.')) {
+      return;
+    }
+    playSound('click');
+    setPurgeNotice('Purging demo stations and test attempts from Supabase & local cache...');
+    try {
+      await clearAllStationsFromCloud();
+      await clearAllAttemptsFromCloud();
+      localStorage.removeItem('codedna_mcq_attempts');
+      localStorage.removeItem('codedna_codespark_active_batch');
+      setAllAttempts([]);
+      playSound('success');
+      setPurgeNotice('Purge complete: 0 demo stations and 0 test attempts in cloud & local store.');
+      setTimeout(() => setPurgeNotice(null), 5000);
+    } catch (err: any) {
+      setPurgeNotice(`Purge finished: ${err.message || 'Complete'}`);
+      setTimeout(() => setPurgeNotice(null), 5000);
+    }
+  };
+
+  // Real Gmail SMTP actions
+  const handleTestSmtp = async () => {
+    if (!smtpUser.trim() || !smtpPassword.trim()) {
+      setSmtpTestResult({
+        success: false,
+        message: 'Please provide both your Gmail address and 16-character Google App Password.'
+      });
+      return;
+    }
+    setSmtpTesting(true);
+    setSmtpTestResult(null);
+    try {
+      const res = await testSmtpConnection({
+        smtp_user: smtpUser.trim(),
+        smtp_password: smtpPassword.trim(),
+        smtp_from_name: smtpFromName.trim()
+      });
+      if (res.success) {
+        saveStoredSmtpConfig({
+          smtp_user: smtpUser.trim(),
+          smtp_password: smtpPassword.trim(),
+          smtp_from_name: smtpFromName.trim()
+        });
+        setSmtpTestResult({
+          success: true,
+          message: res.message || `Connected to smtp.gmail.com:587 as ${smtpUser.trim()} successfully!`
+        });
+        playSound('success');
+      } else {
+        setSmtpTestResult({
+          success: false,
+          message: res.error || 'SMTP Authentication failed. Verify your 16-character Google App Password.'
+        });
+        playSound('warning');
+      }
+    } catch (e: any) {
+      setSmtpTestResult({
+        success: false,
+        message: e.message || 'Connection test failed.'
+      });
+      playSound('warning');
+    } finally {
+      setSmtpTesting(false);
+    }
+  };
+
+  const handleSendEmailsViaSmtp = async () => {
+    if (!smtpUser.trim() || !smtpPassword.trim()) {
+      setSmtpTestResult({
+        success: false,
+        message: 'Please enter your Gmail address and 16-character Google App Password first.'
+      });
+      return;
+    }
+
+    if (shortlistedRolls.length === 0) {
+      setSmtpSendResult({
+        success: false,
+        message: 'No candidates are shortlisted yet. Conclude Round 1 to compute the shortlist first.',
+        sent: 0,
+        total: 0
+      });
+      return;
+    }
+
+    const recipients = shortlistedRolls.map((roll) => {
+      const matchAttempt = aptitudeCandidates.find((c) => (c.studentRoll || '').toUpperCase() === roll);
+      const matchCand = registeredCandidates.find(
+        (c) =>
+          (c.rollNumber && c.rollNumber.toUpperCase() === roll) ||
+          c.accessKey.toUpperCase() === roll ||
+          c.email.toUpperCase() === roll
+      );
+      const name = matchAttempt?.studentName || matchCand?.name || 'Candidate';
+      const email = matchAttempt?.studentEmail || matchCand?.email || '';
+      const r2Key = matchCand?.round2Key || `AXENT-R2-${roll.slice(-4) || '9901'}`;
+      const score = matchAttempt?.score ?? matchCand?.round1Score ?? 0;
+      const maxScore = matchAttempt?.totalMarks || matchAttempt?.maxScore || examTotalMarks || 0;
+
+      return {
+        name,
+        email,
+        rollNumber: roll,
+        round2Key: r2Key,
+        round1Score: score,
+        round1MaxScore: maxScore,
+        examUrl: `${window.location.origin}/code-spark`
+      };
+    }).filter((r) => r.email && r.email.includes('@'));
+
+    setSmtpSending(true);
+    setSmtpSendResult(null);
+
+    saveStoredSmtpConfig({
+      smtp_user: smtpUser.trim(),
+      smtp_password: smtpPassword.trim(),
+      smtp_from_name: smtpFromName.trim()
+    });
+
+    try {
+      const result = await dispatchRound2EmailsViaSmtp(
+        {
+          smtp_user: smtpUser.trim(),
+          smtp_password: smtpPassword.trim(),
+          smtp_from_name: smtpFromName.trim()
+        },
+        recipients
+      );
+
+      if (result.success && result.sent_count > 0) {
+        setSmtpSendResult({
+          success: true,
+          message: `Dispatched ${result.sent_count} of ${recipients.length} Round 2 keys via smtp.gmail.com!`,
+          sent: result.sent_count,
+          total: recipients.length
+        });
+        playSound('success');
+      } else {
+        setSmtpSendResult({
+          success: false,
+          message: result.error || `Dispatch completed with ${result.failed_count || 0} delivery failures. Check recipient email addresses.`,
+          sent: result.sent_count || 0,
+          total: recipients.length
+        });
+        playSound('warning');
+      }
+    } catch (e: any) {
+      setSmtpSendResult({
+        success: false,
+        message: e.message || 'Email dispatch failed over SMTP.',
+        sent: 0,
+        total: recipients.length
+      });
+      playSound('warning');
+    } finally {
+      setSmtpSending(false);
+    }
+  };
+
+  const handleConcludeRound1AndShortlist = () => {
+    const res = concludeRound1AndShortlistUnified({
+      mode: concludeMode,
+      value: Number(concludeValue) || (concludeMode === 'top_n' ? 10 : Math.round(examTotalMarks * 0.6))
+    });
+    setShortlistedRolls(res.shortlistedRolls);
+    setRegisteredCandidates(res.candidates);
+    setIsRound1Concluded(true);
+    setShowConcludeModal(false);
+    setConcludeSuccessNotice(
+      `Round 1 officially concluded! Combined leaderboard calculated across all labs. Shortlisted ${res.shortlistedCount} candidates for Round 2.`
+    );
+    playSound('success');
+    setShowEmailDispatchModal(true);
+    setTimeout(() => setConcludeSuccessNotice(null), 8000);
+  };
+
+  const handleReopenRound1 = () => {
+    setRound1ConcludedGlobally(false);
+    setIsRound1Concluded(false);
+    setConcludeSuccessNotice('Round 1 re-opened! Students can resume taking the Round 1 assessment across labs.');
+    playSound('click');
+    setTimeout(() => setConcludeSuccessNotice(null), 6000);
+  };
+
+  // Proctor lock & alert actions
+  const handleToggleLock = (stationId: string, labId?: string) => {
+    playSound('click');
+    setLockedStations((prev) => {
+      const next = !prev[stationId];
+      sendProctorLockCommand(stationId, next, labId || 'LAB-SPARK-01');
+      return { ...prev, [stationId]: next };
+    });
+  };
+
+  const handleSendProctorWarning = (candidateName: string, stationId?: string, roll?: string) => {
+    playSound('warning');
+    const msg = `PROCTOR WARNING: Suspicious activity detected on your workstation. Keep focus strictly on the examination window.`;
+    setProctorWarningSent(`Official proctor warning broadcasted to ${candidateName}'s active screen.`);
+    if (stationId) {
+      sendProctorWarning(stationId, msg);
+    }
+    if (roll) {
+      try {
+        localStorage.setItem(`codedna_candidate_warning_${roll.toUpperCase()}`, msg);
+        window.dispatchEvent(new CustomEvent('codedna_proctor_warning', { detail: { roll, message: msg } }));
+      } catch {}
+    }
+    setTimeout(() => setProctorWarningSent(null), 4500);
+  };
+
+  // Round 1 MCQ CCTV Stations: Synthesizes registered candidates, live proctoring stations, and all attempts
+  const round1Stations = useMemo(() => {
+    const candMap = new Map<string, { id: string; defaultStationNumber: string; candidate: CodeSparkCandidate; cleanRoll: string }>();
+
+    // 1. Registered candidates in CodeSpark
+    registeredCandidates.forEach((cand, idx) => {
+      const cleanRoll = (cand.rollNumber || cand.accessKey).toUpperCase().trim();
+      candMap.set(cleanRoll, {
+        id: `AXNT-SPARK-WS-${String(idx + 1).padStart(2, '0')}`,
+        defaultStationNumber: `Terminal #${String(idx + 1).padStart(2, '0')}`,
+        candidate: cand,
+        cleanRoll
+      });
+    });
+
+    // 2. Also incorporate any students in allAttempts that might not be in registeredCandidates
+    allAttempts.forEach((att) => {
+      const cleanRoll = (att.studentRoll || '').trim().toUpperCase();
+      if (!cleanRoll) return;
+      if (!candMap.has(cleanRoll)) {
+        candMap.set(cleanRoll, {
+          id: `AXNT-SPARK-WS-${String(candMap.size + 1).padStart(2, '0')}`,
+          defaultStationNumber: `Terminal #${String(candMap.size + 1).padStart(2, '0')}`,
+          candidate: {
+            name: att.studentName || cleanRoll,
+            email: att.studentEmail || `${cleanRoll.toLowerCase()}@institution.edu`,
+            rollNumber: cleanRoll,
+            accessKey: att.accessKey || `AXENT-${cleanRoll.slice(-4) || '9999'}`,
+            status: att.status === 'SUBMITTED' ? 'ROUND1_COMPLETED' : 'CHECKED_IN',
+            registeredAt: Date.now()
+          },
+          cleanRoll
+        });
+      }
+    });
+
+    const result: (CandidateStation & { isStandby?: boolean })[] = [];
+    let stationIndex = 1;
+
+    candMap.forEach(({ id, defaultStationNumber, candidate, cleanRoll }) => {
+      // Find matching attempt
+      const attempt = allAttempts.find(
+        (a) => (a.studentRoll || '').trim().toUpperCase() === cleanRoll
+      );
+
+      // Find matching live station from stations prop if available
+      const liveStation = stations.find(
+        (s) =>
+          (s.student?.rollNumber || '').trim().toUpperCase() === cleanRoll ||
+          (s.student?.name || '').trim().toLowerCase() === candidate.name.trim().toLowerCase() ||
+          s.id === id
+      );
+
+      const answeredKeys = attempt?.answers
+        ? Object.keys(attempt.answers).filter(
+            (k) => attempt.answers[k] !== undefined && attempt.answers[k] !== null && attempt.answers[k] !== ''
+          )
+        : [];
+      const answeredCount = answeredKeys.length;
+      const totalQ = attempt?.assignedQuestions?.length || currentAssignedExam?.questionCount || mcqQuestions.length || 0;
+
+      const isSubmitted =
+        attempt?.status === 'SUBMITTED' ||
+        attempt?.status === 'TIMED_OUT' ||
+        (attempt && attempt.score !== undefined);
+      const isActive = attempt?.status === 'IN_PROGRESS' || (liveStation && liveStation.status === 'In Progress');
+      const isStandby = !isSubmitted && !isActive;
+
+      // Determine which question the student is on:
+      let currentQIdx = 0;
+      if (liveStation?.mcqProgress?.currentQuestionIndex !== undefined) {
+        currentQIdx = liveStation.mcqProgress.currentQuestionIndex;
+      } else if (isActive) {
+        currentQIdx = Math.min(answeredCount, totalQ - 1);
+      } else if (isSubmitted) {
+        currentQIdx = totalQ - 1;
+      }
+
+      const isLocked = Boolean(lockedStations[id] || liveStation?.isLockedByProctor);
+
+      const stationObj: CandidateStation & { isStandby?: boolean } = {
+        id: liveStation?.id || id,
+        labId: 'LAB-SPARK-01',
+        labName: 'CodeSpark Enclave 01',
+        stationNumber: liveStation?.stationNumber || defaultStationNumber,
+        ipAddress: liveStation?.ipAddress || `10.26.3.${10 + stationIndex}`,
+        student: {
+          name: candidate.name,
+          rollNumber: candidate.rollNumber || cleanRoll,
+          semester: 'Final',
+          examType: 'Aptitude',
+          assignmentTitle: 'Code Spark 2026: General Aptitude & Reasoning',
+          course: 'Code Spark 2026',
+          department: candidate.department || 'Axent Enclave',
+          examMode: 'MCQ'
+        },
+        language: 'MCQ',
+        examMode: 'MCQ',
+        code: '// Round 1 Cognitive Aptitude MCQ Telemetry',
+        screenImageData: liveStation?.screenImageData,
+        status: isSubmitted ? 'Submitted & Done' : 'In Progress',
+        isStandby,
+        isLockedByProctor: isLocked,
+        metrics: {
+          typingSpeed: 0,
+          timeSpent: attempt?.timeSpentSeconds || liveStation?.metrics?.timeSpent || 0,
+          pasteCount: 0,
+          deleteCount: 0,
+          editCount: answeredCount,
+          undoCount: 0,
+          pasteRatio: 0,
+          pastedLines: 0,
+          totalLines: 0,
+          keystrokes: answeredCount,
+          pauseDuration: 0,
+          tabSwitchViolations: attempt?.tabSwitchCount || liveStation?.metrics?.tabSwitchViolations || 0,
+          unfocusedTimeSeconds: attempt?.unfocusedSeconds || liveStation?.metrics?.unfocusedTimeSeconds || 0
+        },
+        mcqProgress: {
+          examId: currentAssignedExam?.id || 'exam-spark',
+          examTitle: currentAssignedExam?.title || 'Code Spark 2026: General Aptitude & Reasoning',
+          currentQuestionIndex: currentQIdx,
+          totalQuestions: totalQ,
+          answeredCount: answeredCount,
+          tabSwitches: attempt?.tabSwitchCount || liveStation?.metrics?.tabSwitchViolations || 0,
+          score: attempt?.score,
+          maxScore: attempt?.maxScore || examTotalMarks || (attempt?.score !== undefined ? attempt.score : 0)
+        },
+        marks: attempt?.score !== undefined ? {
+          totalMarks: attempt.score,
+          maxMarks: attempt.maxScore || examTotalMarks || (attempt?.score !== undefined ? attempt.score : 0),
+          executionMarks: attempt.score,
+          logicMarks: 0,
+          vivaMarks: 0,
+          integrityMarks: 10
+        } : undefined,
+        integrityStatus:
+          (attempt?.tabSwitchCount || 0) >= 3 ? 'High Cheating Risk / Plagiarized' : 'Verified Original Work',
+        cheatingRisk:
+          (attempt?.tabSwitchCount || 0) >= 3 ? 'Critical' : (attempt?.tabSwitchCount || 0) >= 1 ? 'Medium' : 'Low',
+        lastActive: 'Just now',
+        lastUpdatedTimestamp: Date.now()
+      };
+
+      stationIndex++;
+      result.push(stationObj);
+    });
+
+    return result;
+  }, [registeredCandidates, allAttempts, stations, mcqQuestions, currentAssignedExam, lockedStations]);
+
+  const displayedCctvStations = useMemo(() => {
+    return round1Stations.filter((s) => {
+      if (cctvFilter === 'live' && (s.isStandby || s.status !== 'In Progress')) return false;
+      if (cctvFilter === 'submitted' && s.status !== 'Submitted & Done') return false;
+      if (cctvFilter === 'standby' && !s.isStandby) return false;
+
+      if (!cctvSearch.trim()) return true;
+      const q = cctvSearch.toLowerCase().trim();
+      return (
+        s.student.name.toLowerCase().includes(q) ||
+        (s.student.rollNumber || '').toLowerCase().includes(q) ||
+        s.stationNumber.toLowerCase().includes(q) ||
+        s.ipAddress.toLowerCase().includes(q)
+      );
+    });
+  }, [round1Stations, cctvFilter, cctvSearch]);
+
+  const liveMcqCount = useMemo(() => round1Stations.filter((s) => !s.isStandby && s.status === 'In Progress').length, [round1Stations]);
+  const submittedMcqCount = useMemo(() => round1Stations.filter((s) => s.status === 'Submitted & Done').length, [round1Stations]);
+  const standbyMcqCount = useMemo(() => round1Stations.filter((s) => s.isStandby).length, [round1Stations]);
+
+  // Round 2 Live Stations
+  const round2Stations = useMemo(() => {
+    return stations.filter((s) => {
+      const title = (s.student?.assignmentTitle || s.student?.course || '').toLowerCase();
+      const mode = s.examMode || (s.language === 'MCQ' ? 'MCQ' : 'CODING');
+      return mode === 'CODING' || title.includes('spark') || title.includes('coding');
+    });
+  }, [stations]);
+
+  // Shortlist management
+  const toggleCandidateShortlist = (rollNumber: string) => {
+    const roll = rollNumber.trim().toUpperCase();
+    const isNowShortlisted = !shortlistedRolls.includes(roll);
+    shortlistCandidateForRound2(roll, isNowShortlisted);
+    setShortlistedRolls(getShortlistedRolls());
+    setRegisteredCandidates(getAllCodeSparkCandidates());
+    playSound('success');
+  };
+
+  const handleShortlistTopN = (n: number) => {
+    const topRolls = aptitudeCandidates.slice(0, n).map((c) => (c.studentRoll || '').toUpperCase());
+    topRolls.forEach((r) => shortlistCandidateForRound2(r, true));
+    setShortlistedRolls(getShortlistedRolls());
+    setRegisteredCandidates(getAllCodeSparkCandidates());
+    playSound('success');
+  };
+
+  const handleShortlistByCutoff = (pct: number) => {
+    const eligible = aptitudeCandidates.filter((c) => c.scorePct >= pct).map((c) => (c.studentRoll || '').toUpperCase());
+    eligible.forEach((r) => shortlistCandidateForRound2(r, true));
+    setShortlistedRolls(getShortlistedRolls());
+    setRegisteredCandidates(getAllCodeSparkCandidates());
+    playSound('success');
+  };
+
+  const handleClearShortlist = () => {
+    if (!window.confirm('Clear all candidates from the Round 2 shortlist?')) return;
+    try {
+      localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify([]));
+      const all = getAllCodeSparkCandidates();
+      all.forEach((c) => {
+        c.isShortlisted = false;
+        c.round2Key = undefined;
+        if (c.status === 'SHORTLISTED') c.status = 'ROUND1_COMPLETED';
+      });
+      saveCodeSparkCandidates(all);
+      setShortlistedRolls([]);
+      setRegisteredCandidates(all);
+      playSound('click');
+    } catch {}
+  };
+
+  const handleAssignPaper = (examId: string) => {
+    if (!examId) return;
+    playSound('click');
+    try {
+      localStorage.setItem('codedna_codespark_round1_exam_id', examId);
+      setAssignedExamId(examId);
+
+      const target = allExams.find((e) => e.id === examId);
+      if (target) {
+        const updatedExam: MCQExamConfig = {
+          ...target,
+          isCodeSpark: true,
+          updatedAt: Date.now()
+        };
+        saveExam(updatedExam);
+        setAllExams(getAllExams());
+      }
+
+      playSound('success');
+      setPaperSaveSuccess(`Assigned "${target?.title || examId}" as CodeSpark Round 1 Paper.`);
+      setTimeout(() => setPaperSaveSuccess(null), 4000);
+      window.dispatchEvent(new Event('storage'));
+    } catch (err) {
+      console.error('Failed to assign CodeSpark paper:', err);
+    }
+  };
+
+  const handleDeleteCandidate = (key: string) => {
+    if (!window.confirm(`Remove candidate with key ${key} from roster?`)) return;
+    const remaining = registeredCandidates.filter((c) => c.accessKey !== key);
+    saveCodeSparkCandidates(remaining);
+    setRegisteredCandidates(remaining);
+    playSound('click');
+  };
+
+  const handlePurgeAllAttempts = async () => {
+    if (!window.confirm('Are you sure you want to purge ALL Round 1 attempts from database and storage?')) return;
+    await clearAllAttemptsFromEverywhere();
+    setAllAttempts([]);
+    setShortlistedRolls([]);
+    localStorage.removeItem(SHORTLIST_STORAGE_KEY);
+    playSound('click');
+  };
+
+  const handleExportShortlistCSV = () => {
+    const rows = [
+      ['Rank', 'Roll Number', 'Candidate Name', 'Email', 'Score', 'Total Marks', 'Score %', 'Shortlisted', 'Round 2 Access Key'],
+      ...aptitudeCandidates.map((c, idx) => [
+        idx + 1,
+        c.studentRoll,
+        c.studentName,
+        c.studentEmail || c.candidateRecord?.email || '',
+        c.score,
+        c.totalMarks,
+        `${c.scorePct}%`,
+        c.isShortlisted ? 'YES' : 'NO',
+        c.round2Key || (c.isShortlisted ? 'AXENT-R2-' + c.studentRoll : 'N/A')
+      ])
+    ];
+    const csvContent = 'data:text/csv;charset=utf-8,' + rows.map((e) => e.join(',')).join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `CodeSpark_Shortlist_Round2_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    playSound('click');
+  };
+
+  // ── High-Density Anti-Slop Dark Architecture Styles ──
+  const darkCardStyle: React.CSSProperties = {
+    background: '#121214',
+    border: '1px solid #27272a',
+    borderRadius: '8px',
+    padding: '16px 20px',
+    boxSizing: 'border-box'
+  };
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+        width: '100%',
+        color: '#f4f4f5',
+        fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      }}
+    >
+      {/* ── 1. MASTER CODESPARK CONTROL ROOM BANNER ── */}
+      <div
+        style={{
+          ...darkCardStyle,
+          background: '#09090b',
+          borderColor: '#27272a',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '16px',
+          padding: '20px 24px'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div
+            style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '8px',
+              background: '#18181b',
+              border: '1px solid #27272a',
+              color: '#f4f4f5',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <Zap size={22} color="#f4f4f5" />
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: '#f4f4f5', letterSpacing: '-0.02em' }}>
+                Code Spark 2026 Admin Control
+              </h2>
+              <span
+                style={{
+                  fontSize: '10.5px',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  background: '#18181b',
+                  color: '#e4e4e7',
+                  border: '1px solid #3f3f46',
+                  fontFamily: 'monospace'
+                }}
+              >
+                DUAL-ROUND INSTITUTIONAL CONTEST
+              </span>
+              <span
+                style={{
+                  fontSize: '10.5px',
+                  fontWeight: 600,
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  background: 'rgba(16, 185, 129, 0.1)',
+                  color: '#10b981',
+                  border: '1px solid rgba(16, 185, 129, 0.25)'
+                }}
+              >
+                SEALED SHORTLIST GATEKEEPER
+              </span>
+            </div>
+            <p style={{ fontSize: '12px', color: '#a1a1aa', margin: '4px 0 0 0' }}>
+              Round 1: Cognitive Aptitude MCQ &bull; Automated Shortlist &bull; Round 2: Algorithmic Code Sprint Arena
+            </p>
+          </div>
+        </div>
+
+        {/* Real-Time Contest Metric Badges */}
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <div style={{ padding: '8px 14px', borderRadius: '6px', background: '#18181b', border: '1px solid #27272a', textAlign: 'center' }}>
+            <div style={{ fontSize: '16px', fontWeight: 800, color: '#f4f4f5' }}>{aptitudeCandidates.length}</div>
+            <div style={{ fontSize: '9.5px', color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>R1 Submissions</div>
+          </div>
+          <div style={{ padding: '8px 14px', borderRadius: '6px', background: '#18181b', border: '1px solid #10b981', textAlign: 'center' }}>
+            <div style={{ fontSize: '16px', fontWeight: 800, color: '#10b981' }}>{shortlistedRolls.length}</div>
+            <div style={{ fontSize: '9.5px', color: '#10b981', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Shortlisted for R2</div>
+          </div>
+          <div style={{ padding: '8px 14px', borderRadius: '6px', background: '#18181b', border: '1px solid #27272a', textAlign: 'center' }}>
+            <div style={{ fontSize: '16px', fontWeight: 800, color: '#3b82f6' }}>{mcqQuestions.length}</div>
+            <div style={{ fontSize: '9.5px', color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>MCQ Questions</div>
+          </div>
+          <div style={{ padding: '8px 14px', borderRadius: '6px', background: '#18181b', border: '1px solid #27272a', textAlign: 'center' }}>
+            <div style={{ fontSize: '16px', fontWeight: 800, color: '#e4e4e7' }}>{codingQuestions.length}</div>
+            <div style={{ fontSize: '9.5px', color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Coding Problems</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 2. SUB-NAVIGATION TABS (High-Density Dark Pills) ── */}
+      <div
+        style={{
+          display: 'flex',
+          gap: '6px',
+          borderBottom: '1px solid #27272a',
+          paddingBottom: '10px',
+          overflowX: 'auto'
+        }}
+      >
+        {[
+          { id: 'mcq_cctv', label: `Round 1 MCQ CCTV (${round1Stations.length})`, icon: Video },
+          { id: 'round1', label: `Round 1 Results & Sheets (${aptitudeCandidates.length})`, icon: Trophy },
+          { id: 'shortlist', label: `Shortlist & Round 2 Keys (${shortlistedRolls.length})`, icon: ShieldCheck },
+          { id: 'round2', label: `Round 2 Live Arena (${round2Stations.length})`, icon: Code2 },
+          { id: 'mcq_paper', label: `Paper Blueprint & Solutions (${mcqQuestions.length})`, icon: BookOpen },
+          { id: 'candidates', label: `Candidate Roster (${registeredCandidates.length})`, icon: Key },
+          { id: 'overview', label: 'Paper Config & Specs', icon: FileText }
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => {
+              setActiveTab(tab.id as any);
+              playSound('click');
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 14px',
+              borderRadius: '6px',
+              border: activeTab === tab.id ? '1px solid #3f3f46' : '1px solid #27272a',
+              background: activeTab === tab.id ? '#18181b' : 'transparent',
+              color: activeTab === tab.id ? '#ffffff' : '#a1a1aa',
+              fontSize: '12px',
+              fontWeight: activeTab === tab.id ? 700 : 500,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <tab.icon size={13} />
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* ── 3. TAB CONTENT ── */}
+
+      {/* ── TAB: ROUND 1 MCQ CCTV SURVEILLANCE GRID ── */}
+      {activeTab === 'mcq_cctv' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Top Control Bar & Live Stats */}
+          <div
+            style={{
+              ...darkCardStyle,
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '14px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '6px',
+                  background: 'rgba(234, 26, 28, 0.12)',
+                  color: '#ea1a1c',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1px solid rgba(234, 26, 28, 0.25)'
+                }}
+              >
+                <Video size={18} />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#f4f4f5' }}>
+                    Round 1 MCQ CCTV Surveillance Wall
+                  </h4>
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      fontFamily: 'monospace',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      background: liveMcqCount > 0 ? 'rgba(56, 189, 248, 0.15)' : '#18181b',
+                      color: liveMcqCount > 0 ? '#38bdf8' : '#71717a',
+                      border: liveMcqCount > 0 ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid #27272a',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        background: liveMcqCount > 0 ? '#38bdf8' : '#71717a'
+                      }}
+                    />
+                    {liveMcqCount} ACTIVE CANDIDATE FEEDS
+                  </span>
+                </div>
+                <div style={{ fontSize: '12px', color: '#71717a', marginTop: '2px' }}>
+                  Real-time student question progression telemetry & workstation CCTV monitor
+                </div>
+              </div>
+            </div>
+
+            {/* Filter Pills & Search */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              {/* Status Filter Buttons */}
+              <div
+                style={{
+                  display: 'inline-flex',
+                  padding: '3px',
+                  background: '#18181b',
+                  borderRadius: '6px',
+                  border: '1px solid #27272a'
+                }}
+              >
+                {[
+                  { id: 'all', label: `All (${round1Stations.length})` },
+                  { id: 'live', label: `Live (${liveMcqCount})` },
+                  { id: 'submitted', label: `Submitted (${submittedMcqCount})` },
+                  { id: 'standby', label: `Standby (${standbyMcqCount})` }
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => {
+                      setCctvFilter(f.id as any);
+                      playSound('click');
+                    }}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '4px',
+                      border: 'none',
+                      background: cctvFilter === f.id ? '#27272a' : 'transparent',
+                      color: cctvFilter === f.id ? '#ffffff' : '#a1a1aa',
+                      fontSize: '11px',
+                      fontWeight: cctvFilter === f.id ? 700 : 500,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Search Bar */}
+              <div style={{ position: 'relative', width: '220px' }}>
+                <Search
+                  size={13}
+                  style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#71717a' }}
+                />
+                <input
+                  type="text"
+                  placeholder="Search candidate or terminal..."
+                  value={cctvSearch}
+                  onChange={(e) => setCctvSearch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '6px 10px 6px 30px',
+                    borderRadius: '6px',
+                    border: '1px solid #27272a',
+                    background: '#18181b',
+                    color: '#f4f4f5',
+                    fontSize: '11.5px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => window.open('/codespark-exams?round=1', '_blank')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  background: '#18181b',
+                  border: '1px solid #27272a',
+                  color: '#f4f4f5',
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                <Eye size={12} />
+                <span>Open Exam Hall</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Alert notice if proctor warning was sent */}
+          {proctorWarningSent && (
+            <div
+              style={{
+                padding: '10px 14px',
+                borderRadius: '6px',
+                background: 'rgba(234, 26, 28, 0.12)',
+                border: '1px solid rgba(234, 26, 28, 0.3)',
+                color: '#fca5a5',
+                fontSize: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              <AlertTriangle size={14} color="#ea1a1c" />
+              <span>{proctorWarningSent}</span>
+            </div>
+          )}
+
+          {/* Institutional Multi-Lab Status & Conclude Controller */}
+          <div
+            style={{
+              ...darkCardStyle,
+              background: isRound1Concluded ? 'rgba(16, 185, 129, 0.04)' : '#0e0e11',
+              borderColor: isRound1Concluded ? 'rgba(16, 185, 129, 0.4)' : '#27272a',
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '14px',
+              padding: '16px 20px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '6px',
+                  background: isRound1Concluded ? 'rgba(16, 185, 129, 0.15)' : 'rgba(234, 26, 28, 0.12)',
+                  color: isRound1Concluded ? '#10b981' : '#f4f4f5',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: isRound1Concluded ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(255, 255, 255, 0.15)'
+                }}
+              >
+                {isRound1Concluded ? <CheckCircle2 size={18} color="#10b981" /> : <Shield size={18} color="#f4f4f5" />}
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#f4f4f5' }}>
+                    Institutional Multi-Lab Examination Status
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      fontFamily: 'monospace',
+                      padding: '2.5px 7px',
+                      borderRadius: '4px',
+                      background: isRound1Concluded ? 'rgba(16, 185, 129, 0.15)' : '#18181b',
+                      color: isRound1Concluded ? '#10b981' : '#fbbf24',
+                      border: isRound1Concluded ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid #3f3f46'
+                    }}
+                  >
+                    {isRound1Concluded
+                      ? '✓ ROUND 1 CONCLUDED & SEALED'
+                      : '● ROUND 1 LIVE ACROSS ALL LABS — SHORTLIST PENDING'}
+                  </span>
+                </div>
+                <div style={{ fontSize: '12px', color: '#a1a1aa', marginTop: '3px' }}>
+                  {isRound1Concluded
+                    ? `Round 1 is officially concluded. All lab records merged into unified leaderboard. ${shortlistedRolls.length} candidates shortlisted for Round 2.`
+                    : 'Lab A, Lab B & Waiting Sittings Active. Candidates attend exam when workstations become free. Shortlisting will combine scores across all labs when testing concludes.'}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {!isRound1Concluded ? (
+                <button
+                  type="button"
+                  onClick={() => setShowConcludeModal(true)}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '6px',
+                    background: '#f4f4f5',
+                    border: 'none',
+                    color: '#09090b',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 8px rgba(255,255,255,0.1)'
+                  }}
+                >
+                  <Trophy size={13} color="#09090b" />
+                  <span>Conclude Round 1 &amp; Shortlist Across All Labs</span>
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowEmailDispatchModal(true)}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '6px',
+                      background: '#10b981',
+                      border: 'none',
+                      color: '#09090b',
+                      fontSize: '12px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Mail size={13} color="#09090b" />
+                    <span>Send Round 2 Codes via Gmail</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleReopenRound1}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      background: '#18181b',
+                      border: '1px solid #27272a',
+                      color: '#f4f4f5',
+                      fontSize: '11.5px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <RefreshCw size={12} />
+                    <span>Re-open Round 1</span>
+                  </button>
+                </>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setShowAIPaperModal(true)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  background: '#18181b',
+                  border: '1px solid #27272a',
+                  color: '#f4f4f5',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                title="Generate fresh exam paper with any number of questions and marks"
+              >
+                <Cpu size={12} color="#a1a1aa" />
+                <span>AI Paper Gen</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowImportModal(true)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  background: '#18181b',
+                  border: '1px solid #27272a',
+                  color: '#f4f4f5',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                title="Manage and issue CodeSpark candidate keys (AXENT-XXXX)"
+              >
+                <Key size={12} />
+                <span>Candidate Keys</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowGoogleFormModal(true)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  background: '#18181b',
+                  border: '1px solid #27272a',
+                  color: '#f4f4f5',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                title="Import questions directly from Google Form, Docs, or Text"
+              >
+                <FileText size={12} color="#a1a1aa" />
+                <span>Import Google Form</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handlePurgeCloudData}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  background: '#18181b',
+                  border: '1px solid #27272a',
+                  color: '#a1a1aa',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                title="Purge demo stations and test attempts from Supabase & local cache"
+              >
+                <Trash2 size={12} />
+                <span>Purge Demo Data</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Purge / Conclude / Retake Notifications */}
+          {purgeNotice && (
+            <div
+              style={{
+                padding: '10px 14px',
+                borderRadius: '6px',
+                background: 'rgba(59, 130, 246, 0.12)',
+                border: '1px solid rgba(59, 130, 246, 0.3)',
+                color: '#93c5fd',
+                fontSize: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              <CheckCircle2 size={14} color="#60a5fa" />
+              <span>{purgeNotice}</span>
+            </div>
+          )}
+
+          {concludeSuccessNotice && (
+            <div
+              style={{
+                padding: '10px 14px',
+                borderRadius: '6px',
+                background: 'rgba(16, 185, 129, 0.12)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                color: '#6ee7b7',
+                fontSize: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              <CheckCircle2 size={14} color="#10b981" />
+              <span>{concludeSuccessNotice}</span>
+            </div>
+          )}
+
+          {/* CCTV Workstation Grid */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
+              gap: '14px'
+            }}
+          >
+            {displayedCctvStations.length === 0 ? (
+              <div
+                style={{
+                  gridColumn: '1 / -1',
+                  padding: '48px 24px',
+                  textAlign: 'center',
+                  border: '1px dashed #27272a',
+                  borderRadius: '8px',
+                  background: '#09090b'
+                }}
+              >
+                <VideoOff size={32} color="#71717a" style={{ marginBottom: '10px' }} />
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#f4f4f5' }}>
+                  No candidate workstations match filter "{cctvFilter}"
+                </div>
+                <div style={{ fontSize: '12px', color: '#71717a', marginTop: '4px' }}>
+                  Candidates appear here in real-time as they authenticate and take Round 1.
+                </div>
+              </div>
+            ) : (
+              displayedCctvStations.map((station) => {
+                const totalQ = station.mcqProgress?.totalQuestions || currentAssignedExam?.questionCount || mcqQuestions.length || 0;
+                const answeredCount = station.mcqProgress?.answeredCount || 0;
+                const currentIdx = station.mcqProgress?.currentQuestionIndex ?? 0;
+                const pct = Math.min(100, Math.round((answeredCount / Math.max(1, totalQ)) * 100));
+                const view = stationViewModes[station.id] || 'telemetry';
+                const candKey = registeredCandidates.find(
+                  (c) =>
+                    (c.rollNumber && c.rollNumber.toUpperCase() === (station.student?.rollNumber || '').toUpperCase()) ||
+                    c.name.trim().toLowerCase() === (station.student?.name || '').trim().toLowerCase()
+                )?.accessKey || `AXENT-${(station.student?.rollNumber || '5278').slice(-4)}`;
+
+                return (
+                  <div
+                    key={station.id}
+                    style={{
+                      ...darkCardStyle,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px'
+                    }}
+                  >
+                    {/* Station Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Monitor size={15} color="#ea1a1c" />
+                        <span style={{ fontWeight: 800, fontSize: '14px', color: '#ffffff' }}>
+                          {station.stationNumber}
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#71717a', fontFamily: 'monospace' }}>
+                          {station.ipAddress}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {station.isLockedByProctor ? (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              background: 'rgba(239, 68, 68, 0.15)',
+                              border: '1px solid rgba(239, 68, 68, 0.4)',
+                              color: '#ef4444',
+                              fontSize: '10.5px',
+                              fontWeight: 700
+                            }}
+                          >
+                            <Lock size={10} />
+                            <span>LOCKED</span>
+                          </span>
+                        ) : station.status === 'Submitted & Done' ? (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              background: 'rgba(16, 185, 129, 0.15)',
+                              border: '1px solid rgba(16, 185, 129, 0.4)',
+                              color: '#10b981',
+                              fontSize: '10.5px',
+                              fontWeight: 700
+                            }}
+                          >
+                            <CheckCircle2 size={10} />
+                            <span>SUBMITTED</span>
+                          </span>
+                        ) : station.status === 'In Progress' && !station.isStandby ? (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              background: 'rgba(56, 189, 248, 0.15)',
+                              border: '1px solid rgba(56, 189, 248, 0.4)',
+                              color: '#38bdf8',
+                              fontSize: '10.5px',
+                              fontWeight: 700
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: '6px',
+                                height: '6px',
+                                borderRadius: '50%',
+                                background: '#38bdf8'
+                              }}
+                            />
+                            <span>LIVE ON Q{currentIdx + 1}</span>
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              background: 'rgba(255, 255, 255, 0.05)',
+                              border: '1px solid rgba(255, 255, 255, 0.1)',
+                              color: '#71717a',
+                              fontSize: '10.5px',
+                              fontWeight: 700
+                            }}
+                          >
+                            STANDBY
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* CCTV / Screen Stream Window */}
+                    <div
+                      style={{
+                        height: '195px',
+                        minHeight: '195px',
+                        background: '#040508',
+                        borderRadius: '6px',
+                        border: '1px solid #27272a',
+                        padding: '10px 12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        boxSizing: 'border-box',
+                        position: 'relative',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      {/* View Mode Toggle Button in Top Right */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setStationViewModes((prev) => ({
+                            ...prev,
+                            [station.id]: view === 'telemetry' ? 'screen' : 'telemetry'
+                          }));
+                          playSound('click');
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: '6px',
+                          right: '6px',
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          border: '1px solid rgba(255, 255, 255, 0.14)',
+                          borderRadius: '4px',
+                          color: '#a1a1aa',
+                          fontSize: '9.5px',
+                          padding: '2px 6px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          zIndex: 5
+                        }}
+                        title={view === 'telemetry' ? 'Switch to screen stream' : 'Switch to live MCQ answering telemetry'}
+                      >
+                        {view === 'telemetry' ? <Monitor size={10} /> : <ListChecks size={10} />}
+                        <span>{view === 'telemetry' ? 'Screen' : 'MCQ Live'}</span>
+                      </button>
+
+                      {view === 'screen' && station.screenImageData ? (
+                        <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <img
+                            src={station.screenImageData}
+                            alt={`Screen ${station.stationNumber}`}
+                            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                          />
+                          <span
+                            style={{
+                              position: 'absolute',
+                              bottom: '6px',
+                              left: '6px',
+                              fontSize: '9.5px',
+                              fontWeight: 700,
+                              background: 'rgba(234, 26, 28, 0.85)',
+                              color: '#fff',
+                              borderRadius: '3px',
+                              padding: '1px 6px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <Radio size={9} />
+                            <span>SCREEN BROADCAST</span>
+                          </span>
+                        </div>
+                      ) : (
+                        /* MCQ Telemetry Mode (Showing which student is on which question) */
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <ListChecks size={13} color="#ea1a1c" />
+                              <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#f4f4f5', letterSpacing: '0.04em' }}>
+                                MCQ TELEMETRY
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', paddingRight: '60px' }}>
+                              <span
+                                style={{
+                                  fontSize: '9.5px',
+                                  fontWeight: 700,
+                                  background: 'rgba(56, 189, 248, 0.15)',
+                                  color: '#38bdf8',
+                                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                Active Q {currentIdx + 1} / {totalQ}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Grid of 10 Numbered Question Indicators (5x2 Matrix) */}
+                          <div
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(5, 1fr)',
+                              gap: '4px',
+                              margin: '6px 0'
+                            }}
+                          >
+                            {Array.from({ length: totalQ }).map((_, idx) => {
+                              const isAnswered = idx < answeredCount;
+                              const isCurrent = idx === currentIdx;
+                              return (
+                                <div
+                                  key={idx}
+                                  style={{
+                                    height: '22px',
+                                    borderRadius: '3px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '2px',
+                                    fontSize: '9.5px',
+                                    fontWeight: 800,
+                                    fontFamily: 'monospace',
+                                    background: isCurrent
+                                      ? 'rgba(56, 189, 248, 0.28)'
+                                      : isAnswered
+                                      ? 'rgba(34, 197, 94, 0.2)'
+                                      : 'rgba(255, 255, 255, 0.04)',
+                                    border: isCurrent
+                                      ? '1px solid #38bdf8'
+                                      : isAnswered
+                                      ? '1px solid rgba(34, 197, 94, 0.5)'
+                                      : '1px solid rgba(255, 255, 255, 0.08)',
+                                    color: isCurrent ? '#38bdf8' : isAnswered ? '#4ade80' : '#71717a'
+                                  }}
+                                  title={`Question ${idx + 1}: ${isCurrent ? 'Current Active Solving' : isAnswered ? 'Answered' : 'Unanswered'}`}
+                                >
+                                  <span>{idx + 1}</span>
+                                  {isCurrent && (
+                                    <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#38bdf8' }} />
+                                  )}
+                                  {isAnswered && !isCurrent && (
+                                    <span style={{ fontSize: '9px' }}>✓</span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Progress bar + Answered summary */}
+                          <div>
+                            <div
+                              style={{
+                                width: '100%',
+                                height: '4px',
+                                background: 'rgba(255, 255, 255, 0.08)',
+                                borderRadius: '2px',
+                                overflow: 'hidden',
+                                marginBottom: '6px'
+                              }}
+                            >
+                              <div
+                                style={{
+                                  width: `${pct}%`,
+                                  height: '100%',
+                                  background: '#22c55e',
+                                  transition: 'width 0.3s ease'
+                                }}
+                              />
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: '#a1a1aa' }}>
+                              <span>{answeredCount}/{totalQ} Answered ({pct}%)</span>
+                              <span style={{ fontWeight: 700, color: '#f4f4f5' }}>
+                                {station.mcqProgress?.score !== undefined ? `${station.mcqProgress.score} pts` : 'Evaluating'}
+                              </span>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Candidate Details */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: '#f4f4f5' }}>
+                            {station.student.name}
+                          </h4>
+                          {isCandidateAuthorizedForRound1Retake(station.student.rollNumber || candKey) ? (
+                            <span
+                              style={{
+                                fontSize: '9px',
+                                fontWeight: 800,
+                                padding: '1px 5px',
+                                borderRadius: '3px',
+                                background: 'rgba(245, 158, 11, 0.15)',
+                                color: '#f59e0b',
+                                border: '1px solid rgba(245, 158, 11, 0.35)',
+                                fontFamily: 'monospace'
+                              }}
+                            >
+                              BATCH 2 (2ND SITTING)
+                            </span>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: '9px',
+                                fontWeight: 700,
+                                padding: '1px 5px',
+                                borderRadius: '3px',
+                                background: '#18181b',
+                                color: '#71717a',
+                                border: '1px solid #27272a',
+                                fontFamily: 'monospace'
+                              }}
+                            >
+                              BATCH 1
+                            </span>
+                          )}
+                        </div>
+                        <span style={{ fontSize: '11px', color: '#71717a', fontFamily: 'monospace' }}>
+                          {station.student.rollNumber}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: '#a1a1aa', marginTop: '2px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Access Key: <strong style={{ color: '#ffffff', fontFamily: 'monospace' }}>{candKey}</strong></span>
+                        {(station.metrics?.tabSwitchViolations || 0) > 0 ? (
+                          <span style={{ color: '#ef4444', fontWeight: 700, fontSize: '10.5px' }}>
+                            {station.metrics?.tabSwitchViolations} Tab Violations
+                          </span>
+                        ) : (
+                          <span style={{ color: '#10b981', fontSize: '10.5px' }}>0 Infractions</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Quick Action Buttons */}
+                    <div style={{ display: 'flex', gap: '6px', paddingTop: '8px', borderTop: '1px solid #27272a', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const att = allAttempts.find(
+                            (a) => (a.studentRoll || '').trim().toUpperCase() === (station.student.rollNumber || '').trim().toUpperCase()
+                          );
+                          setSelectedCandidateSheet(
+                            att || {
+                              studentRoll: station.student.rollNumber,
+                              studentName: station.student.name,
+                              score: station.mcqProgress?.score ?? 0,
+                              maxScore: examTotalMarks || totalQ,
+                              answers: {},
+                              status: station.status === 'Submitted & Done' ? 'SUBMITTED' : (station.status === 'In Progress' ? 'IN_PROGRESS' : 'STANDBY')
+                            }
+                          );
+                          playSound('click');
+                        }}
+                        style={{
+                          flex: 1,
+                          minWidth: '85px',
+                          padding: '7px 8px',
+                          borderRadius: '4px',
+                          background: '#18181b',
+                          border: '1px solid #27272a',
+                          color: '#f4f4f5',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Eye size={12} />
+                        <span>Inspect Sheet</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const candId = station.student.rollNumber || candKey;
+                          const currentlyAllowed = isCandidateAuthorizedForRound1Retake(candId);
+                          handleToggleCandidateRetake(candId, !currentlyAllowed);
+                        }}
+                        style={{
+                          padding: '7px 9px',
+                          borderRadius: '4px',
+                          background: isCandidateAuthorizedForRound1Retake(station.student.rollNumber || candKey)
+                            ? 'rgba(245, 158, 11, 0.15)'
+                            : '#18181b',
+                          border: isCandidateAuthorizedForRound1Retake(station.student.rollNumber || candKey)
+                            ? '1px solid rgba(245, 158, 11, 0.4)'
+                            : '1px solid #27272a',
+                          color: isCandidateAuthorizedForRound1Retake(station.student.rollNumber || candKey)
+                            ? '#f59e0b'
+                            : '#d4d4d8',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title="Authorize or toggle Round 1 (Batch 2 / 2nd Sitting) if lab had no space"
+                      >
+                        <Zap size={11} color={isCandidateAuthorizedForRound1Retake(station.student.rollNumber || candKey) ? '#f59e0b' : '#a1a1aa'} />
+                        <span>
+                          {isCandidateAuthorizedForRound1Retake(station.student.rollNumber || candKey)
+                            ? 'Batch 2'
+                            : '+ 2nd Sit'}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleToggleLock(station.id, station.labId)}
+                        style={{
+                          padding: '7px 10px',
+                          borderRadius: '4px',
+                          background: station.isLockedByProctor ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                          border: station.isLockedByProctor ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+                          color: station.isLockedByProctor ? '#10b981' : '#ef4444',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        {station.isLockedByProctor ? <Unlock size={12} /> : <Lock size={12} />}
+                        <span>{station.isLockedByProctor ? 'Unlock' : 'Lock'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSendProctorWarning(station.student.name, station.id, station.student.rollNumber)}
+                        style={{
+                          padding: '7px 8px',
+                          borderRadius: '4px',
+                          background: '#18181b',
+                          border: '1px solid #27272a',
+                          color: '#f59e0b',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title="Broadcast warning to candidate screen"
+                      >
+                        <Send size={11} />
+                        <span>Warn</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: MCQ PAPER & BLUEPRINT SOLUTIONS ── */}
+      {activeTab === 'mcq_paper' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Header Bar */}
+          <div style={{ ...darkCardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#f4f4f5' }}>
+                  CodeSpark Round 1 MCQ Examination Screen
+                </h4>
+                <span style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '3px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', fontWeight: 700 }}>
+                  LIVE CANDIDATE VIEW
+                </span>
+              </div>
+              <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#a1a1aa' }}>
+                Paper: <strong>{currentAssignedExam?.title}</strong> &bull; {mcqQuestions.length} Questions &bull; {currentAssignedExam?.durationMinutes || 30} Minutes &bull; {examTotalMarks} Total Marks
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setShowGoogleFormModal(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 14px',
+                  borderRadius: '6px',
+                  background: '#18181b',
+                  border: '1px solid #27272a',
+                  color: '#f4f4f5',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                <FileText size={13} color="#a1a1aa" />
+                <span>Import Google Form</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowAIPaperModal(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 14px',
+                  borderRadius: '6px',
+                  background: '#18181b',
+                  border: '1px solid #27272a',
+                  color: '#f4f4f5',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                <Cpu size={13} color="#a1a1aa" />
+                <span>AI Paper Gen</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  window.open('/codespark-exams?round=1', '_blank');
+                  playSound('click');
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 14px',
+                  borderRadius: '6px',
+                  background: '#18181b',
+                  border: '1px solid #27272a',
+                  color: '#f4f4f5',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                <Eye size={13} />
+                <span>Open Candidate Hall in New Window</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Interactive Question Browser */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+            {/* Question Screen Card */}
+            <div style={{ ...darkCardStyle, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #27272a', paddingBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ padding: '3px 8px', borderRadius: '4px', background: '#18181b', border: '1px solid #3f3f46', fontFamily: 'monospace', fontSize: '11px', fontWeight: 800, color: '#f4f4f5' }}>
+                    QUESTION {inspectedQuestionIdx + 1} OF {mcqQuestions.length}
+                  </span>
+                  <span style={{ fontSize: '11px', color: '#71717a' }}>
+                    +{(mcqQuestions[inspectedQuestionIdx]?.marks || 1).toFixed(1)} Marks &bull; -{(mcqQuestions[inspectedQuestionIdx]?.negativeMarks || 0).toFixed(1)} Negative
+                  </span>
+                </div>
+                <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.25)', fontWeight: 600 }}>
+                  {mcqQuestions[inspectedQuestionIdx]?.topic || 'Quantitative Aptitude'}
+                </span>
+              </div>
+
+              {/* Question Text */}
+              <div style={{ fontSize: '14.5px', fontWeight: 600, color: '#f4f4f5', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                {mcqQuestions[inspectedQuestionIdx]?.text || 'No question available'}
+              </div>
+
+              {/* Options */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {mcqQuestions[inspectedQuestionIdx]?.options.map((opt, oIdx) => {
+                  const letter = String.fromCharCode(65 + oIdx);
+                  const isCorrect = opt.isCorrect;
+                  return (
+                    <div
+                      key={oIdx}
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: '6px',
+                        background: isCorrect ? 'rgba(16, 185, 129, 0.08)' : '#18181b',
+                        border: isCorrect ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid #27272a',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '12px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span
+                          style={{
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '4px',
+                            background: isCorrect ? '#10b981' : '#27272a',
+                            color: isCorrect ? '#09090b' : '#f4f4f5',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '11px',
+                            fontWeight: 800
+                          }}
+                        >
+                          {letter}
+                        </span>
+                        <span style={{ fontSize: '13px', color: isCorrect ? '#ffffff' : '#d4d4d8', fontWeight: isCorrect ? 600 : 400 }}>
+                          {opt.text}
+                        </span>
+                      </div>
+                      {isCorrect && (
+                        <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Check size={13} />
+                          <span>VERIFIED ANSWER</span>
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Explanation Card */}
+              {mcqQuestions[inspectedQuestionIdx]?.explanation && (
+                <div style={{ padding: '12px 14px', borderRadius: '6px', background: '#18181b', border: '1px solid #27272a' }}>
+                  <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#71717a', fontWeight: 700, marginBottom: '4px' }}>
+                    Official Mathematical / Logical Solution
+                  </div>
+                  <div style={{ fontSize: '12.5px', color: '#a1a1aa', lineHeight: 1.5 }}>
+                    {mcqQuestions[inspectedQuestionIdx].explanation}
+                  </div>
+                </div>
+              )}
+
+              {/* Prev / Next controls */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px' }}>
+                <button
+                  type="button"
+                  disabled={inspectedQuestionIdx <= 0}
+                  onClick={() => {
+                    setInspectedQuestionIdx((prev) => Math.max(0, prev - 1));
+                    playSound('click');
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    borderRadius: '5px',
+                    background: '#18181b',
+                    border: '1px solid #27272a',
+                    color: inspectedQuestionIdx <= 0 ? '#52525b' : '#f4f4f5',
+                    fontSize: '12px',
+                    cursor: inspectedQuestionIdx <= 0 ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  <ChevronLeft size={14} />
+                  <span>Previous</span>
+                </button>
+
+                <span style={{ fontSize: '12px', color: '#71717a', fontFamily: 'monospace' }}>
+                  {inspectedQuestionIdx + 1} / {mcqQuestions.length}
+                </span>
+
+                <button
+                  type="button"
+                  disabled={inspectedQuestionIdx >= mcqQuestions.length - 1}
+                  onClick={() => {
+                    setInspectedQuestionIdx((prev) => Math.min(mcqQuestions.length - 1, prev + 1));
+                    playSound('click');
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    borderRadius: '5px',
+                    background: '#18181b',
+                    border: '1px solid #27272a',
+                    color: inspectedQuestionIdx >= mcqQuestions.length - 1 ? '#52525b' : '#f4f4f5',
+                    fontSize: '12px',
+                    cursor: inspectedQuestionIdx >= mcqQuestions.length - 1 ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  <span>Next</span>
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* Questions Grid & Blueprint Breakdown */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={darkCardStyle}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 700, color: '#f4f4f5' }}>
+                  Question Navigation Grid
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
+                  {mcqQuestions.map((_, qIdx) => (
+                    <button
+                      key={qIdx}
+                      type="button"
+                      onClick={() => {
+                        setInspectedQuestionIdx(qIdx);
+                        playSound('click');
+                      }}
+                      style={{
+                        padding: '10px 0',
+                        borderRadius: '6px',
+                        border: inspectedQuestionIdx === qIdx ? '1px solid #ffffff' : '1px solid #27272a',
+                        background: inspectedQuestionIdx === qIdx ? '#27272a' : '#18181b',
+                        color: inspectedQuestionIdx === qIdx ? '#ffffff' : '#a1a1aa',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        textAlign: 'center'
+                      }}
+                    >
+                      Q{qIdx + 1}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Topic Distribution */}
+              <div style={darkCardStyle}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 700, color: '#f4f4f5' }}>
+                  Topic Blueprint & Weights
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
+                  {[
+                    { topic: 'Speed, Time & Distance', count: 1 },
+                    { topic: 'Logical Syllogisms', count: 1 },
+                    { topic: 'Percentages & Economics', count: 1 },
+                    { topic: 'Algorithmic Complexity (Master Theorem)', count: 1 },
+                    { topic: 'Number Series & Prime Sequences', count: 1 },
+                    { topic: 'Probability & Combinatorics', count: 1 },
+                    { topic: 'Work, Pipes & Cisterns', count: 1 },
+                    { topic: 'Direction Sense & Displacement', count: 1 },
+                    { topic: 'Cryptographic Ciphers & Coding', count: 1 },
+                    { topic: 'Binary Trees & Graph Theory', count: 1 }
+                  ].map((t, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: '#a1a1aa' }}>
+                      <span>{t.topic}</span>
+                      <strong style={{ color: '#f4f4f5' }}>{t.count} Question ({t.count * 10}%)</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: ROUND 1 RESULTS & CANDIDATE MCQ ANSWER SHEETS ── */}
+      {activeTab === 'round1' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Action Bar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => handleShortlistTopN(quickCutoffInput)}
+                style={{ padding: '7px 12px', borderRadius: '6px', background: '#18181b', border: '1px solid #3f3f46', color: '#f4f4f5', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+              >
+                <Trophy size={13} color="#eab308" /> Shortlist Top {quickCutoffInput} Candidates
+              </button>
+              <button
+                type="button"
+                onClick={() => handleShortlistByCutoff(cutoffScore)}
+                style={{ padding: '7px 12px', borderRadius: '6px', background: '#18181b', border: '1px solid #27272a', color: '#f4f4f5', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+              >
+                <Filter size={13} /> Shortlist &ge; {cutoffScore}% Score
+              </button>
+              <button
+                type="button"
+                onClick={handleAuthorizeAllRemaining}
+                style={{ padding: '7px 12px', borderRadius: '6px', background: '#18181b', border: '1px solid rgba(245, 158, 11, 0.4)', color: '#f59e0b', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                title="If lab was full during slot 1, authorize all remaining candidates to take Round 1 in Batch 2"
+              >
+                <Zap size={13} color="#f59e0b" /> Authorize Remaining for Batch 2 (Lab Overflow)
+              </button>
+              <button
+                type="button"
+                onClick={handleClearShortlist}
+                style={{ padding: '7px 12px', borderRadius: '6px', background: '#18181b', border: '1px solid #27272a', color: '#71717a', fontSize: '12px', fontWeight: 500, cursor: 'pointer' }}
+              >
+                Clear Shortlist
+              </button>
+              <button
+                type="button"
+                onClick={handlePurgeAllAttempts}
+                style={{ padding: '7px 12px', borderRadius: '6px', background: '#18181b', border: '1px solid rgba(239,68,68,0.4)', color: '#ef4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+              >
+                <Trash2 size={13} /> Purge Attempts
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={handleExportShortlistCSV}
+                style={{ padding: '7px 14px', borderRadius: '6px', background: '#f4f4f5', border: 'none', color: '#09090b', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Download size={13} /> Export CSV
+              </button>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div style={{ ...darkCardStyle, padding: 0, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
+              <thead>
+                <tr style={{ background: '#18181b', borderBottom: '1px solid #27272a', color: '#71717a', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  <th style={{ padding: '10px 14px' }}>Rank</th>
+                  <th style={{ padding: '10px 14px' }}>Roll / Key</th>
+                  <th style={{ padding: '10px 14px' }}>Candidate Name</th>
+                  <th style={{ padding: '10px 14px' }}>Marks</th>
+                  <th style={{ padding: '10px 14px' }}>Score %</th>
+                  <th style={{ padding: '10px 14px' }}>Status</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'center' }}>Lab Batch / 2nd Sitting</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'center' }}>MCQ Answer Sheet</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'center' }}>Round 2 Clearance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {aptitudeCandidates.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} style={{ padding: '36px', textAlign: 'center', color: '#71717a' }}>
+                      No Round 1 Aptitude attempts recorded yet. Student attempts will appear here in real-time as they complete Round 1.
+                    </td>
+                  </tr>
+                ) : (
+                  aptitudeCandidates.map((c, idx) => (
+                    <tr
+                      key={c.id || idx}
+                      style={{
+                        borderBottom: '1px solid #27272a',
+                        background: c.isShortlisted ? 'rgba(16, 185, 129, 0.04)' : 'transparent',
+                        transition: 'background 0.1s'
+                      }}
+                    >
+                      <td style={{ padding: '10px 14px', fontWeight: 700, color: idx < 3 ? '#eab308' : '#71717a' }}>
+                        #{idx + 1}
+                      </td>
+                      <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: '12px', color: '#f4f4f5' }}>
+                        {c.studentRoll || c.studentEmail || '—'}
+                      </td>
+                      <td style={{ padding: '10px 14px', color: '#f4f4f5', fontWeight: 600 }}>
+                        {c.studentName || 'Candidate'}
+                      </td>
+                      <td style={{ padding: '10px 14px', fontWeight: 700, color: '#f4f4f5' }}>
+                        {c.score} / {c.totalMarks}
+                      </td>
+                      <td style={{ padding: '10px 14px' }}>
+                        <span style={{ fontWeight: 700, color: c.scorePct >= 70 ? '#10b981' : c.scorePct >= 50 ? '#eab308' : '#ef4444' }}>
+                          {c.scorePct}%
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 14px' }}>
+                        <span style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                          Completed
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const candId = c.studentRoll || c.studentEmail;
+                            const isAllowed = isCandidateAuthorizedForRound1Retake(candId);
+                            handleToggleCandidateRetake(candId, !isAllowed);
+                          }}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '4px',
+                            border: isCandidateAuthorizedForRound1Retake(c.studentRoll || c.studentEmail)
+                              ? '1px solid rgba(245, 158, 11, 0.4)'
+                              : '1px solid #27272a',
+                            background: isCandidateAuthorizedForRound1Retake(c.studentRoll || c.studentEmail)
+                              ? 'rgba(245, 158, 11, 0.12)'
+                              : '#18181b',
+                            color: isCandidateAuthorizedForRound1Retake(c.studentRoll || c.studentEmail)
+                              ? '#f59e0b'
+                              : '#a1a1aa',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                          title="If candidate had no seat in the lab during slot 1, grant 2nd sitting in Batch 2"
+                        >
+                          <Zap size={11} color={isCandidateAuthorizedForRound1Retake(c.studentRoll || c.studentEmail) ? '#f59e0b' : '#71717a'} />
+                          <span>
+                            {isCandidateAuthorizedForRound1Retake(c.studentRoll || c.studentEmail)
+                              ? 'Batch 2 (Granted)'
+                              : '+ Grant 2nd Sit'}
+                          </span>
+                        </button>
+                      </td>
+                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCandidateSheet(c);
+                            playSound('click');
+                          }}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '4px',
+                            border: '1px solid #27272a',
+                            background: '#18181b',
+                            color: '#f4f4f5',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Eye size={12} />
+                          <span>Inspect Sheet</span>
+                        </button>
+                      </td>
+                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => toggleCandidateShortlist(c.studentRoll)}
+                          style={{
+                            padding: '4px 12px',
+                            borderRadius: '4px',
+                            border: c.isShortlisted ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid #27272a',
+                            background: c.isShortlisted ? 'rgba(16, 185, 129, 0.12)' : '#18181b',
+                            color: c.isShortlisted ? '#10b981' : '#a1a1aa',
+                            fontSize: '11.5px',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {c.isShortlisted ? '✓ SHORTLISTED' : '+ Shortlist'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: SHORTLIST GATEKEEPER & ROUND 2 KEY DISPATCH ── */}
+      {activeTab === 'shortlist' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ ...darkCardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <h4 style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 700, color: '#f4f4f5' }}>
+                Round 2 Shortlist Registry &amp; Email Key Dispatch
+              </h4>
+              <p style={{ margin: 0, fontSize: '12px', color: '#a1a1aa' }}>
+                Candidates in this list are cleared for Round 2. Each has a provisioned Round 2 Access Key to enter the Coding Sprint.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setShowEmailDispatchModal(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 14px',
+                  borderRadius: '6px',
+                  background: '#f4f4f5',
+                  color: '#09090b',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <Mail size={13} />
+                <span>Generate Email Keys Dispatch</span>
+              </button>
+            </div>
+          </div>
+
+          <div style={{ ...darkCardStyle, padding: 0, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
+              <thead>
+                <tr style={{ background: '#18181b', borderBottom: '1px solid #27272a', color: '#71717a', fontSize: '11px', textTransform: 'uppercase' }}>
+                  <th style={{ padding: '10px 14px' }}>Candidate Name</th>
+                  <th style={{ padding: '10px 14px' }}>Roll / USN</th>
+                  <th style={{ padding: '10px 14px' }}>Email Address</th>
+                  <th style={{ padding: '10px 14px' }}>Aptitude Score</th>
+                  <th style={{ padding: '10px 14px' }}>Round 2 Email Key</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shortlistedRolls.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} style={{ padding: '36px', textAlign: 'center', color: '#71717a' }}>
+                      No candidates currently shortlisted. Switch to the &quot;Round 1 Results&quot; tab to shortlist candidates by top percentile or cutoff marks.
+                    </td>
+                  </tr>
+                ) : (
+                  shortlistedRolls.map((roll) => {
+                    const matchAttempt = aptitudeCandidates.find((c) => (c.studentRoll || '').toUpperCase() === roll);
+                    const matchCand = registeredCandidates.find((c) => (c.rollNumber && c.rollNumber.toUpperCase() === roll) || c.accessKey.toUpperCase() === roll);
+                    const name = matchAttempt?.studentName || matchCand?.name || 'Candidate';
+                    const email = matchAttempt?.studentEmail || matchCand?.email || '—';
+                    const score = matchAttempt?.score !== undefined ? `${matchAttempt.score}/${matchAttempt.totalMarks}` : 'N/A';
+                    const r2Key = matchCand?.round2Key || `AXENT-R2-${roll.slice(-4) || '9901'}`;
+
+                    return (
+                      <tr key={roll} style={{ borderBottom: '1px solid #27272a' }}>
+                        <td style={{ padding: '10px 14px', fontWeight: 600, color: '#f4f4f5' }}>{name}</td>
+                        <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: '#a1a1aa' }}>{roll}</td>
+                        <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: '#71717a' }}>{email}</td>
+                        <td style={{ padding: '10px 14px', fontWeight: 700, color: '#10b981' }}>{score}</td>
+                        <td style={{ padding: '10px 14px' }}>
+                          <span style={{ padding: '3px 8px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.25)', fontFamily: 'monospace', fontWeight: 800, color: '#60a5fa' }}>
+                            {r2Key}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(r2Key);
+                              setCopiedKey(r2Key);
+                              playSound('click');
+                              setTimeout(() => setCopiedKey(null), 2000);
+                            }}
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid #27272a',
+                              background: '#18181b',
+                              color: copiedKey === r2Key ? '#10b981' : '#a1a1aa',
+                              fontSize: '11px',
+                              cursor: 'pointer',
+                              marginRight: '6px'
+                            }}
+                          >
+                            {copiedKey === r2Key ? 'Copied' : 'Copy Key'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleCandidateShortlist(roll)}
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid rgba(239, 68, 68, 0.3)',
+                              background: '#18181b',
+                              color: '#ef4444',
+                              fontSize: '11px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: ROUND 2 CODING ARENA LIVE STREAM ── */}
+      {activeTab === 'round2' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#f4f4f5' }}>Round 2: Live Coding Workstations</h4>
+              <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#71717a' }}>Real-time code stream and keystroke telemetry for candidates in the coding phase</p>
+            </div>
+            <div style={{ fontSize: '12px', color: '#a1a1aa' }}>
+              Active Coding Terminals: <strong style={{ color: '#ffffff' }}>{round2Stations.length}</strong>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '14px' }}>
+            {round2Stations.length === 0 ? (
+              <div style={{ gridColumn: '1 / -1', padding: '48px 24px', textAlign: 'center', border: '1px dashed #27272a', borderRadius: '8px', background: '#09090b' }}>
+                <Code2 size={28} color="#71717a" style={{ marginBottom: '8px' }} />
+                <div style={{ fontSize: '13px', fontWeight: 600, color: '#f4f4f5' }}>No active coding workstations</div>
+                <div style={{ fontSize: '12px', color: '#71717a', marginTop: '4px' }}>
+                  When shortlisted candidates start Round 2 at /codespark-exams?round=2, their live telemetry and code stream will stream here.
+                </div>
+              </div>
+            ) : (
+              round2Stations.map((station) => (
+                <div key={station.id} style={{ ...darkCardStyle, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 800, color: '#f4f4f5' }}>{station.student?.name || 'Candidate'}</span>
+                      <span style={{ fontSize: '11px', color: '#71717a', fontFamily: 'monospace' }}>({station.student?.rollNumber || 'N/A'})</span>
+                    </div>
+                    <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa' }}>
+                      {station.stationNumber} ({station.labId})
+                    </span>
+                  </div>
+
+                  {/* Live Code Stream Panel */}
+                  <div style={{ borderRadius: '6px', border: '1px solid #27272a', background: '#09090b', padding: '10px', height: '140px', overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #27272a', paddingBottom: '4px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <Code2 size={11} color="#60a5fa" />
+                        <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#a1a1aa', letterSpacing: '0.05em' }}>LIVE CODE STREAM</span>
+                      </div>
+                      <span style={{ fontSize: '9px', color: '#71717a', fontFamily: 'monospace' }}>{station.language || 'Python'}</span>
+                    </div>
+                    <pre style={{ margin: 0, flex: 1, fontFamily: 'monospace', fontSize: '10.5px', color: '#e4e4e7', whiteSpace: 'pre-wrap', wordBreak: 'break-all', overflow: 'hidden' }}>
+                      {station.code?.trim() || '// Awaiting keyboard input from candidate...'}
+                    </pre>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px' }}>
+                    <div style={{ fontSize: '11px', color: '#71717a' }}>
+                      WPM: {station.metrics?.typingSpeed || 0} &bull; Keystrokes: {station.metrics?.keystrokes || 0}
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => sendProctorLockCommand(station.id, !station.isLockedByProctor, station.labId)}
+                        style={{
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          border: station.isLockedByProctor ? '1px solid #10b981' : '1px solid #ef4444',
+                          background: 'transparent',
+                          color: station.isLockedByProctor ? '#10b981' : '#ef4444',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {station.isLockedByProctor ? 'Unlock' : 'Lock'}
+                      </button>
+                      {onInspectStation && (
+                        <button
+                          type="button"
+                          onClick={() => onInspectStation(station.id)}
+                          style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #27272a', background: '#18181b', color: '#f4f4f5', fontSize: '11px', cursor: 'pointer' }}
+                        >
+                          Inspect
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: CANDIDATE ROSTER & AXENT KEYS ── */}
+      {activeTab === 'candidates' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ ...darkCardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <h4 style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 700, color: '#f4f4f5' }}>
+                CodeSpark Private Candidate Registry &amp; Access Keys
+              </h4>
+              <p style={{ margin: 0, fontSize: '12px', color: '#a1a1aa' }}>
+                Each candidate is provisioned a unique <strong>AXENT-XXXX</strong> key for authenticating on the /code-spark candidate portal.
+              </p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={handleAuthorizeAllRemaining}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  background: '#18181b',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  color: '#f59e0b',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+                title="Authorize remaining candidates for Round 1 (Batch 2 / 2nd Sitting) if lab was full"
+              >
+                <Zap size={13} color="#f59e0b" />
+                <span>Authorize All for Batch 2 (Lab Overflow)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowImportModal(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 14px',
+                  borderRadius: '6px',
+                  background: '#f4f4f5',
+                  color: '#09090b',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <Key size={13} />
+                <span>+ Import Candidates &amp; Issue Keys</span>
+              </button>
+            </div>
+          </div>
+
+          <div style={{ ...darkCardStyle, padding: 0, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
+              <thead>
+                <tr style={{ background: '#18181b', borderBottom: '1px solid #27272a', color: '#71717a', fontSize: '11px', textTransform: 'uppercase' }}>
+                  <th style={{ padding: '10px 14px' }}>AXENT Key</th>
+                  <th style={{ padding: '10px 14px' }}>Candidate Name</th>
+                  <th style={{ padding: '10px 14px' }}>Email Address</th>
+                  <th style={{ padding: '10px 14px' }}>Round 2 Email Key</th>
+                  <th style={{ padding: '10px 14px' }}>Status</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'center' }}>Lab Batch / 2nd Sitting</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'right' }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {registeredCandidates.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '36px', textAlign: 'center', color: '#71717a' }}>
+                      No candidates registered yet. Click &quot;+ Import Candidates &amp; Issue Keys&quot; to import candidates with Name and Email.
+                    </td>
+                  </tr>
+                ) : (
+                  registeredCandidates.map((c) => (
+                    <tr key={c.accessKey} style={{ borderBottom: '1px solid #27272a', color: '#f4f4f5' }}>
+                      <td style={{ padding: '10px 14px' }}>
+                        <span style={{ padding: '2px 8px', borderRadius: '4px', background: '#18181b', border: '1px solid #3f3f46', fontFamily: 'monospace', fontWeight: 800, color: '#f4f4f5' }}>
+                          {c.accessKey}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 14px', fontWeight: 600 }}>{c.name}</td>
+                      <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: '#a1a1aa' }}>{c.email || '—'}</td>
+                      <td style={{ padding: '10px 14px' }}>
+                        {c.round2Key ? (
+                          <span style={{ padding: '2px 6px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', fontFamily: 'monospace', fontWeight: 700, border: '1px solid rgba(59, 130, 246, 0.25)' }}>
+                            {c.round2Key}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#52525b', fontSize: '11px' }}>Not Shortlisted</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '10px 14px' }}>
+                        <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '3px', background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa' }}>
+                          {c.status}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const isAllowed = isCandidateAuthorizedForRound1Retake(c.rollNumber || c.accessKey);
+                            handleToggleCandidateRetake(c.rollNumber || c.accessKey, !isAllowed);
+                          }}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '4px',
+                            border: isCandidateAuthorizedForRound1Retake(c.rollNumber || c.accessKey)
+                              ? '1px solid rgba(245, 158, 11, 0.4)'
+                              : '1px solid #27272a',
+                            background: isCandidateAuthorizedForRound1Retake(c.rollNumber || c.accessKey)
+                              ? 'rgba(245, 158, 11, 0.12)'
+                              : '#18181b',
+                            color: isCandidateAuthorizedForRound1Retake(c.rollNumber || c.accessKey)
+                              ? '#f59e0b'
+                              : '#a1a1aa',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Zap size={11} color={isCandidateAuthorizedForRound1Retake(c.rollNumber || c.accessKey) ? '#f59e0b' : '#71717a'} />
+                          <span>
+                            {isCandidateAuthorizedForRound1Retake(c.rollNumber || c.accessKey)
+                              ? 'Batch 2 (Granted)'
+                              : '+ Grant 2nd Sit'}
+                          </span>
+                        </button>
+                      </td>
+                      <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(c.accessKey);
+                              setCopiedKey(c.accessKey);
+                              playSound('click');
+                              setTimeout(() => setCopiedKey(null), 2000);
+                            }}
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid #27272a',
+                              background: '#18181b',
+                              color: copiedKey === c.accessKey ? '#10b981' : '#a1a1aa',
+                              fontSize: '11px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {copiedKey === c.accessKey ? 'Copied' : 'Copy Key'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCandidate(c.accessKey)}
+                            title="Delete Candidate"
+                            style={{
+                              padding: '3px 6px',
+                              borderRadius: '4px',
+                              border: '1px solid #27272a',
+                              background: '#18181b',
+                              color: '#ef4444',
+                              fontSize: '11px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: OVERVIEW & PAPER CONFIGURATION ── */}
+      {activeTab === 'overview' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={darkCardStyle}>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 700, color: '#f4f4f5' }}>
+              Assign CodeSpark Round 1 Aptitude Paper
+            </h4>
+            <div style={{ display: 'flex', gap: '8px', maxWidth: '600px' }}>
+              <select
+                value={selectedExamToAssign || (currentAssignedExam?.id || '')}
+                onChange={(e) => setSelectedExamToAssign(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '9px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #27272a',
+                  background: '#18181b',
+                  color: '#f4f4f5',
+                  fontSize: '12.5px',
+                  outline: 'none',
+                  colorScheme: 'dark'
+                }}
+              >
+                <option value="">-- Choose Exam Paper from Question Bank --</option>
+                {allExams.map((exam) => (
+                  <option key={exam.id} value={exam.id}>
+                    {exam.title} ({exam.questionCount} Questions &bull; {exam.durationMinutes}m)
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => handleAssignPaper(selectedExamToAssign || (currentAssignedExam?.id || ''))}
+                disabled={!selectedExamToAssign && !currentAssignedExam?.id}
+                style={{
+                  padding: '9px 16px',
+                  borderRadius: '6px',
+                  background: '#f4f4f5',
+                  color: '#09090b',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                Save Paper
+              </button>
+            </div>
+            {paperSaveSuccess && (
+              <div style={{ marginTop: '10px', color: '#10b981', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <CheckCircle2 size={13} />
+                <span>{paperSaveSuccess}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 1: CANDIDATE MCQ ANSWER SHEET INSPECTOR ── */}
+      {selectedCandidateSheet && (
+        <div
+          onClick={() => setSelectedCandidateSheet(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(9, 9, 11, 0.85)',
+            backdropFilter: 'blur(6px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#121214',
+              border: '1px solid #27272a',
+              borderRadius: '8px',
+              maxWidth: '800px',
+              width: '100%',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #27272a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#f4f4f5' }}>
+                    Candidate MCQ Answer Sheet &bull; {selectedCandidateSheet.studentName}
+                  </h3>
+                  <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#60a5fa' }}>
+                    [{selectedCandidateSheet.studentRoll}]
+                  </span>
+                </div>
+                <div style={{ fontSize: '12px', color: '#a1a1aa', marginTop: '2px' }}>
+                  Score: <strong style={{ color: '#10b981' }}>{selectedCandidateSheet.score ?? 0} / {selectedCandidateSheet.totalMarks || selectedCandidateSheet.maxScore || examTotalMarks}</strong> &bull; Completed {new Date(selectedCandidateSheet.endTime || selectedCandidateSheet.submittedAt || Date.now()).toLocaleTimeString()}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedCandidateSheet(null)}
+                style={{ background: 'none', border: 'none', color: '#a1a1aa', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Questions Answered List */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {mcqQuestions.map((q, qIdx) => {
+                const candidateChoice = selectedCandidateSheet.answers?.[q.id];
+                const correctOption = q.options.find((o) => o.isCorrect);
+                const isCorrect = candidateChoice !== undefined && q.options[candidateChoice]?.isCorrect;
+                const isSkipped = candidateChoice === undefined || candidateChoice === null;
+
+                return (
+                  <div
+                    key={q.id || qIdx}
+                    style={{
+                      background: '#18181b',
+                      border: '1px solid #27272a',
+                      borderRadius: '6px',
+                      padding: '14px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '11.5px', fontFamily: 'monospace', fontWeight: 800, color: '#a1a1aa' }}>
+                        QUESTION {qIdx + 1} ({q.marks || 1} MARKS)
+                      </span>
+                      {isSkipped ? (
+                        <span style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '3px', background: '#27272a', color: '#a1a1aa' }}>
+                          SKIPPED / UNANSWERED
+                        </span>
+                      ) : isCorrect ? (
+                        <span style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '3px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', fontWeight: 700 }}>
+                          ✓ CORRECT (+{q.marks || 1})
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '3px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', fontWeight: 700 }}>
+                          ✗ INCORRECT ({q.negativeMarks ? `-${q.negativeMarks}` : '0.0'})
+                        </span>
+                      )}
+                    </div>
+
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#f4f4f5', marginBottom: '10px' }}>
+                      {q.text}
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px', fontSize: '12px' }}>
+                      {q.options.map((opt, oIdx) => {
+                        const isStudentPick = candidateChoice === oIdx;
+                        const isRightAnswer = opt.isCorrect;
+                        let bg = '#121214';
+                        let borderColor = '#27272a';
+                        let textColor = '#d4d4d8';
+
+                        if (isRightAnswer) {
+                          bg = 'rgba(16, 185, 129, 0.08)';
+                          borderColor = 'rgba(16, 185, 129, 0.35)';
+                          textColor = '#10b981';
+                        }
+                        if (isStudentPick && !isRightAnswer) {
+                          bg = 'rgba(239, 68, 68, 0.08)';
+                          borderColor = 'rgba(239, 68, 68, 0.35)';
+                          textColor = '#ef4444';
+                        }
+
+                        return (
+                          <div
+                            key={oIdx}
+                            style={{
+                              padding: '8px 10px',
+                              borderRadius: '4px',
+                              background: bg,
+                              border: `1px solid ${borderColor}`,
+                              color: textColor,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between'
+                            }}
+                          >
+                            <span>{String.fromCharCode(65 + oIdx)}. {opt.text}</span>
+                            {isStudentPick && (
+                              <span style={{ fontSize: '9.5px', fontWeight: 800, padding: '1px 4px', borderRadius: '2px', background: '#27272a', color: '#f4f4f5' }}>
+                                CANDIDATE PICK
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ padding: '14px 20px', borderTop: '1px solid #27272a', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setSelectedCandidateSheet(null)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  background: '#f4f4f5',
+                  color: '#09090b',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                Close Answer Sheet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 2: SHORTLIST EMAIL INVITATION & REAL GMAIL SMTP DISPATCH ENGINE ── */}
+      {showEmailDispatchModal && (
+        <div
+          onClick={() => setShowEmailDispatchModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(9, 9, 11, 0.85)',
+            backdropFilter: 'blur(6px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#121214',
+              border: '1px solid #27272a',
+              borderRadius: '8px',
+              maxWidth: '820px',
+              width: '100%',
+              maxHeight: '92vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #27272a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Mail size={16} color="#f4f4f5" />
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#f4f4f5' }}>
+                    Round 2 Shortlist Notification &amp; Gmail SMTP Dispatcher
+                  </h3>
+                  <div style={{ fontSize: '11.5px', color: '#a1a1aa', marginTop: '2px' }}>
+                    {shortlistedRolls.length} Shortlisted Candidates Cleared for Round 2: Algorithmic Code Sprint
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEmailDispatchModal(false)}
+                style={{ background: 'none', border: 'none', color: '#a1a1aa', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* SMTP Credentials & Dispatch Control Box */}
+              <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Shield size={14} color="#60a5fa" />
+                    <strong style={{ fontSize: '13px', color: '#f4f4f5' }}>Gmail SMTP Dispatch Settings</strong>
+                  </div>
+                  <span style={{ fontSize: '10.5px', fontFamily: 'monospace', color: '#a1a1aa', background: '#09090b', padding: '2px 8px', borderRadius: '4px', border: '1px solid #27272a' }}>
+                    smtp.gmail.com:587 (TLS)
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', marginBottom: '4px' }}>
+                      Gmail Account Address
+                    </label>
+                    <input
+                      type="email"
+                      value={smtpUser}
+                      onChange={(e) => setSmtpUser(e.target.value)}
+                      placeholder="e.g. exam.chairperson@gmail.com"
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        background: '#09090b',
+                        border: '1px solid #27272a',
+                        borderRadius: '4px',
+                        color: '#f4f4f5',
+                        fontSize: '12px',
+                        fontFamily: 'monospace',
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', marginBottom: '4px' }}>
+                      16-Digit Google App Password
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type={showSmtpPassword ? 'text' : 'password'}
+                        value={smtpPassword}
+                        onChange={(e) => setSmtpPassword(e.target.value)}
+                        placeholder="xxxx xxxx xxxx xxxx"
+                        style={{
+                          width: '100%',
+                          padding: '8px 36px 8px 10px',
+                          background: '#09090b',
+                          border: '1px solid #27272a',
+                          borderRadius: '4px',
+                          color: '#f4f4f5',
+                          fontSize: '12px',
+                          fontFamily: 'monospace',
+                          outline: 'none'
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowSmtpPassword(!showSmtpPassword)}
+                        style={{
+                          position: 'absolute',
+                          right: '8px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          color: '#71717a',
+                          cursor: 'pointer',
+                          padding: '2px'
+                        }}
+                      >
+                        {showSmtpPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '10px' }}>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', marginBottom: '4px' }}>
+                    Sender Display Name
+                  </label>
+                  <input
+                    type="text"
+                    value={smtpFromName}
+                    onChange={(e) => setSmtpFromName(e.target.value)}
+                    placeholder="e.g. CodeSpark 2026 Examination Board"
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      background: '#09090b',
+                      border: '1px solid #27272a',
+                      borderRadius: '4px',
+                      color: '#f4f4f5',
+                      fontSize: '12px',
+                      outline: 'none'
+                    }}
+                  />
+                  <div style={{ fontSize: '10.5px', color: '#71717a', marginTop: '4px' }}>
+                    Tip: Use your 16-character App Password generated from Google Account &gt; Security &gt; 2-Step Verification &gt; App Passwords.
+                  </div>
+                </div>
+
+                {/* SMTP Test Connection Button & Result */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '12px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={handleTestSmtp}
+                    disabled={smtpTesting || !smtpUser.trim() || !smtpPassword.trim()}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: '4px',
+                      background: '#27272a',
+                      border: '1px solid #3f3f46',
+                      color: '#f4f4f5',
+                      fontSize: '11.5px',
+                      fontWeight: 700,
+                      cursor: smtpTesting || !smtpUser.trim() || !smtpPassword.trim() ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <RefreshCw size={12} className={smtpTesting ? 'animate-spin' : ''} />
+                    <span>{smtpTesting ? 'Testing SMTP TLS...' : 'Test Gmail SMTP Connection'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSendEmailsViaSmtp}
+                    disabled={smtpSending || shortlistedRolls.length === 0 || !smtpUser.trim() || !smtpPassword.trim()}
+                    style={{
+                      padding: '7px 16px',
+                      borderRadius: '4px',
+                      background: '#10b981',
+                      border: 'none',
+                      color: '#09090b',
+                      fontSize: '11.5px',
+                      fontWeight: 800,
+                      cursor: smtpSending || shortlistedRolls.length === 0 || !smtpUser.trim() || !smtpPassword.trim() ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 2px 8px rgba(16, 185, 129, 0.2)'
+                    }}
+                  >
+                    <Send size={12} color="#09090b" className={smtpSending ? 'animate-pulse' : ''} />
+                    <span>{smtpSending ? 'Dispatching via Gmail...' : `Dispatch Round 2 Codes to ${shortlistedRolls.length} Shortlisted Candidates`}</span>
+                  </button>
+                </div>
+
+                {/* SMTP Feedback */}
+                {smtpTestResult && (
+                  <div
+                    style={{
+                      marginTop: '10px',
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      background: smtpTestResult.success ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                      border: smtpTestResult.success ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+                      color: smtpTestResult.success ? '#10b981' : '#fca5a5',
+                      fontSize: '11.5px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    {smtpTestResult.success ? <CheckCircle2 size={13} color="#10b981" /> : <AlertTriangle size={13} color="#ef4444" />}
+                    <span>{smtpTestResult.message}</span>
+                  </div>
+                )}
+
+                {smtpSendResult && (
+                  <div
+                    style={{
+                      marginTop: '10px',
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      background: smtpSendResult.success ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                      border: smtpSendResult.success ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(239, 68, 68, 0.4)',
+                      color: smtpSendResult.success ? '#6ee7b7' : '#fca5a5',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    {smtpSendResult.success ? <CheckCircle2 size={14} color="#10b981" /> : <AlertTriangle size={14} color="#ef4444" />}
+                    <span>{smtpSendResult.message}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Candidates List Preview */}
+              <div>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 700, color: '#f4f4f5' }}>
+                  Recipients &amp; Invitation Dispatch Preview ({shortlistedRolls.length})
+                </h4>
+
+                {shortlistedRolls.map((roll) => {
+                  const matchAttempt = aptitudeCandidates.find((c) => (c.studentRoll || '').toUpperCase() === roll);
+                  const matchCand = registeredCandidates.find(
+                    (c) =>
+                      (c.rollNumber && c.rollNumber.toUpperCase() === roll) ||
+                      c.accessKey.toUpperCase() === roll ||
+                      c.email.toUpperCase() === roll
+                  );
+                  const name = matchAttempt?.studentName || matchCand?.name || 'Candidate';
+                  const email = matchAttempt?.studentEmail || matchCand?.email || 'student@domain.com';
+                  const r2Key = matchCand?.round2Key || `AXENT-R2-${roll.slice(-4) || '9901'}`;
+                  const score = matchAttempt?.score ?? matchCand?.round1Score ?? 0;
+                  const maxScore = matchAttempt?.totalMarks || matchAttempt?.maxScore || examTotalMarks || 0;
+
+                  const emailBody = `Subject: Code Spark 2026: You are Shortlisted for Round 2 (Coding Contest)!\n\nDear ${name},\n\nCongratulations! Based on your performance in the Round 1 General Aptitude Assessment (Score: ${score}/${maxScore}), you have successfully cleared the institutional cutoff and have been shortlisted for Round 2: Algorithmic Code Sprint Arena.\n\nYour Exclusive Round 2 Access Code: ${r2Key}\n\nHow to Start Round 2:\n1. Visit the portal at: ${window.location.origin}/code-spark\n2. Scroll down to candidate check-in.\n3. Enter your Round 2 code: ${r2Key}\n4. Enter the Secure Fullscreen Coding Arena.\n\nBest regards,\n${smtpFromName || 'Code Spark 2026 Examination Board'}`;
+
+                  return (
+                    <div key={roll} style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '12px', marginBottom: '10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <div>
+                          <strong style={{ color: '#f4f4f5', fontSize: '13px' }}>{name}</strong>
+                          <span style={{ color: '#71717a', fontSize: '11px', marginLeft: '6px' }}>&lt;{email}&gt;</span>
+                          <span style={{ marginLeft: '10px', fontSize: '11px', color: '#10b981', fontFamily: 'monospace', fontWeight: 700 }}>
+                            Score: {score}/{maxScore}
+                          </span>
+                          <span style={{ marginLeft: '8px', fontSize: '11px', padding: '1px 6px', background: '#09090b', border: '1px solid #3f3f46', color: '#60a5fa', fontFamily: 'monospace', fontWeight: 800, borderRadius: '3px' }}>
+                            {r2Key}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(emailBody);
+                            setCopiedEmailKey(roll);
+                            playSound('click');
+                            setTimeout(() => setCopiedEmailKey(null), 2000);
+                          }}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '4px',
+                            background: copiedEmailKey === roll ? '#10b981' : '#27272a',
+                            color: copiedEmailKey === roll ? '#09090b' : '#f4f4f5',
+                            border: 'none',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Copy size={11} />
+                          <span>{copiedEmailKey === roll ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                      <pre style={{ margin: 0, fontFamily: 'monospace', fontSize: '11px', color: '#a1a1aa', background: '#09090b', padding: '10px', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
+                        {emailBody}
+                      </pre>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ padding: '14px 20px', borderTop: '1px solid #27272a', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setShowEmailDispatchModal(false)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  background: '#f4f4f5',
+                  color: '#09090b',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                Close Dispatcher
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 3: CONCLUDE ROUND 1 & MULTI-LAB COMBINED SHORTLIST ── */}
+      {showConcludeModal && (
+        <div
+          onClick={() => setShowConcludeModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(9, 9, 11, 0.85)',
+            backdropFilter: 'blur(6px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#121214',
+              border: '1px solid #27272a',
+              borderRadius: '8px',
+              maxWidth: '560px',
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
+            }}
+          >
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #27272a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Trophy size={16} color="#fbbf24" />
+                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#f4f4f5' }}>
+                  Conclude Round 1 &amp; Compute Combined Shortlist
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowConcludeModal(false)}
+                style={{ background: 'none', border: 'none', color: '#a1a1aa', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <p style={{ margin: 0, fontSize: '12.5px', color: '#a1a1aa', lineHeight: 1.5 }}>
+                This will officially conclude Round 1 across <strong>Lab A, Lab B, and all waiting/overflow sessions</strong>. All candidate attempts will be aggregated into a unified institutional leaderboard to determine the Round 2 qualifiers.
+              </p>
+
+              {/* Shortlist Mode Selector */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#f4f4f5' }}>
+                  Shortlisting Method
+                </label>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConcludeMode('top_n');
+                      setConcludeValue(10);
+                    }}
+                    style={{
+                      padding: '12px',
+                      borderRadius: '6px',
+                      background: concludeMode === 'top_n' ? '#18181b' : '#09090b',
+                      border: concludeMode === 'top_n' ? '2px solid #f4f4f5' : '1px solid #27272a',
+                      color: '#f4f4f5',
+                      textAlign: 'left',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <div style={{ fontSize: '12.5px', fontWeight: 800 }}>Top N Candidates</div>
+                    <div style={{ fontSize: '11px', color: '#a1a1aa', marginTop: '2px' }}>
+                      Highest scorers across all labs
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConcludeMode('cutoff');
+                      setConcludeValue(Math.max(1, Math.round((examTotalMarks || 100) * 0.6)));
+                    }}
+                    style={{
+                      padding: '12px',
+                      borderRadius: '6px',
+                      background: concludeMode === 'cutoff' ? '#18181b' : '#09090b',
+                      border: concludeMode === 'cutoff' ? '2px solid #f4f4f5' : '1px solid #27272a',
+                      color: '#f4f4f5',
+                      textAlign: 'left',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <div style={{ fontSize: '12.5px', fontWeight: 800 }}>Cutoff Score</div>
+                    <div style={{ fontSize: '11px', color: '#a1a1aa', marginTop: '2px' }}>
+                      Score threshold out of {examTotalMarks || 'Total'} marks
+                    </div>
+                  </button>
+                </div>
+
+                <div style={{ marginTop: '8px' }}>
+                  <label style={{ display: 'block', fontSize: '11.5px', color: '#a1a1aa', marginBottom: '4px' }}>
+                    {concludeMode === 'top_n'
+                      ? 'Number of top candidates to qualify:'
+                      : `Minimum qualifying score (out of ${examTotalMarks || 'Total'} marks):`}
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={concludeMode === 'cutoff' ? (examTotalMarks || 100) : 500}
+                    value={concludeValue}
+                    onChange={(e) => setConcludeValue(Math.max(1, Number(e.target.value) || 1))}
+                    style={{
+                      width: '100%',
+                      padding: '9px 12px',
+                      background: '#09090b',
+                      border: '1px solid #27272a',
+                      borderRadius: '4px',
+                      color: '#f4f4f5',
+                      fontSize: '13px',
+                      fontFamily: 'monospace',
+                      fontWeight: 800,
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ padding: '12px', background: '#09090b', border: '1px solid #27272a', borderRadius: '6px', fontSize: '11.5px', color: '#a1a1aa' }}>
+                <div>Total Candidates in Registry: <strong style={{ color: '#f4f4f5' }}>{registeredCandidates.length}</strong></div>
+                <div>Completed Attempts Logged: <strong style={{ color: '#10b981' }}>{allAttempts.length}</strong></div>
+                <div style={{ marginTop: '4px', color: '#60a5fa' }}>
+                  ✓ Shortlisted candidates will immediately have dedicated <span style={{ fontFamily: 'monospace', fontWeight: 800 }}>AXENT-R2-XXXX</span> keys provisioned.
+                </div>
+              </div>
+            </div>
+
+            <div style={{ padding: '14px 20px', borderTop: '1px solid #27272a', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setShowConcludeModal(false)}
+                style={{
+                  padding: '8px 14px',
+                  borderRadius: '6px',
+                  background: 'none',
+                  border: '1px solid #27272a',
+                  color: '#a1a1aa',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConcludeRound1AndShortlist}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '6px',
+                  background: '#f4f4f5',
+                  border: 'none',
+                  color: '#09090b',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Trophy size={13} color="#09090b" />
+                <span>Confirm &amp; Generate Combined Shortlist</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── GOOGLE FORM / TEXT / QUIZ DIRECT IMPORTER ── */}
+      {showGoogleFormModal && (
+        <GoogleFormImportModal
+          isOpen={showGoogleFormModal}
+          onClose={() => setShowGoogleFormModal(false)}
+          onQuestionsImported={handleGoogleFormQuestionsImported}
+          defaultSubject="Cognitive Aptitude & Logic"
+          defaultTopic="Problem Solving & Reasoning"
+        />
+      )}
+
+      {/* ── MODAL 5: AI PAPER GENERATOR ── */}
+      {showAIPaperModal && (
+        <AIPaperGeneratorModal
+          isOpen={showAIPaperModal}
+          onClose={() => setShowAIPaperModal(false)}
+          onPaperGenerated={handlePaperGenerated}
+        />
+      )}
+
+      {/* ── MODAL 6: BULK CANDIDATE IMPORT ── */}
+      {showImportModal && (
+        <CodeSparkCandidateImportModal
+          isOpen={showImportModal}
+          onClose={() => {
+            setShowImportModal(false);
+            setRegisteredCandidates(getAllCodeSparkCandidates());
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+export default AdminCodeSparkView;

@@ -19,12 +19,12 @@ export const SubmitActionButton: React.FC<SubmitActionButtonProps> = ({
   return (
     <button
       onClick={onSubmit}
-      disabled={disabled || isSubmitting}
+      disabled={disabled || isSubmitting || isSubmitted}
       title={
-        isLocked
-          ? 'Submissions locked by invigilator'
-          : isSubmitted
+        isSubmitted
           ? 'Exam already submitted and dossier generated'
+          : isLocked
+          ? 'Workstation is locked — click to finalize and submit exam anyway'
           : 'Finalize exam and submit code for official practical marks'
       }
       style={{
@@ -34,13 +34,17 @@ export const SubmitActionButton: React.FC<SubmitActionButtonProps> = ({
         border: isSubmitted
           ? '1px solid var(--success)'
           : isLocked
-          ? '1px solid var(--border)'
+          ? '1px solid var(--danger)'
           : '1px solid var(--border-strong)',
         background: isSubmitted
           ? 'var(--success-bg)'
+          : isLocked
+          ? 'rgba(239, 68, 68, 0.1)'
           : 'var(--bg-surface)',
         color: isSubmitted
           ? 'var(--success)'
+          : isLocked
+          ? 'var(--danger)'
           : 'var(--text-primary)',
         fontSize: '12px',
         fontWeight: 700,
@@ -68,8 +72,8 @@ export const SubmitActionButton: React.FC<SubmitActionButtonProps> = ({
         </>
       ) : isLocked ? (
         <>
-          <Lock size={13} color="var(--text-muted)" />
-          <span>Submit Locked</span>
+          <Send size={12} color="var(--danger)" />
+          <span>Submit Exam</span>
         </>
       ) : (
         <>

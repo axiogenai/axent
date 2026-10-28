@@ -11,12 +11,17 @@ import {
   Database,
   Bot,
   ExternalLink,
-  Award
+  Award,
+  Code2,
+  Key
 } from 'lucide-react';
+import { CodeSparkCandidateImportModal } from './codespark/CodeSparkCandidateImportModal';
 import { MCQQuestionBank } from './MCQQuestionBank';
 import { MCQCreateExam } from './MCQCreateExam';
 import { MCQResults } from './MCQResults';
 import { AIPaperGeneratorModal } from './AIPaperGeneratorModal';
+import { CodingQuestionsTab } from './coding/CodingQuestionsTab';
+import { getAllCodingQuestions, onCodingDataChanged } from '../services/codingQuestionService';
 import {
   WatermelonStatCard,
   ContinuousTabs,
@@ -35,7 +40,7 @@ import { playSound } from '../utils/sounds';
 import { MCQExamConfig, MCQQuestion, MCQAttempt } from '../types/mcq';
 import { AIPaperGenerationResult } from '../services/groqService';
 
-type PaperSetterTab = 'exams' | 'bank' | 'results';
+type PaperSetterTab = 'exams' | 'bank' | 'results' | 'coding';
 
 export const PaperSetterPortal: React.FC = () => {
   const navigate = useNavigate();
@@ -43,7 +48,9 @@ export const PaperSetterPortal: React.FC = () => {
   const [exams, setExams] = useState<MCQExamConfig[]>(() => getAllExams());
   const [questions, setQuestions] = useState<MCQQuestion[]>(() => getAllQuestions());
   const [attempts, setAttempts] = useState<MCQAttempt[]>(() => getAllAttempts());
+  const [codingCount, setCodingCount] = useState<number>(() => getAllCodingQuestions().length);
   const [showAIModal, setShowAIModal] = useState(false);
+  const [showCandidateModal, setShowCandidateModal] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -54,6 +61,7 @@ export const PaperSetterPortal: React.FC = () => {
     setExams(getAllExams());
     setQuestions(getAllQuestions());
     setAttempts(getAllAttempts());
+    setCodingCount(getAllCodingQuestions().length);
     const now = new Date();
     setLastRefreshed(
       now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -64,11 +72,13 @@ export const PaperSetterPortal: React.FC = () => {
     loadData();
     const unsubData = onMcqDataChanged(loadData);
     const unsubExams = onExamsChanged(loadData);
+    const unsubCoding = onCodingDataChanged(loadData);
     window.addEventListener('storage', loadData);
 
     return () => {
       unsubData();
       unsubExams();
+      unsubCoding();
       window.removeEventListener('storage', loadData);
     };
   }, []);
@@ -87,7 +97,7 @@ export const PaperSetterPortal: React.FC = () => {
     }
   };
 
-  // ── Metrics Calculations ───────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Metrics Calculations Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const publishedCount = useMemo(
     () => exams.filter((e) => e.status === 'PUBLISHED').length,
     [exams]
@@ -145,7 +155,7 @@ export const PaperSetterPortal: React.FC = () => {
         boxSizing: 'border-box'
       }}
     >
-      {/* ── 1. TOP FACULTY KPI METRICS RIBBON (Watermelon Stat Cards) ── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ 1. TOP FACULTY KPI METRICS RIBBON (Watermelon Stat Cards) Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <div
         style={{
           display: 'grid',
@@ -156,7 +166,7 @@ export const PaperSetterPortal: React.FC = () => {
         <WatermelonStatCard
           label="EXAM PAPERS"
           value={exams.length}
-          subtext={`${publishedCount} Published • ${draftCount} Drafts`}
+          subtext={`${publishedCount} Published Ã¢â‚¬Â¢ ${draftCount} Drafts`}
           icon={<FileEdit size={14} />}
           iconColor="var(--accent)"
           badgeBg="var(--bg-surface)"
@@ -167,7 +177,7 @@ export const PaperSetterPortal: React.FC = () => {
         <WatermelonStatCard
           label="QUESTION REPOSITORY"
           value={questions.length}
-          subtext={`${easyQuestions} Easy • ${medQuestions} Med • ${hardQuestions} Hard`}
+          subtext={`${easyQuestions} Easy Ã¢â‚¬Â¢ ${medQuestions} Med Ã¢â‚¬Â¢ ${hardQuestions} Hard`}
           icon={<BookOpen size={14} />}
           iconColor="var(--accent)"
           badgeBg="var(--bg-surface)"
@@ -178,7 +188,7 @@ export const PaperSetterPortal: React.FC = () => {
         <WatermelonStatCard
           label="STUDENT ATTEMPTS"
           value={attempts.length}
-          subtext={`${submittedAttempts} Graded • ${liveSittingAttempts} Live Sitting`}
+          subtext={`${submittedAttempts} Graded Ã¢â‚¬Â¢ ${liveSittingAttempts} Live Sitting`}
           icon={<Award size={14} />}
           iconColor="var(--accent)"
           badgeBg="var(--bg-surface)"
@@ -189,7 +199,7 @@ export const PaperSetterPortal: React.FC = () => {
         <WatermelonStatCard
           label="INTEGRITY COMPLIANCE"
           value={`${cleanCompliancePct}%`}
-          subtext={`Avg Score: ${averageScorePct}% • Zero Tamper`}
+          subtext={`Avg Score: ${averageScorePct}% Ã¢â‚¬Â¢ Zero Tamper`}
           icon={<ShieldCheck size={14} />}
           iconColor={cleanCompliancePct >= 90 ? 'var(--success)' : 'var(--warning)'}
           badgeBg="var(--bg-surface)"
@@ -198,7 +208,7 @@ export const PaperSetterPortal: React.FC = () => {
         />
       </div>
 
-      {/* ── 2. EXECUTIVE COMMAND & ACTION BAR (Matching AdminDashboard) ── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ 2. EXECUTIVE COMMAND & ACTION BAR (Matching AdminDashboard) Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <div
         className="card-elevated"
         style={{
@@ -277,6 +287,25 @@ export const PaperSetterPortal: React.FC = () => {
             <span>+ AI Paper Generator</span>
           </button>
 
+                    {/* CodeSpark Private Candidates & Keys */}
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              setShowCandidateModal(true);
+              playSound('click');
+            }}
+            style={{
+              gap: '6px',
+              fontSize: '11.5px',
+              fontWeight: 600,
+              padding: '6px 14px'
+            }}
+            title="Import candidates and issue AXNT-XXXX private keys for CodeSpark"
+          >
+            <Key size={13} color="var(--accent)" />
+            <span>CodeSpark Candidates (AXNT-XXXX)</span>
+          </button>
           {/* Quick Jump to Student Exam Hall */}
           <a
             href="/mcq"
@@ -369,7 +398,7 @@ export const PaperSetterPortal: React.FC = () => {
 
 
 
-      {/* ── 4. FILTER TABS & SUB-PORTAL SELECTION (ContinuousTabs) ── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ 4. FILTER TABS & SUB-PORTAL SELECTION (ContinuousTabs) Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <div
         style={{
           display: 'flex',
@@ -407,6 +436,13 @@ export const PaperSetterPortal: React.FC = () => {
                 badgeTone: 'neutral'
               },
               {
+                id: 'coding',
+                label: 'Coding Problems & Test Cases',
+                icon: <Code2 size={12} />,
+                badge: codingCount,
+                badgeTone: 'accent'
+              },
+              {
                 id: 'results',
                 label: 'Results, Ledgers & Analytics',
                 icon: <BarChart2 size={12} />,
@@ -418,14 +454,25 @@ export const PaperSetterPortal: React.FC = () => {
         </div>
       </div>
 
-      {/* ── 5. MAIN TAB CONTENT AREA ── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ 5. MAIN TAB CONTENT AREA Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <div style={{ width: '100%', boxSizing: 'border-box' }}>
         {activeTab === 'exams' && <MCQCreateExam />}
         {activeTab === 'bank' && <MCQQuestionBank />}
+        {activeTab === 'coding' && <CodingQuestionsTab createdBy="paper_setter" />}
         {activeTab === 'results' && <MCQResults />}
       </div>
 
-      {/* ── Autonomous AI Paper Generator Modal ── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ Autonomous AI Paper Generator Modal Ã¢â€â‚¬Ã¢â€â‚¬ */}
+            {/* CodeSpark Private Candidate Import & AXNT Key Generator Modal */}
+      {showCandidateModal && (
+        <CodeSparkCandidateImportModal
+          isOpen={showCandidateModal}
+          onClose={() => {
+            setShowCandidateModal(false);
+            loadData();
+          }}
+        />
+      )}
       {showAIModal && (
         <AIPaperGeneratorModal
           isOpen={showAIModal}

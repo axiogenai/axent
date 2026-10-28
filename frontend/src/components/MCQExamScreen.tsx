@@ -24,6 +24,7 @@ import { ConfirmationModal, ModalDetailItem } from './ConfirmationModal';
 import {
   getSynchronizedNow,
   isCurrentlyFullscreen,
+  isNativeFullscreen,
   requestExamFullscreen,
   exitExamFullscreen,
   formatSynchronizedTime,
@@ -460,12 +461,21 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
   const navigate = useNavigate();
   const [mode, setMode] = useState<'manual' | 'token'>('manual');
   
-  // Manual student identity state (Pre-filled for demo tests)
-  const [name, setName] = useState('');
-  const [roll, setRoll] = useState('');
-  const [dept, setDept] = useState('CSE');
-  const [sem, setSem] = useState('4th Sem');
-  const [division, setDivision] = useState('A');
+  // Read any pre-authenticated profile from CodeSpark Portal or Ticket Key
+  const existingProfile = useMemo(() => {
+    try {
+      const raw = localStorage.getItem('codedna_student_profile');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const [name, setName] = useState(() => existingProfile?.name || '');
+  const [roll, setRoll] = useState(() => existingProfile?.rollNumber || (existingProfile?.email ? existingProfile.email.split('@')[0].toUpperCase() : ''));
+  const [dept, setDept] = useState(() => existingProfile?.department || 'Axent Candidate');
+  const [sem, setSem] = useState(() => existingProfile?.semester || '4th Sem');
+  const [division, setDivision] = useState(() => existingProfile?.division || 'A');
   const [errors, setErrors] = useState<string[]>([]);
 
   // Token state
@@ -475,6 +485,84 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
   const parsedToken = tokenInput.trim() ? parseExamToken(tokenInput.trim()) : null;
   const now = getSynchronizedNow();
   const isLive = (!exam.startTime || now >= exam.startTime) && (!exam.endTime || now <= exam.endTime);
+
+  // Auto-start for pre-authenticated candidates
+  const autoStartDoneRef = useRef(false);
+  useEffect(() => {
+    if (autoStartDoneRef.current) return;
+    if (existingProfile?.name?.trim()) {
+      const pName = existingProfile.name.trim();
+      const pRoll = (existingProfile.rollNumber || (existingProfile.email ? existingProfile.email.split('@')[0].toUpperCase() : pName.replace(/\s+/g, '_'))).trim();
+
+      // Schedule timing guard: prohibit early entry
+      if (exam.startTime && getSynchronizedNow() < exam.startTime) return;
+
+      // Duplicate submission guard: check if candidate already submitted this exam
+      const normalizedRoll = pRoll.toLowerCase();
+      const candidateAttempts = getAttemptsForExam(exam.id).filter(
+        (item) => String(item.studentRoll || '').trim().toLowerCase() === normalizedRoll
+      );
+      const isRetake = Boolean(
+        existingProfile.batch === 2 ||
+        existingProfile.isRetake ||
+        (typeof localStorage !== 'undefined' && localStorage.getItem('codedna_codespark_active_batch') === '2')
+      );
+      const existingSubmitted = candidateAttempts.find(
+        (item) => item.status === 'SUBMITTED' || item.status === 'TIMED_OUT'
+      );
+      if (existingSubmitted && !isRetake && Math.max(1, exam.maxAttempts || 1) <= 1) {
+        autoStartDoneRef.current = true;
+        onStart({
+          name: pName,
+          rollNumber: pRoll,
+          department: existingProfile.department || 'Axent Candidate',
+          semester: existingProfile.semester || '4th Sem',
+          division: existingProfile.division || 'A',
+          course: existingProfile.course || exam.subject || 'MCQ Course',
+          examType: (exam.examCategory as ExamCategory) || 'Aptitude',
+          assignmentTitle: exam.title,
+          labId: existingProfile.labId || exam.assignedLabId || 'LAB-01',
+          labName: existingProfile.labName || exam.assignedLabName || `Exam: ${exam.title}`,
+          stationNumber: existingProfile.stationNumber || 'Station #01',
+          examDurationMinutes: exam.durationMinutes,
+          examMode: 'MCQ',
+          mcqExamId: exam.id
+        });
+        return;
+      }
+
+      autoStartDoneRef.current = true;
+      const rollDigits = pRoll.replace(/[^0-9]/g, '');
+      const stationDigits = rollDigits.length > 0 ? String(parseInt(rollDigits.slice(-2), 10) || 1).padStart(2, '0') : '01';
+      const stationNumber = existingProfile.stationNumber || `Station #${stationDigits}`;
+      const dedicatedLabId = existingProfile.labId || exam.assignedLabId || 'LAB-01';
+      const dedicatedLabName = existingProfile.labName || exam.assignedLabName || `Exam: ${exam.title}`;
+
+      const studentData: StudentInfo = {
+        name: pName,
+        rollNumber: pRoll,
+        department: existingProfile.department || 'Axent Candidate',
+        semester: existingProfile.semester || '4th Sem',
+        division: existingProfile.division || 'A',
+        course: existingProfile.course || exam.subject || 'MCQ Course',
+        examType: (exam.examCategory as ExamCategory) || 'Aptitude',
+        assignmentTitle: exam.title,
+        labId: dedicatedLabId,
+        labName: dedicatedLabName,
+        stationNumber,
+        examDurationMinutes: exam.durationMinutes,
+        examMode: 'MCQ',
+        mcqExamId: exam.id
+      };
+
+      try {
+        localStorage.setItem('codedna_active_exam_mode', 'MCQ');
+        localStorage.setItem('codedna_student_profile', JSON.stringify(studentData));
+      } catch {}
+
+      onStart(studentData);
+    }
+  }, [exam, existingProfile]);
 
   const handleStartManual = () => {
     const errs: string[] = [];
@@ -607,6 +695,32 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
 
     onStart(student);
   };
+
+  if (existingProfile?.name && errors.length === 0 && (!startError)) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--bg-main)',
+        color: 'var(--text-primary)',
+        gap: '16px',
+        fontFamily: 'var(--font-mono, monospace)'
+      }}>
+        <Loader2 className="animate-spin text-[#ea1a1c]" size={36} />
+        <div style={{ textAlign: 'center' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 900, margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            ENTERING EXAMINATION HALL
+          </h2>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+            Authenticating Seat: {existingProfile.name} · CCTV Synced
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mcq-reg-wrapper">
@@ -1036,7 +1150,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
                   <input
                     value={roll}
                     onChange={(e) => setRoll(e.target.value)}
-                    placeholder="e.g. DEMO-101"
+                    placeholder="Roll Number / USN"
                     style={{ ...inputStyle, padding: '6px 10px', height: '32px', fontSize: '12px', borderRadius: '6px', background: 'var(--bg-surface)' }}
                     onKeyDown={(e) => e.key === 'Enter' && handleStartManual()}
                   />
@@ -2240,12 +2354,15 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
   const [activeExamId, setActiveExamId] = useState<string>(initialExamId);
 
-  // Anti-tamper: enforce URL synchronization with active session exam
+  // Anti-tamper: enforce URL synchronization with active session exam (for standalone /mcq only)
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.pathname.includes('/codespark-exams')) return;
     if (activeAttempt && activeAttempt.status === 'IN_PROGRESS') {
       const urlExamId = searchParams.get('examId');
       if (urlExamId !== activeAttempt.examId) {
-        setSearchParams({ examId: activeAttempt.examId }, { replace: true });
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.set('examId', activeAttempt.examId);
+        setSearchParams(nextParams, { replace: true });
       }
     }
   }, [activeAttempt, searchParams, setSearchParams]);
@@ -2274,6 +2391,31 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     if (activeAttempt && activeAttempt.status === 'IN_PROGRESS' && activeAttempt.examId === initialExamId) {
       return activeAttempt;
     }
+    // Check if an attempt exists for the authenticated student profile
+    try {
+      const rawProfile = localStorage.getItem('codedna_student_profile');
+      if (rawProfile) {
+        const profile = JSON.parse(rawProfile);
+        const pRoll = (profile.rollNumber || (profile.email ? profile.email.split('@')[0].toUpperCase() : '')).trim().toLowerCase();
+        if (pRoll) {
+          const all = getAttemptsForExam(initialExamId).filter((a) => String(a.studentRoll || '').trim().toLowerCase() === pRoll);
+          const inProgress = all.find((a) => a.status === 'IN_PROGRESS');
+          if (inProgress) return inProgress;
+
+          const isRetake = Boolean(profile.batch === 2 || profile.isRetake || localStorage.getItem('codedna_codespark_active_batch') === '2');
+          if (isRetake) {
+            // If retake is active, return the 2nd attempt if already started/submitted, or null to start fresh
+            if (all.length >= 2) {
+              return all[all.length - 1];
+            }
+            return null;
+          }
+
+          const sub = all.find((a) => a.status === 'SUBMITTED' || a.status === 'TIMED_OUT');
+          if (sub) return sub;
+        }
+      }
+    } catch {}
     return null;
   });
 
@@ -2321,7 +2463,33 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
   const [gradeResult, setGradeResult] = useState<MCQGradeResult | null>(null);
   const [attemptStartError, setAttemptStartError] = useState<string | null>(null);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [submitted, setSubmitted] = useState(() => {
+    if (activeAttempt && (activeAttempt.status === 'SUBMITTED' || activeAttempt.status === 'TIMED_OUT')) {
+      return true;
+    }
+    try {
+      const rawProfile = localStorage.getItem('codedna_student_profile');
+      if (rawProfile) {
+        const profile = JSON.parse(rawProfile);
+        const pRoll = (profile.rollNumber || (profile.email ? profile.email.split('@')[0].toUpperCase() : '')).trim().toLowerCase();
+        if (pRoll) {
+          const all = getAttemptsForExam(initialExamId).filter((a) => String(a.studentRoll || '').trim().toLowerCase() === pRoll);
+          const isRetake = Boolean(profile.batch === 2 || profile.isRetake || localStorage.getItem('codedna_codespark_active_batch') === '2');
+          if (isRetake) {
+            if (all.length >= 2) {
+              const secondAttempt = all[all.length - 1];
+              return secondAttempt.status === 'SUBMITTED' || secondAttempt.status === 'TIMED_OUT';
+            }
+            return false;
+          }
+
+          const sub = all.find((a) => a.status === 'SUBMITTED' || a.status === 'TIMED_OUT');
+          if (sub) return true;
+        }
+      }
+    } catch {}
+    return false;
+  });
   const unfocusedStartRef = useRef<number | null>(null);
   const totalUnfocusedRef = useRef(0);
   const isAwayRef = useRef(false);
@@ -2672,6 +2840,15 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     document.addEventListener('mozfullscreenchange', handleFsChange);
     document.addEventListener('MSFullscreenChange', handleFsChange);
 
+    const autoFsOnCandidateClick = () => {
+      if (!isNativeFullscreen()) {
+        void requestExamFullscreen().catch(() => {});
+      }
+    };
+    window.addEventListener('click', autoFsOnCandidateClick, { capture: true, passive: true });
+    window.addEventListener('keydown', autoFsOnCandidateClick, { capture: true, passive: true });
+    window.addEventListener('pointerdown', autoFsOnCandidateClick, { capture: true, passive: true });
+
     // Lock screen orientation to portrait on mobile devices if supported by browser
     try {
       if (typeof screen !== 'undefined' && screen.orientation && typeof (screen.orientation as any).lock === 'function') {
@@ -2686,6 +2863,9 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       document.removeEventListener('webkitfullscreenchange', handleFsChange);
       document.removeEventListener('mozfullscreenchange', handleFsChange);
       document.removeEventListener('MSFullscreenChange', handleFsChange);
+      window.removeEventListener('click', autoFsOnCandidateClick, { capture: true } as any);
+      window.removeEventListener('keydown', autoFsOnCandidateClick, { capture: true } as any);
+      window.removeEventListener('pointerdown', autoFsOnCandidateClick, { capture: true } as any);
     };
   }, []);
 
@@ -3211,6 +3391,68 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     });
     void requestExamFullscreen().catch(() => {});
   };
+
+  // Auto-start for pre-authenticated candidates (redirected from CodeSpark Candidate Terminal)
+  const hasAutoStartedRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoStartedRef.current || attempt || submitted || !exam) return;
+    try {
+      const rawProfile = localStorage.getItem('codedna_student_profile');
+      if (!rawProfile) return;
+      const profile = JSON.parse(rawProfile);
+      if (profile?.name?.trim()) {
+        const studentName = profile.name.trim();
+        const studentEmail = (profile.email || '').trim().toLowerCase();
+        const derivedRoll = (profile.rollNumber || (studentEmail ? studentEmail.split('@')[0] : studentName.replace(/\s+/g, '_'))).trim();
+
+        // Check duplicate submission guard
+        const normalizedRoll = derivedRoll.toLowerCase();
+        const candidateAttempts = getAttemptsForExam(exam.id).filter(
+          (item) => String(item.studentRoll || '').trim().toLowerCase() === normalizedRoll
+        );
+        const existingSubmitted = candidateAttempts.find(
+          (item) => item.status === 'SUBMITTED' || item.status === 'TIMED_OUT'
+        );
+        if (existingSubmitted && Math.max(1, exam.maxAttempts || 1) <= 1) {
+          setAttempt(existingSubmitted);
+          setSubmitted(true);
+          return;
+        }
+
+        // Schedule timing guard
+        if (exam.startTime && getSynchronizedNow() < exam.startTime) {
+          return;
+        }
+
+        hasAutoStartedRef.current = true;
+
+        const rollDigits = derivedRoll.replace(/[^0-9]/g, '');
+        const stationDigits = rollDigits.length > 0 ? String(parseInt(rollDigits.slice(-2), 10) || 1).padStart(2, '0') : '01';
+        const stationNumber = profile.stationNumber || `Station #${stationDigits}`;
+        const dedicatedLabId = profile.labId || exam.assignedLabId || 'LAB-01';
+        const dedicatedLabName = profile.labName || exam.assignedLabName || `Exam: ${exam.title}`;
+
+        const studentData: StudentInfo = {
+          name: studentName,
+          rollNumber: derivedRoll,
+          department: profile.department?.trim() || studentEmail || 'Axent Candidate',
+          semester: profile.semester?.trim() || '4th Sem',
+          division: profile.division?.trim() || 'A',
+          course: profile.course || exam.subject || 'MCQ Course',
+          examType: (exam.examCategory as ExamCategory) || 'Aptitude',
+          assignmentTitle: exam.title,
+          labId: dedicatedLabId,
+          labName: dedicatedLabName,
+          stationNumber,
+          examDurationMinutes: exam.durationMinutes,
+          examMode: 'MCQ',
+          mcqExamId: exam.id
+        };
+
+        handleStart(studentData);
+      }
+    } catch {}
+  }, [exam, attempt, submitted, handleStart]);
 
   const handleSelectOption = (questionId: string, optionId: string) => {
     if (!attempt || isLockedByProctor || (attempt && attempt.tabSwitchCount >= 3) || !exam) {
@@ -5053,8 +5295,11 @@ export const MCQExamSelector: React.FC = () => {
   const loadEligibleExams = () => {
     const all = getAllExams();
     const now = getSynchronizedNow();
+    const assignedCodeSparkExamId = typeof window !== 'undefined'
+      ? localStorage.getItem('codedna_codespark_round1_exam_id')
+      : null;
     return all
-      .filter((e) => (e.status === 'PUBLISHED' || e.status === 'CLOSED') && !e.isPrivate)
+      .filter((e) => (e.status === 'PUBLISHED' || e.status === 'CLOSED') && !e.isPrivate && !e.isCodeSpark && e.id !== assignedCodeSparkExamId)
       .sort((a, b) => {
         const aConcluded = a.status === 'CLOSED' || Boolean(a.endTime && now > a.endTime);
         const bConcluded = b.status === 'CLOSED' || Boolean(b.endTime && now > b.endTime);

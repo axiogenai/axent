@@ -38,6 +38,17 @@ export const MCQHub: React.FC = () => {
     }
 
     try {
+      const rawProfile = localStorage.getItem('codedna_student_profile');
+      if (rawProfile) {
+        try {
+          const profile = JSON.parse(rawProfile);
+          if (profile.course === 'Code Spark 2026' || (profile.accessKey && String(profile.accessKey).toUpperCase().startsWith('AXENT-'))) {
+            navigate('/codespark-exams', { replace: true });
+            return;
+          }
+        } catch {}
+      }
+
       const examId = searchParams.get('examId');
       if (examId) {
         localStorage.setItem('codedna_active_exam_mode', 'MCQ');
@@ -45,7 +56,6 @@ export const MCQHub: React.FC = () => {
       }
 
       const activeMode = localStorage.getItem('codedna_active_exam_mode');
-      const rawProfile = localStorage.getItem('codedna_student_profile');
       let isCodingStudent = activeMode === 'CODING';
       if (rawProfile) {
         const profile = JSON.parse(rawProfile);

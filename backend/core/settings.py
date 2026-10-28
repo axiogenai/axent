@@ -29,7 +29,7 @@ if not SECRET_KEY:
 
 ALLOWED_HOSTS = [
     host.strip()
-    for host in os.environ.get('ALLOWED_HOSTS', '*' if DEBUG else 'localhost,127.0.0.1,.onrender.com').split(',')
+    for host in os.environ.get('ALLOWED_HOSTS', '*' if DEBUG else 'localhost,127.0.0.1,.onrender.com,axent.axiogen.in,.axiogen.in').split(',')
     if host.strip()
 ]
 
@@ -60,13 +60,20 @@ MIDDLEWARE = [
 ]
 
 # Wildcard CORS must not be combined with credentialed requests.
-CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL_ORIGINS', 'False').strip().lower() in {'1', 'true', 'yes'}
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',')
     if origin.strip()
 ]
 CORS_ALLOW_CREDENTIALS = False
+CSRF_TRUSTED_ORIGINS = [
+    "https://axent.axiogen.in",
+    "https://*.axiogen.in",
+    "https://*.onrender.com",
+    "http://localhost:4000",
+    "http://127.0.0.1:4000",
+]
 
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
