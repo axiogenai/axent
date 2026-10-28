@@ -22,6 +22,9 @@ import {
   CodeSparkCandidate,
   lookupCandidateByKey,
   lookupCandidateAny,
+  asyncLookupCandidateByKey,
+  asyncLookupCandidateAny,
+  syncCandidatesFromCloud,
   isCandidateInShortlistStorage,
   getAllCodeSparkCandidates,
   setActiveCodeSparkCandidate,
@@ -192,8 +195,22 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     return () => clearInterval(interval);
   }, [targetDate]);
 
-  // CRITICAL: Ensure ancestors do not block position: sticky
+  // CRITICAL: Ensure ancestors do not block position: sticky & inject mobile overrides
   useEffect(() => {
+    const mobileStyle = document.createElement('style');
+    mobileStyle.id = 'codespark-mobile-overrides';
+    mobileStyle.textContent = `
+      @media (max-width: 768px) {
+        #p1, #p2 { height: auto !important; margin-top: 0 !important; }
+        #p1 > div, #p2 > div { position: relative !important; height: auto !important; min-height: 0 !important; overflow: visible !important; }
+        #p1 > div > svg, #p2 > div > svg { position: relative !important; width: 100% !important; height: auto !important; display: block !important; }
+        #candidate-terminal { padding-top: 3rem !important; padding-bottom: 3rem !important; }
+        .cs-terminal-grid { display: flex !important; flex-direction: column !important; }
+      }
+    `;
+    if (!document.getElementById('codespark-mobile-overrides')) {
+      document.head.appendChild(mobileStyle);
+    }
     const origHtmlHeight = document.documentElement.style.height;
     const origBodyHeight = document.body.style.height;
     const origHtmlOverflowX = document.documentElement.style.overflowX;
@@ -223,6 +240,15 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     };
   }, []);
 
+  // Synchronize candidate roster from cloud on mount
+  useEffect(() => {
+    void syncCandidatesFromCloud().then((synced) => {
+      if (synced && synced.length > 0) {
+        setRegisteredCandidates(synced);
+      }
+    });
+  }, []);
+
   // Direct Key Authentication & One-Click Exam Launch
   const handleDigitsInput = (val: string) => {
     const digits = val.replace(/\D/g, '').slice(0, 4);
@@ -242,7 +268,19 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
         setDepartment(candidate.department || 'Axent Candidate');
         playSound('success');
       } else {
-        setActiveCandidate(null);
+        // Asynchronously check Supabase cloud roster
+        void asyncLookupCandidateByKey(fullKey).then((cloudCand) => {
+          if (cloudCand) {
+            setActiveCandidate(cloudCand);
+            setCandidateName(cloudCand.name || '');
+            setCandidateEmail(cloudCand.email || '');
+            setRollNumber(cloudCand.rollNumber || cloudCand.email.split('@')[0].toUpperCase());
+            setDepartment(cloudCand.department || 'Axent Candidate');
+            playSound('success');
+          } else {
+            setActiveCandidate(null);
+          }
+        });
       }
     } else {
       setActiveCandidate(null);
@@ -265,7 +303,10 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     }
 
     const fullKey = `AXENT-${digits}`;
-    const anyLookup = lookupCandidateAny(fullKey) || lookupCandidateAny(digits);
+    let anyLookup = lookupCandidateAny(fullKey) || lookupCandidateAny(digits);
+    if (!anyLookup) {
+      anyLookup = (await asyncLookupCandidateAny(fullKey)) || (await asyncLookupCandidateAny(digits));
+    }
     if (!anyLookup) {
       playSound('warning');
       setActiveCandidate(null);
@@ -1517,9 +1558,9 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                   onClick={() => keyInputRef.current?.focus()}
                   className={`w-full bg-white border-2 ${
                     keyError ? 'border-[#ea1a1c]' : 'border-black focus-within:border-[#ea1a1c]'
-                  } px-5 py-4 flex items-center transition-colors cursor-text`}
+                  } px-3 sm:px-5 py-3 sm:py-4 flex items-center transition-colors cursor-text overflow-hidden`}
                 >
-                  <span className="font-mono text-2xl font-black text-black select-none tracking-[0.25em] shrink-0">
+                  <span className="font-mono text-xl sm:text-2xl font-black text-black select-none tracking-[0.1em] sm:tracking-[0.25em] shrink-0">
                     AXENT-
                   </span>
                   <input
@@ -1538,12 +1579,13 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                     }}
                     placeholder="XXXX"
                     autoFocus
-                    className="flex-1 min-w-0 bg-transparent border-none outline-none font-mono text-2xl font-black tracking-[0.25em] text-black placeholder-zinc-300 p-0 m-0"
+                    className="flex-1 min-w-0 bg-transparent border-none outline-none font-mono text-xl sm:text-2xl font-black tracking-[0.1em] sm:tracking-[0.25em] text-black placeholder-zinc-300 p-0 m-0"
                   />
                   {activeCandidate && (
-                    <div className="ml-2 flex items-center gap-1.5 px-3 py-1 bg-[#ea1a1c] text-white text-xs font-black uppercase font-mono shrink-0">
-                      <Check size={14} />
+                    <div className="ml-1 sm:ml-2 flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 bg-[#ea1a1c] text-white text-[10px] sm:text-xs font-black uppercase font-mono shrink-0">
+                      <Check size={12} className="sm:w-3.5 sm:h-3.5" />
                       <span className="hidden sm:inline">KEY RESOLVED</span>
+                      <span className="sm:hidden">OK</span>
                     </div>
                   )}
                 </div>
@@ -1696,6 +1738,17 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
         </div>
       </footer>
 
+      {/* Mobile Floating Action Button: Quick Jump to Terminal */}
+      <div className="sm:hidden fixed bottom-4 right-4 z-50">
+        <button
+          type="button"
+          onClick={scrollToTerminal}
+          className="px-4 py-2.5 bg-[#ea1a1c] text-white font-mono font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-[3px_3px_0px_#000] border-2 border-black cursor-pointer active:scale-95 transition-transform"
+        >
+          <Key size={13} />
+          <span>Enter Key</span>
+        </button>
+      </div>
       </div>
   );
 };

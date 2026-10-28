@@ -57,6 +57,7 @@ import { playSound } from '../../utils/sounds';
 import { sendProctorLockCommand, sendProctorWarning } from '../../services/adminService';
 import {
   getAllCodeSparkCandidates,
+  syncCandidatesFromCloud,
   CodeSparkCandidate,
   saveCodeSparkCandidates,
   ensureCodeSparkAptitudeExam,
@@ -220,6 +221,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       setRetakeRolls(getRound1RetakeRolls());
       setLabOverflowEnabled(isLabOverflowRetakeEnabledGlobally());
     };
+    void syncCandidatesFromCloud().then((synced) => {
+      if (synced && synced.length > 0) setRegisteredCandidates(synced);
+    });
     const unsub = onExamsChanged(sync);
     window.addEventListener('storage', sync);
     return () => {
@@ -577,24 +581,45 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
   // Round 1 MCQ CCTV Stations: Synthesizes registered candidates, live proctoring stations, and all attempts
   const round1Stations = useMemo(() => {
+    // Unique map keyed by Candidate Access Key to prevent ANY duplicate terminals
     const candMap = new Map<string, { id: string; defaultStationNumber: string; candidate: CodeSparkCandidate; cleanRoll: string }>();
 
-    // 1. Registered candidates in CodeSpark
+    // 1. Registered candidates in CodeSpark (Deduplicated by Access Key)
     registeredCandidates.forEach((cand, idx) => {
+      const accessKey = cand.accessKey.toUpperCase().trim();
+      if (!accessKey) return;
       const cleanRoll = (cand.rollNumber || cand.accessKey).toUpperCase().trim();
-      candMap.set(cleanRoll, {
+      candMap.set(accessKey, {
         id: `AXNT-SPARK-WS-${String(idx + 1).padStart(2, '0')}`,
         defaultStationNumber: `Terminal #${String(idx + 1).padStart(2, '0')}`,
-        candidate: cand,
+        candidate: {
+          ...cand,
+          rollNumber: cand.rollNumber || (cand.email ? cand.email.split('@')[0].toUpperCase() : accessKey)
+        },
         cleanRoll
       });
     });
 
-    // 2. Also incorporate any students in allAttempts that might not be in registeredCandidates
+    // 2. Only incorporate attempts for candidates taking the CodeSpark exam who aren't already mapped
     allAttempts.forEach((att) => {
+      const isSparkExam = !currentAssignedExam?.id || att.examId === currentAssignedExam.id || att.examId === 'codespark-round1-aptitude' || (att as any).isCodeSpark;
+      if (!isSparkExam) return;
+
       const cleanRoll = (att.studentRoll || '').trim().toUpperCase();
       if (!cleanRoll) return;
-      if (!candMap.has(cleanRoll)) {
+
+      const alreadyMapped = Array.from(candMap.values()).some(({ candidate }) => {
+        const candRoll = (candidate.rollNumber || '').trim().toUpperCase();
+        const candKey = (candidate.accessKey || '').trim().toUpperCase();
+        const candEmail = (candidate.email || '').trim().toLowerCase();
+        return (
+          candRoll === cleanRoll ||
+          candKey === cleanRoll ||
+          (att.studentEmail && candEmail === (att.studentEmail || '').trim().toLowerCase())
+        );
+      });
+
+      if (!alreadyMapped && !candMap.has(cleanRoll)) {
         candMap.set(cleanRoll, {
           id: `AXNT-SPARK-WS-${String(candMap.size + 1).padStart(2, '0')}`,
           defaultStationNumber: `Terminal #${String(candMap.size + 1).padStart(2, '0')}`,
@@ -615,37 +640,59 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
     let stationIndex = 1;
 
     candMap.forEach(({ id, defaultStationNumber, candidate, cleanRoll }) => {
-      // Find matching attempt
-      const attempt = allAttempts.find(
-        (a) => (a.studentRoll || '').trim().toUpperCase() === cleanRoll
-      );
+      const candKeyUpper = (candidate.accessKey || '').trim().toUpperCase();
+      const candEmailLower = (candidate.email || '').trim().toLowerCase();
+      const candRollUpper = (candidate.rollNumber || '').trim().toUpperCase();
+
+      // Find matching attempt strictly for this exam session
+      const attempt = allAttempts.find((a) => {
+        const matchesExam = !currentAssignedExam?.id || a.examId === currentAssignedExam.id || a.examId === 'codespark-round1-aptitude' || (a as any).isCodeSpark;
+        if (!matchesExam) return false;
+        const attRoll = (a.studentRoll || '').trim().toUpperCase();
+        const attEmail = (a.studentEmail || '').trim().toLowerCase();
+        return (
+          attRoll === candKeyUpper ||
+          attRoll === cleanRoll ||
+          (candRollUpper && attRoll === candRollUpper) ||
+          (candEmailLower && attEmail === candEmailLower)
+        );
+      });
 
       // Find matching live station from stations prop if available
       const liveStation = stations.find(
         (s) =>
           (s.student?.rollNumber || '').trim().toUpperCase() === cleanRoll ||
+          (s.student?.rollNumber || '').trim().toUpperCase() === candKeyUpper ||
           (s.student?.name || '').trim().toLowerCase() === candidate.name.trim().toLowerCase() ||
           s.id === id
       );
 
-      const answeredKeys = attempt?.answers
+      const isSubmitted =
+        Boolean(attempt) &&
+        (attempt.status === 'SUBMITTED' ||
+         attempt.status === 'TIMED_OUT' ||
+         attempt.status === 'DISQUALIFIED');
+
+      const isActive = !isSubmitted && Boolean(
+        attempt?.status === 'IN_PROGRESS' ||
+        (liveStation && liveStation.status === 'In Progress' && !(liveStation as any).isStandby)
+      );
+
+      const isStandby = !isSubmitted && !isActive;
+
+      const answeredKeys = attempt?.answers && !isStandby
         ? Object.keys(attempt.answers).filter(
             (k) => attempt.answers[k] !== undefined && attempt.answers[k] !== null && attempt.answers[k] !== ''
           )
         : [];
-      const answeredCount = answeredKeys.length;
-      const totalQ = attempt?.assignedQuestions?.length || currentAssignedExam?.questionCount || mcqQuestions.length || 0;
-
-      const isSubmitted =
-        attempt?.status === 'SUBMITTED' ||
-        attempt?.status === 'TIMED_OUT' ||
-        (attempt && attempt.score !== undefined);
-      const isActive = attempt?.status === 'IN_PROGRESS' || (liveStation && liveStation.status === 'In Progress');
-      const isStandby = !isSubmitted && !isActive;
+      const answeredCount = isStandby ? 0 : answeredKeys.length;
+      const totalQ = attempt?.assignedQuestions?.length || currentAssignedExam?.questionCount || mcqQuestions.length || 10;
 
       // Determine which question the student is on:
       let currentQIdx = 0;
-      if (liveStation?.mcqProgress?.currentQuestionIndex !== undefined) {
+      if (isStandby) {
+        currentQIdx = 0;
+      } else if (liveStation?.mcqProgress?.currentQuestionIndex !== undefined) {
         currentQIdx = liveStation.mcqProgress.currentQuestionIndex;
       } else if (isActive) {
         currentQIdx = Math.min(answeredCount, totalQ - 1);
@@ -680,7 +727,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
         isLockedByProctor: isLocked,
         metrics: {
           typingSpeed: 0,
-          timeSpent: attempt?.timeSpentSeconds || liveStation?.metrics?.timeSpent || 0,
+          timeSpent: isStandby ? 0 : (attempt?.timeSpentSeconds || liveStation?.metrics?.timeSpent || 0),
           pasteCount: 0,
           deleteCount: 0,
           editCount: answeredCount,
@@ -690,20 +737,20 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           totalLines: 0,
           keystrokes: answeredCount,
           pauseDuration: 0,
-          tabSwitchViolations: attempt?.tabSwitchCount || liveStation?.metrics?.tabSwitchViolations || 0,
-          unfocusedTimeSeconds: attempt?.unfocusedSeconds || liveStation?.metrics?.unfocusedTimeSeconds || 0
+          tabSwitchViolations: isStandby ? 0 : (attempt?.tabSwitchCount || liveStation?.metrics?.tabSwitchViolations || 0),
+          unfocusedTimeSeconds: isStandby ? 0 : (attempt?.unfocusedSeconds || liveStation?.metrics?.unfocusedTimeSeconds || 0)
         },
         mcqProgress: {
-          examId: currentAssignedExam?.id || 'exam-spark',
+          examId: currentAssignedExam?.id || 'codespark-round1-aptitude',
           examTitle: currentAssignedExam?.title || 'Code Spark 2026: General Aptitude & Reasoning',
           currentQuestionIndex: currentQIdx,
           totalQuestions: totalQ,
           answeredCount: answeredCount,
-          tabSwitches: attempt?.tabSwitchCount || liveStation?.metrics?.tabSwitchViolations || 0,
-          score: attempt?.score,
-          maxScore: attempt?.maxScore || examTotalMarks || (attempt?.score !== undefined ? attempt.score : 0)
+          tabSwitches: isStandby ? 0 : (attempt?.tabSwitchCount || liveStation?.metrics?.tabSwitchViolations || 0),
+          score: isStandby ? undefined : attempt?.score,
+          maxScore: isStandby ? examTotalMarks : (attempt?.maxScore || examTotalMarks || (attempt?.score !== undefined ? attempt.score : 0))
         },
-        marks: attempt?.score !== undefined ? {
+        marks: (!isStandby && attempt?.score !== undefined) ? {
           totalMarks: attempt.score,
           maxMarks: attempt.maxScore || examTotalMarks || (attempt?.score !== undefined ? attempt.score : 0),
           executionMarks: attempt.score,
@@ -715,16 +762,16 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           (attempt?.tabSwitchCount || 0) >= 3 ? 'High Cheating Risk / Plagiarized' : 'Verified Original Work',
         cheatingRisk:
           (attempt?.tabSwitchCount || 0) >= 3 ? 'Critical' : (attempt?.tabSwitchCount || 0) >= 1 ? 'Medium' : 'Low',
-        lastActive: 'Just now',
+        lastActive: isStandby ? 'Standby' : 'Just now',
         lastUpdatedTimestamp: Date.now()
       };
 
-      stationIndex++;
       result.push(stationObj);
+      stationIndex++;
     });
 
     return result;
-  }, [registeredCandidates, allAttempts, stations, mcqQuestions, currentAssignedExam, lockedStations]);
+  }, [registeredCandidates, allAttempts, stations, currentAssignedExam, mcqQuestions, examTotalMarks, lockedStations]);
 
   const displayedCctvStations = useMemo(() => {
     return round1Stations.filter((s) => {
@@ -1784,7 +1831,11 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: '#a1a1aa' }}>
                               <span>{answeredCount}/{totalQ} Answered ({pct}%)</span>
                               <span style={{ fontWeight: 700, color: '#f4f4f5' }}>
-                                {station.mcqProgress?.score !== undefined ? `${station.mcqProgress.score} pts` : 'Evaluating'}
+                                {station.mcqProgress?.score !== undefined
+                                  ? `${station.mcqProgress.score} pts`
+                                  : station.isStandby
+                                  ? '—'
+                                  : 'In Progress'}
                               </span>
                             </div>
                           </div>

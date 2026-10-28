@@ -1,3 +1,4 @@
+import { supabase } from './supabaseService';
 import {
   MCQExamConfig,
   MCQQuestion
@@ -39,45 +40,107 @@ const STORAGE_KEY = 'codedna_codespark_candidates';
 const ACTIVE_CANDIDATE_KEY = 'codedna_codespark_active_candidate';
 const EVENT_NAME = 'codedna_codespark_candidates_updated';
 
+
+export function deduplicateCandidates(candidates: CodeSparkCandidate[]): CodeSparkCandidate[] {
+  const keyMap = new Map<string, CodeSparkCandidate>();
+  for (const c of candidates) {
+    if (!c || !c.accessKey) continue;
+    const cleanKey = normalizeCodeSparkKey(c.accessKey);
+    if (!cleanKey) continue;
+    const itemRoll = c.rollNumber || (c.email ? c.email.split('@')[0].toUpperCase() : cleanKey);
+    
+    if (!keyMap.has(cleanKey)) {
+      keyMap.set(cleanKey, { ...c, accessKey: cleanKey, rollNumber: itemRoll });
+    } else {
+      const existing = keyMap.get(cleanKey)!;
+      existing.name = c.name || existing.name;
+      existing.email = c.email || existing.email;
+      existing.rollNumber = existing.rollNumber || itemRoll;
+      existing.department = c.department || existing.department;
+      if (c.status && c.status !== 'REGISTERED') existing.status = c.status;
+      if (c.round1Score !== undefined) existing.round1Score = c.round1Score;
+      if (c.round1MaxScore !== undefined) existing.round1MaxScore = c.round1MaxScore;
+      if (c.isShortlisted !== undefined) existing.isShortlisted = c.isShortlisted;
+      if (c.round2Key) existing.round2Key = c.round2Key;
+    }
+  }
+  return Array.from(keyMap.values());
+}
+
+export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): Promise<boolean> {
+  try {
+    if (!supabase) return false;
+    const deduped = deduplicateCandidates(candidates);
+    const { data: exam, error } = await supabase
+      .from('mcq_exams')
+      .select('instructions')
+      .eq('id', 'codespark-round1-aptitude')
+      .maybeSingle();
+
+    if (error || !exam) {
+      return false;
+    }
+
+    let instr = exam.instructions || '';
+    instr = instr.replace(/<!--CODESPARK_ROSTER:[\s\S]*?-->/g, '').trim();
+    instr = `${instr}\n<!--CODESPARK_ROSTER:${JSON.stringify(deduped)}-->`;
+
+    const { error: updateErr } = await supabase
+      .from('mcq_exams')
+      .update({ instructions: instr, updated_at: Date.now() })
+      .eq('id', 'codespark-round1-aptitude');
+
+    return !updateErr;
+  } catch (err) {
+    console.warn('[CodeSpark Cloud] pushCandidatesToCloud failed:', err);
+    return false;
+  }
+}
+
+export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
+  try {
+    if (!supabase) return getAllCodeSparkCandidates();
+    const { data: exam, error } = await supabase
+      .from('mcq_exams')
+      .select('instructions')
+      .eq('id', 'codespark-round1-aptitude')
+      .maybeSingle();
+
+    if (error || !exam || !exam.instructions) {
+      return getAllCodeSparkCandidates();
+    }
+
+    const match = exam.instructions.match(/<!--CODESPARK_ROSTER:([\s\S]*?)-->/);
+    if (!match) return getAllCodeSparkCandidates();
+
+    const cloudCandidates = JSON.parse(match[1]) as CodeSparkCandidate[];
+    if (!Array.isArray(cloudCandidates)) return getAllCodeSparkCandidates();
+
+    const local = getAllCodeSparkCandidates();
+    const combined = deduplicateCandidates([...local, ...cloudCandidates]);
+
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(combined));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: combined }));
+        window.dispatchEvent(new Event('storage'));
+      }
+    } catch {}
+
+    return combined;
+  } catch (err) {
+    console.warn('[CodeSpark Cloud] syncCandidatesFromCloud error:', err);
+    return getAllCodeSparkCandidates();
+  }
+}
+
 export function getAllCodeSparkCandidates(): CodeSparkCandidate[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      const defaultCandidates: CodeSparkCandidate[] = [
-        {
-          name: 'Aditya Patil',
-          email: 'aditya.patil@codespark.internal',
-          rollNumber: 'CS2026_01',
-          department: 'Computer Science',
-          accessKey: 'AXENT-5278',
-          status: 'REGISTERED',
-          registeredAt: Date.now()
-        }
-      ];
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultCandidates));
-      } catch {}
-      return defaultCandidates;
-    }
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      const defaultCandidates: CodeSparkCandidate[] = [
-        {
-          name: 'Aditya Patil',
-          email: 'aditya.patil@codespark.internal',
-          rollNumber: 'CS2026_01',
-          department: 'Computer Science',
-          accessKey: 'AXENT-5278',
-          status: 'REGISTERED',
-          registeredAt: Date.now()
-        }
-      ];
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultCandidates));
-      } catch {}
-      return defaultCandidates;
-    }
-    return parsed;
+    if (!Array.isArray(parsed)) return [];
+    return deduplicateCandidates(parsed);
   } catch (e) {
     console.error('[CodeSpark] Failed to load candidates from storage:', e);
     return [];
@@ -86,11 +149,13 @@ export function getAllCodeSparkCandidates(): CodeSparkCandidate[] {
 
 export function saveCodeSparkCandidates(candidates: CodeSparkCandidate[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(candidates));
+    const deduped = deduplicateCandidates(candidates);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(deduped));
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: candidates }));
+      window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: deduped }));
       window.dispatchEvent(new Event('storage'));
     }
+    void pushCandidatesToCloud(deduped);
   } catch (e) {
     console.error('[CodeSpark] Failed to save candidates:', e);
   }
@@ -145,6 +210,15 @@ export function lookupCandidateByKey(rawKey: string): CodeSparkCandidate | null 
   
   const all = getAllCodeSparkCandidates();
   return all.find((c) => normalizeCodeSparkKey(c.accessKey) === normalized) || null;
+}
+
+export async function asyncLookupCandidateByKey(rawKey: string): Promise<CodeSparkCandidate | null> {
+  const local = lookupCandidateByKey(rawKey);
+  if (local) return local;
+  const synced = await syncCandidatesFromCloud();
+  const normalized = normalizeCodeSparkKey(rawKey);
+  if (!normalized) return null;
+  return synced.find((c) => normalizeCodeSparkKey(c.accessKey) === normalized) || null;
 }
 
 export const SHORTLIST_STORAGE_KEY = 'codedna_codespark_shortlist';
@@ -543,6 +617,13 @@ export interface KeyLookupResult {
 /**
  * Searches registered candidates by either their Round 1 Access Key OR their Round 2 Email Key.
  */
+export async function asyncLookupCandidateAny(rawKey: string): Promise<KeyLookupResult | null> {
+  const local = lookupCandidateAny(rawKey);
+  if (local) return local;
+  await syncCandidatesFromCloud();
+  return lookupCandidateAny(rawKey);
+}
+
 export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
   if (!rawKey) return null;
   const cleaned = rawKey.trim().toUpperCase().replace(/\s+/g, '');
@@ -698,6 +779,8 @@ export function importCodeSparkCandidates(
       accessKey: newKey,
       name: cleanName,
       email: cleanEmail,
+      rollNumber: item.rollNumber || cleanEmail.split('@')[0].toUpperCase(),
+      department: item.department || 'Axent Enclave',
       examId: examId,
       status: 'REGISTERED',
       registeredAt: Date.now()
