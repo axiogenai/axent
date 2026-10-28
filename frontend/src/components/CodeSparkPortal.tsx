@@ -40,6 +40,8 @@ import { getAllCodingQuestions, getAllCodingExams } from '../services/codingQues
 import { CodeSparkCandidateImportModal } from './codespark/CodeSparkCandidateImportModal';
 import { playSound } from '../utils/sounds';
 import { requestExamFullscreen } from '../services/timeSyncService';
+import Lenis from 'lenis';
+import 'lenis/dist/lenis.css';
 
 interface CodeSparkPortalProps {
   theme?: string;
@@ -50,6 +52,34 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const keyInputRef = useRef<HTMLInputElement>(null);
+  const lenisRef = useRef<Lenis | null>(null);
+
+  // Initialize Lenis Smooth Scrolling
+  useEffect(() => {
+    const lenis = new Lenis({
+      duration: 1.2,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      orientation: 'vertical',
+      gestureOrientation: 'vertical',
+      smoothWheel: true,
+      wheelMultiplier: 1.0,
+      touchMultiplier: 1.5
+    });
+    lenisRef.current = lenis;
+
+    let rafId: number;
+    function raf(time: number) {
+      lenis.raf(time);
+      rafId = requestAnimationFrame(raf);
+    }
+    rafId = requestAnimationFrame(raf);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      lenis.destroy();
+      lenisRef.current = null;
+    };
+  }, []);
 
   // Scroll Progress and active section
   const [scrollProgress, setScrollProgress] = useState(0);
@@ -592,17 +622,30 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
 
   const scrollToTerminal = () => {
     playSound('click');
-    terminalRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (lenisRef.current && terminalRef.current) {
+      lenisRef.current.scrollTo(terminalRef.current, { offset: 0, duration: 1.4 });
+    } else {
+      terminalRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   const scrollToPhases = () => {
     playSound('click');
-    window.scrollTo({ top: window.innerHeight * 1.4, behavior: 'smooth' });
+    if (lenisRef.current) {
+      lenisRef.current.scrollTo(window.innerHeight * 1.4, { duration: 1.2 });
+    } else {
+      window.scrollTo({ top: window.innerHeight * 1.4, behavior: 'smooth' });
+    }
   };
 
   const scrollToForensics = () => {
     playSound('click');
-    document.getElementById('forensics-section')?.scrollIntoView({ behavior: 'smooth' });
+    const el = document.getElementById('forensics-section');
+    if (lenisRef.current && el) {
+      lenisRef.current.scrollTo(el, { duration: 1.2 });
+    } else {
+      el?.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   // Launch Stage 01 (General Aptitude MCQ)
@@ -791,9 +834,12 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
     let animId: number;
 
     const onScroll = () => {
-      tgt = window.scrollY || document.documentElement.scrollTop;
+      tgt = lenisRef.current ? lenisRef.current.scroll : (window.scrollY || document.documentElement.scrollTop);
     };
     window.addEventListener('scroll', onScroll, { passive: true });
+    const unsubLenis = lenisRef.current?.on('scroll', (e: { scroll: number }) => {
+      tgt = e.scroll;
+    });
     onScroll();
     cur = tgt;
 
@@ -892,6 +938,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
     return () => {
       window.removeEventListener('resize', size);
       window.removeEventListener('scroll', onScroll);
+      if (unsubLenis) unsubLenis();
       cancelAnimationFrame(animId);
     };
   }, []);
@@ -928,106 +975,6 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
           backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .6 0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E")`
         }}
       />
-
-      {/* ── Floating Top Swiss Editorial Control Bar (Fixed at z-50, pointer-events pass-through) ── */}
-      <header
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100%',
-          zIndex: 50,
-          pointerEvents: 'none'
-        }}
-        className="font-mono text-xs"
-      >
-        {/* Dynamic Scroll Progress Bar */}
-        <div className="w-full bg-black/5 h-[3px]">
-          <div
-            className="bg-[#ea1a1c] h-full transition-all duration-75 ease-out"
-            style={{ width: `${scrollProgress}%` }}
-          />
-        </div>
-
-        <div className="max-w-[1536px] mx-auto px-4 sm:px-8 py-2.5 flex items-center justify-between gap-4 bg-[#eeece8]/85 backdrop-blur-md border-b border-black/10">
-          <div className="flex items-center gap-4 pointer-events-auto">
-            <span className="font-black tracking-tighter text-black uppercase text-sm border-r border-black/15 pr-4 flex items-center gap-1.5">
-              <span className="w-2 h-2 bg-[#ea1a1c] inline-block" />
-              <span>CODESPARK // 2026</span>
-            </span>
-
-            <div className="hidden md:flex items-center gap-3 text-zinc-600 text-[11px] uppercase tracking-wider">
-              <span>DOC REF: AXNT-SPARK-03NOV</span>
-              <span className="text-zinc-400">/</span>
-              <span>SPECIAL ENCLAVE</span>
-              <span className="text-zinc-400">/</span>
-              <strong className="text-black">SCROLL: {scrollProgress}%</strong>
-            </div>
-          </div>
-
-          <div className="hidden lg:flex items-center gap-1 text-[11px] uppercase tracking-wider font-bold pointer-events-auto">
-            <button
-              type="button"
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              className={`px-2.5 py-1 transition-colors ${
-                activeSection === 'hero' ? 'bg-black text-white' : 'text-zinc-600 hover:text-black'
-              }`}
-            >
-              01 // CODE SPARK
-            </button>
-            <span className="text-zinc-300">/</span>
-            <button
-              type="button"
-              onClick={scrollToPhases}
-              className={`px-2.5 py-1 transition-colors ${
-                activeSection === 'phases' ? 'bg-black text-white' : 'text-zinc-600 hover:text-black'
-              }`}
-            >
-              02 // TWO PHASES
-            </button>
-            <span className="text-zinc-300">/</span>
-            <button
-              type="button"
-              onClick={scrollToForensics}
-              className={`px-2.5 py-1 transition-colors ${
-                activeSection === 'forensics' ? 'bg-black text-white' : 'text-zinc-600 hover:text-black'
-              }`}
-            >
-              03 // FORENSICS
-            </button>
-            <span className="text-zinc-300">/</span>
-            <button
-              type="button"
-              onClick={scrollToTerminal}
-              className={`px-2.5 py-1 transition-colors ${
-                activeSection === 'terminal' ? 'bg-[#ea1a1c] text-white' : 'text-zinc-600 hover:text-[#ea1a1c]'
-              }`}
-            >
-              04 // TERMINAL &darr;
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 pointer-events-auto">
-            <button
-              type="button"
-              onClick={scrollToTerminal}
-              className="px-4 py-1.5 bg-[#ea1a1c] hover:bg-[#c81e1b] text-white font-bold uppercase tracking-wider transition-colors flex items-center gap-2 cursor-pointer text-xs shadow-sm"
-            >
-              <Key size={12} />
-              <span>CANDIDATE TERMINAL</span>
-              <ArrowDown size={11} />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => navigate('/admin')}
-              className="text-zinc-500 hover:text-black uppercase text-[11px] tracking-wider transition-colors hidden sm:block"
-            >
-              INVIGILATOR CCTV
-            </button>
-          </div>
-        </div>
-      </header>
 
       {/* ══════════════════════════════════════════════════════════════════════════
           PAGE 1: CODE SPARK ON AXENT (EXACT CODE RECREATION & SCROLL PINNED)
@@ -1132,25 +1079,25 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
               </g>
               {/* 'ON' mark - Outlined Swiss corner typography (aligned after P of Spark) */}
               <text
-                x="650"
-                y="703"
-                fontSize="38"
+                x="785"
+                y="702"
+                fontSize="32"
                 fontWeight="300"
-                textLength="86"
+                textLength="72"
                 fill="none"
                 stroke="#000"
-                strokeWidth="1.4"
+                strokeWidth="1.2"
               >
                 ON
               </text>
 
-              {/* Official AXENT Logo from /axent-lightmode.png (starts after P of Spark) */}
+              {/* Official AXENT Logo from /axent-lightmode.png (starts after P of Spark, shifted right & resized) */}
               <image
                 href="/axent-lightmode.png"
-                x="640"
-                y="716"
-                width="540"
-                height="98"
+                x="780"
+                y="722"
+                width="400"
+                height="72"
                 preserveAspectRatio="xMinYMid meet"
               />
 
