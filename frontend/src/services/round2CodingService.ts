@@ -1,4 +1,4 @@
-﻿import { supabase } from './supabaseService';
+import { supabase } from './supabaseService';
 
 
 
@@ -1399,23 +1399,31 @@ function computeDynamicScore(
   maxMarks: number, aiAligned: boolean, compileOk: boolean,
   timeComplexity: string, spaceComplexity: string, timeTakenMs: number
 ): number {
-  if (!compileOk) return 0;
-  let score = maxMarks * 0.35;
-  if (aiAligned) score += maxMarks * 0.35;
+  // HackerRank standard: If code does not compile or does not solve the problem, score is strictly 0!
+  if (!compileOk || !aiAligned) return 0;
+
+  // Problem correctly solved: Start with 80% base score
+  let score = maxMarks * 0.80;
+
+  // Efficiency bonus (up to 15%)
   const tc = (timeComplexity || '').toLowerCase();
   const sc = (spaceComplexity || '').toLowerCase();
   let cBonus = 0;
-  if (tc.includes('o(1)') || tc.includes('o(log')) cBonus += 0.12;
-  else if (tc.includes('o(n log') || tc.includes('o(nlog')) cBonus += 0.09;
-  else if (tc.includes('o(n)')) cBonus += 0.07;
-  else if (tc.includes('o(n^2)') || tc.includes('o(n\u00b2)')) cBonus += 0.04;
-  else cBonus += 0.02;
-  if (sc.includes('o(1)')) cBonus += 0.08;
-  else if (sc.includes('o(n)') || sc.includes('o(log')) cBonus += 0.05;
-  else cBonus += 0.02;
-  score += maxMarks * Math.min(cBonus, 0.20);
-  const maxTimeMs = 30 * 60 * 1000;
-  score += maxMarks * 0.10 * Math.max(0, 1 - ((timeTakenMs || 0) / maxTimeMs));
+  if (tc.includes('o(1)') || tc.includes('o(log')) cBonus += 0.08;
+  else if (tc.includes('o(n log') || tc.includes('o(nlog')) cBonus += 0.06;
+  else if (tc.includes('o(n)')) cBonus += 0.04;
+  else cBonus += 0.01;
+
+  if (sc.includes('o(1)')) cBonus += 0.07;
+  else if (sc.includes('o(n)') || sc.includes('o(log')) cBonus += 0.04;
+  else cBonus += 0.01;
+
+  score += maxMarks * Math.min(cBonus, 0.15);
+
+  // Speed bonus (up to 5% if finished within 20 mins)
+  const maxTimeMs = 20 * 60 * 1000;
+  score += maxMarks * 0.05 * Math.max(0, 1 - ((timeTakenMs || 0) / maxTimeMs));
+
   return Math.min(maxMarks, Math.max(0, Math.round(score)));
 }
 
@@ -1455,8 +1463,8 @@ export async function evaluateRound2Code(
 
   let status: Round2QuestionReport['status'] = 'PARTIAL';
   if (primaryCompilerResult?.compileOutput) status = 'COMPILE_ERROR';
-  else if (aiAligned) status = 'ACCEPTED';
   else if (!compileOk) status = 'RUNTIME_ERROR';
+  else if (aiAligned) status = 'ACCEPTED';
 
   const rawTimeStr = primaryCompilerResult?.time || '';
   const parsedTimeSec = parseFloat(rawTimeStr.replace(/[^\d.]/g, ''));

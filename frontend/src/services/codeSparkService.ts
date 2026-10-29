@@ -298,6 +298,7 @@ export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
       }
       if (config.isConcluded !== undefined && typeof window !== 'undefined') {
         localStorage.setItem(ROUND1_CONCLUDED_STORAGE_KEY, config.isConcluded ? 'true' : 'false');
+        window.dispatchEvent(new CustomEvent('codedna_codespark_concluded_updated', { detail: config.isConcluded }));
       }
 
       const local = getAllCodeSparkCandidates();
@@ -645,7 +646,14 @@ export function generateRound2KeyForCandidate(cand: CodeSparkCandidate): string 
 
 export function isRound1ConcludedGlobally(): boolean {
   try {
-    return localStorage.getItem(ROUND1_CONCLUDED_STORAGE_KEY) === 'true';
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(ROUND1_CONCLUDED_STORAGE_KEY) === 'true') {
+      return true;
+    }
+    const cands = getAllCodeSparkCandidates();
+    if (cands.some(c => c.round2Key || c.isShortlisted || c.status === 'SHORTLISTED')) {
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -1072,97 +1080,89 @@ export async function asyncLookupCandidateAny(rawKey: string): Promise<KeyLookup
   return lookupCandidateAny(rawKey);
 }
 
+function extractPureKeySuffix(k: string): string {
+  if (!k) return '';
+  return k.toUpperCase().replace(/^AXENT-R2-|^AXENT-|^R2-?/i, '').replace(/\D/g, '');
+}
+
 export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
   if (!rawKey) return null;
   const cleaned = rawKey.trim().toUpperCase().replace(/\s+/g, '');
+  const inputPure = extractPureKeySuffix(cleaned);
+  const inputDigits = cleaned.replace(/\D/g, '');
+
+  // Strictly require at least 4 digits or a valid AXENT- key.
+  // Never match empty string, partial prefixes like 'AXENT-R2-', or fewer than 4 digits.
+  if (inputPure.length < 4 && inputDigits.length < 4 && !/^AXENT-\d{4}$/.test(cleaned) && !/^AXENT-R2-\d{4}$/.test(cleaned)) {
+    return null;
+  }
+
   const all = getAllCodeSparkCandidates();
   const normalizedKey = normalizeCodeSparkKey(cleaned);
-  const inputDigits = cleaned.replace(/\D/g, '');
   const isRound1Over = isRound1ConcludedGlobally();
-  const isInputR2 = cleaned.includes('R2') || isRound1Over;
 
-  // 1. If candidate explicitly enters a Round 2 code (contains R2, e.g. AXENT-R2-XXXX, R2-XXXX):
-  if (isInputR2) {
-    for (const c of all) {
-      if (c.round2Key) {
-        const cleanR2 = c.round2Key.trim().toUpperCase().replace(/\s+/g, '');
-        const rawR2Digits = cleanR2.replace(/\D/g, '');
+  // 1. Check Round 2 keys first
+  for (const c of all) {
+    if (c.round2Key) {
+      const cleanR2 = c.round2Key.trim().toUpperCase().replace(/\s+/g, '');
+      const r2Pure = extractPureKeySuffix(cleanR2);
+      const r2Digits = cleanR2.replace(/\D/g, '');
 
-        if (
-          cleanR2 === cleaned ||
-          cleanR2.replace('AXENT-', '') === cleaned ||
-          cleanR2.replace('AXENT-R2-', '') === cleaned ||
-          cleanR2.includes(cleaned) ||
-          cleaned.includes(cleanR2.replace('AXENT-', '')) ||
-          (rawR2Digits.length >= 4 && inputDigits === rawR2Digits) ||
-          (inputDigits.length >= 4 && rawR2Digits.endsWith(inputDigits))
-        ) {
-          return {
-            candidate: c,
-            targetRound: 'round2',
-            isShortlisted: true,
-            round2Key: c.round2Key
-          };
-        }
+      if (
+        cleanR2 === cleaned ||
+        cleanR2.replace('AXENT-', '') === cleaned ||
+        cleanR2.replace('AXENT-R2-', '') === cleaned ||
+        (r2Pure.length >= 4 && inputPure.length >= 4 && inputPure === r2Pure) ||
+        (r2Digits.length >= 4 && inputDigits.length >= 4 && inputDigits === r2Digits)
+      ) {
+        return {
+          candidate: c,
+          targetRound: 'round2',
+          isShortlisted: true,
+          round2Key: c.round2Key
+        };
       }
     }
   }
 
-  // 2. Check standard Round 1 keys (AXENT-XXXX or 4-digit code)
+  // 2. Check Round 1 keys
   for (const c of all) {
     const cleanR1 = c.accessKey.trim().toUpperCase().replace(/\s+/g, '');
     const normR1 = normalizeCodeSparkKey(cleanR1);
-    const candDigits = cleanR1.replace(/\D/g, '');
+    const r1Pure = extractPureKeySuffix(cleanR1);
+    const r1Digits = cleanR1.replace(/\D/g, '');
 
     if (
       cleanR1 === cleaned ||
       normR1 === normalizedKey ||
       cleanR1 === normalizedKey ||
       normR1 === cleaned ||
-      (inputDigits.length >= 4 && candDigits === inputDigits)
+      (r1Pure.length >= 4 && inputPure.length >= 4 && inputPure === r1Pure) ||
+      (r1Digits.length >= 4 && inputDigits.length >= 4 && inputDigits === r1Digits)
     ) {
       const isShortlisted = Boolean(
         c.isShortlisted ||
         c.status === 'SHORTLISTED' ||
+        Boolean(c.round2Key) ||
         isCandidateInShortlistStorage(c.rollNumber || c.accessKey)
       );
 
-      // If Round 1 has concluded and candidate is shortlisted, auto-route to Round 2!
-      if (isRound1Over && isShortlisted) {
-        if (!c.round2Key) {
-          c.round2Key = generateRound2KeyForCandidate(c);
-        }
+      // If candidate is shortlisted and (has round2Key or round 1 is over), targetRound is round2!
+      if (isShortlisted && (c.round2Key || isRound1Over)) {
         return {
           candidate: c,
           targetRound: 'round2',
           isShortlisted: true,
-          round2Key: c.round2Key
+          round2Key: c.round2Key || generateRound2KeyForCandidate(c)
         };
       }
 
-      // This is explicitly a Round 1 key!
       return {
         candidate: c,
         targetRound: 'round1',
         isShortlisted,
         round2Key: c.round2Key
       };
-    }
-  }
-
-  // 3. Fallback: If input has digits matching a Round 2 key and no Round 1 key matched:
-  for (const c of all) {
-    if (c.round2Key) {
-      const cleanR2 = c.round2Key.trim().toUpperCase().replace(/\s+/g, '');
-      const rawR2Digits = cleanR2.replace(/\D/g, '');
-      if (rawR2Digits.length >= 4 && inputDigits === rawR2Digits) {
-        return {
-          candidate: c,
-          targetRound: 'round2',
-          isShortlisted: true,
-          round2Key: c.round2Key
-        };
-      }
     }
   }
 

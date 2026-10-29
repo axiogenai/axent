@@ -2777,6 +2777,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     reason: string;
   } | null>(null);
   const lastStrikeTimestampRef = useRef<number>(0);
+  const examMountTimestampRef = useRef<number>(Date.now());
   const [proctorWarning, setProctorWarning] = useState<string | null>(null);
   const [proctorUnlockCodeInput, setProctorUnlockCodeInput] = useState('');
   const [unlockError, setUnlockError] = useState<string | null>(null);
@@ -3254,6 +3255,10 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
     const triggerFocusLossInfraction = (reason: string) => {
       const now = Date.now();
+      // 10-second startup grace period: never give false positive strikes on initial launch or fullscreen transition
+      if (now - examMountTimestampRef.current < 10000) {
+        return;
+      }
       // Grace period: ignore initial settling within 2s of start, or while choosing screen
       if (isSelectingScreenRef.current || (attempt.startTime && (now - attempt.startTime < 2000))) {
         return;
@@ -3333,18 +3338,18 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
     const handleBlur = () => {
       const now = Date.now();
-      if (isSelectingScreenRef.current || (attempt.startTime && (now - attempt.startTime < 2000))) {
-        return;
-      }
+      if (now - examMountTimestampRef.current < 10000) return;
+      if (isSelectingScreenRef.current || (attempt.startTime && (now - attempt.startTime < 10000))) return;
       const isTouch = typeof window !== 'undefined' && ('ontouchstart' in window || (navigator && navigator.maxTouchPoints > 0));
-      if (isTouch) {
-        return;
+      if (isTouch) return;
+      // Only count if document is actually hidden (user switched away)
+      if (document.hidden) {
+        if (!isAwayRef.current && !submitted) {
+          isAwayRef.current = true;
+          unfocusedStartRef.current = now;
+        }
+        triggerFocusLossInfraction('Window focus lost: Application or window switch detected');
       }
-      if (!isAwayRef.current && !submitted) {
-        isAwayRef.current = true;
-        unfocusedStartRef.current = now;
-      }
-      triggerFocusLossInfraction('Window focus lost: Application or window switch detected');
     };
 
     const handleFocus = () => {

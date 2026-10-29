@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
 import {
   Code2,
@@ -66,10 +66,10 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
   onExit,
   theme = 'dark'
 }) => {
-  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 2. Candidate Submission & Progress State ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+  // --- 2. Candidate Submission & Progress State |
   const candidateKey = candidateProfile.round2Key || candidateProfile.accessKey || 'GUEST';
   const cleanRoll = candidateProfile.rollNumber || candidateProfile.email.split('@')[0] || 'CANDIDATE';
-  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 1. Problems State: Individualized 5 randomized questions from 10+ pool ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+  // --- 1. Problems State: Individualized 5 randomized questions from 10+ pool |
   const [problems, setProblems] = useState<Round2Problem[]>(() => {
     const all = getAllRound2Problems();
     return selectStudentRound2Problems(all, candidateKey);
@@ -191,8 +191,16 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
   };
   // Editor ref
   const editorRef = useRef<any>(null);
-  const handleEditorDidMount: OnMount = (editor) => {
+  const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
+    if (monaco && monaco.editor && typeof monaco.editor.remeasureFonts === 'function') {
+      monaco.editor.remeasureFonts();
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => {
+          monaco.editor.remeasureFonts();
+        });
+      }
+    }
   };
   const liveSyncTimer = useRef<any>(null);
   const handleCodeChange = (val: string | undefined) => {
@@ -204,7 +212,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       void pushRound2LiveCodeToCloud(candidateProfile, code, effectiveLang, currentQIndex);
     }, 1000);
   };
-  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 3. Compile & Test Execution ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+  // --- 3. Compile & Test Execution |
   const handleCompileAndRun = async () => {
     if (!currentProblem || !currentProblem.id) return;
     setIsCompiling(true);
@@ -276,7 +284,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       setIsCompiling(false);
     }
   };
-  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 4. Question Navigation ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+  // --- 4. Question Navigation |
   const handleSelectQuestion = (qNum: number) => {
     if (qNum < 1 || qNum > 5) return;
     playSound('click');
@@ -318,7 +326,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       handleSelectQuestion(currentQIndex - 1);
     }
   };
-  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 5. Template Reset ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+  // --- 5. Template Reset |
   const handleResetToTemplate = () => {
     if (!currentProblem || !currentProblem.starterCode) return;
     const targetLang = effectiveLang;
@@ -328,7 +336,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       playSound('click');
     }
   };
-  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 6. Final Submission Modal ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+  // --- 6. Final Submission Modal |
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [isSubmittingFinal, setIsSubmittingFinal] = useState(false);
   const solvedCount = useMemo(() => {
@@ -356,7 +364,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       setIsSubmittingFinal(false);
     }
   };
-  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 7. Submission Concluded Screen ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+  // --- 7. Submission Concluded Screen |
   if (submission.isSubmitted) {
     return (
       <div
@@ -598,7 +606,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       </div>
     );
   }
-  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 8. Main Student Coding Arena ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+  // --- 8. Main Student Coding Arena |
   return (
     <div
       style={{
@@ -612,7 +620,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
         fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
       }}
     >
-      {/* ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ Top Bar: Candidate Dossier, Question Stepper & Controls ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ */}
+      {/* --- Top Bar: Candidate Dossier, Question Stepper & Controls --- */}
       <header
         style={{
           height: '52px',
@@ -789,9 +797,9 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
           </button>
         </div>
       </header>
-      {/* ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ Main Workspace: Left Problem Statement | Right Editor & Console ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ */}
+      {/* --- Main Workspace: Left Problem Statement | Right Editor & Console --- */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        {/* ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ LEFT COLUMN: Problem Statement ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ */}
+        {/* --- LEFT COLUMN: Problem Statement --- */}
         <section
           style={{
             width: '44%',
@@ -867,7 +875,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                 <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{currentProblem.description}</p>
               </div>
               
-        {/* ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ RIGHT COLUMN: Code Editor, Compiler & Report Drawer ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ */}
+        {/* --- RIGHT COLUMN: Code Editor, Compiler & Report Drawer --- */}
             </div>
           )}
         </section>
@@ -1004,7 +1012,10 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
               theme="vs-dark"
               options={{
                 fontSize: 13,
-                fontFamily: 'JetBrains Mono, Fira Code, Consolas, monospace',
+                fontFamily: "'Consolas', 'Courier New', monospace",
+                fontLigatures: false,
+                cursorStyle: 'line',
+                cursorWidth: 2,
                 minimap: { enabled: false },
                 lineNumbers: 'on',
                 scrollBeyondLastLine: false,
@@ -1138,8 +1149,8 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                   {/* Timestamps strip */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: '#a1a1aa', fontFamily: 'monospace', padding: '6px 10px', background: '#121214', borderRadius: '4px', border: '1px solid #27272a' }}>
                     <span>Started: {activeReport.startedAtFormatted || (activeReport.startedAt ? new Date(activeReport.startedAt).toLocaleTimeString() : 'Just now')}</span>
-                    <span>ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Compiled: {activeReport.compiledAtFormatted || new Date(activeReport.compiledAt).toLocaleTimeString()}</span>
-                    {activeReport.timeTakenSeconds ? <span>ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Time Spent: {Math.floor(activeReport.timeTakenSeconds / 60)}m {activeReport.timeTakenSeconds % 60}s</span> : null}
+                    <span> | Compiled: {activeReport.compiledAtFormatted || new Date(activeReport.compiledAt).toLocaleTimeString()}</span>
+                    {activeReport.timeTakenSeconds ? <span> | Time Spent: {Math.floor(activeReport.timeTakenSeconds / 60)}m {activeReport.timeTakenSeconds % 60}s</span> : null}
                   </div>
 
                   {/* AI Verification & Predicted Output Box */}
@@ -1151,7 +1162,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                           <strong style={{ color: '#f4f4f5' }}>AI Verification: Screen Question: {activeReport.aiVerification.verifiedQuestionTitle}</strong>
                         </div>
                         <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '3px', background: activeReport.aiVerification.isAlignedWithProblem ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)', color: activeReport.aiVerification.isAlignedWithProblem ? '#10b981' : '#ef4444', fontWeight: 700 }}>
-                          {activeReport.aiVerification.isAlignedWithProblem ? 'ALIGNED ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ' : 'DEVIATION DETECTED'}
+                          {activeReport.aiVerification.isAlignedWithProblem ? 'ALIGNED (PASS)' : 'DEVIATION DETECTED'}
                         </span>
                       </div>
                       <div style={{ color: '#a1a1aa', lineHeight: 1.5 }}>
@@ -1298,7 +1309,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
           </div>
         </section>
       </div>
-      {/* ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 9. Final Submission Confirmation Modal ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ */}
+      {/* --- 9. Final Submission Confirmation Modal --- */}
       {showSubmitModal && (
         <div
           style={{

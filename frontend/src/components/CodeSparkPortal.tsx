@@ -343,21 +343,26 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
 
   // Direct Key Authentication & One-Click Exam Launch
   const handleDigitsInput = (val: string) => {
-    // Clean spaces and convert to uppercase
+    // Strip AXENT-R2-, AXENT-, R2- prefixes
     let clean = val.toUpperCase().replace(/\s+/g, '');
-    if (clean.startsWith('AXENT-')) {
-      clean = clean.replace('AXENT-', '');
-    }
-    if (clean.startsWith('R2-')) {
-      clean = clean.replace('R2-', '');
-    }
+    clean = clean.replace(/^AXENT-?R2-?|^AXENT-?|^R2-?/i, '');
     setKeyDigits(clean);
     setKeyError(null);
 
+    // If fewer than 4 digits, NEVER show or verify any candidate
+    if (clean.length < 4) {
+      setActiveCandidate(null);
+      return;
+    }
+
     let lookupRes = lookupCandidateAny(clean);
-    if (!lookupRes && isRound1Concluded) {
+    if (!lookupRes) {
       lookupRes = lookupCandidateAny('AXENT-R2-' + clean);
     }
+    if (!lookupRes) {
+      lookupRes = lookupCandidateAny('AXENT-' + clean);
+    }
+
     if (lookupRes) {
       setActiveCandidate(lookupRes.candidate);
       setCandidateName(lookupRes.candidate.name || '');
@@ -366,29 +371,24 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       setDepartment(lookupRes.candidate.department || 'Axent Candidate');
       playSound('success');
     } else {
-      // Try async cloud lookup
-      if (clean.length >= 4) {
-        const queryToTry = isRound1Concluded && !clean.includes('R2') ? 'AXENT-R2-' + clean : clean;
-        void asyncLookupCandidateAny(queryToTry).then((res) => {
-          if (!res && isRound1Concluded) {
-            return asyncLookupCandidateAny(clean);
-          }
-          return res;
-        }).then((res) => {
-          if (res) {
-            setActiveCandidate(res.candidate);
-            setCandidateName(res.candidate.name || '');
-            setCandidateEmail(res.candidate.email || '');
-            setRollNumber(res.candidate.rollNumber || res.candidate.email.split('@')[0].toUpperCase());
-            setDepartment(res.candidate.department || 'Axent Candidate');
-            playSound('success');
-          } else {
-            setActiveCandidate(null);
-          }
-        });
-      } else {
-        setActiveCandidate(null);
-      }
+      // Async cloud lookup only for 4+ digits
+      void asyncLookupCandidateAny(clean).then((res) => {
+        if (!res) {
+          return asyncLookupCandidateAny('AXENT-R2-' + clean);
+        }
+        return res;
+      }).then((res) => {
+        if (res) {
+          setActiveCandidate(res.candidate);
+          setCandidateName(res.candidate.name || '');
+          setCandidateEmail(res.candidate.email || '');
+          setRollNumber(res.candidate.rollNumber || res.candidate.email.split('@')[0].toUpperCase());
+          setDepartment(res.candidate.department || 'Axent Candidate');
+          playSound('success');
+        } else {
+          setActiveCandidate(null);
+        }
+      });
     }
   };
 
@@ -1776,7 +1776,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                     <Key size={13} className="text-[#ea1a1c]" />
                     <span>{isRound1Concluded ? "ENTER ROUND 2 KEY (AXENT-R2-XXXX)" : "ENTER 4-DIGIT ACCESS KEY"}</span>
                   </label>
-                  {activeCandidate && (
+                  {activeCandidate && keyDigits.length >= 4 && (
                     <span className="text-[10px] text-[#ea1a1c] font-black uppercase tracking-widest flex items-center gap-1 font-mono">
                       <Check size={12} />
                       <span>SEAT VERIFIED</span>
@@ -1810,7 +1810,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                     autoFocus
                     className="flex-1 min-w-0 bg-transparent border-none outline-none font-mono text-xl sm:text-2xl font-black tracking-[0.1em] sm:tracking-[0.25em] text-black placeholder-zinc-300 p-0 m-0"
                   />
-                  {activeCandidate && (
+                  {activeCandidate && keyDigits.length >= 4 && (
                     <div className="ml-1 sm:ml-2 flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 bg-[#ea1a1c] text-white text-[10px] sm:text-xs font-black uppercase font-mono shrink-0">
                       <Check size={12} className="sm:w-3.5 sm:h-3.5" />
                       <span className="hidden sm:inline">KEY RESOLVED</span>
@@ -1819,8 +1819,8 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                   )}
                 </div>
 
-                {/* Verified Candidate Card (Automatically Populated from Registry) */}
-                {activeCandidate && (
+                {/* Verified Candidate Card (Rendered ONLY when valid 4-digit key is typed) */}
+                {activeCandidate && keyDigits.length >= 4 && (
                   <div className="p-4 bg-white border-2 border-black flex items-center justify-between gap-3 text-xs font-mono shadow-[3px_3px_0px_#0A0A0C]">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-black text-white flex items-center justify-center font-black">
@@ -1883,38 +1883,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                         Examinations are ongoing across campus laboratories (Lab A, Lab B &amp; overflow sessions). The Chief Proctor will conclude Round 1 and calculate the combined institutional shortlist once all laboratory sittings finish. Shortlisted candidates will receive their Round 2 key via email.
                       </p>
                     </div>
-                  ) : isRound2Unlocked ? (
-                    <div className="p-4 bg-zinc-950 text-white border-2 border-[#ea1a1c] flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs font-mono shadow-[4px_4px_0px_#ea1a1c]">
-                      <div>
-                        <div className="text-[10px] text-emerald-400 uppercase font-black tracking-wider">
-                          ★ Shortlist Cleared
-                        </div>
-                        <div className="text-sm font-black text-white mt-0.5">
-                          Cleared for Round 2: Algorithmic Code Sprint Arena
-                        </div>
-                        <div className="text-[11.5px] text-zinc-300 mt-1">
-                          Round 2 Key: <span className="text-[#ea1a1c] font-black px-1.5 py-0.5 bg-black border border-[#ea1a1c]">{activeCandidate?.round2Key || 'AXENT-R2-KEY'}</span> (also delivered via Gmail)
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleLaunchRound2}
-                        className="px-5 py-3 bg-[#ea1a1c] hover:bg-white hover:text-black text-white font-mono font-black text-xs uppercase cursor-pointer shrink-0 transition-colors shadow-[2px_2px_0px_#000] flex items-center justify-center gap-2"
-                      >
-                        <span>Enter Round 2 Coding Sprint</span>
-                        <ArrowRight size={13} />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="p-4 bg-zinc-100 border-2 border-zinc-300 text-xs font-mono">
-                      <div className="text-[10px] text-zinc-500 uppercase font-black tracking-wider">
-                        Round 1 Examination Concluded
-                      </div>
-                      <div className="text-xs text-zinc-700 mt-1">
-                        Score Logged: {candidateAttempt.score ?? 0}{dynamicTotalMarks > 0 ? ` / ${dynamicTotalMarks} Marks` : ' Marks'}. Institutional cutoff was not met. Thank you for participating in CodeSpark 2026.
-                      </div>
-                    </div>
-                  )}
+                  ) : null}
                 </div>
               )}
             </div>

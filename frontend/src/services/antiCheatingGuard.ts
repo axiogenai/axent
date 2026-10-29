@@ -67,12 +67,10 @@ export function startAntiCheatingShield(config: AntiCheatingConfig): AntiCheatin
 
   // ── 2. CURSOR DEPARTURE & FLOATING AI DETECTION (Desktop & Tablets) ─────────
   const triggerCursorDepartureInfraction = () => {
-    if (!isRunning || config.enableCursorDepartureGuard === false) return;
-    if (Date.now() - shieldStartTime < STARTUP_GRACE_PERIOD_MS) return;
-    playSound('warning');
-    config.onWarningBanner('PROCTOR SECURITY: Cursor departed examination window. External hover detected.');
-    config.onInfraction('Cursor left examination window / external hover detected');
-    if (config.onAiAlert) config.onAiAlert('Cursor departure outside viewport');
+    // Non-disruptive warning only, never trigger academic strike for cursor motion
+    if (!isRunning || config.enableCursorDepartureGuard !== true) return;
+    if (Date.now() - shieldStartTime < 10000) return;
+    config.onWarningBanner('PROCTOR NOTICE: Please keep cursor within the active examination window.');
   };
 
   const handleMouseLeave = (e: MouseEvent) => {
