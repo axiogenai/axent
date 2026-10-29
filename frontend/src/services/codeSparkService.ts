@@ -141,15 +141,36 @@ export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): P
     const deduped = deduplicateCandidates(candidates);
 
     let currentConfig: Partial<CodeSparkSystemConfig> = {};
-    const { data: existing } = await supabase
-      .from('mcq_exams')
-      .select('instructions')
-      .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-      .maybeSingle();
 
-    if (existing?.instructions) {
+    // 1. Try reading existing config from candidate_stations (100% public read-write for anon and authenticated)
+    try {
+      const { data: stationRec } = await supabase
+        .from('candidate_stations')
+        .select('code, student')
+        .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
+        .maybeSingle();
+
+      if (stationRec) {
+        if (stationRec.student && typeof stationRec.student === 'object' && Object.keys(stationRec.student).length > 0) {
+          currentConfig = stationRec.student as Partial<CodeSparkSystemConfig>;
+        } else if (stationRec.code) {
+          currentConfig = JSON.parse(stationRec.code);
+        }
+      }
+    } catch {}
+
+    // 2. Fallback read from mcq_exams if needed
+    if (!currentConfig.activeExamId) {
       try {
-        currentConfig = JSON.parse(existing.instructions);
+        const { data: existing } = await supabase
+          .from('mcq_exams')
+          .select('instructions')
+          .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
+          .maybeSingle();
+
+        if (existing?.instructions) {
+          currentConfig = JSON.parse(existing.instructions);
+        }
       } catch {}
     }
 
@@ -170,24 +191,46 @@ export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): P
       updatedAt: Date.now()
     };
 
-    const { error: upsertErr } = await supabase
-      .from('mcq_exams')
-      .upsert({
-        id: CODESPARK_SYSTEM_CONFIG_ID,
-        title: 'CodeSpark System Configuration & Roster',
-        description: 'Cloud configuration for CodeSpark Active Paper, Shortlist Criteria, and Registered Candidates',
-        instructions: JSON.stringify(payload),
-        subject: 'CodeSpark',
-        topic: 'System',
-        status: 'DRAFT',
-        duration_minutes: 0,
-        total_marks: 0,
-        question_count: 0,
-        created_at: Date.now(),
-        updated_at: Date.now()
-      });
+    // 1. Save to candidate_stations (universally accessible by all phones and stations)
+    try {
+      await supabase
+        .from('candidate_stations')
+        .upsert({
+          id: CODESPARK_SYSTEM_CONFIG_ID,
+          lab_id: 'SYSTEM_CONFIG',
+          station_number: 'CONFIG',
+          status: 'CONFIG',
+          code: JSON.stringify(payload),
+          student: payload,
+          last_updated_timestamp: Date.now()
+        });
+    } catch (csErr) {
+      console.warn('[CodeSpark] candidate_stations upsert warning:', csErr);
+    }
 
-    return !upsertErr;
+    // 2. Also save to mcq_exams with status: 'PUBLISHED'
+    try {
+      await supabase
+        .from('mcq_exams')
+        .upsert({
+          id: CODESPARK_SYSTEM_CONFIG_ID,
+          title: 'CodeSpark System Configuration & Roster',
+          description: 'Cloud configuration for CodeSpark Active Paper, Shortlist Criteria, and Registered Candidates',
+          instructions: JSON.stringify(payload),
+          subject: 'CodeSpark',
+          topic: 'System',
+          status: 'PUBLISHED',
+          duration_minutes: 0,
+          total_marks: 0,
+          question_count: 0,
+          created_at: Date.now(),
+          updated_at: Date.now()
+        });
+    } catch (meErr) {
+      console.warn('[CodeSpark] mcq_exams upsert warning:', meErr);
+    }
+
+    return true;
   } catch (err) {
     console.warn('[CodeSpark Cloud] pushCandidatesToCloud failed:', err);
     return false;
@@ -197,46 +240,78 @@ export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): P
 export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
   try {
     if (!supabase) return getAllCodeSparkCandidates();
-    const { data: record, error } = await supabase
-      .from('mcq_exams')
-      .select('instructions')
-      .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-      .maybeSingle();
 
-    if (!error && record && record.instructions) {
+    let config: CodeSparkSystemConfig | null = null;
+
+    // 1. Read from candidate_stations first (100% public read-write for anon and authenticated)
+    try {
+      const { data: stationRec, error: stationErr } = await supabase
+        .from('candidate_stations')
+        .select('code, student')
+        .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
+        .maybeSingle();
+
+      if (!stationErr && stationRec) {
+        if (stationRec.student && typeof stationRec.student === 'object' && Array.isArray((stationRec.student as any).candidates)) {
+          config = stationRec.student as CodeSparkSystemConfig;
+        } else if (stationRec.code) {
+          const parsed = JSON.parse(stationRec.code);
+          if (parsed && Array.isArray(parsed.candidates)) {
+            config = parsed;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[CodeSpark] candidate_stations read error:', e);
+    }
+
+    // 2. If not found in candidate_stations, fallback to mcq_exams
+    if (!config) {
       try {
-        const config: CodeSparkSystemConfig = JSON.parse(record.instructions);
-        if (config && Array.isArray(config.candidates)) {
-          if (config.activeExamId && typeof window !== 'undefined') {
-            localStorage.setItem('codedna_codespark_round1_exam_id', config.activeExamId);
-          }
-          if (config.shortlistMode && typeof window !== 'undefined') {
-            localStorage.setItem('codedna_codespark_shortlist_mode', config.shortlistMode);
-            localStorage.setItem('codedna_codespark_shortlist_value', String(config.shortlistValue || 12));
-          }
-          if (Array.isArray(config.manualShortlistRolls) && typeof window !== 'undefined') {
-            localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(config.manualShortlistRolls));
-          }
-          if (config.isConcluded !== undefined && typeof window !== 'undefined') {
-            localStorage.setItem(ROUND1_CONCLUDED_STORAGE_KEY, config.isConcluded ? 'true' : 'false');
-          }
+        const { data: record, error } = await supabase
+          .from('mcq_exams')
+          .select('instructions')
+          .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
+          .maybeSingle();
 
-          const local = getAllCodeSparkCandidates();
-          const combined = deduplicateCandidates([...local, ...config.candidates]);
-
-          try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(combined));
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: combined }));
-              window.dispatchEvent(new Event('storage'));
-            }
-          } catch {}
-
-          return combined;
+        if (!error && record?.instructions) {
+          const parsed = JSON.parse(record.instructions);
+          if (parsed && Array.isArray(parsed.candidates)) {
+            config = parsed;
+          }
         }
       } catch (e) {
-        console.warn('[CodeSpark] JSON parse error in system config:', e);
+        console.warn('[CodeSpark] mcq_exams read error:', e);
       }
+    }
+
+    if (config && Array.isArray(config.candidates)) {
+      if (config.activeExamId && typeof window !== 'undefined') {
+        localStorage.setItem('codedna_codespark_round1_exam_id', config.activeExamId);
+      }
+      if (config.shortlistMode && typeof window !== 'undefined') {
+        localStorage.setItem('codedna_codespark_shortlist_mode', config.shortlistMode);
+        localStorage.setItem('codedna_codespark_shortlist_value', String(config.shortlistValue || 12));
+      }
+      if (Array.isArray(config.manualShortlistRolls) && typeof window !== 'undefined') {
+        localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(config.manualShortlistRolls));
+      }
+      if (config.isConcluded !== undefined && typeof window !== 'undefined') {
+        localStorage.setItem(ROUND1_CONCLUDED_STORAGE_KEY, config.isConcluded ? 'true' : 'false');
+      }
+
+      const local = getAllCodeSparkCandidates();
+      const combined = deduplicateCandidates([...local, ...config.candidates]);
+
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(combined));
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: combined }));
+          window.dispatchEvent(new Event('storage'));
+        }
+      } catch {}
+
+      return combined;
     }
 
     return getAllCodeSparkCandidates();
@@ -261,15 +336,35 @@ export async function saveActiveCodeSparkPaper(
     if (!supabase) return true;
 
     let currentConfig: Partial<CodeSparkSystemConfig> = {};
-    const { data: existing } = await supabase
-      .from('mcq_exams')
-      .select('instructions')
-      .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-      .maybeSingle();
 
-    if (existing?.instructions) {
+    // Read current config
+    try {
+      const { data: stationRec } = await supabase
+        .from('candidate_stations')
+        .select('code, student')
+        .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
+        .maybeSingle();
+
+      if (stationRec) {
+        if (stationRec.student && typeof stationRec.student === 'object' && Object.keys(stationRec.student).length > 0) {
+          currentConfig = stationRec.student as Partial<CodeSparkSystemConfig>;
+        } else if (stationRec.code) {
+          currentConfig = JSON.parse(stationRec.code);
+        }
+      }
+    } catch {}
+
+    if (!currentConfig.candidates) {
       try {
-        currentConfig = JSON.parse(existing.instructions);
+        const { data: existing } = await supabase
+          .from('mcq_exams')
+          .select('instructions')
+          .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
+          .maybeSingle();
+
+        if (existing?.instructions) {
+          currentConfig = JSON.parse(existing.instructions);
+        }
       } catch {}
     }
 
@@ -283,22 +378,40 @@ export async function saveActiveCodeSparkPaper(
       updatedAt: Date.now()
     };
 
-    await supabase
-      .from('mcq_exams')
-      .upsert({
-        id: CODESPARK_SYSTEM_CONFIG_ID,
-        title: 'CodeSpark System Configuration & Roster',
-        description: 'Cloud configuration for CodeSpark Active Paper, Shortlist Criteria, and Registered Candidates',
-        instructions: JSON.stringify(updatedConfig),
-        subject: 'CodeSpark',
-        topic: 'System',
-        status: 'DRAFT',
-        duration_minutes: 0,
-        total_marks: 0,
-        question_count: 0,
-        created_at: Date.now(),
-        updated_at: Date.now()
-      });
+    // 1. Save to candidate_stations
+    try {
+      await supabase
+        .from('candidate_stations')
+        .upsert({
+          id: CODESPARK_SYSTEM_CONFIG_ID,
+          lab_id: 'SYSTEM_CONFIG',
+          station_number: 'CONFIG',
+          status: 'CONFIG',
+          code: JSON.stringify(updatedConfig),
+          student: updatedConfig,
+          last_updated_timestamp: Date.now()
+        });
+    } catch {}
+
+    // 2. Save to mcq_exams with status: 'PUBLISHED'
+    try {
+      await supabase
+        .from('mcq_exams')
+        .upsert({
+          id: CODESPARK_SYSTEM_CONFIG_ID,
+          title: 'CodeSpark System Configuration & Roster',
+          description: 'Cloud configuration for CodeSpark Active Paper, Shortlist Criteria, and Registered Candidates',
+          instructions: JSON.stringify(updatedConfig),
+          subject: 'CodeSpark',
+          topic: 'System',
+          status: 'PUBLISHED',
+          duration_minutes: 0,
+          total_marks: 0,
+          question_count: 0,
+          created_at: Date.now(),
+          updated_at: Date.now()
+        });
+    } catch {}
 
     // Mark target exam as isCodeSpark: true in Supabase
     const all = getAllExams();
@@ -354,55 +467,84 @@ export async function asyncGetCodeSparkActiveExam(): Promise<MCQExamConfig | nul
 
   if (supabase) {
     try {
-      const { data: configRow } = await supabase
-        .from('mcq_exams')
-        .select('instructions')
-        .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-        .maybeSingle();
+      let activeExamId: string | null = null;
 
-      if (configRow?.instructions) {
-        const parsed = JSON.parse(configRow.instructions);
-        if (parsed?.activeExamId) {
-          const { data: row } = await supabase
+      // 1. Check candidate_stations
+      try {
+        const { data: stRec } = await supabase
+          .from('candidate_stations')
+          .select('code, student')
+          .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
+          .maybeSingle();
+
+        if (stRec) {
+          const cfg = (stRec.student && typeof stRec.student === 'object' && (stRec.student as any).activeExamId)
+            ? (stRec.student as any)
+            : (stRec.code ? JSON.parse(stRec.code) : null);
+          if (cfg?.activeExamId) {
+            activeExamId = cfg.activeExamId;
+          }
+        }
+      } catch {}
+
+      // 2. Check mcq_exams
+      if (!activeExamId) {
+        try {
+          const { data: configRow } = await supabase
             .from('mcq_exams')
-            .select('*')
-            .eq('id', parsed.activeExamId)
+            .select('instructions')
+            .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
             .maybeSingle();
 
-          if (row) {
-            const mapped: MCQExamConfig = {
-              id: row.id,
-              title: row.title,
-              description: row.description || '',
-              instructions: row.instructions || '',
-              subject: row.subject || '',
-              topic: row.topic || '',
-              examCategory: row.exam_category || 'Aptitude',
-              durationMinutes: Number(row.duration_minutes) || 30,
-              startTime: row.start_time ? Number(row.start_time) : undefined,
-              endTime: row.end_time ? Number(row.end_time) : undefined,
-              totalMarks: Number(row.total_marks) || 0,
-              questionCount: Array.isArray(row.question_ids) ? row.question_ids.length : (Number(row.question_count) || 0),
-              questionIds: Array.isArray(row.question_ids) ? row.question_ids : [],
-              shuffleQuestions: Boolean(row.shuffle_questions),
-              shuffleOptions: Boolean(row.shuffle_options),
-              negativeMarkingEnabled: Boolean(row.negative_marking_enabled),
-              allowReview: Boolean(row.allow_review),
-              showExplanationsAfterSubmit: Boolean(row.show_explanations_after_submit),
-              maxAttempts: Number(row.max_attempts) || 1,
-              isCodeSpark: true,
-              isPrivate: true,
-              status: row.status,
-              createdAt: Number(row.created_at) || Date.now(),
-              updatedAt: Number(row.updated_at) || Date.now(),
-              createdBy: row.created_by || 'admin'
-            };
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('codedna_codespark_round1_exam_id', mapped.id);
+          if (configRow?.instructions) {
+            const parsed = JSON.parse(configRow.instructions);
+            if (parsed?.activeExamId) {
+              activeExamId = parsed.activeExamId;
             }
-            saveExam(mapped);
-            return mapped;
           }
+        } catch {}
+      }
+
+      if (activeExamId) {
+        const { data: row } = await supabase
+          .from('mcq_exams')
+          .select('*')
+          .eq('id', activeExamId)
+          .maybeSingle();
+
+        if (row) {
+          const mapped: MCQExamConfig = {
+            id: row.id,
+            title: row.title,
+            description: row.description || '',
+            instructions: row.instructions || '',
+            subject: row.subject || '',
+            topic: row.topic || '',
+            examCategory: row.exam_category || 'Aptitude',
+            durationMinutes: Number(row.duration_minutes) || 30,
+            startTime: row.start_time ? Number(row.start_time) : undefined,
+            endTime: row.end_time ? Number(row.end_time) : undefined,
+            totalMarks: Number(row.total_marks) || 0,
+            questionCount: Array.isArray(row.question_ids) ? row.question_ids.length : (Number(row.question_count) || 0),
+            questionIds: Array.isArray(row.question_ids) ? row.question_ids : [],
+            shuffleQuestions: Boolean(row.shuffle_questions),
+            shuffleOptions: Boolean(row.shuffle_options),
+            negativeMarkingEnabled: Boolean(row.negative_marking_enabled),
+            allowReview: Boolean(row.allow_review),
+            showExplanationsAfterSubmit: Boolean(row.show_explanations_after_submit),
+            maxAttempts: Number(row.max_attempts) || 1,
+            isCodeSpark: true,
+            isPrivate: true,
+            status: row.status,
+            createdAt: Number(row.created_at) || Date.now(),
+            updatedAt: Number(row.updated_at) || Date.now(),
+            createdBy: row.created_by || 'admin'
+          };
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('codedna_codespark_round1_exam_id', mapped.id);
+          }
+          saveExam(mapped);
+          return mapped;
         }
       }
 
@@ -909,12 +1051,12 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
   const cleaned = rawKey.trim().toUpperCase().replace(/\s+/g, '');
   const all = getAllCodeSparkCandidates();
   const normalizedKey = normalizeCodeSparkKey(cleaned);
+  const inputDigits = cleaned.replace(/\D/g, '');
 
   for (const c of all) {
     if (c.round2Key) {
       const cleanR2 = c.round2Key.trim().toUpperCase().replace(/\s+/g, '');
       const rawR2Digits = cleanR2.replace(/\D/g, '');
-      const inputDigits = cleaned.replace(/\D/g, '');
 
       if (
         cleanR2 === cleaned ||
@@ -935,7 +1077,15 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
   for (const c of all) {
     const cleanR1 = c.accessKey.trim().toUpperCase().replace(/\s+/g, '');
     const normR1 = normalizeCodeSparkKey(cleanR1);
-    if (cleanR1 === cleaned || normR1 === normalizedKey) {
+    const candDigits = cleanR1.replace(/\D/g, '');
+
+    if (
+      cleanR1 === cleaned ||
+      normR1 === normalizedKey ||
+      cleanR1 === normalizedKey ||
+      normR1 === cleaned ||
+      (inputDigits.length === 4 && candDigits === inputDigits)
+    ) {
       const isShortlisted = Boolean(
         c.isShortlisted ||
         c.status === 'SHORTLISTED' ||
