@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 
 
 
@@ -246,7 +246,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-  const [langFilter, setLangFilter] = useState<'ALL' | 'Python' | 'C++' | 'C'>('ALL');
+  const [langFilter, setLangFilter] = useState<'ALL' | 'Python' | 'C++' | 'C' | 'Java'>('ALL');
 
 
 
@@ -2332,7 +2332,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-              {(['ALL', 'Python', 'C++', 'C'] as const).map((l) => (
+              {(['ALL', 'Python', 'C++', 'C', 'Java'] as const).map((l) => (
 
 
 

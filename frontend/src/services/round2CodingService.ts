@@ -91,21 +91,10 @@ export interface Round2Problem {
 
 
   starterCode: {
-
-
-
     C: string;
-
-
-
     'C++': string;
-
-
-
     Python: string;
-
-
-
+    Java?: string;
   };
 
 
@@ -124,7 +113,7 @@ export interface Round2QuestionReport {
 
   code: string;
 
-  language: 'C' | 'C++' | 'Python';
+  language: 'C' | 'C++' | 'Python' | 'Java';
 
   compilerResult: CompilerExecutionResult | null;
 
@@ -290,7 +279,7 @@ export function isLegacyQuestionPool(problems: Round2Problem[]): boolean {
   return problems.some(p => LEGACY_PROBLEM_TITLES.has(p.title) || (p.id && (p.id.startsWith('r2_q1_two_sum') || p.id.startsWith('r2_q8_rotated'))));
 }
 
-export function detectLanguageFromCode(code: string): 'C' | 'C++' | 'Python' {
+export function detectLanguageFromCode(code: string): 'C' | 'C++' | 'Python' | 'Java' {
 
 
 
@@ -301,6 +290,13 @@ export function detectLanguageFromCode(code: string): 'C' | 'C++' | 'Python' {
   const c = code.trim();
 
 
+
+  // Java patterns
+  const isJava =
+    /import\s+java\.|public\s+class|System\.(out|err)\.print|public\s+static\s+void\s+main|Scanner\s+[a-zA-Z0-9_]+\s*=/i.test(
+      c
+    );
+  if (isJava) return 'Java';
 
   // C++ patterns
 
@@ -675,7 +671,7 @@ export function analyzeCodeComplexity(
 
 
 
-  language: 'C' | 'C++' | 'Python',
+  language: 'C' | 'C++' | 'Python' | 'Java',
 
 
 
@@ -1426,7 +1422,7 @@ function computeDynamicScore(
 export async function evaluateRound2Code(
   problem: Round2Problem,
   code: string,
-  explicitLanguage?: 'C' | 'C++' | 'Python',
+  explicitLanguage?: 'C' | 'C++' | 'Python' | 'Java',
   timeTakenMs?: number
 ): Promise<Round2QuestionReport> {
   const language = explicitLanguage || detectLanguageFromCode(code);
@@ -1645,7 +1641,7 @@ export function selectStudentRound2Problems(
 export async function verifyRound2CodeWithAI(
   problem: Round2Problem,
   code: string,
-  language: 'C' | 'C++' | 'Python',
+  language: 'C' | 'C++' | 'Python' | 'Java',
   _sampleInput?: string,
   _expectedOutput?: string,
   actualOutput?: string

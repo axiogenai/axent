@@ -58,7 +58,8 @@ interface CodeSparkRound2ArenaProps {
 const MONACO_LANG_MAP: Record<string, string> = {
   Python: 'python',
   'C++': 'cpp',
-  C: 'c'
+  C: 'c',
+  Java: 'java'
 };
 export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
   candidateProfile,
@@ -136,7 +137,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     return map;
   });
   // Language selection & Auto-detect
-  const [explicitLanguageMap, setExplicitLanguageMap] = useState<Record<number, 'Auto' | 'Python' | 'C++' | 'C'>>({
+  const [explicitLanguageMap, setExplicitLanguageMap] = useState<Record<number, 'Auto' | 'Python' | 'C++' | 'C' | 'Java'>>({
     1: 'Auto',
     2: 'Auto',
     3: 'Auto',
@@ -149,7 +150,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
   const detectedLang = useMemo(() => {
     return detectLanguageFromCode(activeCode);
   }, [activeCode]);
-  const effectiveLang: 'C' | 'C++' | 'Python' = useMemo(() => {
+  const effectiveLang: 'C' | 'C++' | 'Python' | 'Java' = useMemo(() => {
     if (currentExplicit !== 'Auto') return currentExplicit;
     return detectedLang;
   }, [currentExplicit, detectedLang]);
@@ -937,6 +938,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                 <option value="Python">Python</option>
                 <option value="C++">C++</option>
                 <option value="C">C</option>
+                <option value="Java">Java</option>
               </select>
               <button
                 type="button"
