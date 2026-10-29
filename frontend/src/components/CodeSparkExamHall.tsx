@@ -29,6 +29,7 @@ import {
 import { MCQExamConfig } from '../types/mcq';
 import { MCQExamScreen } from './MCQExamScreen';
 import { Workspace } from './Workspace';
+import { CodeSparkRound2Arena } from './codespark/CodeSparkRound2Arena';
 import { ErrorBoundary } from './ErrorBoundary';
 import { playSound } from '../utils/sounds';
 import { requestExamFullscreen, isCurrentlyFullscreen, exitExamFullscreen } from '../services/timeSyncService';
@@ -243,6 +244,9 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
       if (cleanRoll && shortlistedRolls.includes(cleanRoll)) return true;
       if (candidateKey && shortlistedRolls.includes(candidateKey.toUpperCase())) return true;
       if (candidateProfile?.isShortlisted || candidateProfile?.status === 'SHORTLISTED') return true;
+      if (candidateProfile?.round2Key) return true;
+      if (candidateKey && candidateKey.toUpperCase().includes('R2')) return true;
+      if (searchParams.get('round') === '2' && candidateProfile) return true;
       return false;
     } catch {
       return false;
@@ -576,18 +580,16 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
             {isCandidateShortlisted ? (
               <ErrorBoundary fallbackTitle="CodeSpark Coding Arena Error">
-                <Workspace
-                  initialCode={codeData.code}
-                  onRunCode={onRunCode}
-                  onCodeChange={onCodeChange}
-                  executionHistory={executionHistory}
-                  isExecuting={isExecuting}
-                  compilerResult={compilerResult}
-                  analysisResults={analysisResults}
-                  onViewReport={() => navigate('/report')}
-                  onClearTerminal={onClearTerminal}
-                  vivaEvaluation={vivaEvaluation}
-                  onVivaComplete={onVivaComplete}
+                <CodeSparkRound2Arena
+                  candidateProfile={
+                    candidateProfile || {
+                      name: candidateName,
+                      rollNumber: cleanRoll,
+                      accessKey: candidateKey,
+                      email: candidateProfile?.email || ''
+                    }
+                  }
+                  onExit={handleExitToPortal}
                   theme={theme}
                 />
               </ErrorBoundary>

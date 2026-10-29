@@ -83,6 +83,7 @@ import {
   authorizeAllRemainingCandidatesForRetake
 } from '../../services/codeSparkService';
 import { CodeSparkCandidateImportModal } from '../codespark/CodeSparkCandidateImportModal';
+import { AdminRound2Hub } from './AdminRound2Hub';
 import { AIPaperGeneratorModal } from '../AIPaperGeneratorModal';
 import { GoogleFormImportModal } from '../mcq/GoogleFormImportModal';
 import { AIPaperGenerationResult } from '../../services/groqService';
@@ -1076,7 +1077,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
               </span>
             </div>
             <p style={{ fontSize: '12px', color: t.textMuted, margin: '4px 0 0 0' }}>
-              Round 1: Cognitive Aptitude MCQ &bull; Automated Shortlist &bull; Round 2: Algorithmic Code Sprint Arena
+              Round 1: Cognitive Aptitude MCQ • Automated Shortlist • Round 2: Algorithmic Code Sprint Arena
             </p>
           </div>
         </div>
@@ -1145,7 +1146,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
               <option value="">-- Choose Exam Paper --</option>
               {allExams.map((e) => (
                 <option key={e.id} value={e.id}>
-                  {e.title} ({e.questionCount} Qs &bull; {e.durationMinutes}m)
+                  {e.title} ({e.questionCount} Qs • {e.durationMinutes}m)
                 </option>
               ))}
             </select>
@@ -2551,92 +2552,14 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
         </div>
       )}
 
-      {/* ── TAB: ROUND 2 CODING ARENA LIVE STREAM ── */}
+      {/* ── TAB: ROUND 2 CODING ARENA LIVE STREAM & LEADERBOARD ── */}
       {activeTab === 'round2' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: t.textPrimary }}>Round 2: Live Coding Workstations</h4>
-              <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#71717a' }}>Real-time code stream and keystroke telemetry for candidates in the coding phase</p>
-            </div>
-            <div style={{ fontSize: '12px', color: '#a1a1aa' }}>
-              Active Coding Terminals: <strong style={{ color: t.textPrimary }}>{round2Stations.length}</strong>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '14px' }}>
-            {round2Stations.length === 0 ? (
-              <div style={{ gridColumn: '1 / -1', padding: '48px 24px', textAlign: 'center', border: `1px dashed ${t.borderDashed}`, borderRadius: '8px', background: t.bgCard }}>
-                <Code2 size={28} color={t.textMuted} style={{ marginBottom: '8px' }} />
-                <div style={{ fontSize: '13px', fontWeight: 600, color: t.textPrimary }}>No active coding workstations</div>
-                <div style={{ fontSize: '12px', color: t.textMuted, marginTop: '4px' }}>
-                  When shortlisted candidates start Round 2 at /codespark-exams?round=2, their live telemetry and code stream will stream here.
-                </div>
-              </div>
-            ) : (
-              round2Stations.map((station) => (
-                <div key={station.id} style={{ ...darkCardStyle, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '13px', fontWeight: 800, color: t.textPrimary }}>{station.student?.name || 'Candidate'}</span>
-                      <span style={{ fontSize: '11px', color: '#71717a', fontFamily: 'monospace' }}>({station.student?.rollNumber || 'N/A'})</span>
-                    </div>
-                    <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', background: t.badgeBg, border: `1px solid ${t.badgeBorder}`, color: t.badgeText }}>
-                      {station.stationNumber} ({station.labId})
-                    </span>
-                  </div>
-
-                  {/* Live Code Stream Panel */}
-                  <div style={{ borderRadius: '6px', border: `1px solid ${t.border}`, background: isDark ? '#09090b' : '#0f172a', padding: '10px', height: '140px', overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '4px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <Code2 size={11} color="#60a5fa" />
-                        <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#a1a1aa', letterSpacing: '0.05em' }}>LIVE CODE STREAM</span>
-                      </div>
-                      <span style={{ fontSize: '9px', color: '#71717a', fontFamily: 'monospace' }}>{station.language || 'Python'}</span>
-                    </div>
-                    <pre style={{ margin: 0, flex: 1, fontFamily: 'monospace', fontSize: '10.5px', color: '#e4e4e7', whiteSpace: 'pre-wrap', wordBreak: 'break-all', overflow: 'hidden' }}>
-                      {station.code?.trim() || '// Awaiting keyboard input from candidate...'}
-                    </pre>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px' }}>
-                    <div style={{ fontSize: '11px', color: '#71717a' }}>
-                      WPM: {station.metrics?.typingSpeed || 0} &bull; Keystrokes: {station.metrics?.keystrokes || 0}
-                    </div>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <button
-                        type="button"
-                        onClick={() => sendProctorLockCommand(station.id, !station.isLockedByProctor, station.labId)}
-                        style={{
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          border: station.isLockedByProctor ? '1px solid #10b981' : '1px solid #ef4444',
-                          background: 'transparent',
-                          color: station.isLockedByProctor ? '#10b981' : '#ef4444',
-                          fontSize: '11px',
-                          fontWeight: 600,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {station.isLockedByProctor ? 'Unlock' : 'Lock'}
-                      </button>
-                      {onInspectStation && (
-                        <button
-                          type="button"
-                          onClick={() => onInspectStation(station.id)}
-                          style={{ padding: '4px 8px', borderRadius: '4px', border: `1px solid ${t.border}`, background: t.btnSecondaryBg, color: t.btnSecondaryColor, fontSize: '11px', cursor: 'pointer' }}
-                        >
-                          Inspect
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+        <AdminRound2Hub
+          round2Stations={round2Stations}
+          onInspectStation={onInspectStation}
+          sendProctorLockCommand={sendProctorLockCommand}
+          isDark={isDark}
+        />
       )}
 
       {/* ── TAB: CANDIDATE ROSTER & AXENT KEYS ── */}
@@ -2852,7 +2775,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                 <option value="">-- Choose Exam Paper from Question Bank --</option>
                 {allExams.map((exam) => (
                   <option key={exam.id} value={exam.id}>
-                    {exam.title} ({exam.questionCount} Questions &bull; {exam.durationMinutes}m)
+                    {exam.title} ({exam.questionCount} Questions • {exam.durationMinutes}m)
                   </option>
                 ))}
               </select>
@@ -2920,14 +2843,14 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: t.textPrimary }}>
-                    Candidate MCQ Answer Sheet &bull; {selectedCandidateSheet.studentName}
+                    Candidate MCQ Answer Sheet • {selectedCandidateSheet.studentName}
                   </h3>
                   <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#60a5fa' }}>
                     [{selectedCandidateSheet.studentRoll}]
                   </span>
                 </div>
                 <div style={{ fontSize: '12px', color: '#a1a1aa', marginTop: '2px' }}>
-                  Score: <strong style={{ color: '#10b981' }}>{selectedCandidateSheet.score ?? 0} / {selectedCandidateSheet.totalMarks || selectedCandidateSheet.maxScore || examTotalMarks}</strong> &bull; Completed {new Date(selectedCandidateSheet.endTime || selectedCandidateSheet.submittedAt || Date.now()).toLocaleTimeString()}
+                  Score: <strong style={{ color: '#10b981' }}>{selectedCandidateSheet.score ?? 0} / {selectedCandidateSheet.totalMarks || selectedCandidateSheet.maxScore || examTotalMarks}</strong> • Completed {new Date(selectedCandidateSheet.endTime || selectedCandidateSheet.submittedAt || Date.now()).toLocaleTimeString()}
                 </div>
               </div>
               <button
