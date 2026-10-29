@@ -1418,7 +1418,7 @@ export function getAllRound2Problems(): Round2Problem[] {
 
 
 
-  return DEFAULT_ROUND2_PROBLEMS;
+  return [];
 
 
 

@@ -112,7 +112,7 @@ import {
 
   Maximize2,
   Upload,
-  Sparkles,
+  ListPlus,
   Brain
 } from 'lucide-react';
 
@@ -549,11 +549,11 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-    setProblems(DEFAULT_ROUND2_PROBLEMS);
+    setProblems([]);
 
 
 
-    saveRound2Problems(DEFAULT_ROUND2_PROBLEMS);
+    saveRound2Problems([]);
 
 
 
@@ -992,7 +992,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-    return problems.find((p) => p.number === activeQTab) || problems[0] || DEFAULT_ROUND2_PROBLEMS[0];
+    return problems.find((p) => p.number === activeQTab) || problems[0] || ({ id: "q1", number: 1, title: "", difficulty: "Medium", marks: 20, timeLimitMs: 2000, description: "", inputFormat: "", outputFormat: "", constraints: [], sampleTestCases: [], hiddenTestCases: [], starterCode: { Python: "" } } as any);
 
 
 
@@ -1120,11 +1120,11 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-    setProblems(DEFAULT_ROUND2_PROBLEMS);
+    setProblems([]);
 
 
 
-    saveRound2Problems(DEFAULT_ROUND2_PROBLEMS);
+    saveRound2Problems([]);
 
 
 
@@ -1885,8 +1885,8 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
                 }}
                 title="Paste 10 questions directly without manual difficulty or marks setup"
               >
-                <Sparkles size={13} />
-                <span>⚡ Quick Paste 10 Questions</span>
+                <ListPlus size={13} />
+                <span>Paste Questions</span>
               </button>
 
 
@@ -3311,12 +3311,12 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-          {/* ⚡ DIRECT ON-SCREEN QUICK-PASTE 10 QUESTIONS BOX */}
+          {/* DIRECT ON-SCREEN QUICK-PASTE 10 QUESTIONS BOX */}
           <div style={{ background: '#121214', border: '1px solid #3b82f6', borderRadius: '8px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Sparkles size={16} color="#60a5fa" />
-                <strong style={{ fontSize: '13.5px', color: '#f4f4f5' }}>⚡ Quick-Paste 10 Questions (Zero Setup / No Form Filling)</strong>
+                <ListPlus size={16} color="#60a5fa" />
+                <strong style={{ fontSize: '13.5px', color: '#f4f4f5' }}>Import Coding Questions (Paste Text)</strong>
                 <span style={{ fontSize: '11px', color: '#60a5fa', background: 'rgba(59, 130, 246, 0.15)', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Fast Mode</span>
               </div>
               <span style={{ fontSize: '11.5px', color: '#71717a' }}>Paste 10 questions directly — titles, 20 marks each, boilerplates & test cases are auto-configured!</span>
@@ -3361,7 +3361,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
                 }}
               >
                 <Check size={13} />
-                <span>⚡ Import & Set Active Pool Now</span>
+                <span>Import & Set Active Pool Now</span>
               </button>
             </div>
           </div>
@@ -3378,7 +3378,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-              <Sparkles size={14} color="#3b82f6" />
+              <ListPlus size={14} color="#3b82f6" />
 
 
 
@@ -7222,115 +7222,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-            {/* Quick 1-Click Load Official 10-Question Bank */}
-
-
-
-            <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-
-
-
-              <div>
-
-
-
-                <strong style={{ fontSize: '13px', color: '#f4f4f5', display: 'block' }}>
-
-
-
-                  Prebuilt Official 10-Question Coding Bank
-
-
-
-                </strong>
-
-
-
-                <span style={{ fontSize: '11.5px', color: '#71717a' }}>
-
-
-
-                  Includes Two Sum, Palindrome, Kadane's, Climbing Stairs, Longest Substring, Parentheses, etc.
-
-
-
-                </span>
-
-
-
-              </div>
-
-
-
-              <button
-
-
-
-                type="button"
-
-
-
-                onClick={handleLoadOfficial10Bank}
-
-
-
-                style={{
-
-
-
-                  padding: '8px 14px',
-
-
-
-                  borderRadius: '6px',
-
-
-
-                  background: '#10b981',
-
-
-
-                  border: 'none',
-
-
-
-                  color: '#ffffff',
-
-
-
-                  fontSize: '12px',
-
-
-
-                  fontWeight: 700,
-
-
-
-                  cursor: 'pointer',
-
-
-
-                  whiteSpace: 'nowrap'
-
-
-
-                }}
-
-
-
-              >
-
-
-
-                1-Click Load 10 Bank
-
-
-
-              </button>
-
-
-
-            </div>
+            {/* Prebuilt 10 bank removed */}
 
 
 
@@ -7346,7 +7238,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                ⚡ Paste Your 10 Questions Directly (Plain Text or Numbered List):
+                Paste Your 10 Questions Directly (Plain Text or Numbered List):
 
 
 

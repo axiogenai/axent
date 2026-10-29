@@ -101,6 +101,7 @@ import {
   deleteSingleAttempt,
 
   clearAllAttemptsFromEverywhere,
+  clearAllAttemptsLocally,
 
   clearAllQuestions
 
@@ -771,7 +772,11 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       if (station.id) {
         await deleteStationFromCloud(station.id);
       }
-      setAllAttempts((prev: any[]) => prev.filter(a => (a.studentRoll || a.student_roll || '').toUpperCase() !== candRoll.toUpperCase() && (a.candidateRollNumber || '').toUpperCase() !== candRoll.toUpperCase()));
+      try {
+        const { clearAllAttemptsLocally } = await import('../../services/mcqService');
+        // Filter in-memory attempts
+        setAllAttempts((prev: any[]) => prev.filter(a => (a.studentRoll || a.student_roll || '').toUpperCase() !== candRoll.toUpperCase() && (a.candidateRollNumber || '').toUpperCase() !== candRoll.toUpperCase() && a.id !== station.id));
+      } catch {}
       setRegisteredCandidates((prev: any[]) => prev.filter(c => (c.rollNumber || '').toUpperCase() !== candRoll.toUpperCase() && (c.accessKey || '').toUpperCase() !== candRoll.toUpperCase()));
       setShortlistedRolls((prev: string[]) => prev.filter(r => r.toUpperCase() !== candRoll.toUpperCase()));
       playSound('success');
@@ -801,6 +806,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
     try {
 
+      await clearAllAttemptsFromEverywhere();
+      clearAllAttemptsLocally();
+      await resetCodeSparkSystemInCloud();
       await clearAllStationsFromCloud();
 
       await clearAllAttemptsFromCloud();
