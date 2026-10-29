@@ -1417,6 +1417,61 @@ export function deleteCodeSparkCandidate(accessKey: string): void {
   saveCodeSparkCandidates(remaining);
 }
 
+export async function deleteCodeSparkCandidateComplete(accessKeyOrRoll: string): Promise<void> {
+  const clean = accessKeyOrRoll.trim().toUpperCase();
+  if (!clean) return;
+  const all = getAllCodeSparkCandidates();
+  const remaining = all.filter(c => 
+    (c.accessKey?.toUpperCase() !== clean) && 
+    (c.rollNumber?.toUpperCase() !== clean) &&
+    (c.email?.toUpperCase() !== clean)
+  );
+  saveCodeSparkCandidates(remaining);
+
+  const shortlists = getShortlistedRolls();
+  const remainingShortlists = shortlists.filter(r => r.toUpperCase() !== clean);
+  try {
+    localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(remainingShortlists));
+  } catch {}
+
+  try {
+    const { deleteAttemptByRollOrKeyFromCloud } = await import('./supabaseService');
+    await deleteAttemptByRollOrKeyFromCloud(clean);
+  } catch {}
+
+  await pushCandidatesToCloud(remaining);
+}
+
+export async function resetCodeSparkSystemInCloud(): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const emptyConfig: CodeSparkSystemConfig = {
+      activeExamId: null,
+      shortlistMode: 'cutoff',
+      shortlistValue: 12,
+      manualShortlistRolls: [],
+      isConcluded: false,
+      candidates: [],
+      updatedAt: Date.now()
+    };
+    await supabase
+      .from('candidate_stations')
+      .upsert({
+        id: CODESPARK_SYSTEM_CONFIG_ID,
+        lab_id: 'SYSTEM_CONFIG',
+        station_number: 'CONFIG',
+        status: 'CONFIG',
+        code: JSON.stringify(emptyConfig),
+        student: emptyConfig,
+        last_updated_timestamp: Date.now()
+      });
+    return true;
+  } catch (err) {
+    console.warn('[CodeSpark Cloud] resetCodeSparkSystemInCloud failed:', err);
+    return false;
+  }
+}
+
 export function getActiveCodeSparkCandidate(): CodeSparkCandidate | null {
   try {
     const raw = localStorage.getItem('codedna_codespark_active_candidate');

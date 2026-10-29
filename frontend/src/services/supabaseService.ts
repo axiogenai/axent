@@ -835,14 +835,22 @@ export async function clearSubmittedStationsFromCloud(labId?: string): Promise<b
 
 export async function clearAllStationsFromCloud(labId?: string): Promise<boolean> {
   try {
-    let query = supabase.from('candidate_stations').delete();
+    let selectQuery = supabase.from('candidate_stations').select('id');
     if (labId && labId !== 'all') {
-      query = query.eq('lab_id', labId);
-    } else {
-      query = query.neq('id', 'codespark_system_config');
+      selectQuery = selectQuery.eq('lab_id', labId);
     }
-    const { error } = await query;
-    return !error;
+    const { data: records, error: selErr } = await selectQuery;
+    if (selErr) {
+      console.warn('[Supabase] Failed to list stations for clearing:', selErr);
+    }
+    if (records && records.length > 0) {
+      const ids = records.map(r => r.id).filter(id => id !== 'codespark_system_config' && id !== 'codespark_round2_questions');
+      for (let i = 0; i < ids.length; i += 50) {
+        const batch = ids.slice(i, i + 50);
+        await supabase.from('candidate_stations').delete().in('id', batch);
+      }
+    }
+    return true;
   } catch (err) {
     console.warn('[Supabase] Failed to clear all stations from cloud:', err);
     return false;
@@ -851,16 +859,39 @@ export async function clearAllStationsFromCloud(labId?: string): Promise<boolean
 
 export async function clearAllAttemptsFromCloud(labId?: string): Promise<boolean> {
   try {
-    let query = supabase.from('mcq_attempts').delete();
+    let selectQuery = supabase.from('mcq_attempts').select('id');
     if (labId && labId !== 'all') {
-      query = query.eq('assigned_lab_id', labId);
-    } else {
-      query = query.neq('id', '');
+      selectQuery = selectQuery.eq('assigned_lab_id', labId);
     }
-    const { error } = await query;
-    return !error;
+    const { data: records, error: selErr } = await selectQuery;
+    if (selErr) {
+      console.warn('[Supabase] Failed to list attempts for clearing:', selErr);
+    }
+    if (records && records.length > 0) {
+      const ids = records.map(r => r.id);
+      for (let i = 0; i < ids.length; i += 50) {
+        const batch = ids.slice(i, i + 50);
+        await supabase.from('mcq_attempts').delete().in('id', batch);
+      }
+    }
+    return true;
   } catch (err) {
     console.warn('[Supabase] Failed to clear attempts from cloud:', err);
+    return false;
+  }
+}
+
+export async function deleteAttemptByRollOrKeyFromCloud(rollOrKey: string): Promise<boolean> {
+  try {
+    const clean = rollOrKey.trim();
+    if (!clean) return false;
+    await supabase.from('mcq_attempts').delete().ilike('student_roll', clean);
+    await supabase.from('mcq_attempts').delete().ilike('candidate_ticket_id', clean);
+    await supabase.from('candidate_stations').delete().ilike('student_name', '%' + clean + '%');
+    await supabase.from('candidate_stations').delete().ilike('roll_number', clean);
+    return true;
+  } catch (err) {
+    console.warn('[Supabase] Failed to delete attempt by roll from cloud:', err);
     return false;
   }
 }

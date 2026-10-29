@@ -163,7 +163,8 @@ import {
 
 
   DEFAULT_ROUND2_PROBLEMS,
-  extractCleanCandidateCode
+  extractCleanCandidateCode,
+  parseQuestionsFromPlainText
 } from '../../services/round2CodingService';
 
 
@@ -901,6 +902,8 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
   const [importJsonText, setImportJsonText] = useState('');
+  const [quickPasteText, setQuickPasteText] = useState('');
+  const [showAdvancedParams, setShowAdvancedParams] = useState(false);
 
 
 
@@ -1396,7 +1399,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-            <span>Define Coding Questions (5 Questions)</span>
+            <span>Define Coding Questions ({problems.length} in Pool)</span>
 
 
 
