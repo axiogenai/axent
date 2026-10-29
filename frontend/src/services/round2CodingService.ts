@@ -1,4 +1,4 @@
-import { supabase } from './supabaseService';
+﻿import { supabase } from './supabaseService';
 
 
 
@@ -1655,7 +1655,7 @@ export async function verifyRound2CodeWithAI(
   isAlignedWithProblem: boolean;
   analysis: string;
 }> {
-  const groqKey = localStorage.getItem('codedna_groq_api_key') || localStorage.getItem('GROQ_API_KEY');
+  const groqKey = localStorage.getItem('codedna_groq_api_key') || localStorage.getItem('GROQ_API_KEY') || (import.meta as any).env?.VITE_GROQ_API_KEY || (import.meta as any).env?.VITE_AI_API_KEY;
   if (groqKey && code && code.trim()) {
     try {
       const prompt = `You are the CodeSpark 2026 AI Examiner. Analyze if this code correctly solves the problem.
@@ -1676,7 +1676,7 @@ Return strict JSON only:
           Authorization: `Bearer ${groqKey}`
         },
         body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
+          model: (import.meta as any).env?.VITE_DEFAULT_MODEL || 'qwen/qwen3.8-27b',
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.1,
           response_format: { type: 'json_object' }
