@@ -402,24 +402,27 @@ export async function runRealCode(
   const customUrl = getCustomJudge0Url();
   if (customUrl) {
     try {
-      return await executeWithJudge0(sourceCode, language, stdin, customUrl, 6000);
+      return await executeWithJudge0(sourceCode, language, stdin, customUrl, 5000);
     } catch (err) {
-      console.warn(`[Compiler Tier 1: Intranet Judge0] Failed, falling back to public cluster:`, err);
+      console.warn('[Compiler Tier 1: Intranet Judge0] Failed, falling back to public cluster:', err);
     }
   }
 
-  // Check Tier 2: Public Judge0 Cloud CE
-  try {
-    return await executeWithJudge0(sourceCode, language, stdin, undefined, 6500);
-  } catch (tier2Err) {
-    console.warn(`[Compiler Tier 2: Judge0 Cloud CE] Failed or timed out, cascading to Tier 3:`, tier2Err);
+  // Fast-Path: Wandbox High-Throughput Cluster (Flagship speed ~400ms for C, C++, Java, Python, Go, Rust)
+  const hasWandbox = Boolean(WANDBOX_COMPILERS[language]);
+  if (hasWandbox) {
+    try {
+      return await executeWithWandbox(sourceCode, language, stdin, 5000);
+    } catch (wandboxErr) {
+      console.warn('[Compiler Fast-Path: Wandbox] Failed or timed out, trying Judge0 Cloud:', wandboxErr);
+    }
   }
 
-  // Check Tier 3: Wandbox High-Throughput Cluster
+  // Tier 2: Public Judge0 Cloud CE
   try {
-    return await executeWithWandbox(sourceCode, language, stdin, 8000);
-  } catch (tier3Err) {
-    console.warn(`[Compiler Tier 3: Wandbox Cluster] Failed or timed out, cascading to Tier 4:`, tier3Err);
+    return await executeWithJudge0(sourceCode, language, stdin, undefined, 5000);
+  } catch (tier2Err) {
+    console.warn('[Compiler Tier 2: Judge0 Cloud CE] Failed or timed out, cascading to sandbox:', tier2Err);
   }
 
   // Tier 4: Client-side In-Browser Sandbox or Offline Pre-Flight

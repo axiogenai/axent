@@ -157,6 +157,8 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
   // Compilation & Output State
   const [isCompiling, setIsCompiling] = useState(false);
   const [compileError, setCompileError] = useState<string | null>(null);
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [customInputText, setCustomInputText] = useState('');
   const [activeReport, setActiveReport] = useState<Round2QuestionReport | null>(() => {
     return submission.questionReports[currentQIndex] || null;
   });
@@ -222,7 +224,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       const qTimestamps = submission.questionTimestamps || {};
       const qStart = qTimestamps[currentQIndex]?.startedAt || Date.now();
       const timeTakenMs = Date.now() - qStart;
-      const report = await evaluateRound2Code(currentProblem, activeCode, effectiveLang, timeTakenMs);
+      const report = await evaluateRound2Code(currentProblem, activeCode, effectiveLang, timeTakenMs, showCustomInput ? customInputText : undefined);
       // Track question start and compiled timestamps
       report.startedAt = qStart;
       report.startedAtFormatted = new Date(qStart).toLocaleTimeString();
@@ -969,6 +971,29 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                 <span>Template</span>
               </button>
             </div>
+            {/* Toggle Custom Input (stdin) */}
+            <button
+              type="button"
+              onClick={() => setShowCustomInput(!showCustomInput)}
+              style={{
+                background: showCustomInput ? '#27272a' : '#18181b',
+                color: showCustomInput ? '#10b981' : '#a1a1aa',
+                border: '1px solid #27272a',
+                borderRadius: '6px',
+                padding: '5px 10px',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+              title="Provide custom input (stdin) for programs using scanf, cin, input(), etc."
+            >
+              <Terminal size={12} />
+              <span>{showCustomInput ? 'Custom Input: Active' : 'Custom Input (stdin)'}</span>
+            </button>
+
             {/* Run & Compile Button */}
             <button
               type="button"
@@ -1001,6 +1026,36 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
               )}
             </button>
           </div>
+          {/* Optional Custom Input Drawer */}
+          {showCustomInput && (
+            <div style={{ background: '#09090b', borderBottom: '1px solid #27272a', padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', color: '#a1a1aa', fontWeight: 600, fontFamily: 'monospace' }}>
+                  STDIN (Custom Input for scanf / cin / input / Scanner):
+                </span>
+                <span style={{ fontSize: '10px', color: '#71717a' }}>Pass arguments or lines of input</span>
+              </div>
+              <textarea
+                value={customInputText}
+                onChange={(e) => setCustomInputText(e.target.value)}
+                placeholder="Enter input to feed into stdin (e.g. 10 20)..."
+                rows={2}
+                style={{
+                  width: '100%',
+                  background: '#121214',
+                  border: '1px solid #27272a',
+                  borderRadius: '4px',
+                  color: '#f4f4f5',
+                  fontFamily: "'Consolas', monospace",
+                  fontSize: '12px',
+                  padding: '6px 8px',
+                  resize: 'vertical',
+                  outline: 'none'
+                }}
+              />
+            </div>
+          )}
+
           {/* Monaco Editor Canvas */}
           <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
             <Editor
@@ -1109,6 +1164,30 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                 </div>
               ) : activeReport ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {/* Real Program Standard Output */}
+                  {activeReport.compilerResult?.stdout && (
+                    <div style={{ background: '#09090b', border: '1px solid #27272a', borderRadius: '6px', padding: '8px 12px' }}>
+                      <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', marginBottom: '4px', fontFamily: 'monospace' }}>
+                        Program Standard Output:
+                      </div>
+                      <pre style={{ margin: 0, fontFamily: "'Consolas', monospace", fontSize: '12px', color: '#f4f4f5', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                        {activeReport.compilerResult.stdout}
+                      </pre>
+                    </div>
+                  )}
+
+                  {/* Real Program Compile/Runtime Error Output */}
+                  {(activeReport.compilerResult?.compileOutput || activeReport.compilerResult?.stderr) && (
+                    <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', padding: '8px 12px' }}>
+                      <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#ef4444', textTransform: 'uppercase', marginBottom: '4px', fontFamily: 'monospace' }}>
+                        Compilation / Runtime Diagnostics:
+                      </div>
+                      <pre style={{ margin: 0, fontFamily: "'Consolas', monospace", fontSize: '11.5px', color: '#fca5a5', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                        {activeReport.compilerResult.compileOutput || activeReport.compilerResult.stderr}
+                      </pre>
+                    </div>
+                  )}
+
                   {/* Time Complexity & Execution Telemetry Card */}
                   <div
                     style={{

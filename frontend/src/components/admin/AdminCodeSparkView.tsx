@@ -1700,17 +1700,36 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
   // Round 2 Live Stations
 
   const round2Stations = useMemo(() => {
-
-    return stations.filter((s) => {
-
+    const rawFiltered = stations.filter((s) => {
       const title = (s.student?.assignmentTitle || s.student?.course || '').toLowerCase();
-
       const mode = s.examMode || (s.language === 'MCQ' ? 'MCQ' : 'CODING');
-
       return mode === 'CODING' || title.includes('spark') || title.includes('coding');
-
     });
 
+    // Deduplicate strictly by candidate roll number / email / ID so one candidate = exactly 1 CCTV card
+    const byStudent = new Map<string, CandidateStation>();
+    for (const st of rawFiltered) {
+      const anySt = st as any;
+      const key = (
+        st.student?.rollNumber ||
+        anySt.student?.email ||
+        anySt.cleanRoll ||
+        anySt.student?.accessKey ||
+        st.id
+      ).trim().toUpperCase();
+
+      if (!byStudent.has(key)) {
+        byStudent.set(key, st);
+      } else {
+        const existing = byStudent.get(key)!;
+        const existingTime = (existing as any).lastUpdatedTimestamp || (existing as any).last_updated_timestamp || 0;
+        const newTime = anySt.lastUpdatedTimestamp || anySt.last_updated_timestamp || 0;
+        if (newTime >= existingTime) {
+          byStudent.set(key, st);
+        }
+      }
+    }
+    return Array.from(byStudent.values());
   }, [stations]);
 
 
@@ -1724,11 +1743,12 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
     const isNowShortlisted = !shortlistedRolls.includes(roll);
 
     shortlistCandidateForRound2(roll, isNowShortlisted);
-
-    setShortlistedRolls(getShortlistedRolls());
-
+    const updatedRolls = getShortlistedRolls();
+    setShortlistedRolls(updatedRolls);
     setRegisteredCandidates(getAllCodeSparkCandidates());
-
+    if (updatedRolls.length === 0) {
+      setRound1ConcludedGlobally(false);
+    }
     playSound('success');
 
   };
@@ -1790,9 +1810,8 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       saveCodeSparkCandidates(all);
 
       setShortlistedRolls([]);
-
       setRegisteredCandidates(all);
-
+      setRound1ConcludedGlobally(false);
       playSound('click');
 
     } catch {}

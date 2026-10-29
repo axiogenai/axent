@@ -260,6 +260,33 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
   const [copiedCode, setCopiedCode] = useState(false);
 
+  // Deduplicate round2Stations strictly by candidate roll / email so each student has exactly ONE card
+  const uniqueRound2Stations = useMemo(() => {
+    const byStudent = new Map<string, CandidateStation>();
+    for (const st of round2Stations) {
+      const anySt = st as any;
+      const key = (
+        st.student?.rollNumber ||
+        anySt.student?.email ||
+        anySt.cleanRoll ||
+        anySt.student?.accessKey ||
+        st.id
+      ).trim().toUpperCase();
+
+      if (!byStudent.has(key)) {
+        byStudent.set(key, st);
+      } else {
+        const existing = byStudent.get(key)!;
+        const existingTime = (existing as any).lastUpdatedTimestamp || (existing as any).last_updated_timestamp || 0;
+        const newTime = anySt.lastUpdatedTimestamp || anySt.last_updated_timestamp || 0;
+        if (newTime >= existingTime) {
+          byStudent.set(key, st);
+        }
+      }
+    }
+    return Array.from(byStudent.values());
+  }, [round2Stations]);
+
 
 
   const loadLeaderboardData = async () => {
@@ -1577,7 +1604,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-              {round2Stations.length}
+              {uniqueRound2Stations.length}
 
 
 
@@ -3733,7 +3760,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-          {round2Stations.length === 0 ? (
+          {uniqueRound2Stations.length === 0 ? (
 
 
 
@@ -3769,7 +3796,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-            round2Stations.map((station) => (
+            uniqueRound2Stations.map((station) => (
 
 
 

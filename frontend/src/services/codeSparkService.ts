@@ -1,4 +1,4 @@
-﻿import { supabase } from './supabaseService';
+import { supabase } from './supabaseService';
 import {
   MCQExamConfig,
   MCQQuestion,
@@ -646,14 +646,15 @@ export function generateRound2KeyForCandidate(cand: CodeSparkCandidate): string 
 
 export function isRound1ConcludedGlobally(): boolean {
   try {
-    if (typeof localStorage !== 'undefined' && localStorage.getItem(ROUND1_CONCLUDED_STORAGE_KEY) === 'true') {
-      return true;
+    if (typeof localStorage !== 'undefined') {
+      const val = localStorage.getItem(ROUND1_CONCLUDED_STORAGE_KEY);
+      if (val === 'false') return false;
+      if (val === 'true') return true;
     }
+    const shortlisted = getShortlistedRolls();
+    if (shortlisted.length === 0) return false;
     const cands = getAllCodeSparkCandidates();
-    if (cands.some(c => c.round2Key || c.isShortlisted || c.status === 'SHORTLISTED')) {
-      return true;
-    }
-    return false;
+    return cands.some(c => Boolean(c.round2Key) && (c.status === 'SHORTLISTED' || c.isShortlisted));
   } catch {
     return false;
   }
@@ -662,6 +663,9 @@ export function isRound1ConcludedGlobally(): boolean {
 export function setRound1ConcludedGlobally(concluded: boolean): void {
   try {
     localStorage.setItem(ROUND1_CONCLUDED_STORAGE_KEY, concluded ? 'true' : 'false');
+    if (!concluded) {
+      localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify([]));
+    }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('codedna_codespark_concluded_updated', { detail: concluded }));
       window.dispatchEvent(new Event('storage'));
@@ -678,21 +682,27 @@ export function setRound1ConcludedGlobally(concluded: boolean): void {
             .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
             .maybeSingle();
 
+          let cfg: any = {};
           if (stRec) {
-            let cfg = (stRec.student && typeof stRec.student === 'object') ? stRec.student : (stRec.code ? JSON.parse(stRec.code) : {});
-            cfg.isConcluded = concluded;
-            cfg.updatedAt = Date.now();
-            await supabase.from('candidate_stations').upsert({
-              id: CODESPARK_SYSTEM_CONFIG_ID,
-              lab_id: 'SYSTEM_CONFIG',
-              station_number: 'CONFIG',
-              status: 'CONFIG',
-              code: JSON.stringify(cfg),
-              student: cfg,
-              last_updated_timestamp: Date.now()
-            });
+            cfg = (stRec.student && typeof stRec.student === 'object') ? stRec.student : (stRec.code ? JSON.parse(stRec.code) : {});
           }
-        } catch {}
+          cfg.isConcluded = concluded;
+          if (!concluded) {
+            cfg.manualShortlistRolls = [];
+          }
+          cfg.updatedAt = Date.now();
+          await supabase.from('candidate_stations').upsert({
+            id: CODESPARK_SYSTEM_CONFIG_ID,
+            lab_id: 'SYSTEM_CONFIG',
+            station_number: 'CONFIG',
+            status: 'CONFIG',
+            code: JSON.stringify(cfg),
+            student: cfg,
+            last_updated_timestamp: Date.now()
+          });
+        } catch (e) {
+          console.warn('[CodeSpark] setRound1ConcludedGlobally cloud push error:', e);
+        }
       })();
     }
   } catch {}
@@ -1194,6 +1204,8 @@ export function shortlistCandidateForRound2(identifier: string, isShortlisted = 
       c.status = isShortlisted ? 'SHORTLISTED' : 'ROUND1_COMPLETED';
       if (isShortlisted && !c.round2Key) {
         c.round2Key = generateRound2KeyForCandidate(c);
+      } else if (!isShortlisted) {
+        c.round2Key = undefined;
       }
       c.round2InvitedAt = isShortlisted ? Date.now() : undefined;
       updated = true;

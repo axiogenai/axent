@@ -161,9 +161,22 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     };
     window.addEventListener('codedna_codespark_concluded_updated', syncConcluded);
     window.addEventListener('storage', syncConcluded);
+
+    // Fast 2.5-second cloud sync so portal instantly reacts when admin concludes or clears Round 2!
+    const pollInterval = setInterval(async () => {
+      try {
+        const latestCandidates = await syncCandidatesFromCloud();
+        if (latestCandidates) {
+          setRegisteredCandidates(latestCandidates);
+        }
+        setIsRound1Concluded(isRound1ConcludedGlobally());
+      } catch {}
+    }, 2500);
+
     return () => {
       window.removeEventListener('codedna_codespark_concluded_updated', syncConcluded);
       window.removeEventListener('storage', syncConcluded);
+      clearInterval(pollInterval);
     };
   }, []);
 

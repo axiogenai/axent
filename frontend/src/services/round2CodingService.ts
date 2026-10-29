@@ -1431,13 +1431,26 @@ export async function evaluateRound2Code(
   problem: Round2Problem,
   code: string,
   explicitLanguage?: 'C' | 'C++' | 'Python' | 'Java',
-  timeTakenMs?: number
+  timeTakenMs?: number,
+  customStdin?: string
 ): Promise<Round2QuestionReport> {
   const language = explicitLanguage || detectLanguageFromCode(code);
   let primaryCompilerResult: CompilerExecutionResult | null = null;
 
+  // Smart STDIN resolver: Custom input > Problem sample test input > Smart default for input-expecting programs
+  let stdinToUse = (customStdin !== undefined && customStdin !== null && customStdin.trim() !== '') ? customStdin : '';
+  if (!stdinToUse && problem.sampleTestCases && problem.sampleTestCases.length > 0) {
+    stdinToUse = problem.sampleTestCases[0].input || '';
+  }
+  if (!stdinToUse) {
+    const expectsInput = /\b(scanf|cin|input\s*\(|Scanner|nextInt|readLine|stdin\.read)\b/.test(code);
+    if (expectsInput) {
+      stdinToUse = '10 20\n5 15\n100\n';
+    }
+  }
+
   try {
-    primaryCompilerResult = await runRealCode(code, language, '');
+    primaryCompilerResult = await runRealCode(code, language, stdinToUse);
   } catch {}
 
   const compileOk = !!(primaryCompilerResult && !primaryCompilerResult.compileOutput && !primaryCompilerResult.isError);
@@ -1448,7 +1461,7 @@ export async function evaluateRound2Code(
   if (compileOk && code.trim().length > 20) {
     try {
       const aiResult = await verifyRound2CodeWithAI(
-        problem, code, language, '', '', primaryCompilerResult?.stdout || ''
+        problem, code, language, stdinToUse, problem.sampleTestCases?.[0]?.expectedOutput || '', primaryCompilerResult?.stdout || ''
       );
       aiAligned = aiResult.isAlignedWithProblem;
       aiVerification = aiResult;
@@ -1739,7 +1752,8 @@ export async function pushRound2LiveCodeToCloud(
 
 
 
-    const cloudId = `r2_sub_${profile.accessKey.replace(/[^A-Za-z0-9_-]/g, '_')}`;
+    const canonicalRoll = (profile.rollNumber || profile.accessKey || '').trim().toUpperCase().replace(/[^A-Za-z0-9_-]/g, '_');
+    const cloudId = `r2_station_${canonicalRoll}`;
 
 
 
@@ -2224,6 +2238,17 @@ export async function clearRound2Leaderboard(): Promise<void> {
   if (supabase) {
     try {
       await supabase.from('candidate_stations').delete().like('id', 'r2_sub_%');
+      await supabase.from('candidate_stations').delete().like('id', 'r2_station_%');
+      if (typeof window !== 'undefined') {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && (k.startsWith('codedna_r2_sub_') || k.startsWith('codedna_codespark_r2_'))) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+      }
     } catch (e) { console.warn('[Round 2] clearRound2Leaderboard error:', e); }
   }
 }
