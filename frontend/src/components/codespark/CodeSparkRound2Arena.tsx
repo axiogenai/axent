@@ -24,9 +24,7 @@ import {
   FileCheck,
   XCircle,
   LogOut,
-  Brain,
-  Sparkles
-} from 'lucide-react';
+  Brain} from 'lucide-react';
 import {
   Round2Problem,
   Round2QuestionReport,
@@ -1410,7 +1408,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                     gap: '4px'
                   }}
                 >
-                  <span>Final Submit All 5 Questions</span>
+                  <span>Final Submit (${problems.length} Questions)</span>
                   <Send size={13} />
                 </button>
               )}

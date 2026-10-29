@@ -882,7 +882,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-    if (problems.length <= 5) {
+    if (problems.length === 0) return; if (!window.confirm("Delete Question #" + numToDelete + " from pool?")) return; if (false) {
 
 
 
@@ -929,6 +929,18 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
   };
 
 
+
+  const handleClearAllQuestions = () => {
+    if (problems.length === 0) return;
+    if (!window.confirm("Are you sure you want to delete ALL " + problems.length + " questions from the pool?")) return;
+    playSound('click');
+    setProblems([]);
+    saveRound2Problems([]);
+    void saveRound2ProblemsToCloud([]);
+    setActiveQTab(1);
+    setSaveSuccessMsg('All questions cleared from pool and cloud.');
+    setTimeout(() => setSaveSuccessMsg(null), 3000);
+  };
 
   const [showImportModal, setShowImportModal] = useState(false);
 
@@ -1784,7 +1796,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                  setShowImportModal(true);
+                  handleClearAllQuestions();
 
 
 
@@ -1852,11 +1864,11 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                <Upload size={13} />
+                {null}
 
 
 
-                <span>Import Questions (10+ Pool)</span>
+                {null}
 
 
 
@@ -1867,7 +1879,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setShowImportModal(true);
+                  handleClearAllQuestions();
                   playSound('click');
                 }}
                 style={{
@@ -1883,10 +1895,10 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
                   alignItems: 'center',
                   gap: '6px'
                 }}
-                title="Paste 10 questions directly without manual difficulty or marks setup"
+                title="Clear all questions from pool"
               >
-                <ListPlus size={13} />
-                <span>Paste Questions</span>
+                <Trash2 size={13} />
+                <span>Clear Pool</span>
               </button>
 
 
@@ -2039,11 +2051,11 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                <RotateCcw size={13} />
+                {null}
 
 
 
-                <span>Reload 10 Defaults</span>
+                {null}
 
 
 

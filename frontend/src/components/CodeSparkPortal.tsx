@@ -12,7 +12,6 @@ import {
   Search,
   Users,
   Trophy,
-  Sparkles,
   ExternalLink,
   RefreshCw,
   X,
