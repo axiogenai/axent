@@ -54,7 +54,7 @@ import {
 import { MCQExamConfig, MCQQuestion } from '../../types/mcq';
 import { getAllCodingQuestions } from '../../services/codingQuestionService';
 import { playSound } from '../../utils/sounds';
-import { sendProctorLockCommand, sendProctorWarning } from '../../services/adminService';
+import { sendProctorLockCommand, sendProctorWarning, saveAllStations } from '../../services/adminService';
 import {
   getAllCodeSparkCandidates,
   syncCandidatesFromCloud,
@@ -377,22 +377,34 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
     }
   };
 
-  // Cloud & Local Demo Data Purge
+  // Cloud & Local Full Data Purge (Nuclear Reset)
   const handlePurgeCloudData = async () => {
-    if (!window.confirm('Purge all demo candidate stations and test attempts from Supabase & local cache? Registered candidates and exam blueprints will be preserved.')) {
+    if (!window.confirm('PURGE ALL DATA: This will permanently wipe all candidate stations, test attempts, candidate keys, and shortlist data from both Supabase and your browser cache. The arena will be 100% clean and ready for real contestants. Proceed?')) {
       return;
     }
     playSound('click');
-    setPurgeNotice('Purging demo stations and test attempts from Supabase & local cache...');
+    setPurgeNotice('Purging all candidate workstations, test attempts, and local cache...');
     try {
       await clearAllStationsFromCloud();
       await clearAllAttemptsFromCloud();
       localStorage.removeItem('codedna_mcq_attempts');
+      localStorage.removeItem('codedna_college_stations');
+      localStorage.removeItem('codedna_live_stations');
       localStorage.removeItem('codedna_codespark_active_batch');
+      localStorage.removeItem('codedna_codespark_candidates');
+      localStorage.removeItem('codedna_codespark_round1_shortlist');
+      localStorage.removeItem('codedna_codespark_round1_concluded');
+      saveAllStations([]);
+      saveCodeSparkCandidates([]);
       setAllAttempts([]);
+      setRegisteredCandidates([]);
+      setShortlistedRolls([]);
       playSound('success');
-      setPurgeNotice('Purge complete: 0 demo stations and 0 test attempts in cloud & local store.');
+      setPurgeNotice('Purge complete: 0 workstations, 0 test attempts, 0 phantom candidates. System is 100% clean.');
       setTimeout(() => setPurgeNotice(null), 5000);
+      window.dispatchEvent(new Event('codedna_codespark_candidates_updated'));
+      window.dispatchEvent(new Event('codedna_cctv_broadcast'));
+      window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       setPurgeNotice(`Purge finished: ${err.message || 'Complete'}`);
       setTimeout(() => setPurgeNotice(null), 5000);
@@ -594,20 +606,25 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
     // Unique map keyed by Candidate Access Key to prevent ANY duplicate terminals
     const candMap = new Map<string, { id: string; defaultStationNumber: string; candidate: CodeSparkCandidate; cleanRoll: string }>();
 
-    // 1. Registered candidates in CodeSpark (Deduplicated by Access Key)
+    // 1. Registered candidates in CodeSpark (Strict deduplication by identity)
     registeredCandidates.forEach((cand, idx) => {
-      const accessKey = cand.accessKey.toUpperCase().trim();
-      if (!accessKey) return;
-      const cleanRoll = (cand.rollNumber || cand.accessKey).toUpperCase().trim();
-      candMap.set(accessKey, {
-        id: `AXNT-SPARK-WS-${String(idx + 1).padStart(2, '0')}`,
-        defaultStationNumber: `Terminal #${String(idx + 1).padStart(2, '0')}`,
-        candidate: {
-          ...cand,
-          rollNumber: cand.rollNumber || (cand.email ? cand.email.split('@')[0].toUpperCase() : accessKey)
-        },
-        cleanRoll
-      });
+      const accessKey = (cand.accessKey || '').toUpperCase().trim();
+      const normName = (cand.name || '').trim().toLowerCase();
+      const cleanRoll = (cand.rollNumber || (cand.email ? cand.email.split('@')[0] : accessKey)).toUpperCase().trim();
+      if (!cleanRoll && !normName) return;
+
+      const dedupeKey = cleanRoll || normName;
+      if (!candMap.has(dedupeKey)) {
+        candMap.set(dedupeKey, {
+          id: `AXNT-SPARK-WS-${String(candMap.size + 1).padStart(2, '0')}`,
+          defaultStationNumber: `Terminal #${String(candMap.size + 1).padStart(2, '0')}`,
+          candidate: {
+            ...cand,
+            rollNumber: cleanRoll
+          },
+          cleanRoll
+        });
+      }
     });
 
     // 2. Only incorporate attempts for candidates taking the CodeSpark exam who aren't already mapped
@@ -616,33 +633,36 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       if (!isSparkExam) return;
 
       const cleanRoll = (att.studentRoll || '').trim().toUpperCase();
-      if (!cleanRoll) return;
+      const attName = (att.studentName || '').trim().toLowerCase();
+      if (!cleanRoll && !attName) return;
 
       const alreadyMapped = Array.from(candMap.values()).some(({ candidate }) => {
         const candRoll = (candidate.rollNumber || '').trim().toUpperCase();
         const candKey = (candidate.accessKey || '').trim().toUpperCase();
-        const candEmail = (candidate.email || '').trim().toLowerCase();
+        const candName = (candidate.name || '').trim().toLowerCase();
         return (
-          candRoll === cleanRoll ||
-          candKey === cleanRoll ||
-          (att.studentEmail && candEmail === (att.studentEmail || '').trim().toLowerCase())
+          (cleanRoll && (candRoll === cleanRoll || candKey === cleanRoll)) ||
+          (attName && candName && candName === attName)
         );
       });
 
-      if (!alreadyMapped && !candMap.has(cleanRoll)) {
-        candMap.set(cleanRoll, {
-          id: `AXNT-SPARK-WS-${String(candMap.size + 1).padStart(2, '0')}`,
-          defaultStationNumber: `Terminal #${String(candMap.size + 1).padStart(2, '0')}`,
-          candidate: {
-            name: att.studentName || cleanRoll,
-            email: att.studentEmail || `${cleanRoll.toLowerCase()}@institution.edu`,
-            rollNumber: cleanRoll,
-            accessKey: att.accessKey || `AXENT-${cleanRoll.slice(-4) || '9999'}`,
-            status: att.status === 'SUBMITTED' ? 'ROUND1_COMPLETED' : 'CHECKED_IN',
-            registeredAt: Date.now()
-          },
-          cleanRoll
-        });
+      if (!alreadyMapped) {
+        const dedupeKey = cleanRoll || attName;
+        if (!candMap.has(dedupeKey)) {
+          candMap.set(dedupeKey, {
+            id: `AXNT-SPARK-WS-${String(candMap.size + 1).padStart(2, '0')}`,
+            defaultStationNumber: `Terminal #${String(candMap.size + 1).padStart(2, '0')}`,
+            candidate: {
+              name: att.studentName || cleanRoll,
+              email: att.studentEmail || `${(cleanRoll || 'candidate').toLowerCase()}@institution.edu`,
+              rollNumber: cleanRoll,
+              accessKey: att.accessKey || `AXENT-${cleanRoll.slice(-4) || '9999'}`,
+              status: att.status === 'SUBMITTED' ? 'ROUND1_COMPLETED' : 'CHECKED_IN',
+              registeredAt: Date.now()
+            },
+            cleanRoll
+          });
+        }
       }
     });
 
@@ -1169,7 +1189,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           { id: 'round1', label: `Round 1 Results & Sheets (${aptitudeCandidates.length})`, icon: Trophy },
           { id: 'shortlist', label: `Shortlist & Round 2 Keys (${shortlistedRolls.length})`, icon: ShieldCheck },
           { id: 'round2', label: `Round 2 Live Arena (${round2Stations.length})`, icon: Code2 },
-          { id: 'mcq_paper', label: `Paper Blueprint & Solutions (${mcqQuestions.length})`, icon: BookOpen },
+          { id: 'mcq_paper', label: `Assigned Paper Preview (${mcqQuestions.length})`, icon: BookOpen },
           { id: 'candidates', label: `Candidate Roster (${registeredCandidates.length})`, icon: Key },
           { id: 'overview', label: 'Paper Config & Specs', icon: FileText }
         ].map((tab) => (
@@ -2417,29 +2437,31 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                 </div>
               </div>
 
-              {/* Topic Distribution */}
+              {/* Dynamic Topic Breakdown from Assigned Paper */}
               <div style={darkCardStyle}>
                 <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 700, color: '#f4f4f5' }}>
-                  Topic Blueprint & Weights
+                  Paper Topic Breakdown
                 </h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
-                  {[
-                    { topic: 'Speed, Time & Distance', count: 1 },
-                    { topic: 'Logical Syllogisms', count: 1 },
-                    { topic: 'Percentages & Economics', count: 1 },
-                    { topic: 'Algorithmic Complexity (Master Theorem)', count: 1 },
-                    { topic: 'Number Series & Prime Sequences', count: 1 },
-                    { topic: 'Probability & Combinatorics', count: 1 },
-                    { topic: 'Work, Pipes & Cisterns', count: 1 },
-                    { topic: 'Direction Sense & Displacement', count: 1 },
-                    { topic: 'Cryptographic Ciphers & Coding', count: 1 },
-                    { topic: 'Binary Trees & Graph Theory', count: 1 }
-                  ].map((t, idx) => (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: '#a1a1aa' }}>
-                      <span>{t.topic}</span>
-                      <strong style={{ color: '#f4f4f5' }}>{t.count} Question ({t.count * 10}%)</strong>
-                    </div>
-                  ))}
+                  {mcqQuestions.length === 0 ? (
+                    <div style={{ color: '#71717a' }}>No questions assigned to paper yet.</div>
+                  ) : (
+                    (() => {
+                      const counts: Record<string, number> = {};
+                      mcqQuestions.forEach((q) => {
+                        const top = q.topic || 'General Aptitude';
+                        counts[top] = (counts[top] || 0) + 1;
+                      });
+                      return Object.entries(counts).map(([topic, count], idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: '#a1a1aa' }}>
+                          <span>{topic}</span>
+                          <strong style={{ color: '#f4f4f5' }}>
+                            {count} {count === 1 ? 'Question' : 'Questions'} ({Math.round((count / mcqQuestions.length) * 100)}%)
+                          </strong>
+                        </div>
+                      ));
+                    })()
+                  )}
                 </div>
               </div>
             </div>

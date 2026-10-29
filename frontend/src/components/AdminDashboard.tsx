@@ -1184,7 +1184,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             College Examination Grid
           </h2>
           <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-            {selectedLabId === 'all' ? (allLabs.length > 0 ? `All Laboratories (${allLabs.length} Active)` : 'All Laboratories') : currentLabInfo?.labName} â€¢ {stations.length} Active Workstations
+            {selectedLabId === 'all' ? (allLabs.length > 0 ? `All Laboratories (${allLabs.length} Active)` : 'All Laboratories') : currentLabInfo?.labName} &bull; {stations.length} {stations.length === 1 ? 'Active Workstation' : 'Active Workstations'}
           </div>
         </div>
 
@@ -1585,7 +1585,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             <div className="admin-concluded-text-wrap" style={{ flex: 1, minWidth: 0 }}>
               <div className="admin-concluded-title">
-                Examination Concluded Â· All {submittedCount} Candidates Submitted
+                Examination Concluded · All {submittedCount} Candidates Submitted
               </div>
 
               <div className="admin-concluded-desc">
@@ -2173,8 +2173,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {station.student.name || 'Candidate (Unregistered)'}
                     </h4>
                     <div style={{ fontSize: '12px', color: '#a1a1aa' }}>
-                      Candidate Â· {station.examMode === 'MCQ' || station.language === 'MCQ' ? 'MCQ exam' : 'Practical coding'}
-                      {station.student.rollNumber ? ` Â· ${station.student.rollNumber.replace(/^#/, '')}` : ''}
+                      Candidate &bull; {station.examMode === 'MCQ' || station.language === 'MCQ' ? 'MCQ exam' : 'Practical coding'}{station.student.rollNumber ? ` &bull; ${station.student.rollNumber.replace(/^#/, '')}` : ''}
                     </div>
                   </div>
 
@@ -2717,12 +2716,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
                     {modalTab === 'submission'
                       ? `Evaluated Exam Submission: ${selectedStation.student.name || selectedStation.stationNumber}`
-                      : `Surveillance & Telemetry Audit: ${selectedStation.stationNumber} â€¢ ${selectedStation.student.name || 'Candidate'}`}
+                      : `Surveillance & Telemetry Audit: ${selectedStation.stationNumber} • ${selectedStation.student.name || 'Candidate'}`}
                   </h3>
                   {selectedStation.screenImageData ? (
                     <span className="badge badge-danger" style={{ fontSize: '10px', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                       <Radio size={10} />
-                      <span>REC â€¢ LIVE SCREEN STREAM</span>
+                      <span>REC • LIVE SCREEN STREAM</span>
                     </span>
                   ) : (
                     <span className="badge badge-neutral" style={{ fontSize: '10px', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -2753,7 +2752,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   )}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  Lab: {selectedStation.labName || currentLabInfo?.labName || selectedStation.labId} â€¢ IP: {selectedStation.ipAddress} â€¢ Last Packet: {selectedStation.lastActive}
+                  Lab: {selectedStation.labName || currentLabInfo?.labName || selectedStation.labId} • IP: {selectedStation.ipAddress} • Last Packet: {selectedStation.lastActive}
                 </div>
               </div>
               <button
@@ -3152,7 +3151,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       }}
                     >
                       <Radio size={11} />
-                      <span>REC â€¢ CAM-{selectedStation.stationNumber} â€¢ 1080P PROCTOR FEED</span>
+                      <span>REC • CAM-{selectedStation.stationNumber} • 1080P PROCTOR FEED</span>
                     </span>
 
                     <span
@@ -3165,7 +3164,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         fontFamily: 'var(--font-mono)'
                       }}
                     >
-                      LINE L{selectedStation.activeLineNumber || 1} â€¢ {selectedStation.metrics.typingSpeed} WPM
+                      LINE L{selectedStation.activeLineNumber || 1} • {selectedStation.metrics.typingSpeed} WPM
                     </span>
                   </div>
 
@@ -3187,10 +3186,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     }}
                   >
                     <span style={{ fontWeight: 600 }}>
-                      CANDIDATE: {selectedStation.student.name || 'UNREGISTERED'} â€¢ ROLL: {selectedStation.student.rollNumber || 'N/A'}
+                      CANDIDATE: {selectedStation.student.name || 'UNREGISTERED'} • ROLL: {selectedStation.student.rollNumber || 'N/A'}
                     </span>
                     <span style={{ fontFamily: 'var(--font-mono)' }}>
-                      IP: {selectedStation.ipAddress} â€¢ {selectedStation.lastActive}
+                      IP: {selectedStation.ipAddress} • {selectedStation.lastActive}
                     </span>
                   </div>
                 </div>
@@ -3228,7 +3227,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                    Live Code Mirror ({selectedStation.language} â€¢ {selectedStation.code.split('\n').length} lines)
+                    Live Code Mirror ({selectedStation.language} • {selectedStation.code.split('\n').length} lines)
                   </div>
                   <button
                     className="btn btn-ghost btn-sm"
@@ -3628,7 +3627,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         cursor: 'pointer'
                       }}
                     >
-                      â€¢ {preset}
+                      • {preset}
                     </button>
                   ))}
                 </div>

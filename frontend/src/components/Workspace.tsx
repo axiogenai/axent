@@ -2859,7 +2859,7 @@ const handleRun = useCallback(() => {
 
               {isCandidateRegistered
 
-                ? `${student.name || 'Candidate'} Ã‚Â· ${student.stationNumber || 'St#01'}`
+                ? `${student.name || 'Candidate'} Ã‚· ${student.stationNumber || 'St#01'}`
 
                 : 'Register Candidate'}
 
@@ -5086,7 +5086,7 @@ const handleRun = useCallback(() => {
 
                             value: ex.id,
 
-                            label: `${ex.title} (${ex.questionCount} Questions Ã‚Â· ${ex.durationMinutes} Min Ã‚Â· ${ex.totalMarks} Marks)`,
+                            label: `${ex.title} (${ex.questionCount} Questions Ã‚· ${ex.durationMinutes} Min Ã‚· ${ex.totalMarks} Marks)`,
 
                             badge: ex.subject || 'MCQ'
 
@@ -6298,7 +6298,7 @@ const handleRun = useCallback(() => {
 
                 <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
 
-                  1-Time Daily Key Required Ã‚Â· Expires Immediately Upon Use
+                  1-Time Daily Key Required Ã‚· Expires Immediately Upon Use
 
                 </span>
 
