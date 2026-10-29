@@ -345,7 +345,10 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
   // Direct Key Authentication & One-Click Exam Launch
   const handleDigitsInput = (val: string) => {
     // Clean spaces and convert to uppercase
-    const clean = val.toUpperCase().replace(/\s+/g, '');
+    let clean = val.toUpperCase().replace(/\s+/g, '');
+    if (clean.startsWith('AXENT-')) {
+      clean = clean.replace('AXENT-', '');
+    }
     setKeyDigits(clean);
     setKeyError(null);
 
@@ -407,8 +410,8 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       isCandidateInShortlistStorage(cand.rollNumber || cand.accessKey)
     );
 
-    // If target round is Round 2, launch directly without needing Round 1 MCQ exam paper!
-    if (anyLookup.targetRound === 'round2' || (isCandidateShortlisted && isRound1Concluded)) {
+    // 1. If target round is Round 2 (candidate typed Round 2 key):
+    if (anyLookup.targetRound === 'round2' || rawInput.includes('R2')) {
       if (!isCandidateShortlisted) {
         playSound('warning');
         setKeyError('Access Denied: Round 2 is restricted to shortlisted candidates only. Check your registered email.');
@@ -426,6 +429,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
         assignmentTitle: 'Code Spark 2026: Algorithmic Code Sprint Arena',
         examMode: 'CODING',
         accessKey: cand.round2Key || cand.accessKey,
+        round2Key: cand.round2Key,
         isShortlisted: true,
         sessionStartTime: Date.now()
       };
@@ -440,6 +444,27 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
         await requestExamFullscreen();
       } catch {}
       navigate('/codespark-exams?round=2');
+      return;
+    }
+
+    // 2. Candidate entered a Round 1 key: Check if Round 1 has concluded or Round 2 has started
+    const isRound1Over = Boolean(
+      isRound1Concluded ||
+      isRound1ConcludedGlobally() ||
+      (shortlistedRolls && shortlistedRolls.length > 0)
+    );
+
+    if (isRound1Over) {
+      playSound('warning');
+      if (isCandidateShortlisted) {
+        setKeyError(
+          `Round 1 has concluded. You are shortlisted for Round 2! Your Round 2 access code has been emailed to you (${cand.email}). Please enter your Round 2 key (${cand.round2Key || 'AXENT-R2-XXXX'}) to access the coding arena.`
+        );
+      } else {
+        setKeyError(
+          'Round 1 has concluded. Shortlisted candidates have received their Round 2 access keys in their email.'
+        );
+      }
       return;
     }
 

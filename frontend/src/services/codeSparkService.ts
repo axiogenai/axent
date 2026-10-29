@@ -1078,33 +1078,36 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
   const all = getAllCodeSparkCandidates();
   const normalizedKey = normalizeCodeSparkKey(cleaned);
   const inputDigits = cleaned.replace(/\D/g, '');
-  const isConcluded = isRound1ConcludedGlobally();
+  const isInputR2 = cleaned.includes('R2');
 
-  // 1. First check dedicated Round 2 keys
-  for (const c of all) {
-    if (c.round2Key) {
-      const cleanR2 = c.round2Key.trim().toUpperCase().replace(/\s+/g, '');
-      const rawR2Digits = cleanR2.replace(/\D/g, '');
+  // 1. If candidate explicitly enters a Round 2 code (contains R2, e.g. AXENT-R2-XXXX, R2-XXXX):
+  if (isInputR2) {
+    for (const c of all) {
+      if (c.round2Key) {
+        const cleanR2 = c.round2Key.trim().toUpperCase().replace(/\s+/g, '');
+        const rawR2Digits = cleanR2.replace(/\D/g, '');
 
-      if (
-        cleanR2 === cleaned ||
-        cleanR2.replace('AXENT-', '') === cleaned ||
-        cleanR2.replace('AXENT-R2-', '') === cleaned ||
-        (cleaned.includes('R2') && cleanR2.includes(cleaned)) ||
-        (rawR2Digits.length >= 4 && inputDigits === rawR2Digits) ||
-        (inputDigits.length >= 4 && rawR2Digits.endsWith(inputDigits))
-      ) {
-        return {
-          candidate: c,
-          targetRound: 'round2',
-          isShortlisted: true,
-          round2Key: c.round2Key
-        };
+        if (
+          cleanR2 === cleaned ||
+          cleanR2.replace('AXENT-', '') === cleaned ||
+          cleanR2.replace('AXENT-R2-', '') === cleaned ||
+          cleanR2.includes(cleaned) ||
+          cleaned.includes(cleanR2.replace('AXENT-', '')) ||
+          (rawR2Digits.length >= 4 && inputDigits === rawR2Digits) ||
+          (inputDigits.length >= 4 && rawR2Digits.endsWith(inputDigits))
+        ) {
+          return {
+            candidate: c,
+            targetRound: 'round2',
+            isShortlisted: true,
+            round2Key: c.round2Key
+          };
+        }
       }
     }
   }
 
-  // 2. Check standard Round 1 keys
+  // 2. Check standard Round 1 keys (AXENT-XXXX or 4-digit code)
   for (const c of all) {
     const cleanR1 = c.accessKey.trim().toUpperCase().replace(/\s+/g, '');
     const normR1 = normalizeCodeSparkKey(cleanR1);
@@ -1115,7 +1118,7 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
       normR1 === normalizedKey ||
       cleanR1 === normalizedKey ||
       normR1 === cleaned ||
-      (inputDigits.length === 4 && candDigits === inputDigits)
+      (inputDigits.length >= 4 && candDigits === inputDigits)
     ) {
       const isShortlisted = Boolean(
         c.isShortlisted ||
@@ -1123,15 +1126,29 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
         isCandidateInShortlistStorage(c.rollNumber || c.accessKey)
       );
 
-      // If Round 1 is finished/concluded and candidate is shortlisted, automatically route to Round 2!
-      const targetRound = (isShortlisted && isConcluded) ? 'round2' : 'round1';
-
+      // This is explicitly a Round 1 key!
       return {
         candidate: c,
-        targetRound,
+        targetRound: 'round1',
         isShortlisted,
         round2Key: c.round2Key
       };
+    }
+  }
+
+  // 3. Fallback: If input has digits matching a Round 2 key and no Round 1 key matched:
+  for (const c of all) {
+    if (c.round2Key) {
+      const cleanR2 = c.round2Key.trim().toUpperCase().replace(/\s+/g, '');
+      const rawR2Digits = cleanR2.replace(/\D/g, '');
+      if (rawR2Digits.length >= 4 && inputDigits === rawR2Digits) {
+        return {
+          candidate: c,
+          targetRound: 'round2',
+          isShortlisted: true,
+          round2Key: c.round2Key
+        };
+      }
     }
   }
 
