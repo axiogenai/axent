@@ -1025,16 +1025,16 @@ export interface CandidateImportItem {
 }
 
 export function generateCodeSparkKey(existingCandidates: CodeSparkCandidate[] = getAllCodeSparkCandidates()): string {
-  const usedDigits = new Set<number>();
+  const usedKeys = new Set<string>();
   existingCandidates.forEach((c) => {
-    const m = (c.accessKey || '').match(/(\d{4})/);
-    if (m) usedDigits.add(parseInt(m[1], 10));
+    if (c.accessKey) usedKeys.add(c.accessKey.trim().toUpperCase());
   });
-  let next = 1001;
-  while (usedDigits.has(next)) {
-    next++;
-  }
-  return `AXENT-${next}`;
+  let key = '';
+  do {
+    const pin = Math.floor(1000 + Math.random() * 9000);
+    key = `AXENT-${pin}`;
+  } while (usedKeys.has(key));
+  return key;
 }
 
 export function parseCandidateImportText(rawText: string): CandidateImportItem[] {
@@ -1148,13 +1148,18 @@ export function importCodeSparkCandidates(
     if (m) usedDigits.add(parseInt(m[1], 10));
   });
 
-  let nextDigit = 1001;
+  const usedKeys = new Set<string>();
+  existing.forEach((c) => {
+    if (c.accessKey) usedKeys.add(c.accessKey.trim().toUpperCase());
+  });
   const getNextKey = (): string => {
-    while (usedDigits.has(nextDigit)) {
-      nextDigit++;
-    }
-    usedDigits.add(nextDigit);
-    return `AXENT-${nextDigit}`;
+    let key = '';
+    do {
+      const pin = Math.floor(1000 + Math.random() * 9000);
+      key = `AXENT-${pin}`;
+    } while (usedKeys.has(key));
+    usedKeys.add(key);
+    return key;
   };
 
   const updatedRoster = [...existing];

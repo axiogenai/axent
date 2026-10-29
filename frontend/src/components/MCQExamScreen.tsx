@@ -3535,16 +3535,15 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       playSound('warning');
       return;
     }
-    const saved = saveAnswer(attempt.id, questionId, optionId);
-    if (!saved) {
-      playSound('warning');
-      return;
-    }
     const newAnswers = { ...answers, [questionId]: optionId };
     setAnswers(newAnswers);
     playSound('click');
     const updatedAttempt = { ...attempt, answers: newAnswers };
     setAttempt(updatedAttempt);
+
+    // Save answer persistently to local storage and queue cloud sync
+    saveAnswer(attempt.id, questionId, optionId);
+
     syncMcqLiveStation(updatedAttempt, exam, student, currentIdx, false, {
       screenImageData: lastScreenFrameRef.current,
       hasLiveScreenStream: isScreenSharing
@@ -3557,6 +3556,13 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       return;
     }
     setCurrentIdx(newIdx);
+    // Auto-minimize (exit fullscreen) when candidate navigates to the final question before submitting
+    if (newIdx === totalQ - 1 && totalQ > 0) {
+      void exitExamFullscreen();
+      try {
+        if (document.exitPointerLock) document.exitPointerLock();
+      } catch {}
+    }
     if (attempt) {
       try {
         localStorage.setItem(`codedna_mcq_current_idx_${attempt.id}`, String(newIdx));
@@ -5047,7 +5053,11 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
             </div>
 
             <button
-              onClick={() => setShowSubmitConfirm(true)}
+              onClick={() => {
+                void exitExamFullscreen();
+                try { if (document.exitPointerLock) document.exitPointerLock(); } catch {}
+                setShowSubmitConfirm(true);
+              }}
               style={{
                 width: '100%',
                 marginTop: '14px',
@@ -5130,17 +5140,17 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                           onClick={() => qId && handleSelectOption(qId, optId)}
                           style={{
                             display: 'flex',
-                            alignItems: 'flex-start',
-                            gap: '10px',
+                            alignItems: 'center',
+                            gap: '12px',
                             width: '100%',
                             textAlign: 'left',
-                            padding: '9px 12px',
-                            minHeight: '38px',
+                            padding: '10px 14px',
+                            minHeight: '44px',
                             cursor: 'pointer',
                             borderRadius: '8px',
-                            border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
-                            background: isSelected ? 'var(--accent-subtle)' : 'var(--bg-surface)',
-                            boxShadow: isSelected ? '0 0 0 1px var(--accent)' : 'none',
+                            border: isSelected ? '2px solid #2563eb' : '1px solid var(--border)',
+                            background: isSelected ? 'rgba(37, 99, 235, 0.08)' : 'var(--bg-surface)',
+                            boxShadow: isSelected ? '0 1px 3px rgba(37, 99, 235, 0.15)' : 'none',
                             transition: 'all 0.15s cubic-bezier(0.16, 1, 0.3, 1)',
                             boxSizing: 'border-box'
                           }}
@@ -5148,28 +5158,28 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                           {/* Option letter */}
                           <div
                             style={{
-                              width: '24px',
-                              height: '24px',
-                              minWidth: '24px',
-                              borderRadius: '5px',
+                              width: '26px',
+                              height: '26px',
+                              minWidth: '26px',
+                              borderRadius: '6px',
                               flexShrink: 0,
-                              border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
-                              background: isSelected ? 'var(--accent)' : 'var(--bg-elevated)',
+                              border: isSelected ? '2px solid #2563eb' : '1px solid var(--border)',
+                              background: isSelected ? '#2563eb' : 'var(--bg-elevated)',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
                               fontSize: '11px',
                               fontWeight: 700,
-                              color: isSelected ? 'var(--accent-contrast)' : 'var(--text-muted)',
-                              marginTop: '1px'
+                              color: isSelected ? '#ffffff' : 'var(--text-muted)'
                             }}
                           >
                             {String.fromCharCode(65 + optIdx)}
                           </div>
                           <div
                             style={{
-                              fontSize: '13px',
+                              fontSize: '13.5px',
                               color: 'var(--text-primary)',
+                              fontWeight: isSelected ? 600 : 400,
                               lineHeight: 1.45,
                               flex: 1,
                               minWidth: 0,
@@ -5179,11 +5189,9 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                             <FormattedQuestionContent content={opt.text} />
                           </div>
                           {isSelected && (
-                            <CheckCircle
-                              size={15}
-                              color="var(--accent)"
-                              style={{ flexShrink: 0, marginTop: '3px' }}
-                            />
+                            <div style={{ flexShrink: 0, width: '20px', height: '20px', borderRadius: '50%', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Check size={12} color="#ffffff" strokeWidth={3} />
+                            </div>
                           )}
                         </button>
                       );

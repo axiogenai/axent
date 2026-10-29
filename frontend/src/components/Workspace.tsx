@@ -2755,7 +2755,7 @@ const handleRun = useCallback(() => {
 
                         : `${formatSessionTime(sessionSecondsElapsed)} elapsed (Click to view remaining)`
 
-                    } Ã¢â‚¬Â¢ Limit: ${examDurationMinutes}m`
+                    } · Limit: ${examDurationMinutes}m`
 
                   : `Exam Session Clock: ${formatSessionTime(sessionSecondsElapsed)} elapsed`
 

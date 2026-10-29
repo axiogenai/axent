@@ -606,7 +606,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     { id: 'examinations', label: 'Examinations', icon: FileText },
     { id: 'test_stations', label: 'Test Stations', icon: Monitor },
     { id: 'reports', label: 'Reports', icon: BarChart2 },
-    { id: 'cheating_alerts', label: 'Cheating Alerts', icon: AlertTriangle, badge: cheatingCount, badgeColor: cheatingCount > 0 ? 'danger' : undefined },
+    { id: 'cheating_alerts', label: 'Cheating Alerts', icon: AlertTriangle, badge: cheatingCount > 0 ? cheatingCount : undefined, badgeColor: cheatingCount > 0 ? 'danger' : undefined },
     { id: 'audit_ledger', label: 'Audit Ledger', icon: Layers },
     { id: 'institutions', label: 'Institutions', icon: Building },
     { id: 'settings', label: 'Settings', icon: Settings }
@@ -728,15 +728,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <item.icon size={16} color={isActive ? '#ffffff' : 'currentColor'} style={{ flexShrink: 0 }} />
                   <span style={{ whiteSpace: 'nowrap' }}>{item.label}</span>
                 </div>
-                {item.badge !== undefined && (
+                {item.badge !== undefined && (typeof item.badge === 'number' ? item.badge > 0 : Boolean(item.badge)) && (
                   <span
                     style={{
                       fontSize: '10px',
                       fontWeight: 700,
                       padding: '1px 6px',
                       borderRadius: '10px',
-                      background: item.badgeColor === 'danger' ? '#ef4444' : 'var(--bg-elevated)',
-                      color: '#ffffff',
+                      background: item.badgeColor === 'danger' ? '#ef4444' : (isActive ? 'rgba(255, 255, 255, 0.25)' : 'var(--bg-surface)'),
+                      color: item.badgeColor === 'danger' ? '#ffffff' : (isActive ? '#ffffff' : 'var(--text-secondary)'),
+                      border: item.badgeColor === 'danger' ? 'none' : (isActive ? '1px solid rgba(255, 255, 255, 0.3)' : '1px solid var(--border)'),
                       lineHeight: 1.2
                     }}
                   >

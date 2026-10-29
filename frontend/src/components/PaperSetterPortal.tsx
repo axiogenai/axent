@@ -166,7 +166,7 @@ export const PaperSetterPortal: React.FC = () => {
         <WatermelonStatCard
           label="EXAM PAPERS"
           value={exams.length}
-          subtext={`${publishedCount} Published Ã¢â‚¬Â¢ ${draftCount} Drafts`}
+          subtext={`${publishedCount} Published · ${draftCount} Drafts`}
           icon={<FileEdit size={14} />}
           iconColor="var(--accent)"
           badgeBg="var(--bg-surface)"
@@ -177,7 +177,7 @@ export const PaperSetterPortal: React.FC = () => {
         <WatermelonStatCard
           label="QUESTION REPOSITORY"
           value={questions.length}
-          subtext={`${easyQuestions} Easy Ã¢â‚¬Â¢ ${medQuestions} Med Ã¢â‚¬Â¢ ${hardQuestions} Hard`}
+          subtext={`${easyQuestions} Easy · ${medQuestions} Med · ${hardQuestions} Hard`}
           icon={<BookOpen size={14} />}
           iconColor="var(--accent)"
           badgeBg="var(--bg-surface)"
@@ -188,7 +188,7 @@ export const PaperSetterPortal: React.FC = () => {
         <WatermelonStatCard
           label="STUDENT ATTEMPTS"
           value={attempts.length}
-          subtext={`${submittedAttempts} Graded Ã¢â‚¬Â¢ ${liveSittingAttempts} Live Sitting`}
+          subtext={`${submittedAttempts} Graded · ${liveSittingAttempts} Live Sitting`}
           icon={<Award size={14} />}
           iconColor="var(--accent)"
           badgeBg="var(--bg-surface)"
@@ -199,7 +199,7 @@ export const PaperSetterPortal: React.FC = () => {
         <WatermelonStatCard
           label="INTEGRITY COMPLIANCE"
           value={`${cleanCompliancePct}%`}
-          subtext={`Avg Score: ${averageScorePct}% Ã¢â‚¬Â¢ Zero Tamper`}
+          subtext={`Avg Score: ${averageScorePct}% · Zero Tamper`}
           icon={<ShieldCheck size={14} />}
           iconColor={cleanCompliancePct >= 90 ? 'var(--success)' : 'var(--warning)'}
           badgeBg="var(--bg-surface)"

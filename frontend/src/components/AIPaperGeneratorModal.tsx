@@ -592,15 +592,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
       // Expand all questions by default for quick review
       setExpandedQIds(new Set(res.questions.map((q) => q.id)));
 
-      // Notify caller (e.g. PaperSetterPortal) immediately so the draft shows in catalog right away
-      onPaperGenerated({
-        exam: initialExam,
-        questions: res.questions,
-        modelUsed: 'Autonomous-AI-Draft',
-        totalMarks: res.questions.reduce((acc, q) => acc + (Number(q.marks) || 0), 0),
-        questionCount: res.questions.length
-      });
-
+      // Transition to review step for faculty inspection & confirmation
       setStep('review');
       playSound('success');
     } catch (err: any) {

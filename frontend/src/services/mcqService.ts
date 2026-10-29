@@ -1902,9 +1902,10 @@ export function startAttempt(
   saveAttempt(attempt);
 
   try {
-
     sessionStorage.setItem('codedna_mcq_session_attempt', attempt.id);
-
+    sessionStorage.setItem('codedna_mcq_active_attempt_backup', JSON.stringify(attempt));
+    localStorage.setItem(MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT, attempt.id);
+    localStorage.setItem(`codedna_mcq_active_attempt_${exam.id}`, attempt.id);
   } catch {}
 
   return attempt;
@@ -1917,9 +1918,24 @@ export function startAttempt(
 
 export function saveAnswer(attemptId: string, questionId: string, optionId: string): boolean {
 
-  const all = getAllAttempts();
+  let all = getAllAttempts();
 
-  const idx = all.findIndex((a) => a.id === attemptId);
+  let idx = all.findIndex((a) => a.id === attemptId);
+
+  if (idx < 0) {
+    try {
+      const backup = sessionStorage.getItem('codedna_mcq_active_attempt_backup');
+      if (backup) {
+        const parsed = JSON.parse(backup);
+        if (parsed && parsed.id === attemptId) {
+          all = [...all, parsed];
+          idx = all.length - 1;
+          inMemoryAttempts = all;
+          save(MCQ_STORAGE_KEYS.ATTEMPTS, all);
+        }
+      }
+    } catch {}
+  }
 
   if (idx < 0) return false;
 
@@ -2231,9 +2247,24 @@ export function submitAttempt(
 
 ): MCQGradeResult | null {
 
-  const all = getAllAttempts();
+  let all = getAllAttempts();
 
-  const idx = all.findIndex((a) => a.id === attemptId);
+  let idx = all.findIndex((a) => a.id === attemptId);
+
+  if (idx < 0) {
+    try {
+      const backup = sessionStorage.getItem('codedna_mcq_active_attempt_backup');
+      if (backup) {
+        const parsed = JSON.parse(backup);
+        if (parsed && parsed.id === attemptId) {
+          all = [...all, parsed];
+          idx = all.length - 1;
+          inMemoryAttempts = all;
+          save(MCQ_STORAGE_KEYS.ATTEMPTS, all);
+        }
+      }
+    } catch {}
+  }
 
   if (idx < 0) return null;
 
@@ -2635,17 +2666,19 @@ export async function syncFromSupabase(): Promise<void> {
 
 
 
-        // 1. Reconcile Questions: Supabase is authoritative
+        // 1. Reconcile Questions: Merge Supabase cloud with local question bank
     if (cloudQ !== null) {
-      const fiveMinsAgo = Date.now() - 5 * 60 * 1000;
+      const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
       const localQ = load<MCQQuestion[]>(MCQ_STORAGE_KEYS.QUESTIONS, []);
       const mergedQMap = new Map<string, MCQQuestion>();
       cloudQ.forEach((q) => mergedQMap.set(q.id, q));
-      // Only retain local questions if they were freshly created drafts in the last 5 minutes
+      // Retain local questions if they were freshly created or drafted in the last 2 hours
       localQ.forEach((q) => {
-        if (!mergedQMap.has(q.id) && q.status === 'DRAFT' && (q.createdAt || 0) > fiveMinsAgo) {
-          mergedQMap.set(q.id, q);
-          void saveQuestionToCloud(q);
+        if (!mergedQMap.has(q.id)) {
+          if (q.status === 'DRAFT' || (q.createdAt || 0) > twoHoursAgo) {
+            mergedQMap.set(q.id, q);
+            void saveQuestionToCloud(q);
+          }
         }
       });
       save(MCQ_STORAGE_KEYS.QUESTIONS, Array.from(mergedQMap.values()));
@@ -2734,11 +2767,16 @@ export async function syncFromSupabase(): Promise<void> {
       const cloudAttemptIds = new Set(recentCloudAttempts.map((a) => a.id));
       const localAttempts = getAllAttempts();
       const activeLocalId = typeof window !== 'undefined' ? localStorage.getItem(MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT) : null;
+      const activeSessionId = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('codedna_mcq_session_attempt') : null;
       
       const reconciled = [...recentCloudAttempts];
       for (const loc of localAttempts) {
-        if (!cloudAttemptIds.has(loc.id) && loc.status === 'IN_PROGRESS' && loc.id === activeLocalId) {
-          reconciled.push(loc);
+        if (!cloudAttemptIds.has(loc.id)) {
+          // Never purge an in-progress attempt currently active on this machine!
+          if (loc.status === 'IN_PROGRESS' || loc.id === activeLocalId || loc.id === activeSessionId || (loc.startTime && (Date.now() - loc.startTime) < 24 * 3600 * 1000)) {
+            reconciled.push(loc);
+            void saveAttemptToCloud(loc);
+          }
         }
       }
       inMemoryAttempts = reconciled;
