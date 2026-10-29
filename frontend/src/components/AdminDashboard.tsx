@@ -303,7 +303,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     // Only update state if data actually changed (prevent flicker)
     setStations((prev) => {
-      if (cleanList.length === 0 && prev.length > 0) return prev;
+      // allow resetting to empty
       if (isStationListEqual(prev, cleanList)) return prev;
       return cleanList;
     });
@@ -333,6 +333,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       })
       .catch(() => {});
   }, [selectedLabId, allLabs]);
+
+
+  const handleResetGridDirect = async () => {
+    playSound('click');
+    setStations([]);
+    setSelectedStationId(null);
+    saveAllStations([]);
+    await clearAllStations(selectedLabId);
+    const cleanLabs = await purgePhantomExamLabs();
+    setAllLabs(cleanLabs);
+    setStations([]);
+    playSound('success');
+  };
 
   const handleToggleLockStation = (targetStation: CandidateStation) => {
     const isCurrentlyLocked = isStationEffectiveLocked(targetStation);
@@ -1250,9 +1263,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               <button
                 className="btn btn-secondary btn-sm"
-                onClick={() => {
-                  setShowResetRoomConfirm(true);
-                }}
+                onClick={handleResetGridDirect}
                 style={{ fontSize: '11px', gap: '5px', color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.3)', background: 'rgba(239, 68, 68, 0.08)', whiteSpace: 'nowrap' }}
                 title="Wipe stored workstations and reset to live listening mode"
               >

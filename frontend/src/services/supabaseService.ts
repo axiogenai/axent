@@ -839,7 +839,7 @@ export async function clearAllStationsFromCloud(labId?: string): Promise<boolean
     if (labId && labId !== 'all') {
       query = query.eq('lab_id', labId);
     } else {
-      query = query.neq('id', '');
+      query = query.neq('id', 'codespark_system_config');
     }
     const { error } = await query;
     return !error;

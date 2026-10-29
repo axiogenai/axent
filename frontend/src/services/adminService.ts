@@ -1037,7 +1037,7 @@ export async function clearAllStations(labId?: string): Promise<void> {
     broadcastCctvMessage({ type: 'RESET_ALL', labId });
 
     // Cloud database operations run in parallel without blocking the UI
-    void Promise.allSettled([
+    await Promise.allSettled([
       clearAllStationsFromCloud(labId),
       clearAllAttemptsFromCloud(labId),
       purgePhantomExamLabs()

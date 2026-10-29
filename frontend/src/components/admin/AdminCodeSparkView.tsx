@@ -61,6 +61,7 @@ import {
   syncCandidatesFromCloud,
   CodeSparkCandidate,
   saveCodeSparkCandidates,
+  saveActiveCodeSparkPaper,
   ensureCodeSparkAptitudeExam,
   shortlistCandidateForRound2,
   getShortlistedRolls,
@@ -311,6 +312,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       const exam = result.exam;
       exam.isCodeSpark = true;
       saveExam(exam);
+      void saveActiveCodeSparkPaper(exam.id);
       localStorage.setItem('codedna_codespark_round1_exam_id', exam.id);
       setAssignedExamId(exam.id);
       setAllExams(getAllExams());
@@ -359,6 +361,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       };
 
       saveExam(updatedExam);
+        void saveActiveCodeSparkPaper(updatedExam.id);
       localStorage.setItem('codedna_codespark_round1_exam_id', updatedExam.id);
       setAssignedExamId(updatedExam.id);
       setAllExams(getAllExams());
@@ -892,6 +895,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           updatedAt: Date.now()
         };
         saveExam(updatedExam);
+        void saveActiveCodeSparkPaper(updatedExam.id);
         setAllExams(getAllExams());
       }
 
