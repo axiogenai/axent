@@ -1078,7 +1078,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                 Attention Proctor: No Active Paper Assigned to CodeSpark Round 1
               </div>
               <div style={{ fontSize: '12px', color: '#a1a1aa' }}>
-                Candidates will see &quot;Exam is not scheduled&quot; until you select a paper from the Paper Blueprint tab and save configuration.
+                Candidates will see &quot;Exam is not scheduled&quot; until you select a paper from the Paper Config & Specs tab and save configuration.
               </div>
             </div>
           </div>
