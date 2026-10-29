@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Key,
@@ -348,10 +348,16 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     if (clean.startsWith('AXENT-')) {
       clean = clean.replace('AXENT-', '');
     }
+    if (clean.startsWith('R2-')) {
+      clean = clean.replace('R2-', '');
+    }
     setKeyDigits(clean);
     setKeyError(null);
 
-    const lookupRes = lookupCandidateAny(clean);
+    let lookupRes = lookupCandidateAny(clean);
+    if (!lookupRes && isRound1Concluded) {
+      lookupRes = lookupCandidateAny('AXENT-R2-' + clean);
+    }
     if (lookupRes) {
       setActiveCandidate(lookupRes.candidate);
       setCandidateName(lookupRes.candidate.name || '');
@@ -362,7 +368,13 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     } else {
       // Try async cloud lookup
       if (clean.length >= 4) {
-        void asyncLookupCandidateAny(clean).then((res) => {
+        const queryToTry = isRound1Concluded && !clean.includes('R2') ? 'AXENT-R2-' + clean : clean;
+        void asyncLookupCandidateAny(queryToTry).then((res) => {
+          if (!res && isRound1Concluded) {
+            return asyncLookupCandidateAny(clean);
+          }
+          return res;
+        }).then((res) => {
           if (res) {
             setActiveCandidate(res.candidate);
             setCandidateName(res.candidate.name || '');
@@ -382,16 +394,22 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
 
   const handleDirectExamLaunch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const rawInput = keyDigits.trim().toUpperCase();
+    let rawInput = keyDigits.trim().toUpperCase();
     if (!rawInput) {
       playSound('warning');
-      setKeyError('Please enter your access key or 4-digit code.');
+      setKeyError(isRound1Concluded ? 'Please enter your Round 2 access key (AXENT-R2-XXXX).' : 'Please enter your access key or 4-digit code.');
       return;
     }
 
     let anyLookup = lookupCandidateAny(rawInput);
+    if (!anyLookup && isRound1Concluded && !rawInput.includes('R2')) {
+      anyLookup = lookupCandidateAny('AXENT-R2-' + rawInput);
+    }
     if (!anyLookup) {
       anyLookup = await asyncLookupCandidateAny(rawInput);
+    }
+    if (!anyLookup && isRound1Concluded && !rawInput.includes('R2')) {
+      anyLookup = await asyncLookupCandidateAny('AXENT-R2-' + rawInput);
     }
 
     if (!anyLookup) {
@@ -409,8 +427,8 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       isCandidateInShortlistStorage(cand.rollNumber || cand.accessKey)
     );
 
-    // 1. If target round is Round 2 (candidate typed Round 2 key):
-    if (anyLookup.targetRound === 'round2' || rawInput.includes('R2')) {
+    // 1. If target round is Round 2 or Round 1 has concluded:
+    if (anyLookup.targetRound === 'round2' || rawInput.includes('R2') || isRound1Concluded) {
       if (!isCandidateShortlisted) {
         playSound('warning');
         setKeyError('Access Denied: Round 2 is restricted to shortlisted candidates only. Check your registered email.');
@@ -1698,7 +1716,10 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
               </h2>
 
               <p className="text-xs sm:text-sm text-zinc-700 leading-relaxed">
-                CodeSpark is a private, provisioned examination. Enter your exam-issued <strong>AXENT-XXXX</strong> alphanumeric access key to authenticate your candidate seat and unlock Stage 01.
+                {isRound1Concluded
+                  ? <>CodeSpark Stage 01 has concluded. <strong>Shortlisted candidates</strong>: enter your Round 2 key (<strong>AXENT-R2-XXXX</strong>) to access the coding arena.</>
+                  : <>CodeSpark is a private, provisioned examination. Enter your exam-issued <strong>AXENT-XXXX</strong> alphanumeric access key to authenticate your candidate seat and unlock Stage 01.</>
+                }
               </p>
 
               {/* Roster & System Stats Box */}
@@ -1709,7 +1730,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                 </div>
                 <div className="flex items-center justify-between text-xs border-b border-black/10 pb-2">
                   <span className="text-zinc-500 uppercase">STAGE 01 STATUS</span>
-                  <strong className="text-[#ea1a1c] font-black">ACTIVE NOW (MCQ)</strong>
+                  {isRound1Concluded ? <strong className="text-zinc-500 font-black">CONCLUDED</strong> : <strong className="text-[#ea1a1c] font-black">ACTIVE NOW (MCQ)</strong>}
                 </div>
                 <div className="flex items-center justify-between text-xs border-b border-black/10 pb-2">
                   <span className="text-zinc-500 uppercase">STAGE 02 STATUS</span>
@@ -1723,7 +1744,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                       ROUND 1 COMPLETE ({round1Pct}%)
                     </strong>
                   ) : (
-                    <strong className="text-zinc-500">GATE-LOCKED</strong>
+                    <strong className={isRound1Concluded ? "text-[#ea1a1c] font-black" : "text-zinc-500"}>{isRound1Concluded ? "ACTIVE NOW (CODING)" : "GATE-LOCKED"}</strong>
                   )}
                 </div>
                 <div className="flex items-center justify-between text-xs">
@@ -1753,7 +1774,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-black uppercase tracking-wider text-black flex items-center gap-1.5 font-mono">
                     <Key size={13} className="text-[#ea1a1c]" />
-                    <span>ENTER 4-DIGIT ACCESS KEY</span>
+                    <span>{isRound1Concluded ? "ENTER ROUND 2 KEY (AXENT-R2-XXXX)" : "ENTER 4-DIGIT ACCESS KEY"}</span>
                   </label>
                   {activeCandidate && (
                     <span className="text-[10px] text-[#ea1a1c] font-black uppercase tracking-widest flex items-center gap-1 font-mono">
@@ -1771,7 +1792,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                   } px-3 sm:px-5 py-3 sm:py-4 flex items-center transition-colors cursor-text overflow-hidden`}
                 >
                   <span className="font-mono text-xl sm:text-2xl font-black text-black select-none tracking-[0.1em] sm:tracking-[0.25em] shrink-0">
-                    AXENT-
+                    {isRound1Concluded ? 'AXENT-R2-' : 'AXENT-'}
                   </span>
                   <input
                     ref={keyInputRef}

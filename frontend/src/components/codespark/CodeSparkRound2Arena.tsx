@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+﻿import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
 import {
   Code2,
@@ -65,10 +65,10 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
   onExit,
   theme = 'dark'
 }) => {
-  // ── 2. Candidate Submission & Progress State ──
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 2. Candidate Submission & Progress State ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   const candidateKey = candidateProfile.round2Key || candidateProfile.accessKey || 'GUEST';
   const cleanRoll = candidateProfile.rollNumber || candidateProfile.email.split('@')[0] || 'CANDIDATE';
-  // ── 1. Problems State: Individualized 5 randomized questions from 10+ pool ──
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 1. Problems State: Individualized 5 randomized questions from 10+ pool ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   const [problems, setProblems] = useState<Round2Problem[]>(() => {
     const all = getAllRound2Problems();
     return selectStudentRound2Problems(all, candidateKey);
@@ -203,17 +203,18 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       void pushRound2LiveCodeToCloud(candidateProfile, code, effectiveLang, currentQIndex);
     }, 1000);
   };
-  // ── 3. Compile & Test Execution ──
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 3. Compile & Test Execution ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   const handleCompileAndRun = async () => {
     if (!currentProblem || !currentProblem.id) return;
     setIsCompiling(true);
     setCompileError(null);
     playSound('click');
     try {
-      const report = await evaluateRound2Code(currentProblem, activeCode, effectiveLang);
-      // Track question start and compiled timestamps
       const qTimestamps = submission.questionTimestamps || {};
       const qStart = qTimestamps[currentQIndex]?.startedAt || Date.now();
+      const timeTakenMs = Date.now() - qStart;
+      const report = await evaluateRound2Code(currentProblem, activeCode, effectiveLang, timeTakenMs);
+      // Track question start and compiled timestamps
       report.startedAt = qStart;
       report.startedAtFormatted = new Date(qStart).toLocaleTimeString();
       report.timeTakenSeconds = Math.max(1, Math.round((report.compiledAt - qStart) / 1000));
@@ -274,7 +275,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       setIsCompiling(false);
     }
   };
-  // ── 4. Question Navigation ──
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 4. Question Navigation ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   const handleSelectQuestion = (qNum: number) => {
     if (qNum < 1 || qNum > 5) return;
     playSound('click');
@@ -307,7 +308,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     setCurrentQIndex(qNum);
   };
   const handleNextQuestion = () => {
-    if (currentQIndex < 5) {
+    if (currentQIndex < (problems.length || 5)) {
       handleSelectQuestion(currentQIndex + 1);
     }
   };
@@ -316,7 +317,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       handleSelectQuestion(currentQIndex - 1);
     }
   };
-  // ── 5. Template Reset ──
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 5. Template Reset ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   const handleResetToTemplate = () => {
     if (!currentProblem || !currentProblem.starterCode) return;
     const targetLang = effectiveLang;
@@ -326,7 +327,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       playSound('click');
     }
   };
-  // ── 6. Final Submission Modal ──
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 6. Final Submission Modal ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [isSubmittingFinal, setIsSubmittingFinal] = useState(false);
   const solvedCount = useMemo(() => {
@@ -354,7 +355,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       setIsSubmittingFinal(false);
     }
   };
-  // ── 7. Submission Concluded Screen ──
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 7. Submission Concluded Screen ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   if (submission.isSubmitted) {
     return (
       <div
@@ -596,7 +597,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       </div>
     );
   }
-  // ── 8. Main Student Coding Arena ──
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 8. Main Student Coding Arena ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   return (
     <div
       style={{
@@ -610,7 +611,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
         fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
       }}
     >
-      {/* ── Top Bar: Candidate Dossier, Question Stepper & Controls ── */}
+      {/* ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ Top Bar: Candidate Dossier, Question Stepper & Controls ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ */}
       <header
         style={{
           height: '52px',
@@ -787,9 +788,9 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
           </button>
         </div>
       </header>
-      {/* ── Main Workspace: Left Problem Statement | Right Editor & Console ── */}
+      {/* ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ Main Workspace: Left Problem Statement | Right Editor & Console ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        {/* ── LEFT COLUMN: Problem Statement ── */}
+        {/* ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ LEFT COLUMN: Problem Statement ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ */}
         <section
           style={{
             width: '44%',
@@ -864,133 +865,12 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
               <div style={{ fontSize: '13.5px', lineHeight: 1.7, color: '#d4d4d8' }}>
                 <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{currentProblem.description}</p>
               </div>
-              {/* Input & Output Format */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '12px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
-                    Input Format
-                  </div>
-                  <div style={{ fontSize: '12.5px', color: '#e4e4e7', whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
-                    {currentProblem.inputFormat}
-                  </div>
-                </div>
-                <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '12px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
-                    Output Format
-                  </div>
-                  <div style={{ fontSize: '12.5px', color: '#e4e4e7', whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
-                    {currentProblem.outputFormat}
-                  </div>
-                </div>
-              </div>
-              {/* Constraints */}
-              {currentProblem.constraints && currentProblem.constraints.length > 0 && (
-                <div>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '8px' }}>
-                    Constraints
-                  </div>
-                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#a1a1aa', lineHeight: 1.6 }}>
-                    {currentProblem.constraints.map((c, i) => (
-                      <li key={i} style={{ fontFamily: 'monospace' }}>
-                        {c}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {/* Sample Test Cases */}
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '10px' }}>
-                  Sample Test Cases
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {currentProblem.sampleTestCases?.map((tc, idx) => (
-                    <div
-                      key={tc.id || idx}
-                      style={{
-                        background: '#18181b',
-                        border: '1px solid #27272a',
-                        borderRadius: '6px',
-                        padding: '12px'
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#f4f4f5' }}>
-                          Sample {idx + 1}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(tc.input);
-                            playSound('click');
-                          }}
-                          style={{
-                            background: 'transparent',
-                            border: '1px solid #27272a',
-                            borderRadius: '4px',
-                            padding: '3px 6px',
-                            color: '#a1a1aa',
-                            fontSize: '10.5px',
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          <Copy size={11} />
-                          <span>Copy Input</span>
-                        </button>
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px' }}>
-                        <div>
-                          <div style={{ fontSize: '10px', color: '#71717a', marginBottom: '4px' }}>Input:</div>
-                          <pre
-                            style={{
-                              margin: 0,
-                              background: '#09090b',
-                              border: '1px solid #27272a',
-                              padding: '6px 8px',
-                              borderRadius: '4px',
-                              fontFamily: 'monospace',
-                              color: '#e4e4e7',
-                              overflowX: 'auto'
-                            }}
-                          >
-                            {tc.input}
-                          </pre>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '10px', color: '#71717a', marginBottom: '4px' }}>Expected Output:</div>
-                          <pre
-                            style={{
-                              margin: 0,
-                              background: '#09090b',
-                              border: '1px solid #27272a',
-                              padding: '6px 8px',
-                              borderRadius: '4px',
-                              fontFamily: 'monospace',
-                              color: '#10b981',
-                              overflowX: 'auto'
-                            }}
-                          >
-                            {tc.expectedOutput}
-                          </pre>
-                        </div>
-                      </div>
-                      {tc.explanation && (
-                        <div style={{ fontSize: '11.5px', color: '#71717a', marginTop: '8px', fontStyle: 'italic' }}>
-                          Explanation: {tc.explanation}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
+              
+        {/* ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ RIGHT COLUMN: Code Editor, Compiler & Report Drawer ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ */}
             </div>
           )}
         </section>
-        {/* ── RIGHT COLUMN: Code Editor, Compiler & Report Drawer ── */}
-        <section style={{ width: '56%', display: 'flex', flexDirection: 'column', background: '#09090b' }}>
+                <section style={{ width: '56%', display: 'flex', flexDirection: 'column', background: '#09090b' }}>
           {/* Editor Action Toolbar */}
           <div
             style={{
@@ -1101,12 +981,12 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
               {isCompiling ? (
                 <>
                   <Loader2 size={13} className="animate-spin" />
-                  <span>Compiling &amp; Testing...</span>
+                  <span>Executing &amp; Verifying...</span>
                 </>
               ) : (
                 <>
                   <Play size={13} fill="#09090b" />
-                  <span>Compile &amp; Run Tests</span>
+                  <span>Run Code</span>
                 </>
               )}
             </button>
@@ -1256,8 +1136,8 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                   {/* Timestamps strip */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: '#a1a1aa', fontFamily: 'monospace', padding: '6px 10px', background: '#121214', borderRadius: '4px', border: '1px solid #27272a' }}>
                     <span>Started: {activeReport.startedAtFormatted || (activeReport.startedAt ? new Date(activeReport.startedAt).toLocaleTimeString() : 'Just now')}</span>
-                    <span>• Compiled: {activeReport.compiledAtFormatted || new Date(activeReport.compiledAt).toLocaleTimeString()}</span>
-                    {activeReport.timeTakenSeconds ? <span>• Time Spent: {Math.floor(activeReport.timeTakenSeconds / 60)}m {activeReport.timeTakenSeconds % 60}s</span> : null}
+                    <span>ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Compiled: {activeReport.compiledAtFormatted || new Date(activeReport.compiledAt).toLocaleTimeString()}</span>
+                    {activeReport.timeTakenSeconds ? <span>ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Time Spent: {Math.floor(activeReport.timeTakenSeconds / 60)}m {activeReport.timeTakenSeconds % 60}s</span> : null}
                   </div>
 
                   {/* AI Verification & Predicted Output Box */}
@@ -1269,7 +1149,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                           <strong style={{ color: '#f4f4f5' }}>AI Verification: Screen Question: {activeReport.aiVerification.verifiedQuestionTitle}</strong>
                         </div>
                         <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '3px', background: activeReport.aiVerification.isAlignedWithProblem ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)', color: activeReport.aiVerification.isAlignedWithProblem ? '#10b981' : '#ef4444', fontWeight: 700 }}>
-                          {activeReport.aiVerification.isAlignedWithProblem ? 'ALIGNED ✓' : 'DEVIATION DETECTED'}
+                          {activeReport.aiVerification.isAlignedWithProblem ? 'ALIGNED ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ' : 'DEVIATION DETECTED'}
                         </span>
                       </div>
                       <div style={{ color: '#a1a1aa', lineHeight: 1.5 }}>
@@ -1367,9 +1247,9 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                 <span>Previous Question</span>
               </button>
               <div style={{ fontSize: '11.5px', color: '#71717a' }}>
-                Question <strong>{currentQIndex}</strong> of 5
+                Question <strong>{currentQIndex}</strong> of {problems.length || 5}
               </div>
-              {currentQIndex < 5 ? (
+              {currentQIndex < (problems.length || 5) ? (
                 <button
                   type="button"
                   onClick={handleNextQuestion}
@@ -1387,7 +1267,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                     gap: '4px'
                   }}
                 >
-                  <span>Save &amp; Next Question</span>
+                  <span>Next Question</span>
                   <ArrowRight size={13} />
                 </button>
               ) : (
@@ -1416,7 +1296,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
           </div>
         </section>
       </div>
-      {/* ── 9. Final Submission Confirmation Modal ── */}
+      {/* ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 9. Final Submission Confirmation Modal ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ */}
       {showSubmitModal && (
         <div
           style={{

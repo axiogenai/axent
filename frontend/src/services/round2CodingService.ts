@@ -1175,7 +1175,7 @@ export function analyzeCodeComplexity(
 
 
 
-    timeComplexity = 'O(NÂ³)';
+    timeComplexity = 'O(NÃ‚Â³)';
 
 
 
@@ -1195,7 +1195,7 @@ export function analyzeCodeComplexity(
 
 
 
-      timeComplexity = 'O(NÂ² log N)';
+      timeComplexity = 'O(NÃ‚Â² log N)';
 
 
 
@@ -1211,7 +1211,7 @@ export function analyzeCodeComplexity(
 
 
 
-      timeComplexity = 'O(NÂ²)';
+      timeComplexity = 'O(NÃ‚Â²)';
 
 
 
@@ -1371,7 +1371,7 @@ export function analyzeCodeComplexity(
 
 
 
-      timeComplexity = 'O(NÂ²)';
+      timeComplexity = 'O(NÃ‚Â²)';
 
 
 
@@ -1399,398 +1399,97 @@ export function analyzeCodeComplexity(
 
 
 
-export async function evaluateRound2Code(
-
-
-
-  problem: Round2Problem,
-
-
-
-  code: string,
-
-
-
-  explicitLanguage?: 'C' | 'C++' | 'Python'
-
-
-
-): Promise<Round2QuestionReport> {
-
-
-
-  const language = explicitLanguage || detectLanguageFromCode(code);
-
-
-
-  const sampleResults: Round2QuestionReport['sampleResults'] = [];
-
-
-
-  const hiddenResults: Round2QuestionReport['hiddenResults'] = [];
-
-
-
-  let primaryCompilerResult: CompilerExecutionResult | null = null;
-
-
-
-  let passedCount = 0;
-
-
-
-  const allTests = [...problem.sampleTestCases, ...problem.hiddenTestCases];
-
-
-
-  // 1. Run against sample test cases
-
-
-
-  for (const tc of problem.sampleTestCases) {
-
-
-
-    try {
-
-
-
-      const exec = await runRealCode(code, language, tc.input);
-
-
-
-      if (!primaryCompilerResult) primaryCompilerResult = exec;
-
-
-
-      const trimmedActual = (exec.stdout || '').trim();
-
-
-
-      const trimmedExpected = tc.expectedOutput.trim();
-
-
-
-      const passed = !exec.isError && trimmedActual === trimmedExpected;
-
-
-
-      if (passed) passedCount++;
-
-
-
-      sampleResults.push({
-
-
-
-        testCaseId: tc.id,
-
-
-
-        input: tc.input,
-
-
-
-        expected: tc.expectedOutput,
-
-
-
-        actual: trimmedActual || (exec.stderr ? `Error: ${exec.stderr}` : '(No output)'),
-
-
-
-        passed,
-
-
-
-        error: (exec.compileOutput || exec.stderr) || undefined
-
-
-
-      });
-
-
-
-    } catch (err: any) {
-
-
-
-      sampleResults.push({
-
-
-
-        testCaseId: tc.id,
-
-
-
-        input: tc.input,
-
-
-
-        expected: tc.expectedOutput,
-
-
-
-        actual: 'Execution Error',
-
-
-
-        passed: false,
-
-
-
-        error: err.message
-
-
-
-      });
-
-
-
-    }
-
-
-
-  }
-
-
-
-  // 2. Run against hidden test cases
-
-
-
-  for (const tc of problem.hiddenTestCases) {
-
-
-
-    try {
-
-
-
-      const exec = await runRealCode(code, language, tc.input);
-
-
-
-      const trimmedActual = (exec.stdout || '').trim();
-
-
-
-      const trimmedExpected = tc.expectedOutput.trim();
-
-
-
-      const passed = !exec.isError && trimmedActual === trimmedExpected;
-
-
-
-      if (passed) passedCount++;
-
-
-
-      hiddenResults.push({
-
-
-
-        testCaseId: tc.id,
-
-
-
-        passed
-
-
-
-      });
-
-
-
-    } catch {
-
-
-
-      hiddenResults.push({
-
-
-
-        testCaseId: tc.id,
-
-
-
-        passed: false
-
-
-
-      });
-
-
-
-    }
-
-
-
-  }
-
-
-
-  const totalTests = Math.max(1, allTests.length);
-
-
-
-  const rawScore = Math.round((passedCount / totalTests) * problem.marks);
-
-
-
-  let status: Round2QuestionReport['status'] = 'PARTIAL';
-
-
-
-  if (primaryCompilerResult?.compileOutput) {
-
-
-
-    status = 'COMPILE_ERROR';
-
-
-
-  } else if (passedCount === totalTests) {
-
-
-
-    status = 'ACCEPTED';
-
-
-
-  } else if (passedCount === 0) {
-
-
-
-    status = 'RUNTIME_ERROR';
-
-
-
-  }
-
-
-
-  const complexity = analyzeCodeComplexity(code, language, problem?.constraints?.join(' '));
-
-
-
-  const rawTimeStr = primaryCompilerResult?.time || '';
-
-
-
-  const parsedTimeSec = parseFloat(rawTimeStr.replace(/[^\d.]/g, ''));
-
-
-
-  const runtimeMs = !isNaN(parsedTimeSec) && parsedTimeSec > 0
-
-
-
-    ? parsedTimeSec * 1000
-
-
-
-    : undefined;
-
-
-
-  const report: Round2QuestionReport = {
-
-
-
-    questionNumber: problem.number,
-
-
-
-    questionId: problem.id,
-
-
-
-    questionTitle: problem.title,
-
-
-
-    code,
-
-
-
-    language,
-
-
-
-    compilerResult: primaryCompilerResult,
-
-
-
-    sampleResults,
-
-
-
-    hiddenResults,
-
-
-
-    passedTests: passedCount,
-
-
-
-    totalTests,
-
-
-
-    score: rawScore,
-
-
-
-    maxScore: problem.marks,
-
-
-
-    status,
-
-
-
-    compiledAt: Date.now(),
-
-
-
-    executionTime: runtimeMs !== undefined ? `${runtimeMs.toFixed(1)} ms` : (primaryCompilerResult ? '< 1 ms' : undefined),
-
-
-
-    executionTimeMs: runtimeMs,
-
-
-
-    timeComplexity: complexity.timeComplexity,
-
-
-
-    spaceComplexity: complexity.spaceComplexity,
-
-
-
-    complexityExplanation: complexity.explanation,
-
-
-
-    efficiencyRating: complexity.rating
-
-
-
-  };
-
-
-
-  return report;
-
-
-
+function computeDynamicScore(
+  maxMarks: number, aiAligned: boolean, compileOk: boolean,
+  timeComplexity: string, spaceComplexity: string, timeTakenMs: number
+): number {
+  if (!compileOk) return 0;
+  let score = maxMarks * 0.35;
+  if (aiAligned) score += maxMarks * 0.35;
+  const tc = (timeComplexity || '').toLowerCase();
+  const sc = (spaceComplexity || '').toLowerCase();
+  let cBonus = 0;
+  if (tc.includes('o(1)') || tc.includes('o(log')) cBonus += 0.12;
+  else if (tc.includes('o(n log') || tc.includes('o(nlog')) cBonus += 0.09;
+  else if (tc.includes('o(n)')) cBonus += 0.07;
+  else if (tc.includes('o(n^2)') || tc.includes('o(n\u00b2)')) cBonus += 0.04;
+  else cBonus += 0.02;
+  if (sc.includes('o(1)')) cBonus += 0.08;
+  else if (sc.includes('o(n)') || sc.includes('o(log')) cBonus += 0.05;
+  else cBonus += 0.02;
+  score += maxMarks * Math.min(cBonus, 0.20);
+  const maxTimeMs = 30 * 60 * 1000;
+  score += maxMarks * 0.10 * Math.max(0, 1 - ((timeTakenMs || 0) / maxTimeMs));
+  return Math.min(maxMarks, Math.max(0, Math.round(score)));
 }
 
+export async function evaluateRound2Code(
+  problem: Round2Problem,
+  code: string,
+  explicitLanguage?: 'C' | 'C++' | 'Python',
+  timeTakenMs?: number
+): Promise<Round2QuestionReport> {
+  const language = explicitLanguage || detectLanguageFromCode(code);
+  let primaryCompilerResult: CompilerExecutionResult | null = null;
 
+  try {
+    primaryCompilerResult = await runRealCode(code, language, '');
+  } catch {}
 
+  const compileOk = !!(primaryCompilerResult && !primaryCompilerResult.compileOutput && !primaryCompilerResult.isError);
+  const complexity = analyzeCodeComplexity(code, language, '');
+
+  let aiVerification: Round2QuestionReport['aiVerification'] | undefined;
+  let aiAligned = false;
+  if (compileOk && code.trim().length > 20) {
+    try {
+      const aiResult = await verifyRound2CodeWithAI(
+        problem, code, language, '', '', primaryCompilerResult?.stdout || ''
+      );
+      aiAligned = aiResult.isAlignedWithProblem;
+      aiVerification = aiResult;
+    } catch {}
+  }
+
+  const maxMarks = problem.marks || 20;
+  const score = computeDynamicScore(
+    maxMarks, aiAligned, compileOk,
+    complexity.timeComplexity, complexity.spaceComplexity, timeTakenMs || 0
+  );
+
+  let status: Round2QuestionReport['status'] = 'PARTIAL';
+  if (primaryCompilerResult?.compileOutput) status = 'COMPILE_ERROR';
+  else if (aiAligned) status = 'ACCEPTED';
+  else if (!compileOk) status = 'RUNTIME_ERROR';
+
+  const rawTimeStr = primaryCompilerResult?.time || '';
+  const parsedTimeSec = parseFloat(rawTimeStr.replace(/[^\d.]/g, ''));
+  const runtimeMs = !isNaN(parsedTimeSec) && parsedTimeSec > 0 ? parsedTimeSec * 1000 : undefined;
+
+  return {
+    questionNumber: problem.number,
+    questionId: problem.id,
+    questionTitle: problem.title,
+    code,
+    language,
+    compilerResult: primaryCompilerResult,
+    sampleResults: [],
+    hiddenResults: [],
+    passedTests: aiAligned ? 1 : 0,
+    totalTests: 1,
+    score,
+    maxScore: maxMarks,
+    status,
+    compiledAt: Date.now(),
+    executionTime: runtimeMs !== undefined ? `${runtimeMs.toFixed(1)} ms` : (primaryCompilerResult ? '< 1 ms' : undefined),
+    executionTimeMs: runtimeMs,
+    timeComplexity: complexity.timeComplexity,
+    spaceComplexity: complexity.spaceComplexity,
+    complexityExplanation: complexity.explanation,
+    efficiencyRating: complexity.rating,
+    aiVerification
+  };
+}
 export function getStoredRound2Submission(candidateKey: string): Round2CandidateSubmission | null {
 
 
@@ -1947,8 +1646,8 @@ export async function verifyRound2CodeWithAI(
   problem: Round2Problem,
   code: string,
   language: 'C' | 'C++' | 'Python',
-  sampleInput: string,
-  expectedOutput: string,
+  _sampleInput?: string,
+  _expectedOutput?: string,
   actualOutput?: string
 ): Promise<{
   verifiedQuestionTitle: string;
@@ -1959,30 +1658,22 @@ export async function verifyRound2CodeWithAI(
   const groqKey = localStorage.getItem('codedna_groq_api_key') || localStorage.getItem('GROQ_API_KEY');
   if (groqKey && code && code.trim()) {
     try {
-      const prompt = `You are the CodeSpark 2026 Autonomous AI Examiner.
-Analyze the code on the candidate's screen:
-Question: \${problem.title} (\${problem.difficulty})
-Problem Description: \${problem.description.slice(0, 300)}
-Input Format: \${problem.inputFormat}
-Expected Output: \${expectedOutput}
-Sample Input:
-\${sampleInput}
-Candidate Code (\${language}):
-\`\`\`\${language}
-\${code.slice(0, 1200)}
+      const prompt = `You are the CodeSpark 2026 AI Examiner. Analyze if this code correctly solves the problem.
+Problem: ${problem.title}
+Description: ${problem.description.slice(0, 400)}
+Language: ${language}
+Code:
+\`\`\`${language}
+${code.slice(0, 1500)}
 \`\`\`
+Actual output when run: ${actualOutput || '(not available)'}
 Return strict JSON only:
-{
-  "verifiedQuestionTitle": "\${problem.title}",
-  "predictedOutput": "exact predicted stdout from running this code on the sample input",
-  "isAlignedWithProblem": true or false,
-  "analysis": "1 concise sentence on whether logic solves the question"
-}`;
+{"verifiedQuestionTitle":"${problem.title}","predictedOutput":"...","isAlignedWithProblem":true,"analysis":"1 concise sentence on whether logic solves the question"}`;
       const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer \${groqKey}`
+          Authorization: `Bearer ${groqKey}`
         },
         body: JSON.stringify({
           model: 'llama-3.1-8b-instant',
@@ -1991,100 +1682,26 @@ Return strict JSON only:
           response_format: { type: 'json_object' }
         })
       });
-
-
-
       if (res.ok) {
-
-
-
         const data = await res.json();
-
-
-
         const parsed = JSON.parse(data.choices[0].message.content);
-
-
-
         return {
-
-
-
           verifiedQuestionTitle: parsed.verifiedQuestionTitle || problem.title,
-
-
-
-          predictedOutput: parsed.predictedOutput || actualOutput || expectedOutput,
-
-
-
+          predictedOutput: parsed.predictedOutput || actualOutput || '',
           isAlignedWithProblem: Boolean(parsed.isAlignedWithProblem),
-
-
-
-          analysis: parsed.analysis || 'AI verified: Solution logic matches question.'
-
-
-
+          analysis: parsed.analysis || 'AI verified solution logic.'
         };
-
-
-
       }
-
-
-
     } catch {}
-
-
-
   }
-
-
-
-  // Fallback high-speed deterministic verification
-
-
-
-  const isMatch = actualOutput ? actualOutput.trim() === expectedOutput.trim() : true;
-
-
-
+  // Fallback: if code compiled and ran, consider partial alignment
   return {
-
-
-
     verifiedQuestionTitle: problem.title,
-
-
-
-    predictedOutput: actualOutput || expectedOutput,
-
-
-
-    isAlignedWithProblem: isMatch,
-
-
-
-    analysis: isMatch
-
-
-
-      ? `AI Verified: Code logic on screen solves ${problem.title}. Predicted output matches expected specification.`
-
-
-
-      : `AI Verified: Output deviation detected for ${problem.title}. Predicted output diverges from test case expected output.`
-
-
-
+    predictedOutput: actualOutput || '',
+    isAlignedWithProblem: false,
+    analysis: `Could not verify ${problem.title} with AI — no Groq key or network error.`
   };
-
-
-
 }
-
-
 
 export async function pushRound2LiveCodeToCloud(
 
@@ -2598,6 +2215,14 @@ export interface Round2LeaderboardEntry {
 
 
 
+export async function clearRound2Leaderboard(): Promise<void> {
+  try { localStorage.removeItem('codedna_codespark_r2_submissions'); } catch {}
+  if (supabase) {
+    try {
+      await supabase.from('candidate_stations').delete().like('id', 'r2_sub_%');
+    } catch (e) { console.warn('[Round 2] clearRound2Leaderboard error:', e); }
+  }
+}
 export async function fetchRound2Leaderboard(): Promise<Round2LeaderboardEntry[]> {
 
 
@@ -2938,12 +2563,8 @@ export function parseQuestionsFromPlainText(text: string): Round2Problem[] {
           'Memory limit: 256MB',
           'Standard algorithmic constraints apply'
         ],
-        sampleTestCases: Array.isArray(p.sampleTestCases) && p.sampleTestCases.length > 0 ? p.sampleTestCases : [
-          { id: 'stc_' + (idx + 1) + '_1', input: 'SampleInput', expectedOutput: 'SampleOutput', explanation: 'Standard sample test case' }
-        ],
-        hiddenTestCases: Array.isArray(p.hiddenTestCases) && p.hiddenTestCases.length > 0 ? p.hiddenTestCases : [
-          { id: 'htc_' + (idx + 1) + '_1', input: 'HiddenInput', expectedOutput: 'HiddenOutput', isHidden: true }
-        ],
+        sampleTestCases: Array.isArray(p.sampleTestCases) ? p.sampleTestCases : [],
+        hiddenTestCases: Array.isArray(p.hiddenTestCases) ? p.hiddenTestCases : [],
         starterCode: p.starterCode || {
           Python: '# Write your solution below\n\ndef solution():\n    pass\n\nif __name__ == "__main__":\n    solution()\n',
           'C++': '// Write your solution below\n#include <iostream>\nusing namespace std;\n\nint main() {\n    // Code here\n    return 0;\n}\n',
@@ -3011,22 +2632,8 @@ export function parseQuestionsFromPlainText(text: string): Round2Problem[] {
         'Memory limit: 256MB',
         'Standard algorithmic constraints apply'
       ],
-      sampleTestCases: [
-        {
-          id: 'stc_' + (idx + 1) + '_1',
-          input: 'SampleInput',
-          expectedOutput: 'SampleOutput',
-          explanation: 'Standard sample test case'
-        }
-      ],
-      hiddenTestCases: [
-        {
-          id: 'htc_' + (idx + 1) + '_1',
-          input: 'HiddenInput',
-          expectedOutput: 'HiddenOutput',
-          isHidden: true
-        }
-      ],
+      sampleTestCases: [],
+      hiddenTestCases: [],
       starterCode: {
         Python: '# Write your solution below\n\ndef solution():\n    pass\n\nif __name__ == "__main__":\n    solution()\n',
         'C++': '// Write your solution below\n#include <iostream>\nusing namespace std;\n\nint main() {\n    // Code here\n    return 0;\n}\n',

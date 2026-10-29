@@ -1,4 +1,4 @@
-import { supabase } from './supabaseService';
+﻿import { supabase } from './supabaseService';
 import {
   MCQExamConfig,
   MCQQuestion,
@@ -1078,7 +1078,8 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
   const all = getAllCodeSparkCandidates();
   const normalizedKey = normalizeCodeSparkKey(cleaned);
   const inputDigits = cleaned.replace(/\D/g, '');
-  const isInputR2 = cleaned.includes('R2');
+  const isRound1Over = isRound1ConcludedGlobally();
+  const isInputR2 = cleaned.includes('R2') || isRound1Over;
 
   // 1. If candidate explicitly enters a Round 2 code (contains R2, e.g. AXENT-R2-XXXX, R2-XXXX):
   if (isInputR2) {
@@ -1125,6 +1126,19 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
         c.status === 'SHORTLISTED' ||
         isCandidateInShortlistStorage(c.rollNumber || c.accessKey)
       );
+
+      // If Round 1 has concluded and candidate is shortlisted, auto-route to Round 2!
+      if (isRound1Over && isShortlisted) {
+        if (!c.round2Key) {
+          c.round2Key = generateRound2KeyForCandidate(c);
+        }
+        return {
+          candidate: c,
+          targetRound: 'round2',
+          isShortlisted: true,
+          round2Key: c.round2Key
+        };
+      }
 
       // This is explicitly a Round 1 key!
       return {
