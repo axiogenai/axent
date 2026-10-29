@@ -101,7 +101,8 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
   stations,
   allLabs,
   onInspectStation,
-  onInspectReport
+  onInspectReport,
+  theme
 }) => {
   // Navigation tabs: Round 1 MCQ CCTV, Round 1 Results, Shortlist & Keys, Round 2 Coding, Paper Blueprint, Candidate Roster, Specs
   const [activeTab, setActiveTab] = useState<'mcq_cctv' | 'round1' | 'shortlist' | 'round2' | 'candidates' | 'overview'>('mcq_cctv');
@@ -947,14 +948,54 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
     playSound('click');
   };
 
-  // ── High-Density Anti-Slop Dark Architecture Styles ──
-  const darkCardStyle: React.CSSProperties = {
-    background: '#121214',
-    border: '1px solid #27272a',
+  // ── Domain-Intelligent Theme Awareness (Dual-Mode Responsive) ──
+  const isDark = theme === 'dark' || (theme === undefined && typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark');
+
+  const t = {
+    isDark,
+    // Surfaces
+    bgApp: isDark ? '#09090b' : '#f8fafc',
+    bgCard: isDark ? '#121214' : '#ffffff',
+    bgCardElevated: isDark ? '#18181b' : '#f8fafc',
+    bgSurface: isDark ? '#18181b' : '#f1f5f9',
+    bgSubtle: isDark ? '#27272a' : '#e2e8f0',
+    bgInput: isDark ? '#09090b' : '#ffffff',
+    bgTableHead: isDark ? '#18181b' : '#f8fafc',
+    bgHover: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)',
+    // Borders
+    border: isDark ? '#27272a' : '#e2e8f0',
+    borderStrong: isDark ? '#3f3f46' : '#cbd5e1',
+    borderDashed: isDark ? '#27272a' : '#cbd5e1',
+    // Text
+    textPrimary: isDark ? '#f4f4f5' : '#0f172a',
+    textSecondary: isDark ? '#a1a1aa' : '#475569',
+    textMuted: isDark ? '#71717a' : '#64748b',
+    textDim: isDark ? '#52525b' : '#94a3b8',
+    // Badges / Accents
+    badgeBg: isDark ? '#18181b' : '#f1f5f9',
+    badgeBorder: isDark ? '#3f3f46' : '#e2e8f0',
+    badgeText: isDark ? '#e4e4e7' : '#334155',
+    // Buttons
+    btnPrimaryBg: isDark ? '#f4f4f5' : '#0f172a',
+    btnPrimaryColor: isDark ? '#09090b' : '#ffffff',
+    btnSecondaryBg: isDark ? '#18181b' : '#ffffff',
+    btnSecondaryBorder: isDark ? '#27272a' : '#e2e8f0',
+    btnSecondaryColor: isDark ? '#f4f4f5' : '#0f172a',
+    // Shadows
+    shadowSm: isDark ? 'none' : '0 1px 2px rgba(0, 0, 0, 0.05)',
+    shadowMd: isDark ? '0 12px 32px rgba(0, 0, 0, 0.5)' : '0 10px 25px rgba(0, 0, 0, 0.08)',
+  };
+
+  const cardStyle: React.CSSProperties = {
+    background: t.bgCard,
+    border: `1px solid ${t.border}`,
     borderRadius: '8px',
     padding: '16px 20px',
-    boxSizing: 'border-box'
+    boxSizing: 'border-box',
+    color: t.textPrimary,
+    boxShadow: t.shadowSm
   };
+  const darkCardStyle = cardStyle;
 
   return (
     <div
@@ -963,16 +1004,16 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
         flexDirection: 'column',
         gap: '16px',
         width: '100%',
-        color: '#f4f4f5',
+        color: t.textPrimary,
         fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
       }}
     >
       {/* ── 1. MASTER CODESPARK CONTROL ROOM BANNER ── */}
       <div
         style={{
-          ...darkCardStyle,
-          background: '#09090b',
-          borderColor: '#27272a',
+          ...cardStyle,
+          background: t.bgCard,
+          borderColor: t.border,
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -987,19 +1028,19 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
               width: '44px',
               height: '44px',
               borderRadius: '8px',
-              background: '#18181b',
-              border: '1px solid #27272a',
-              color: '#f4f4f5',
+              background: t.bgSurface,
+              border: `1px solid ${t.border}`,
+              color: t.textPrimary,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}
           >
-            <Zap size={22} color="#f4f4f5" />
+            <Zap size={22} color={t.textPrimary} />
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: '#f4f4f5', letterSpacing: '-0.02em' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: t.textPrimary, letterSpacing: '-0.02em' }}>
                 Code Spark 2026 Admin Control
               </h2>
               <span
@@ -1008,9 +1049,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                   fontWeight: 700,
                   padding: '2px 8px',
                   borderRadius: '4px',
-                  background: '#18181b',
-                  color: '#e4e4e7',
-                  border: '1px solid #3f3f46',
+                  background: t.badgeBg,
+                  color: t.badgeText,
+                  border: `1px solid ${t.badgeBorder}`,
                   fontFamily: 'monospace'
                 }}
               >
@@ -1022,15 +1063,15 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                   fontWeight: 600,
                   padding: '2px 8px',
                   borderRadius: '4px',
-                  background: 'rgba(16, 185, 129, 0.1)',
-                  color: '#10b981',
-                  border: '1px solid rgba(16, 185, 129, 0.25)'
+                  background: isDark ? 'rgba(16, 185, 129, 0.1)' : '#ecfdf5',
+                  color: isDark ? '#10b981' : '#059669',
+                  border: isDark ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid #a7f3d0'
                 }}
               >
                 SEALED SHORTLIST GATEKEEPER
               </span>
             </div>
-            <p style={{ fontSize: '12px', color: '#a1a1aa', margin: '4px 0 0 0' }}>
+            <p style={{ fontSize: '12px', color: t.textMuted, margin: '4px 0 0 0' }}>
               Round 1: Cognitive Aptitude MCQ &bull; Automated Shortlist &bull; Round 2: Algorithmic Code Sprint Arena
             </p>
           </div>
@@ -1038,21 +1079,21 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
         {/* Real-Time Contest Metric Badges */}
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          <div style={{ padding: '8px 14px', borderRadius: '6px', background: '#18181b', border: '1px solid #27272a', textAlign: 'center' }}>
-            <div style={{ fontSize: '16px', fontWeight: 800, color: '#f4f4f5' }}>{aptitudeCandidates.length}</div>
-            <div style={{ fontSize: '9.5px', color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>R1 Submissions</div>
+          <div style={{ padding: '8px 14px', borderRadius: '6px', background: t.bgCardElevated, border: `1px solid ${t.border}`, textAlign: 'center' }}>
+            <div style={{ fontSize: '16px', fontWeight: 800, color: t.textPrimary }}>{aptitudeCandidates.length}</div>
+            <div style={{ fontSize: '9.5px', color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>R1 Submissions</div>
           </div>
-          <div style={{ padding: '8px 14px', borderRadius: '6px', background: '#18181b', border: '1px solid #10b981', textAlign: 'center' }}>
-            <div style={{ fontSize: '16px', fontWeight: 800, color: '#10b981' }}>{shortlistedRolls.length}</div>
-            <div style={{ fontSize: '9.5px', color: '#10b981', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Shortlisted for R2</div>
+          <div style={{ padding: '8px 14px', borderRadius: '6px', background: isDark ? '#18181b' : '#ecfdf5', border: isDark ? '1px solid #10b981' : '1px solid #a7f3d0', textAlign: 'center' }}>
+            <div style={{ fontSize: '16px', fontWeight: 800, color: isDark ? '#10b981' : '#059669' }}>{shortlistedRolls.length}</div>
+            <div style={{ fontSize: '9.5px', color: isDark ? '#10b981' : '#059669', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Shortlisted for R2</div>
           </div>
-          <div style={{ padding: '8px 14px', borderRadius: '6px', background: '#18181b', border: '1px solid #27272a', textAlign: 'center' }}>
-            <div style={{ fontSize: '16px', fontWeight: 800, color: '#3b82f6' }}>{mcqQuestions.length}</div>
-            <div style={{ fontSize: '9.5px', color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>MCQ Questions</div>
+          <div style={{ padding: '8px 14px', borderRadius: '6px', background: t.bgCardElevated, border: `1px solid ${t.border}`, textAlign: 'center' }}>
+            <div style={{ fontSize: '16px', fontWeight: 800, color: isDark ? '#3b82f6' : '#0284c7' }}>{mcqQuestions.length}</div>
+            <div style={{ fontSize: '9.5px', color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>MCQ Questions</div>
           </div>
-          <div style={{ padding: '8px 14px', borderRadius: '6px', background: '#18181b', border: '1px solid #27272a', textAlign: 'center' }}>
-            <div style={{ fontSize: '16px', fontWeight: 800, color: '#e4e4e7' }}>{codingQuestions.length}</div>
-            <div style={{ fontSize: '9.5px', color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Coding Problems</div>
+          <div style={{ padding: '8px 14px', borderRadius: '6px', background: t.bgCardElevated, border: `1px solid ${t.border}`, textAlign: 'center' }}>
+            <div style={{ fontSize: '16px', fontWeight: 800, color: t.textPrimary }}>{codingQuestions.length}</div>
+            <div style={{ fontSize: '9.5px', color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Coding Problems</div>
           </div>
         </div>
       </div>
@@ -1063,8 +1104,8 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           style={{
             padding: '14px 18px',
             borderRadius: '8px',
-            background: 'rgba(234, 26, 28, 0.1)',
-            border: '1px solid rgba(234, 26, 28, 0.35)',
+            background: isDark ? 'rgba(234, 26, 28, 0.1)' : '#fef2f2',
+            border: isDark ? '1px solid rgba(234, 26, 28, 0.35)' : '1px solid #fecaca',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -1075,11 +1116,11 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <AlertTriangle size={18} color="#ea1a1c" />
             <div>
-              <div style={{ fontSize: '13px', fontWeight: 800, color: '#f4f4f5' }}>
+              <div style={{ fontSize: '13px', fontWeight: 800, color: isDark ? '#f4f4f5' : '#991b1b' }}>
                 Attention Proctor: No Active Paper Assigned to CodeSpark Round 1
               </div>
-              <div style={{ fontSize: '12px', color: '#a1a1aa' }}>
-                Candidates will see &quot;Exam is not scheduled&quot; until you select a paper from the Paper Config & Specs tab and save configuration.
+              <div style={{ fontSize: '12px', color: isDark ? '#a1a1aa' : '#7f1d1d' }}>
+                Candidates will see &quot;Exam is not scheduled&quot; until you select a paper from the Paper Config &amp; Specs tab and save configuration.
               </div>
             </div>
           </div>
@@ -1090,17 +1131,17 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
               style={{
                 padding: '7px 10px',
                 borderRadius: '6px',
-                border: '1px solid #3f3f46',
-                background: '#09090b',
-                color: '#f4f4f5',
+                border: `1px solid ${t.borderStrong}`,
+                background: t.bgInput,
+                color: t.textPrimary,
                 fontSize: '12px',
-                colorScheme: 'dark'
+                colorScheme: isDark ? 'dark' : 'light'
               }}
             >
               <option value="">-- Choose Exam Paper --</option>
               {allExams.map((e) => (
                 <option key={e.id} value={e.id}>
-                  {e.title} ({e.questionCount} Qs · {e.durationMinutes}m)
+                  {e.title} ({e.questionCount} Qs &bull; {e.durationMinutes}m)
                 </option>
               ))}
             </select>
@@ -1111,8 +1152,8 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
               style={{
                 padding: '7px 14px',
                 borderRadius: '6px',
-                background: '#f4f4f5',
-                color: '#09090b',
+                background: t.btnPrimaryBg,
+                color: t.btnPrimaryColor,
                 fontWeight: 700,
                 fontSize: '12px',
                 border: 'none',
@@ -1128,8 +1169,8 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           style={{
             padding: '10px 16px',
             borderRadius: '6px',
-            background: '#121214',
-            border: '1px solid #27272a',
+            background: t.bgCardElevated,
+            border: `1px solid ${t.border}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -1139,17 +1180,17 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10b981' }} />
-            <span style={{ fontSize: '12px', color: '#71717a' }}>Active CodeSpark Paper:</span>
-            <strong style={{ fontSize: '13px', color: '#f4f4f5' }}>{currentAssignedExam.title}</strong>
+            <span style={{ fontSize: '12px', color: t.textMuted }}>Active CodeSpark Paper:</span>
+            <strong style={{ fontSize: '13px', color: t.textPrimary }}>{currentAssignedExam.title}</strong>
             <span
               style={{
                 fontSize: '10px',
                 fontWeight: 800,
                 padding: '2px 6px',
                 borderRadius: '3px',
-                background: 'rgba(16, 185, 129, 0.12)',
-                color: '#10b981',
-                border: '1px solid rgba(16, 185, 129, 0.3)'
+                background: isDark ? 'rgba(16, 185, 129, 0.12)' : '#ecfdf5',
+                color: isDark ? '#10b981' : '#059669',
+                border: isDark ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid #a7f3d0'
               }}
             >
               CLOUD SYNCHRONIZED
@@ -1160,9 +1201,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
               type="button"
               onClick={() => setActiveTab('overview')}
               style={{
-                background: 'transparent',
-                border: '1px solid #27272a',
-                color: '#a1a1aa',
+                background: t.bgCard,
+                border: `1px solid ${t.border}`,
+                color: t.textSecondary,
                 borderRadius: '4px',
                 padding: '4px 10px',
                 fontSize: '11px',
@@ -1175,12 +1216,12 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
         </div>
       )}
 
-      {/* ── 2. SUB-NAVIGATION TABS (High-Density Dark Pills) ── */}
+      {/* ── 2. SUB-NAVIGATION TABS (High-Density Dual-Mode Pills) ── */}
       <div
         style={{
           display: 'flex',
           gap: '6px',
-          borderBottom: '1px solid #27272a',
+          borderBottom: `1px solid ${t.border}`,
           paddingBottom: '10px',
           overflowX: 'auto'
         }}
@@ -1206,13 +1247,20 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
               gap: '6px',
               padding: '8px 14px',
               borderRadius: '6px',
-              border: activeTab === tab.id ? '1px solid #3f3f46' : '1px solid #27272a',
-              background: activeTab === tab.id ? '#18181b' : 'transparent',
-              color: activeTab === tab.id ? '#ffffff' : '#a1a1aa',
+              border: activeTab === tab.id
+                ? (isDark ? '1px solid #3f3f46' : '1px solid #0f172a')
+                : `1px solid ${t.border}`,
+              background: activeTab === tab.id
+                ? (isDark ? '#18181b' : '#0f172a')
+                : t.bgCard,
+              color: activeTab === tab.id
+                ? '#ffffff'
+                : t.textSecondary,
               fontSize: '12px',
               fontWeight: activeTab === tab.id ? 700 : 500,
               cursor: 'pointer',
               whiteSpace: 'nowrap',
+              boxShadow: activeTab === tab.id && !isDark ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
               transition: 'all 0.15s ease'
             }}
           >
@@ -1230,7 +1278,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           {/* Top Control Bar & Live Stats */}
           <div
             style={{
-              ...darkCardStyle,
+              ...cardStyle,
               display: 'flex',
               flexWrap: 'wrap',
               alignItems: 'center',
@@ -1244,19 +1292,19 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                   width: '38px',
                   height: '38px',
                   borderRadius: '6px',
-                  background: 'rgba(234, 26, 28, 0.12)',
+                  background: isDark ? 'rgba(234, 26, 28, 0.12)' : '#fee2e2',
                   color: '#ea1a1c',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  border: '1px solid rgba(234, 26, 28, 0.25)'
+                  border: isDark ? '1px solid rgba(234, 26, 28, 0.25)' : '1px solid #fecaca'
                 }}
               >
                 <Video size={18} />
               </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#f4f4f5' }}>
+                  <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: t.textPrimary }}>
                     Round 1 MCQ CCTV Surveillance Wall
                   </h4>
                   <span
@@ -1266,9 +1314,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                       fontFamily: 'monospace',
                       padding: '2px 8px',
                       borderRadius: '4px',
-                      background: liveMcqCount > 0 ? 'rgba(56, 189, 248, 0.15)' : '#18181b',
-                      color: liveMcqCount > 0 ? '#38bdf8' : '#71717a',
-                      border: liveMcqCount > 0 ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid #27272a',
+                      background: liveMcqCount > 0 ? (isDark ? 'rgba(56, 189, 248, 0.15)' : '#e0f2fe') : t.badgeBg,
+                      color: liveMcqCount > 0 ? (isDark ? '#38bdf8' : '#0284c7') : t.textMuted,
+                      border: liveMcqCount > 0 ? (isDark ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid #bae6fd') : `1px solid ${t.border}`,
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '5px'
@@ -1279,13 +1327,13 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                         width: '6px',
                         height: '6px',
                         borderRadius: '50%',
-                        background: liveMcqCount > 0 ? '#38bdf8' : '#71717a'
+                        background: liveMcqCount > 0 ? (isDark ? '#38bdf8' : '#0284c7') : t.textMuted
                       }}
                     />
                     {liveMcqCount} ACTIVE CANDIDATE FEEDS
                   </span>
                 </div>
-                <div style={{ fontSize: '12px', color: '#71717a', marginTop: '2px' }}>
+                <div style={{ fontSize: '12px', color: t.textMuted, marginTop: '2px' }}>
                   Real-time student question progression telemetry & workstation CCTV monitor
                 </div>
               </div>
@@ -1298,9 +1346,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                 style={{
                   display: 'inline-flex',
                   padding: '3px',
-                  background: '#18181b',
+                  background: t.bgSurface,
                   borderRadius: '6px',
-                  border: '1px solid #27272a'
+                  border: `1px solid ${t.border}`
                 }}
               >
                 {[
@@ -1320,8 +1368,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                       padding: '4px 10px',
                       borderRadius: '4px',
                       border: 'none',
-                      background: cctvFilter === f.id ? '#27272a' : 'transparent',
-                      color: cctvFilter === f.id ? '#ffffff' : '#a1a1aa',
+                      background: cctvFilter === f.id ? (isDark ? '#27272a' : '#ffffff') : 'transparent',
+                      color: cctvFilter === f.id ? t.textPrimary : t.textSecondary,
+                      boxShadow: cctvFilter === f.id && !isDark ? '0 1px 2px rgba(0, 0, 0, 0.06)' : 'none',
                       fontSize: '11px',
                       fontWeight: cctvFilter === f.id ? 700 : 500,
                       cursor: 'pointer'
@@ -1336,7 +1385,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
               <div style={{ position: 'relative', width: '220px' }}>
                 <Search
                   size={13}
-                  style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#71717a' }}
+                  style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: t.textMuted }}
                 />
                 <input
                   type="text"
@@ -1347,9 +1396,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                     width: '100%',
                     padding: '6px 10px 6px 30px',
                     borderRadius: '6px',
-                    border: '1px solid #27272a',
-                    background: '#18181b',
-                    color: '#f4f4f5',
+                    border: `1px solid ${t.border}`,
+                    background: t.bgInput,
+                    color: t.textPrimary,
                     fontSize: '11.5px',
                     outline: 'none'
                   }}
@@ -1365,9 +1414,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                   gap: '6px',
                   padding: '6px 12px',
                   borderRadius: '6px',
-                  background: '#18181b',
-                  border: '1px solid #27272a',
-                  color: '#f4f4f5',
+                  background: t.btnSecondaryBg,
+                  border: `1px solid ${t.btnSecondaryBorder}`,
+                  color: t.btnSecondaryColor,
                   fontSize: '11.5px',
                   fontWeight: 600,
                   cursor: 'pointer'
@@ -1402,9 +1451,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           {/* Institutional Multi-Lab Status & Conclude Controller */}
           <div
             style={{
-              ...darkCardStyle,
-              background: isRound1Concluded ? 'rgba(16, 185, 129, 0.04)' : '#0e0e11',
-              borderColor: isRound1Concluded ? 'rgba(16, 185, 129, 0.4)' : '#27272a',
+              ...cardStyle,
+              background: isRound1Concluded ? (isDark ? 'rgba(16, 185, 129, 0.04)' : '#f0fdf4') : t.bgCard,
+              borderColor: isRound1Concluded ? (isDark ? 'rgba(16, 185, 129, 0.4)' : '#86efac') : t.border,
               display: 'flex',
               flexWrap: 'wrap',
               alignItems: 'center',
@@ -1419,19 +1468,19 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                   width: '38px',
                   height: '38px',
                   borderRadius: '6px',
-                  background: isRound1Concluded ? 'rgba(16, 185, 129, 0.15)' : 'rgba(234, 26, 28, 0.12)',
-                  color: isRound1Concluded ? '#10b981' : '#f4f4f5',
+                  background: isRound1Concluded ? (isDark ? 'rgba(16, 185, 129, 0.15)' : '#dcfce7') : (isDark ? 'rgba(234, 26, 28, 0.12)' : '#fee2e2'),
+                  color: isRound1Concluded ? '#10b981' : '#dc2626',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  border: isRound1Concluded ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(255, 255, 255, 0.15)'
+                  border: isRound1Concluded ? (isDark ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid #86efac') : (isDark ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid #fecaca')
                 }}
               >
-                {isRound1Concluded ? <CheckCircle2 size={18} color="#10b981" /> : <Shield size={18} color="#f4f4f5" />}
+                {isRound1Concluded ? <CheckCircle2 size={18} color="#10b981" /> : <Shield size={18} color={isDark ? '#f4f4f5' : '#dc2626'} />}
               </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#f4f4f5' }}>
+                  <span style={{ fontSize: '13.5px', fontWeight: 800, color: t.textPrimary }}>
                     Institutional Multi-Lab Examination Status
                   </span>
                   <span
@@ -1441,9 +1490,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                       fontFamily: 'monospace',
                       padding: '2.5px 7px',
                       borderRadius: '4px',
-                      background: isRound1Concluded ? 'rgba(16, 185, 129, 0.15)' : '#18181b',
-                      color: isRound1Concluded ? '#10b981' : '#fbbf24',
-                      border: isRound1Concluded ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid #3f3f46'
+                      background: isRound1Concluded ? (isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5') : t.badgeBg,
+                      color: isRound1Concluded ? (isDark ? '#10b981' : '#059669') : (isDark ? '#fbbf24' : '#d97706'),
+                      border: isRound1Concluded ? (isDark ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid #a7f3d0') : `1px solid ${t.badgeBorder}`
                     }}
                   >
                     {isRound1Concluded
@@ -1451,7 +1500,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                       : '● ROUND 1 LIVE ACROSS ALL LABS — SHORTLIST PENDING'}
                   </span>
                 </div>
-                <div style={{ fontSize: '12px', color: '#a1a1aa', marginTop: '3px' }}>
+                <div style={{ fontSize: '12px', color: t.textMuted, marginTop: '3px' }}>
                   {isRound1Concluded
                     ? `Round 1 is officially concluded. All lab records merged into unified leaderboard. ${shortlistedRolls.length} candidates shortlisted for Round 2.`
                     : 'Lab A, Lab B & Waiting Sittings Active. Candidates attend exam when workstations become free. Shortlisting will combine scores across all labs when testing concludes.'}
@@ -1467,19 +1516,19 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                   style={{
                     padding: '8px 14px',
                     borderRadius: '6px',
-                    background: '#f4f4f5',
+                    background: t.btnPrimaryBg,
                     border: 'none',
-                    color: '#09090b',
+                    color: t.btnPrimaryColor,
                     fontSize: '12px',
                     fontWeight: 800,
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
-                    boxShadow: '0 2px 8px rgba(255,255,255,0.1)'
+                    boxShadow: isDark ? '0 2px 8px rgba(255,255,255,0.1)' : '0 2px 6px rgba(0,0,0,0.1)'
                   }}
                 >
-                  <Trophy size={13} color="#09090b" />
+                  <Trophy size={13} color={t.btnPrimaryColor} />
                   <span>Conclude Round 1 &amp; Shortlist Across All Labs</span>
                 </button>
               ) : (
@@ -1492,7 +1541,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                       borderRadius: '6px',
                       background: '#10b981',
                       border: 'none',
-                      color: '#09090b',
+                      color: '#ffffff',
                       fontSize: '12px',
                       fontWeight: 800,
                       cursor: 'pointer',
@@ -1501,7 +1550,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                       gap: '6px'
                     }}
                   >
-                    <Mail size={13} color="#09090b" />
+                    <Mail size={13} color="#ffffff" />
                     <span>Send Round 2 Codes via Gmail</span>
                   </button>
 
@@ -1511,9 +1560,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                     style={{
                       padding: '8px 12px',
                       borderRadius: '6px',
-                      background: '#18181b',
-                      border: '1px solid #27272a',
-                      color: '#f4f4f5',
+                      background: t.btnSecondaryBg,
+                      border: `1px solid ${t.btnSecondaryBorder}`,
+                      color: t.btnSecondaryColor,
                       fontSize: '11.5px',
                       fontWeight: 700,
                       cursor: 'pointer',
@@ -1534,9 +1583,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                 style={{
                   padding: '8px 12px',
                   borderRadius: '6px',
-                  background: '#18181b',
-                  border: '1px solid #27272a',
-                  color: '#f4f4f5',
+                  background: t.btnSecondaryBg,
+                  border: `1px solid ${t.btnSecondaryBorder}`,
+                  color: t.btnSecondaryColor,
                   fontSize: '11.5px',
                   fontWeight: 700,
                   cursor: 'pointer',
@@ -1546,7 +1595,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                 }}
                 title="Generate fresh exam paper with any number of questions and marks"
               >
-                <Cpu size={12} color="#a1a1aa" />
+                <Cpu size={12} color={t.textMuted} />
                 <span>AI Paper Gen</span>
               </button>
 
@@ -1556,9 +1605,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                 style={{
                   padding: '8px 12px',
                   borderRadius: '6px',
-                  background: '#18181b',
-                  border: '1px solid #27272a',
-                  color: '#f4f4f5',
+                  background: t.btnSecondaryBg,
+                  border: `1px solid ${t.btnSecondaryBorder}`,
+                  color: t.btnSecondaryColor,
                   fontSize: '11.5px',
                   fontWeight: 700,
                   cursor: 'pointer',
@@ -1578,9 +1627,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                 style={{
                   padding: '8px 12px',
                   borderRadius: '6px',
-                  background: '#18181b',
-                  border: '1px solid #27272a',
-                  color: '#f4f4f5',
+                  background: t.btnSecondaryBg,
+                  border: `1px solid ${t.btnSecondaryBorder}`,
+                  color: t.btnSecondaryColor,
                   fontSize: '11.5px',
                   fontWeight: 700,
                   cursor: 'pointer',
@@ -1590,7 +1639,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                 }}
                 title="Import questions directly from Google Form, Docs, or Text"
               >
-                <FileText size={12} color="#a1a1aa" />
+                <FileText size={12} color={t.textMuted} />
                 <span>Import Google Form</span>
               </button>
 
@@ -1600,9 +1649,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                 style={{
                   padding: '8px 12px',
                   borderRadius: '6px',
-                  background: '#18181b',
-                  border: '1px solid #27272a',
-                  color: '#a1a1aa',
+                  background: t.btnSecondaryBg,
+                  border: `1px solid ${t.btnSecondaryBorder}`,
+                  color: t.textSecondary,
                   fontSize: '11.5px',
                   fontWeight: 700,
                   cursor: 'pointer',
@@ -1671,16 +1720,16 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                   gridColumn: '1 / -1',
                   padding: '48px 24px',
                   textAlign: 'center',
-                  border: '1px dashed #27272a',
+                  border: `1px dashed ${t.borderDashed}`,
                   borderRadius: '8px',
-                  background: '#09090b'
+                  background: t.bgCard
                 }}
               >
-                <VideoOff size={32} color="#71717a" style={{ marginBottom: '10px' }} />
-                <div style={{ fontSize: '14px', fontWeight: 700, color: '#f4f4f5' }}>
-                  No candidate workstations match filter "{cctvFilter}"
+                <VideoOff size={32} color={t.textMuted} style={{ marginBottom: '10px' }} />
+                <div style={{ fontSize: '14px', fontWeight: 700, color: t.textPrimary }}>
+                  No candidate workstations match filter &quot;{cctvFilter}&quot;
                 </div>
-                <div style={{ fontSize: '12px', color: '#71717a', marginTop: '4px' }}>
+                <div style={{ fontSize: '12px', color: t.textMuted, marginTop: '4px' }}>
                   Candidates appear here in real-time as they authenticate and take Round 1.
                 </div>
               </div>
@@ -1711,7 +1760,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <Monitor size={15} color="#ea1a1c" />
-                        <span style={{ fontWeight: 800, fontSize: '14px', color: '#ffffff' }}>
+                        <span style={{ fontWeight: 800, fontSize: '14px', color: t.textPrimary }}>
                           {station.stationNumber}
                         </span>
                         <span style={{ fontSize: '11px', color: '#71717a', fontFamily: 'monospace' }}>
@@ -1804,9 +1853,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                       style={{
                         height: '195px',
                         minHeight: '195px',
-                        background: '#040508',
+                        background: isDark ? '#040508' : '#f1f5f9',
                         borderRadius: '6px',
-                        border: '1px solid #27272a',
+                        border: `1px solid ${t.border}`,
                         padding: '10px 12px',
                         display: 'flex',
                         flexDirection: 'column',
@@ -1882,7 +1931,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                               <ListChecks size={13} color="#ea1a1c" />
-                              <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#f4f4f5', letterSpacing: '0.04em' }}>
+                              <span style={{ fontSize: '10.5px', fontWeight: 800, color: t.textPrimary, letterSpacing: '0.04em' }}>
                                 MCQ TELEMETRY
                               </span>
                             </div>
@@ -1995,7 +2044,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: '#f4f4f5' }}>
+                          <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: t.textPrimary }}>
                             {station.student.name}
                           </h4>
                           {isCandidateAuthorizedForRound1Retake(station.student.rollNumber || candKey) ? (
@@ -2020,9 +2069,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                                 fontWeight: 700,
                                 padding: '1px 5px',
                                 borderRadius: '3px',
-                                background: '#18181b',
-                                color: '#71717a',
-                                border: '1px solid #27272a',
+                                background: t.badgeBg,
+                                color: t.textMuted,
+                                border: `1px solid ${t.border}`, 
                                 fontFamily: 'monospace'
                               }}
                             >
@@ -2035,7 +2084,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                         </span>
                       </div>
                       <div style={{ fontSize: '11.5px', color: '#a1a1aa', marginTop: '2px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>Access Key: <strong style={{ color: '#ffffff', fontFamily: 'monospace' }}>{candKey}</strong></span>
+                        <span>Access Key: <strong style={{ color: t.textPrimary, fontFamily: 'monospace' }}>{candKey}</strong></span>
                         {(station.metrics?.tabSwitchViolations || 0) > 0 ? (
                           <span style={{ color: '#ef4444', fontWeight: 700, fontSize: '10.5px' }}>
                             {station.metrics?.tabSwitchViolations} Tab Violations
@@ -2047,7 +2096,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                     </div>
 
                     {/* Quick Action Buttons */}
-                    <div style={{ display: 'flex', gap: '6px', paddingTop: '8px', borderTop: '1px solid #27272a', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: '6px', paddingTop: '8px', borderTop: `1px solid ${t.border}`, flexWrap: 'wrap' }}>
                       <button
                         type="button"
                         onClick={() => {
@@ -2071,9 +2120,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                           minWidth: '85px',
                           padding: '7px 8px',
                           borderRadius: '4px',
-                          background: '#18181b',
-                          border: '1px solid #27272a',
-                          color: '#f4f4f5',
+                          background: t.btnSecondaryBg,
+                          border: `1px solid ${t.btnSecondaryBorder}`,
+                          color: t.btnSecondaryColor,
                           fontSize: '11px',
                           fontWeight: 700,
                           cursor: 'pointer',
@@ -2098,14 +2147,14 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                           padding: '7px 9px',
                           borderRadius: '4px',
                           background: isCandidateAuthorizedForRound1Retake(station.student.rollNumber || candKey)
-                            ? 'rgba(245, 158, 11, 0.15)'
-                            : '#18181b',
+                            ? (isDark ? 'rgba(245, 158, 11, 0.15)' : '#fef3c7')
+                            : t.btnSecondaryBg,
                           border: isCandidateAuthorizedForRound1Retake(station.student.rollNumber || candKey)
-                            ? '1px solid rgba(245, 158, 11, 0.4)'
-                            : '1px solid #27272a',
+                            ? (isDark ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid #fde68a')
+                            : `1px solid ${t.btnSecondaryBorder}`,
                           color: isCandidateAuthorizedForRound1Retake(station.student.rollNumber || candKey)
                             ? '#f59e0b'
-                            : '#d4d4d8',
+                            : t.btnSecondaryColor,
                           fontSize: '11px',
                           fontWeight: 700,
                           cursor: 'pointer',
@@ -2150,8 +2199,8 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                         style={{
                           padding: '7px 8px',
                           borderRadius: '4px',
-                          background: '#18181b',
-                          border: '1px solid #27272a',
+                          background: t.btnSecondaryBg,
+                          border: `1px solid ${t.btnSecondaryBorder}`,
                           color: '#f59e0b',
                           fontSize: '11px',
                           fontWeight: 700,
@@ -2184,21 +2233,21 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
               <button
                 type="button"
                 onClick={() => handleShortlistTopN(quickCutoffInput)}
-                style={{ padding: '7px 12px', borderRadius: '6px', background: '#18181b', border: '1px solid #3f3f46', color: '#f4f4f5', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                style={{ padding: '7px 12px', borderRadius: '6px', background: t.btnSecondaryBg, border: `1px solid ${t.btnSecondaryBorder}`, color: t.btnSecondaryColor, fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
               >
                 <Trophy size={13} color="#eab308" /> Shortlist Top {quickCutoffInput} Candidates
               </button>
               <button
                 type="button"
                 onClick={() => handleShortlistByCutoff(cutoffScore)}
-                style={{ padding: '7px 12px', borderRadius: '6px', background: '#18181b', border: '1px solid #27272a', color: '#f4f4f5', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                style={{ padding: '7px 12px', borderRadius: '6px', background: t.btnSecondaryBg, border: `1px solid ${t.btnSecondaryBorder}`, color: t.btnSecondaryColor, fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
               >
                 <Filter size={13} /> Shortlist &ge; {cutoffScore}% Score
               </button>
               <button
                 type="button"
                 onClick={handleAuthorizeAllRemaining}
-                style={{ padding: '7px 12px', borderRadius: '6px', background: '#18181b', border: '1px solid rgba(245, 158, 11, 0.4)', color: '#f59e0b', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                style={{ padding: '7px 12px', borderRadius: '6px', background: t.btnSecondaryBg, border: '1px solid rgba(245, 158, 11, 0.4)', color: '#f59e0b', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
                 title="If lab was full during slot 1, authorize all remaining candidates to take Round 1 in Batch 2"
               >
                 <Zap size={13} color="#f59e0b" /> Authorize Remaining for Batch 2 (Lab Overflow)
@@ -2206,14 +2255,14 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
               <button
                 type="button"
                 onClick={handleClearShortlist}
-                style={{ padding: '7px 12px', borderRadius: '6px', background: '#18181b', border: '1px solid #27272a', color: '#71717a', fontSize: '12px', fontWeight: 500, cursor: 'pointer' }}
+                style={{ padding: '7px 12px', borderRadius: '6px', background: t.btnSecondaryBg, border: `1px solid ${t.btnSecondaryBorder}`, color: t.textMuted, fontSize: '12px', fontWeight: 500, cursor: 'pointer' }}
               >
                 Clear Shortlist
               </button>
               <button
                 type="button"
                 onClick={handlePurgeAllAttempts}
-                style={{ padding: '7px 12px', borderRadius: '6px', background: '#18181b', border: '1px solid rgba(239,68,68,0.4)', color: '#ef4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                style={{ padding: '7px 12px', borderRadius: '6px', background: isDark ? '#18181b' : '#fef2f2', border: isDark ? '1px solid rgba(239,68,68,0.4)' : '1px solid #fecaca', color: '#ef4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
               >
                 <Trash2 size={13} /> Purge Attempts
               </button>
@@ -2223,7 +2272,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
               <button
                 type="button"
                 onClick={handleExportShortlistCSV}
-                style={{ padding: '7px 14px', borderRadius: '6px', background: '#f4f4f5', border: 'none', color: '#09090b', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                style={{ padding: '7px 14px', borderRadius: '6px', background: t.btnPrimaryBg, border: 'none', color: t.btnPrimaryColor, fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
               >
                 <Download size={13} /> Export CSV
               </button>
@@ -2234,7 +2283,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           <div style={{ ...darkCardStyle, padding: 0, overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
               <thead>
-                <tr style={{ background: '#18181b', borderBottom: '1px solid #27272a', color: '#71717a', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <tr style={{ background: t.bgTableHead, borderBottom: `1px solid ${t.border}`, color: t.textMuted, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   <th style={{ padding: '10px 14px' }}>Rank</th>
                   <th style={{ padding: '10px 14px' }}>Roll / Key</th>
                   <th style={{ padding: '10px 14px' }}>Candidate Name</th>
@@ -2258,21 +2307,21 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                     <tr
                       key={c.id || idx}
                       style={{
-                        borderBottom: '1px solid #27272a',
-                        background: c.isShortlisted ? 'rgba(16, 185, 129, 0.04)' : 'transparent',
+                        borderBottom: `1px solid ${t.border}`,
+                        background: c.isShortlisted ? (isDark ? 'rgba(16, 185, 129, 0.04)' : '#f0fdf4') : 'transparent',
                         transition: 'background 0.1s'
                       }}
                     >
                       <td style={{ padding: '10px 14px', fontWeight: 700, color: idx < 3 ? '#eab308' : '#71717a' }}>
                         #{idx + 1}
                       </td>
-                      <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: '12px', color: '#f4f4f5' }}>
+                      <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: '12px', color: t.textPrimary }}>
                         {c.studentRoll || c.studentEmail || '—'}
                       </td>
-                      <td style={{ padding: '10px 14px', color: '#f4f4f5', fontWeight: 600 }}>
+                      <td style={{ padding: '10px 14px', color: t.textPrimary, fontWeight: 600 }}>
                         {c.studentName || 'Candidate'}
                       </td>
-                      <td style={{ padding: '10px 14px', fontWeight: 700, color: '#f4f4f5' }}>
+                      <td style={{ padding: '10px 14px', fontWeight: 700, color: t.textPrimary }}>
                         {c.score} / {c.totalMarks}
                       </td>
                       <td style={{ padding: '10px 14px' }}>
@@ -2297,14 +2346,14 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                             padding: '4px 10px',
                             borderRadius: '4px',
                             border: isCandidateAuthorizedForRound1Retake(c.studentRoll || c.studentEmail)
-                              ? '1px solid rgba(245, 158, 11, 0.4)'
-                              : '1px solid #27272a',
+                              ? (isDark ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid #fde68a')
+                              : `1px solid ${t.border}`,
                             background: isCandidateAuthorizedForRound1Retake(c.studentRoll || c.studentEmail)
-                              ? 'rgba(245, 158, 11, 0.12)'
-                              : '#18181b',
+                              ? (isDark ? 'rgba(245, 158, 11, 0.12)' : '#fef3c7')
+                              : t.btnSecondaryBg,
                             color: isCandidateAuthorizedForRound1Retake(c.studentRoll || c.studentEmail)
                               ? '#f59e0b'
-                              : '#a1a1aa',
+                              : t.textSecondary,
                             fontSize: '11px',
                             fontWeight: 700,
                             cursor: 'pointer',
@@ -2332,9 +2381,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                           style={{
                             padding: '4px 10px',
                             borderRadius: '4px',
-                            border: '1px solid #27272a',
-                            background: '#18181b',
-                            color: '#f4f4f5',
+                            border: `1px solid ${t.border}`,
+                            background: t.btnSecondaryBg,
+                            color: t.btnSecondaryColor,
                             fontSize: '11px',
                             fontWeight: 600,
                             cursor: 'pointer',
@@ -2354,9 +2403,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                           style={{
                             padding: '4px 12px',
                             borderRadius: '4px',
-                            border: c.isShortlisted ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid #27272a',
-                            background: c.isShortlisted ? 'rgba(16, 185, 129, 0.12)' : '#18181b',
-                            color: c.isShortlisted ? '#10b981' : '#a1a1aa',
+                            border: c.isShortlisted ? (isDark ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid #86efac') : `1px solid ${t.border}`,
+                            background: c.isShortlisted ? (isDark ? 'rgba(16, 185, 129, 0.12)' : '#ecfdf5') : t.btnSecondaryBg,
+                            color: c.isShortlisted ? (isDark ? '#10b981' : '#059669') : t.textSecondary,
                             fontSize: '11.5px',
                             fontWeight: 700,
                             cursor: 'pointer'
@@ -2379,10 +2428,10 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ ...darkCardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
             <div>
-              <h4 style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 700, color: '#f4f4f5' }}>
+              <h4 style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 700, color: t.textPrimary }}>
                 Round 2 Shortlist Registry &amp; Email Key Dispatch
               </h4>
-              <p style={{ margin: 0, fontSize: '12px', color: '#a1a1aa' }}>
+              <p style={{ margin: 0, fontSize: '12px', color: t.textMuted }}>
                 Candidates in this list are cleared for Round 2. Each has a provisioned Round 2 Access Key to enter the Coding Sprint.
               </p>
             </div>
@@ -2397,8 +2446,8 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                   gap: '6px',
                   padding: '7px 14px',
                   borderRadius: '6px',
-                  background: '#f4f4f5',
-                  color: '#09090b',
+                  background: t.btnPrimaryBg,
+                  color: t.btnPrimaryColor,
                   fontSize: '12px',
                   fontWeight: 700,
                   border: 'none',
@@ -2414,7 +2463,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           <div style={{ ...darkCardStyle, padding: 0, overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
               <thead>
-                <tr style={{ background: '#18181b', borderBottom: '1px solid #27272a', color: '#71717a', fontSize: '11px', textTransform: 'uppercase' }}>
+                <tr style={{ background: t.bgTableHead, borderBottom: `1px solid ${t.border}`, color: t.textMuted, fontSize: '11px', textTransform: 'uppercase' }}>
                   <th style={{ padding: '10px 14px' }}>Candidate Name</th>
                   <th style={{ padding: '10px 14px' }}>Roll / USN</th>
                   <th style={{ padding: '10px 14px' }}>Email Address</th>
@@ -2440,10 +2489,10 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                     const r2Key = matchCand?.round2Key || `AXENT-R2-${roll.slice(-4) || '9901'}`;
 
                     return (
-                      <tr key={roll} style={{ borderBottom: '1px solid #27272a' }}>
-                        <td style={{ padding: '10px 14px', fontWeight: 600, color: '#f4f4f5' }}>{name}</td>
-                        <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: '#a1a1aa' }}>{roll}</td>
-                        <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: '#71717a' }}>{email}</td>
+                      <tr key={roll} style={{ borderBottom: `1px solid ${t.border}` }}>
+                        <td style={{ padding: '10px 14px', fontWeight: 600, color: t.textPrimary }}>{name}</td>
+                        <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: t.textSecondary }}>{roll}</td>
+                        <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: t.textMuted }}>{email}</td>
                         <td style={{ padding: '10px 14px', fontWeight: 700, color: '#10b981' }}>{score}</td>
                         <td style={{ padding: '10px 14px' }}>
                           <span style={{ padding: '3px 8px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.25)', fontFamily: 'monospace', fontWeight: 800, color: '#60a5fa' }}>
@@ -2462,9 +2511,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                             style={{
                               padding: '3px 8px',
                               borderRadius: '4px',
-                              border: '1px solid #27272a',
-                              background: '#18181b',
-                              color: copiedKey === r2Key ? '#10b981' : '#a1a1aa',
+                              border: `1px solid ${t.border}`,
+                              background: t.btnSecondaryBg,
+                              color: copiedKey === r2Key ? '#10b981' : t.textSecondary,
                               fontSize: '11px',
                               cursor: 'pointer',
                               marginRight: '6px'
@@ -2478,9 +2527,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                             style={{
                               padding: '3px 8px',
                               borderRadius: '4px',
-                              border: '1px solid rgba(239, 68, 68, 0.3)',
-                              background: '#18181b',
-                              color: '#ef4444',
+                              border: isDark ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid #fecaca',
+                              background: isDark ? '#18181b' : '#fef2f2',
+                              color: isDark ? '#ef4444' : '#dc2626',
                               fontSize: '11px',
                               cursor: 'pointer'
                             }}
@@ -2503,20 +2552,20 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#f4f4f5' }}>Round 2: Live Coding Workstations</h4>
+              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: t.textPrimary }}>Round 2: Live Coding Workstations</h4>
               <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#71717a' }}>Real-time code stream and keystroke telemetry for candidates in the coding phase</p>
             </div>
             <div style={{ fontSize: '12px', color: '#a1a1aa' }}>
-              Active Coding Terminals: <strong style={{ color: '#ffffff' }}>{round2Stations.length}</strong>
+              Active Coding Terminals: <strong style={{ color: t.textPrimary }}>{round2Stations.length}</strong>
             </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '14px' }}>
             {round2Stations.length === 0 ? (
-              <div style={{ gridColumn: '1 / -1', padding: '48px 24px', textAlign: 'center', border: '1px dashed #27272a', borderRadius: '8px', background: '#09090b' }}>
-                <Code2 size={28} color="#71717a" style={{ marginBottom: '8px' }} />
-                <div style={{ fontSize: '13px', fontWeight: 600, color: '#f4f4f5' }}>No active coding workstations</div>
-                <div style={{ fontSize: '12px', color: '#71717a', marginTop: '4px' }}>
+              <div style={{ gridColumn: '1 / -1', padding: '48px 24px', textAlign: 'center', border: `1px dashed ${t.borderDashed}`, borderRadius: '8px', background: t.bgCard }}>
+                <Code2 size={28} color={t.textMuted} style={{ marginBottom: '8px' }} />
+                <div style={{ fontSize: '13px', fontWeight: 600, color: t.textPrimary }}>No active coding workstations</div>
+                <div style={{ fontSize: '12px', color: t.textMuted, marginTop: '4px' }}>
                   When shortlisted candidates start Round 2 at /codespark-exams?round=2, their live telemetry and code stream will stream here.
                 </div>
               </div>
@@ -2525,17 +2574,17 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                 <div key={station.id} style={{ ...darkCardStyle, display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '13px', fontWeight: 800, color: '#f4f4f5' }}>{station.student?.name || 'Candidate'}</span>
+                      <span style={{ fontSize: '13px', fontWeight: 800, color: t.textPrimary }}>{station.student?.name || 'Candidate'}</span>
                       <span style={{ fontSize: '11px', color: '#71717a', fontFamily: 'monospace' }}>({station.student?.rollNumber || 'N/A'})</span>
                     </div>
-                    <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', background: t.badgeBg, border: `1px solid ${t.badgeBorder}`, color: t.badgeText }}>
                       {station.stationNumber} ({station.labId})
                     </span>
                   </div>
 
                   {/* Live Code Stream Panel */}
-                  <div style={{ borderRadius: '6px', border: '1px solid #27272a', background: '#09090b', padding: '10px', height: '140px', overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #27272a', paddingBottom: '4px' }}>
+                  <div style={{ borderRadius: '6px', border: `1px solid ${t.border}`, background: isDark ? '#09090b' : '#0f172a', padding: '10px', height: '140px', overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '4px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                         <Code2 size={11} color="#60a5fa" />
                         <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#a1a1aa', letterSpacing: '0.05em' }}>LIVE CODE STREAM</span>
@@ -2572,7 +2621,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                         <button
                           type="button"
                           onClick={() => onInspectStation(station.id)}
-                          style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #27272a', background: '#18181b', color: '#f4f4f5', fontSize: '11px', cursor: 'pointer' }}
+                          style={{ padding: '4px 8px', borderRadius: '4px', border: `1px solid ${t.border}`, background: t.btnSecondaryBg, color: t.btnSecondaryColor, fontSize: '11px', cursor: 'pointer' }}
                         >
                           Inspect
                         </button>
@@ -2591,10 +2640,10 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div style={{ ...darkCardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
             <div>
-              <h4 style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 700, color: '#f4f4f5' }}>
+              <h4 style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 700, color: t.textPrimary }}>
                 CodeSpark Private Candidate Registry &amp; Access Keys
               </h4>
-              <p style={{ margin: 0, fontSize: '12px', color: '#a1a1aa' }}>
+              <p style={{ margin: 0, fontSize: '12px', color: t.textMuted }}>
                 Each candidate is provisioned a unique <strong>AXENT-XXXX</strong> key for authenticating on the /code-spark candidate portal.
               </p>
             </div>
@@ -2608,7 +2657,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                   gap: '6px',
                   padding: '8px 12px',
                   borderRadius: '6px',
-                  background: '#18181b',
+                  background: t.btnSecondaryBg,
                   border: '1px solid rgba(245, 158, 11, 0.4)',
                   color: '#f59e0b',
                   fontSize: '12px',
@@ -2629,8 +2678,8 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                   gap: '6px',
                   padding: '8px 14px',
                   borderRadius: '6px',
-                  background: '#f4f4f5',
-                  color: '#09090b',
+                  background: t.btnPrimaryBg,
+                  color: t.btnPrimaryColor,
                   fontSize: '12px',
                   fontWeight: 700,
                   border: 'none',
@@ -2646,7 +2695,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           <div style={{ ...darkCardStyle, padding: 0, overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
               <thead>
-                <tr style={{ background: '#18181b', borderBottom: '1px solid #27272a', color: '#71717a', fontSize: '11px', textTransform: 'uppercase' }}>
+                <tr style={{ background: t.bgTableHead, borderBottom: `1px solid ${t.border}`, color: t.textMuted, fontSize: '11px', textTransform: 'uppercase' }}>
                   <th style={{ padding: '10px 14px' }}>AXENT Key</th>
                   <th style={{ padding: '10px 14px' }}>Candidate Name</th>
                   <th style={{ padding: '10px 14px' }}>Email Address</th>
@@ -2665,9 +2714,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                   </tr>
                 ) : (
                   registeredCandidates.map((c) => (
-                    <tr key={c.accessKey} style={{ borderBottom: '1px solid #27272a', color: '#f4f4f5' }}>
+                    <tr key={c.accessKey} style={{ borderBottom: `1px solid ${t.border}`, color: t.textPrimary }}>
                       <td style={{ padding: '10px 14px' }}>
-                        <span style={{ padding: '2px 8px', borderRadius: '4px', background: '#18181b', border: '1px solid #3f3f46', fontFamily: 'monospace', fontWeight: 800, color: '#f4f4f5' }}>
+                        <span style={{ padding: '2px 8px', borderRadius: '4px', background: t.badgeBg, border: `1px solid ${t.badgeBorder}`, fontFamily: 'monospace', fontWeight: 800, color: t.textPrimary }}>
                           {c.accessKey}
                         </span>
                       </td>
@@ -2683,7 +2732,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                         )}
                       </td>
                       <td style={{ padding: '10px 14px' }}>
-                        <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '3px', background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa' }}>
+                        <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '3px', background: t.badgeBg, border: `1px solid ${t.border}`, color: t.textSecondary }}>
                           {c.status}
                         </span>
                       </td>
@@ -2698,14 +2747,14 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                             padding: '4px 10px',
                             borderRadius: '4px',
                             border: isCandidateAuthorizedForRound1Retake(c.rollNumber || c.accessKey)
-                              ? '1px solid rgba(245, 158, 11, 0.4)'
-                              : '1px solid #27272a',
+                              ? (isDark ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid #fde68a')
+                              : `1px solid ${t.border}`,
                             background: isCandidateAuthorizedForRound1Retake(c.rollNumber || c.accessKey)
-                              ? 'rgba(245, 158, 11, 0.12)'
-                              : '#18181b',
+                              ? (isDark ? 'rgba(245, 158, 11, 0.12)' : '#fef3c7')
+                              : t.btnSecondaryBg,
                             color: isCandidateAuthorizedForRound1Retake(c.rollNumber || c.accessKey)
                               ? '#f59e0b'
-                              : '#a1a1aa',
+                              : t.textSecondary,
                             fontSize: '11px',
                             fontWeight: 700,
                             cursor: 'pointer',
@@ -2735,9 +2784,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                             style={{
                               padding: '3px 8px',
                               borderRadius: '4px',
-                              border: '1px solid #27272a',
-                              background: '#18181b',
-                              color: copiedKey === c.accessKey ? '#10b981' : '#a1a1aa',
+                              border: `1px solid ${t.border}`,
+                              background: t.btnSecondaryBg,
+                              color: copiedKey === c.accessKey ? '#10b981' : t.textSecondary,
                               fontSize: '11px',
                               cursor: 'pointer'
                             }}
@@ -2751,9 +2800,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                             style={{
                               padding: '3px 6px',
                               borderRadius: '4px',
-                              border: '1px solid #27272a',
-                              background: '#18181b',
-                              color: '#ef4444',
+                              border: isDark ? '1px solid #27272a' : '1px solid #fecaca',
+                              background: isDark ? '#18181b' : '#fef2f2',
+                              color: isDark ? '#ef4444' : '#dc2626',
                               fontSize: '11px',
                               cursor: 'pointer',
                               display: 'inline-flex',
@@ -2777,7 +2826,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       {activeTab === 'overview' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={darkCardStyle}>
-            <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 700, color: '#f4f4f5' }}>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 700, color: t.textPrimary }}>
               Assign CodeSpark Round 1 Aptitude Paper
             </h4>
             <div style={{ display: 'flex', gap: '8px', maxWidth: '600px' }}>
@@ -2788,12 +2837,12 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                   flex: 1,
                   padding: '9px 12px',
                   borderRadius: '6px',
-                  border: '1px solid #27272a',
-                  background: '#18181b',
-                  color: '#f4f4f5',
+                  border: `1px solid ${t.borderStrong}`,
+                  background: t.bgInput,
+                  color: t.textPrimary,
                   fontSize: '12.5px',
                   outline: 'none',
-                  colorScheme: 'dark'
+                  colorScheme: isDark ? 'dark' : 'light'
                 }}
               >
                 <option value="">-- Choose Exam Paper from Question Bank --</option>
@@ -2810,8 +2859,8 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                 style={{
                   padding: '9px 16px',
                   borderRadius: '6px',
-                  background: '#f4f4f5',
-                  color: '#09090b',
+                  background: t.btnPrimaryBg,
+                  color: t.btnPrimaryColor,
                   fontSize: '12px',
                   fontWeight: 700,
                   border: 'none',
@@ -2839,7 +2888,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(9, 9, 11, 0.85)',
+            background: isDark ? 'rgba(9, 9, 11, 0.85)' : 'rgba(15, 23, 42, 0.5)',
             backdropFilter: 'blur(6px)',
             zIndex: 9999,
             display: 'flex',
@@ -2851,8 +2900,8 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: '#121214',
-              border: '1px solid #27272a',
+              background: t.bgCard,
+              border: `1px solid ${t.border}`,
               borderRadius: '8px',
               maxWidth: '800px',
               width: '100%',
@@ -2863,10 +2912,10 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
             }}
           >
             {/* Modal Header */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #27272a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '16px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#f4f4f5' }}>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: t.textPrimary }}>
                     Candidate MCQ Answer Sheet &bull; {selectedCandidateSheet.studentName}
                   </h3>
                   <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#60a5fa' }}>
@@ -2898,8 +2947,8 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                   <div
                     key={q.id || qIdx}
                     style={{
-                      background: '#18181b',
-                      border: '1px solid #27272a',
+                      background: t.bgCardElevated,
+                      border: `1px solid ${t.border}`,
                       borderRadius: '6px',
                       padding: '14px'
                     }}
@@ -2909,7 +2958,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                         QUESTION {qIdx + 1} ({q.marks || 1} MARKS)
                       </span>
                       {isSkipped ? (
-                        <span style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '3px', background: '#27272a', color: '#a1a1aa' }}>
+                        <span style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '3px', background: t.badgeBg, color: t.textMuted }}>
                           SKIPPED / UNANSWERED
                         </span>
                       ) : isCorrect ? (
@@ -2923,7 +2972,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                       )}
                     </div>
 
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#f4f4f5', marginBottom: '10px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: t.textPrimary, marginBottom: '10px' }}>
                       {q.text}
                     </div>
 
@@ -2931,9 +2980,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                       {q.options.map((opt, oIdx) => {
                         const isStudentPick = candidateChoice === oIdx;
                         const isRightAnswer = opt.isCorrect;
-                        let bg = '#121214';
-                        let borderColor = '#27272a';
-                        let textColor = '#d4d4d8';
+                        let bg = t.bgCard;
+                        let borderColor = t.border;
+                        let textColor = t.textPrimary;
 
                         if (isRightAnswer) {
                           bg = 'rgba(16, 185, 129, 0.08)';
@@ -2962,7 +3011,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                           >
                             <span>{String.fromCharCode(65 + oIdx)}. {opt.text}</span>
                             {isStudentPick && (
-                              <span style={{ fontSize: '9.5px', fontWeight: 800, padding: '1px 4px', borderRadius: '2px', background: '#27272a', color: '#f4f4f5' }}>
+                              <span style={{ fontSize: '9.5px', fontWeight: 800, padding: '1px 4px', borderRadius: '2px', background: isDark ? '#27272a' : '#e2e8f0', color: t.textPrimary }}>
                                 CANDIDATE PICK
                               </span>
                             )}
@@ -2976,15 +3025,15 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
             </div>
 
             {/* Modal Footer */}
-            <div style={{ padding: '14px 20px', borderTop: '1px solid #27272a', display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ padding: '14px 20px', borderTop: `1px solid ${t.border}`, display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 type="button"
                 onClick={() => setSelectedCandidateSheet(null)}
                 style={{
                   padding: '8px 16px',
                   borderRadius: '6px',
-                  background: '#f4f4f5',
-                  color: '#09090b',
+                  background: t.btnPrimaryBg,
+                  color: t.btnPrimaryColor,
                   fontSize: '12px',
                   fontWeight: 700,
                   border: 'none',
@@ -3005,7 +3054,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(9, 9, 11, 0.85)',
+            background: isDark ? 'rgba(9, 9, 11, 0.85)' : 'rgba(15, 23, 42, 0.5)',
             backdropFilter: 'blur(6px)',
             zIndex: 9999,
             display: 'flex',
@@ -3017,8 +3066,8 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: '#121214',
-              border: '1px solid #27272a',
+              background: t.bgCard,
+              border: `1px solid ${t.border}`,
               borderRadius: '8px',
               maxWidth: '820px',
               width: '100%',
@@ -3029,11 +3078,11 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
             }}
           >
             {/* Modal Header */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #27272a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '16px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Mail size={16} color="#f4f4f5" />
+                <Mail size={16} color={t.textPrimary} />
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#f4f4f5' }}>
+                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: t.textPrimary }}>
                     Round 2 Shortlist Notification &amp; Gmail SMTP Dispatcher
                   </h3>
                   <div style={{ fontSize: '11.5px', color: '#a1a1aa', marginTop: '2px' }}>
@@ -3052,13 +3101,13 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {/* SMTP Credentials & Dispatch Control Box */}
-              <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '16px' }}>
+              <div style={{ background: t.bgCardElevated, border: `1px solid ${t.border}`, borderRadius: '6px', padding: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Shield size={14} color="#60a5fa" />
-                    <strong style={{ fontSize: '13px', color: '#f4f4f5' }}>Gmail SMTP Dispatch Settings</strong>
+                    <strong style={{ fontSize: '13px', color: t.textPrimary }}>Gmail SMTP Dispatch Settings</strong>
                   </div>
-                  <span style={{ fontSize: '10.5px', fontFamily: 'monospace', color: '#a1a1aa', background: '#09090b', padding: '2px 8px', borderRadius: '4px', border: '1px solid #27272a' }}>
+                  <span style={{ fontSize: '10.5px', fontFamily: 'monospace', color: t.textMuted, background: t.bgInput, padding: '2px 8px', borderRadius: '4px', border: `1px solid ${t.border}` }}>
                     smtp.gmail.com:587 (TLS)
                   </span>
                 </div>
@@ -3076,10 +3125,10 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                       style={{
                         width: '100%',
                         padding: '8px 10px',
-                        background: '#09090b',
-                        border: '1px solid #27272a',
+                        background: t.bgInput,
+                        border: `1px solid ${t.borderStrong}`,
                         borderRadius: '4px',
-                        color: '#f4f4f5',
+                        color: t.textPrimary,
                         fontSize: '12px',
                         fontFamily: 'monospace',
                         outline: 'none'
@@ -3100,10 +3149,10 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                         style={{
                           width: '100%',
                           padding: '8px 36px 8px 10px',
-                          background: '#09090b',
-                          border: '1px solid #27272a',
+                          background: t.bgInput,
+                          border: `1px solid ${t.borderStrong}`,
                           borderRadius: '4px',
-                          color: '#f4f4f5',
+                          color: t.textPrimary,
                           fontSize: '12px',
                           fontFamily: 'monospace',
                           outline: 'none'
@@ -3142,10 +3191,10 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                     style={{
                       width: '100%',
                       padding: '8px 10px',
-                      background: '#09090b',
-                      border: '1px solid #27272a',
+                      background: t.bgInput,
+                      border: `1px solid ${t.borderStrong}`,
                       borderRadius: '4px',
-                      color: '#f4f4f5',
+                      color: t.textPrimary,
                       fontSize: '12px',
                       outline: 'none'
                     }}
@@ -3164,9 +3213,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                     style={{
                       padding: '7px 14px',
                       borderRadius: '4px',
-                      background: '#27272a',
-                      border: '1px solid #3f3f46',
-                      color: '#f4f4f5',
+                      background: t.btnSecondaryBg,
+                      border: `1px solid ${t.btnSecondaryBorder}`,
+                      color: t.btnSecondaryColor,
                       fontSize: '11.5px',
                       fontWeight: 700,
                       cursor: smtpTesting || !smtpUser.trim() || !smtpPassword.trim() ? 'not-allowed' : 'pointer',
@@ -3248,7 +3297,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
               {/* Candidates List Preview */}
               <div>
-                <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 700, color: '#f4f4f5' }}>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 700, color: t.textPrimary }}>
                   Recipients &amp; Invitation Dispatch Preview ({shortlistedRolls.length})
                 </h4>
 
@@ -3269,15 +3318,15 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                   const emailBody = `Subject: Code Spark 2026: You are Shortlisted for Round 2 (Coding Contest)!\n\nDear ${name},\n\nCongratulations! Based on your performance in the Round 1 General Aptitude Assessment (Score: ${score}/${maxScore}), you have successfully cleared the institutional cutoff and have been shortlisted for Round 2: Algorithmic Code Sprint Arena.\n\nYour Exclusive Round 2 Access Code: ${r2Key}\n\nHow to Start Round 2:\n1. Visit the portal at: ${window.location.origin}/code-spark\n2. Scroll down to candidate check-in.\n3. Enter your Round 2 code: ${r2Key}\n4. Enter the Secure Fullscreen Coding Arena.\n\nBest regards,\n${smtpFromName || 'Code Spark 2026 Examination Board'}`;
 
                   return (
-                    <div key={roll} style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '12px', marginBottom: '10px' }}>
+                    <div key={roll} style={{ background: t.bgCardElevated, border: `1px solid ${t.border}`, borderRadius: '6px', padding: '12px', marginBottom: '10px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                         <div>
-                          <strong style={{ color: '#f4f4f5', fontSize: '13px' }}>{name}</strong>
-                          <span style={{ color: '#71717a', fontSize: '11px', marginLeft: '6px' }}>&lt;{email}&gt;</span>
+                          <strong style={{ color: t.textPrimary, fontSize: '13px' }}>{name}</strong>
+                          <span style={{ color: t.textMuted, fontSize: '11px', marginLeft: '6px' }}>&lt;{email}&gt;</span>
                           <span style={{ marginLeft: '10px', fontSize: '11px', color: '#10b981', fontFamily: 'monospace', fontWeight: 700 }}>
                             Score: {score}/{maxScore}
                           </span>
-                          <span style={{ marginLeft: '8px', fontSize: '11px', padding: '1px 6px', background: '#09090b', border: '1px solid #3f3f46', color: '#60a5fa', fontFamily: 'monospace', fontWeight: 800, borderRadius: '3px' }}>
+                          <span style={{ marginLeft: '8px', fontSize: '11px', padding: '1px 6px', background: t.badgeBg, border: `1px solid ${t.badgeBorder}`, color: isDark ? '#60a5fa' : '#2563eb', fontFamily: 'monospace', fontWeight: 800, borderRadius: '3px' }}>
                             {r2Key}
                           </span>
                         </div>
@@ -3292,9 +3341,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                           style={{
                             padding: '4px 10px',
                             borderRadius: '4px',
-                            background: copiedEmailKey === roll ? '#10b981' : '#27272a',
-                            color: copiedEmailKey === roll ? '#09090b' : '#f4f4f5',
-                            border: 'none',
+                            background: copiedEmailKey === roll ? '#10b981' : t.btnSecondaryBg,
+                            color: copiedEmailKey === roll ? '#ffffff' : t.btnSecondaryColor,
+                            border: `1px solid ${t.btnSecondaryBorder}`,
                             fontSize: '11px',
                             fontWeight: 700,
                             cursor: 'pointer',
@@ -3307,7 +3356,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                           <span>{copiedEmailKey === roll ? 'Copied' : 'Copy'}</span>
                         </button>
                       </div>
-                      <pre style={{ margin: 0, fontFamily: 'monospace', fontSize: '11px', color: '#a1a1aa', background: '#09090b', padding: '10px', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
+                      <pre style={{ margin: 0, fontFamily: 'monospace', fontSize: '11px', color: t.textSecondary, background: isDark ? '#09090b' : '#f8fafc', border: `1px solid ${t.border}`, padding: '10px', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
                         {emailBody}
                       </pre>
                     </div>
@@ -3316,15 +3365,15 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
               </div>
             </div>
 
-            <div style={{ padding: '14px 20px', borderTop: '1px solid #27272a', display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ padding: '14px 20px', borderTop: `1px solid ${t.border}`, display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 type="button"
                 onClick={() => setShowEmailDispatchModal(false)}
                 style={{
                   padding: '8px 16px',
                   borderRadius: '6px',
-                  background: '#f4f4f5',
-                  color: '#09090b',
+                  background: t.btnPrimaryBg,
+                  color: t.btnPrimaryColor,
                   fontSize: '12px',
                   fontWeight: 700,
                   border: 'none',
@@ -3345,7 +3394,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(9, 9, 11, 0.85)',
+            background: isDark ? 'rgba(9, 9, 11, 0.85)' : 'rgba(15, 23, 42, 0.5)',
             backdropFilter: 'blur(6px)',
             zIndex: 9999,
             display: 'flex',
@@ -3357,8 +3406,8 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: '#121214',
-              border: '1px solid #27272a',
+              background: t.bgCard,
+              border: `1px solid ${t.border}`,
               borderRadius: '8px',
               maxWidth: '560px',
               width: '100%',
@@ -3367,10 +3416,10 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
             }}
           >
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #27272a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '16px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Trophy size={16} color="#fbbf24" />
-                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#f4f4f5' }}>
+                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: t.textPrimary }}>
                   Conclude Round 1 &amp; Compute Combined Shortlist
                 </h3>
               </div>
@@ -3390,7 +3439,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
               {/* Shortlist Mode Selector */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 700, color: '#f4f4f5' }}>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: t.textPrimary }}>
                   Shortlisting Method
                 </label>
 
@@ -3404,9 +3453,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                     style={{
                       padding: '12px',
                       borderRadius: '6px',
-                      background: concludeMode === 'top_n' ? '#18181b' : '#09090b',
-                      border: concludeMode === 'top_n' ? '2px solid #f4f4f5' : '1px solid #27272a',
-                      color: '#f4f4f5',
+                      background: concludeMode === 'top_n' ? (isDark ? '#18181b' : '#0f172a') : t.bgCard,
+                      border: concludeMode === 'top_n' ? (isDark ? '2px solid #f4f4f5' : '2px solid #0f172a') : `1px solid ${t.border}`,
+                      color: concludeMode === 'top_n' ? '#ffffff' : t.textPrimary,
                       textAlign: 'left',
                       cursor: 'pointer'
                     }}
@@ -3426,9 +3475,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                     style={{
                       padding: '12px',
                       borderRadius: '6px',
-                      background: concludeMode === 'cutoff' ? '#18181b' : '#09090b',
-                      border: concludeMode === 'cutoff' ? '2px solid #f4f4f5' : '1px solid #27272a',
-                      color: '#f4f4f5',
+                      background: concludeMode === 'cutoff' ? (isDark ? '#18181b' : '#0f172a') : t.bgCard,
+                      border: concludeMode === 'cutoff' ? (isDark ? '2px solid #f4f4f5' : '2px solid #0f172a') : `1px solid ${t.border}`,
+                      color: concludeMode === 'cutoff' ? '#ffffff' : t.textPrimary,
                       textAlign: 'left',
                       cursor: 'pointer'
                     }}
@@ -3455,10 +3504,10 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                     style={{
                       width: '100%',
                       padding: '9px 12px',
-                      background: '#09090b',
-                      border: '1px solid #27272a',
+                      background: t.bgInput,
+                      border: `1px solid ${t.borderStrong}`,
                       borderRadius: '4px',
-                      color: '#f4f4f5',
+                      color: t.textPrimary,
                       fontSize: '13px',
                       fontFamily: 'monospace',
                       fontWeight: 800,
@@ -3468,8 +3517,8 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                 </div>
               </div>
 
-              <div style={{ padding: '12px', background: '#09090b', border: '1px solid #27272a', borderRadius: '6px', fontSize: '11.5px', color: '#a1a1aa' }}>
-                <div>Total Candidates in Registry: <strong style={{ color: '#f4f4f5' }}>{registeredCandidates.length}</strong></div>
+              <div style={{ padding: '12px', background: t.bgCardElevated, border: `1px solid ${t.border}`, borderRadius: '6px', fontSize: '11.5px', color: t.textMuted }}>
+                <div>Total Candidates in Registry: <strong style={{ color: t.textPrimary }}>{registeredCandidates.length}</strong></div>
                 <div>Completed Attempts Logged: <strong style={{ color: '#10b981' }}>{allAttempts.length}</strong></div>
                 <div style={{ marginTop: '4px', color: '#60a5fa' }}>
                   ✓ Shortlisted candidates will immediately have dedicated <span style={{ fontFamily: 'monospace', fontWeight: 800 }}>AXENT-R2-XXXX</span> keys provisioned.
@@ -3477,7 +3526,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
               </div>
             </div>
 
-            <div style={{ padding: '14px 20px', borderTop: '1px solid #27272a', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <div style={{ padding: '14px 20px', borderTop: `1px solid ${t.border}`, display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button
                 type="button"
                 onClick={() => setShowConcludeModal(false)}
@@ -3485,8 +3534,8 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                   padding: '8px 14px',
                   borderRadius: '6px',
                   background: 'none',
-                  border: '1px solid #27272a',
-                  color: '#a1a1aa',
+                  border: `1px solid ${t.border}`,
+                  color: t.textSecondary,
                   fontSize: '12px',
                   fontWeight: 600,
                   cursor: 'pointer'
@@ -3500,9 +3549,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                 style={{
                   padding: '8px 18px',
                   borderRadius: '6px',
-                  background: '#f4f4f5',
+                  background: t.btnPrimaryBg,
                   border: 'none',
-                  color: '#09090b',
+                  color: t.btnPrimaryColor,
                   fontSize: '12px',
                   fontWeight: 800,
                   cursor: 'pointer',
@@ -3511,7 +3560,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                   gap: '6px'
                 }}
               >
-                <Trophy size={13} color="#09090b" />
+                <Trophy size={13} color={t.btnPrimaryColor} />
                 <span>Confirm &amp; Generate Combined Shortlist</span>
               </button>
             </div>
