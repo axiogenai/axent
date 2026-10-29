@@ -49,7 +49,8 @@ import {
   onExamsChanged,
   onMcqDataChanged,
   deleteSingleAttempt,
-  clearAllAttemptsFromEverywhere
+  clearAllAttemptsFromEverywhere,
+  clearAllQuestions
 } from '../../services/mcqService';
 import { MCQExamConfig, MCQQuestion } from '../../types/mcq';
 import { getAllCodingQuestions } from '../../services/codingQuestionService';
@@ -84,7 +85,7 @@ import { CodeSparkCandidateImportModal } from '../codespark/CodeSparkCandidateIm
 import { AIPaperGeneratorModal } from '../AIPaperGeneratorModal';
 import { GoogleFormImportModal } from '../mcq/GoogleFormImportModal';
 import { AIPaperGenerationResult } from '../../services/groqService';
-import { clearAllStationsFromCloud, clearAllAttemptsFromCloud } from '../../services/supabaseService';
+import { clearAllStationsFromCloud, clearAllAttemptsFromCloud, clearAllQuestionsFromCloud } from '../../services/supabaseService';
 
 interface AdminCodeSparkViewProps {
   stations: CandidateStation[];
@@ -242,21 +243,16 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
   }, [assignedExamId, allExams]);
 
   const mcqQuestions: MCQQuestion[] = useMemo(() => {
-    const all = getAllQuestions();
-    if (!currentAssignedExam) return all;
-    if (currentAssignedExam.questionIds && currentAssignedExam.questionIds.length > 0) {
-      const qMap = new Map(all.map((q) => [q.id, q]));
-      const matched = currentAssignedExam.questionIds.map((id) => qMap.get(id)).filter(Boolean) as MCQQuestion[];
-      if (matched.length > 0) return matched;
+    // If no paper is currently assigned to CodeSpark Round 1, question count is 0
+    if (!currentAssignedExam) return [];
+    if (!currentAssignedExam.questionIds || currentAssignedExam.questionIds.length === 0) {
+      return [];
     }
-    const apt = all.filter(
-      (q) =>
-        (q.subject || '').toLowerCase().includes('aptitude') ||
-        (q.topic || '').toLowerCase().includes('aptitude') ||
-        (q.topic || '').toLowerCase().includes('reasoning') ||
-        (q.topic || '').toLowerCase().includes('logic')
-    );
-    return apt.length > 0 ? apt : all;
+    const all = getAllQuestions();
+    const qMap = new Map(all.map((q) => [q.id, q]));
+    return currentAssignedExam.questionIds
+      .map((id) => qMap.get(id))
+      .filter(Boolean) as MCQQuestion[];
   }, [currentAssignedExam]);
 
   const examTotalMarks = useMemo(() => {
@@ -387,12 +383,17 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       await clearAllStationsFromCloud();
       await clearAllAttemptsFromCloud();
       localStorage.removeItem('codedna_mcq_attempts');
+      localStorage.removeItem('codedna_mcq_questions');
+      localStorage.removeItem('codedna_mcq_exams');
       localStorage.removeItem('codedna_college_stations');
       localStorage.removeItem('codedna_live_stations');
       localStorage.removeItem('codedna_codespark_active_batch');
       localStorage.removeItem('codedna_codespark_candidates');
       localStorage.removeItem('codedna_codespark_round1_shortlist');
       localStorage.removeItem('codedna_codespark_round1_concluded');
+      localStorage.removeItem('codedna_codespark_round1_exam_id');
+      clearAllQuestions();
+      await clearAllQuestionsFromCloud();
       saveAllStations([]);
       saveCodeSparkCandidates([]);
       setAllAttempts([]);
@@ -913,6 +914,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
   const handlePurgeAllAttempts = async () => {
     if (!window.confirm('Are you sure you want to purge ALL Round 1 attempts from database and storage?')) return;
     await clearAllAttemptsFromEverywhere();
+    clearAllQuestions();
     setAllAttempts([]);
     setShortlistedRolls([]);
     localStorage.removeItem(SHORTLIST_STORAGE_KEY);

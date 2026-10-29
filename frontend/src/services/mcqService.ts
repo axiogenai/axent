@@ -2635,30 +2635,20 @@ export async function syncFromSupabase(): Promise<void> {
 
 
 
-    // 1. Reconcile Questions: Intelligently merge so local unsynced questions are preserved
-
+        // 1. Reconcile Questions: Supabase is authoritative
     if (cloudQ !== null) {
-
+      const fiveMinsAgo = Date.now() - 5 * 60 * 1000;
       const localQ = load<MCQQuestion[]>(MCQ_STORAGE_KEYS.QUESTIONS, []);
-
       const mergedQMap = new Map<string, MCQQuestion>();
-
       cloudQ.forEach((q) => mergedQMap.set(q.id, q));
-
-      // Keep any local questions that haven't been fetched, but do not flood cloud API on sync
-
+      // Only retain local questions if they were freshly created drafts in the last 5 minutes
       localQ.forEach((q) => {
-
-        if (!mergedQMap.has(q.id)) {
-
+        if (!mergedQMap.has(q.id) && q.status === 'DRAFT' && (q.createdAt || 0) > fiveMinsAgo) {
           mergedQMap.set(q.id, q);
-
+          void saveQuestionToCloud(q);
         }
-
       });
-
       save(MCQ_STORAGE_KEYS.QUESTIONS, Array.from(mergedQMap.values()));
-
     }
 
 
