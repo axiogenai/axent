@@ -32,6 +32,8 @@ import {
   generateCodeSparkKey,
   saveCodeSparkCandidates,
   ensureCodeSparkAptitudeExam,
+  getCodeSparkActiveExam,
+  asyncGetCodeSparkActiveExam,
   isRound1ConcludedGlobally,
   isLabOverflowRetakeEnabledGlobally,
   isCandidateAuthorizedForRound1Retake,
@@ -39,6 +41,7 @@ import {
   prepareCandidateForRound1Retake
 } from '../services/codeSparkService';
 import { getAllAttempts, getAllExams } from '../services/mcqService';
+import { MCQExamConfig } from '../types/mcq';
 import { getAllCodingQuestions, getAllCodingExams } from '../services/codingQuestionService';
 import { CodeSparkCandidateImportModal } from './codespark/CodeSparkCandidateImportModal';
 import { playSound } from '../utils/sounds';
@@ -201,10 +204,30 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     mobileStyle.id = 'codespark-mobile-overrides';
     mobileStyle.textContent = `
       @media (max-width: 768px) {
-        #p1, #p2 { height: auto !important; margin-top: 0 !important; }
-        #p1 > div, #p2 > div { position: relative !important; height: auto !important; min-height: 0 !important; overflow: visible !important; }
-        #p1 > div > svg, #p2 > div > svg { position: relative !important; width: 100% !important; height: auto !important; display: block !important; }
-        #candidate-terminal { padding-top: 3rem !important; padding-bottom: 3rem !important; }
+        #p1, #p2 {
+          height: auto !important;
+          margin-top: 0 !important;
+          overflow: hidden !important;
+        }
+        #p1 > div, #p2 > div {
+          position: relative !important;
+          width: 100% !important;
+          aspect-ratio: 1536 / 1024 !important;
+          height: auto !important;
+          min-height: 0 !important;
+          overflow: hidden !important;
+          background: #eeece8 !important;
+        }
+        #p1 > div > svg, #p2 > div > svg {
+          position: absolute !important;
+          inset: 0 !important;
+          width: 100% !important;
+          height: 100% !important;
+          display: block !important;
+          overflow: hidden !important;
+        }
+        #gl { display: none !important; }
+        #candidate-terminal { padding-top: 2rem !important; padding-bottom: 3rem !important; }
         .cs-terminal-grid { display: flex !important; flex-direction: column !important; }
       }
     `;
@@ -307,10 +330,42 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     if (!anyLookup) {
       anyLookup = (await asyncLookupCandidateAny(fullKey)) || (await asyncLookupCandidateAny(digits));
     }
+
+    // Check if CodeSpark exam paper is active/scheduled in Supabase cloud
+    let targetExam = getCodeSparkActiveExam();
+    if (!targetExam) {
+      targetExam = await asyncGetCodeSparkActiveExam();
+    }
+
+    if (!targetExam) {
+      playSound('warning');
+      setActiveCandidate(null);
+      setKeyError(
+        'The CodeSpark examination is not yet scheduled or paper has not been assigned by the proctor. Please wait for the event administrator to launch the session.'
+      );
+      return;
+    }
+
+    if (targetExam.status === 'DRAFT') {
+      playSound('warning');
+      setKeyError(
+        'The CodeSpark examination paper is in draft state and has not been launched yet. Please wait for the event administrator.'
+      );
+      return;
+    }
+
+    if (targetExam.startTime && Date.now() < targetExam.startTime) {
+      playSound('warning');
+      setKeyError(
+        `This examination is scheduled for ${new Date(targetExam.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Early entry is strictly prohibited.`
+      );
+      return;
+    }
+
     if (!anyLookup) {
       playSound('warning');
       setActiveCandidate(null);
-      setKeyError(`Invalid key "${fullKey}". Key not found in the pre-registered exam roster.`);
+      setKeyError(`Candidate key "${fullKey}" is not registered for this event. Please verify your 4-digit code provided by the proctor.`);
       return;
     }
 
@@ -331,7 +386,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     setRegisteredCandidates(allCandidates);
     setActiveCandidate(storedCand);
 
-    const targetExam = ensureCodeSparkAptitudeExam();
+    const safeExam: MCQExamConfig = targetExam;
     const derivedRoll = cand.rollNumber || cand.email.split('@')[0].toUpperCase();
 
     // Check if candidate already completed Round 1
@@ -339,7 +394,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     const priorAttempt = attempts.find(
       (a) =>
         (a.studentRoll || '').trim().toUpperCase() === derivedRoll &&
-        a.examId === targetExam.id &&
+        a.examId === safeExam.id &&
         (a.status === 'SUBMITTED' || a.status === 'TIMED_OUT' || a.score !== undefined)
     );
 
@@ -413,7 +468,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
           isLabOverflowRetakeEnabledGlobally();
 
         if (isRetakeAllowed) {
-          prepareCandidateForRound1Retake(derivedRoll, targetExam.id);
+          prepareCandidateForRound1Retake(derivedRoll, safeExam.id);
           const profile = {
             name: cand.name.trim(),
             email: cand.email.trim().toLowerCase(),
@@ -421,9 +476,9 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
             department: cand.department || 'Axent Candidate',
             course: 'Code Spark 2026',
             examType: 'Aptitude',
-            assignmentTitle: targetExam.title,
+            assignmentTitle: safeExam.title,
             examMode: 'MCQ',
-            mcqExamId: targetExam.id,
+            mcqExamId: safeExam.id,
             accessKey: cand.accessKey,
             sessionStartTime: Date.now(),
             batch: 2,
@@ -432,7 +487,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
           try {
             localStorage.setItem('codedna_student_profile', JSON.stringify(profile));
             localStorage.setItem('codedna_active_exam_mode', 'MCQ');
-            localStorage.setItem('codedna_codespark_round1_exam_id', targetExam.id);
+            localStorage.setItem('codedna_codespark_round1_exam_id', safeExam.id);
             setActiveCodeSparkCandidate(cand);
           } catch {}
 
@@ -440,18 +495,18 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
           try {
             await requestExamFullscreen();
           } catch {}
-          navigate(`/codespark-exams?examId=${targetExam.id}&round=1&batch=2&retake=true&autoStart=true`);
+          navigate(`/codespark-exams?examId=${safeExam.id}&round=1&batch=2&retake=true&autoStart=true`);
           return;
         }
 
         playSound('warning');
         if (!isRound1ConcludedGlobally()) {
           setKeyError(
-            `Round 1 attempt logged (Score: ${priorAttempt.score ?? 0}/${priorAttempt.maxScore || targetExam.totalMarks}). Testing is currently ongoing across campus laboratories (Lab A, Lab B & overflow). The Chief Proctor will conclude Round 1 and calculate the combined shortlist once all testing finishes. Shortlisted candidates will receive their Round 2 key via email.`
+            `Round 1 attempt logged (Score: ${priorAttempt.score ?? 0}/${priorAttempt.maxScore || safeExam.totalMarks}). Testing is currently ongoing across all competition terminals. The Chief Proctor will conclude Round 1 and announce the finalists once all candidates finish. Shortlisted candidates will receive their Round 2 key via email.`
           );
         } else {
           setKeyError(
-            `Round 1 assessment has concluded across all laboratories (Score: ${priorAttempt.score ?? 0}/${priorAttempt.maxScore || targetExam.totalMarks}). Minimum qualifying cutoff was not met.`
+            `Round 1 assessment has concluded across all laboratories (Score: ${priorAttempt.score ?? 0}/${priorAttempt.maxScore || safeExam.totalMarks}). Minimum qualifying cutoff was not met.`
           );
         }
         return;
@@ -461,7 +516,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     // New candidate attempt: Ensure Round 1 is still open
     if (isRound1ConcludedGlobally()) {
       playSound('warning');
-      setKeyError('Round 1 examination has concluded and sealed across all laboratories. New registrations/attempts are closed.');
+      setKeyError('Round 1 examination has concluded and sealed across all terminals. New registrations/attempts are closed.');
       return;
     }
 
@@ -473,9 +528,9 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       department: cand.department || 'Axent Candidate',
       course: 'Code Spark 2026',
       examType: 'Aptitude',
-      assignmentTitle: targetExam.title,
+      assignmentTitle: safeExam.title,
       examMode: 'MCQ',
-      mcqExamId: targetExam.id,
+      mcqExamId: safeExam.id,
       accessKey: cand.accessKey,
       sessionStartTime: Date.now()
     };
@@ -483,7 +538,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     try {
       localStorage.setItem('codedna_student_profile', JSON.stringify(profile));
       localStorage.setItem('codedna_active_exam_mode', 'MCQ');
-      localStorage.setItem('codedna_codespark_round1_exam_id', targetExam.id);
+      localStorage.setItem('codedna_codespark_round1_exam_id', safeExam.id);
       setActiveCodeSparkCandidate(cand);
     } catch {}
 
@@ -491,12 +546,23 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     try {
       await requestExamFullscreen();
     } catch {}
-    navigate(`/codespark-exams?examId=${targetExam.id}&round=1&autoStart=true`);
+    navigate(`/codespark-exams?examId=${safeExam.id}&round=1&autoStart=true`);
   };
 
   const handleLaunchBatch2 = async () => {
     playSound('click');
-    const targetExam = ensureCodeSparkAptitudeExam();
+    let targetExam = getCodeSparkActiveExam();
+    if (!targetExam) {
+      targetExam = await asyncGetCodeSparkActiveExam();
+    }
+    if (!targetExam) {
+      playSound('warning');
+      setKeyError(
+        'The CodeSpark examination is not yet scheduled or paper has not been assigned by the proctor. Please wait for the event administrator to launch the session.'
+      );
+      return;
+    }
+    const safeExam: MCQExamConfig = targetExam;
     const cand = activeCandidate || (keyDigits.trim() ? (lookupCandidateByKey(`AXENT-${keyDigits.trim()}`) || lookupCandidateAny(keyDigits.trim())?.candidate) : null);
     if (!cand) {
       playSound('warning');
@@ -505,7 +571,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     }
     const derivedRoll = cand.rollNumber || cand.email.split('@')[0].toUpperCase();
     authorizeCandidateForRound1Retake(cand.accessKey, true);
-    prepareCandidateForRound1Retake(derivedRoll, targetExam.id);
+    prepareCandidateForRound1Retake(derivedRoll, safeExam.id);
 
     const profile = {
       name: cand.name.trim(),
@@ -514,9 +580,9 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       department: cand.department || 'Axent Candidate',
       course: 'Code Spark 2026',
       examType: 'Aptitude',
-      assignmentTitle: targetExam.title,
+      assignmentTitle: safeExam.title,
       examMode: 'MCQ',
-      mcqExamId: targetExam.id,
+      mcqExamId: safeExam.id,
       accessKey: cand.accessKey,
       sessionStartTime: Date.now(),
       batch: 2,
@@ -525,7 +591,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     try {
       localStorage.setItem('codedna_student_profile', JSON.stringify(profile));
       localStorage.setItem('codedna_active_exam_mode', 'MCQ');
-      localStorage.setItem('codedna_codespark_round1_exam_id', targetExam.id);
+      localStorage.setItem('codedna_codespark_round1_exam_id', safeExam.id);
       setActiveCodeSparkCandidate(cand);
     } catch {}
 
@@ -533,7 +599,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     try {
       await requestExamFullscreen();
     } catch {}
-    navigate(`/codespark-exams?examId=${targetExam.id}&round=1&batch=2&retake=true&autoStart=true`);
+    navigate(`/codespark-exams?examId=${safeExam.id}&round=1&batch=2&retake=true&autoStart=true`);
   };
 
   const cleanRoll = useMemo(() => {
@@ -694,7 +760,17 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     playSound('click');
     try {
       localStorage.setItem('codedna_active_exam_mode', 'MCQ');
-      const targetExam = ensureCodeSparkAptitudeExam();
+      let targetExam = getCodeSparkActiveExam();
+      if (!targetExam) {
+        targetExam = await asyncGetCodeSparkActiveExam();
+      }
+      if (!targetExam) {
+        setKeyError(
+          'The CodeSpark examination is not yet scheduled or paper has not been assigned by the proctor. Please wait for the event administrator to launch the session.'
+        );
+        return;
+      }
+      const safeExam: MCQExamConfig = targetExam;
       const cleanEmail = candidateEmail.trim().toLowerCase();
       const profile = {
         name: candidateName.trim(),
@@ -703,19 +779,19 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
         department: 'Axent Candidate',
         course: 'Code Spark 2026',
         examType: 'Aptitude',
-        assignmentTitle: targetExam.title,
+        assignmentTitle: safeExam.title,
         examMode: 'MCQ',
-        mcqExamId: targetExam.id,
+        mcqExamId: safeExam.id,
         accessKey: accessKey.trim(),
         sessionStartTime: Date.now()
       };
       localStorage.setItem('codedna_student_profile', JSON.stringify(profile));
-      localStorage.setItem('codedna_codespark_round1_exam_id', targetExam.id);
+      localStorage.setItem('codedna_codespark_round1_exam_id', safeExam.id);
 
       try {
         await requestExamFullscreen();
       } catch {}
-      navigate(`/codespark-exams?examId=${targetExam.id}&round=1&autoStart=true`);
+      navigate(`/codespark-exams?examId=${safeExam.id}&round=1&autoStart=true`);
     } catch {
       navigate('/codespark-exams');
     }
@@ -1644,7 +1720,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                           Round 1 Examination Record
                         </div>
                         <span className="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black uppercase">
-                          Multi-Lab Session Active
+                          Tech Fest Arena Active
                         </span>
                       </div>
                       <div className="text-sm font-black text-black">

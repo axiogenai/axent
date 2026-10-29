@@ -263,7 +263,11 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
 
   const handleLaunchBatch2Retake = () => {
     playSound('click');
-    if (cleanRoll && effectiveRound1Exam) {
+    if (!effectiveRound1Exam) {
+      navigate('/codespark');
+      return;
+    }
+    if (cleanRoll) {
       authorizeCandidateForRound1Retake(cleanRoll, true);
       prepareCandidateForRound1Retake(cleanRoll, effectiveRound1Exam.id);
     }
@@ -453,7 +457,7 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
                       <span style={{ color: '#71717a' }}>Exam Paper:</span>
-                      <span style={{ color: '#f4f4f5' }}>{effectiveRound1Exam.title}</span>
+                      <span style={{ color: '#f4f4f5' }}>{effectiveRound1Exam?.title || 'CodeSpark Round 1 Aptitude'}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
                       <span style={{ color: '#71717a' }}>Assessment Score:</span>
@@ -561,7 +565,7 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
             ) : (
               <ErrorBoundary fallbackTitle="CodeSpark Examination Engine Error">
                 <MCQExamScreen
-                  examId={effectiveRound1Exam.id}
+                  examId={effectiveRound1Exam?.id || ''}
                   onBack={handleExitToPortal}
                 />
               </ErrorBoundary>

@@ -20,7 +20,8 @@ import {
   importCodeSparkCandidates,
   parseCandidateImportText,
   saveCodeSparkCandidates,
-  onCodeSparkCandidatesChanged
+  onCodeSparkCandidatesChanged,
+  syncCandidatesFromCloud
 } from '../../services/codeSparkService';
 import { getAllExams } from '../../services/mcqService';
 import { playSound } from '../../utils/sounds';
@@ -54,9 +55,12 @@ export const CodeSparkCandidateImportModal: React.FC<CodeSparkCandidateImportMod
 
   useEffect(() => {
     setCandidates(getAllCodeSparkCandidates());
+    void syncCandidatesFromCloud().then((synced) => {
+      if (synced && synced.length > 0) setCandidates(synced);
+    });
     const unsub = onCodeSparkCandidatesChanged((updated) => setCandidates(updated));
     return () => unsub();
-  }, []);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

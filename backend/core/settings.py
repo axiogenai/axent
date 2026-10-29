@@ -29,7 +29,7 @@ if not SECRET_KEY:
 
 ALLOWED_HOSTS = [
     host.strip()
-    for host in os.environ.get('ALLOWED_HOSTS', '*' if DEBUG else 'localhost,127.0.0.1,.onrender.com,axent.axiogen.in,.axiogen.in').split(',')
+    for host in os.environ.get('ALLOWED_HOSTS', '*' if DEBUG else '.onrender.com,axent.axiogen.in,.axiogen.in').split(',')
     if host.strip()
 ]
 
@@ -71,8 +71,8 @@ CSRF_TRUSTED_ORIGINS = [
     "https://axent.axiogen.in",
     "https://*.axiogen.in",
     "https://*.onrender.com",
-    "http://localhost:4000",
-    "http://127.0.0.1:4000",
+
+
 ]
 
 SECURE_CONTENT_TYPE_NOSNIFF = True

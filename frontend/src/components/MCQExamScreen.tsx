@@ -471,11 +471,21 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
     }
   }, []);
 
+  const isTechFest = Boolean(
+    exam?.isCodeSpark ||
+    exam?.id === 'codespark-round1-aptitude' ||
+    (exam?.title && exam.title.toLowerCase().includes('spark')) ||
+    (typeof window !== 'undefined' && window.location.pathname.includes('/codespark')) ||
+    (typeof localStorage !== 'undefined' && Boolean(localStorage.getItem('codedna_codespark_active_candidate'))) ||
+    existingProfile?.course === 'Code Spark 2026' ||
+    Boolean(existingProfile?.accessKey)
+  );
+
   const [name, setName] = useState(() => existingProfile?.name || '');
   const [roll, setRoll] = useState(() => existingProfile?.rollNumber || (existingProfile?.email ? existingProfile.email.split('@')[0].toUpperCase() : ''));
-  const [dept, setDept] = useState(() => existingProfile?.department || 'Axent Candidate');
-  const [sem, setSem] = useState(() => existingProfile?.semester || '4th Sem');
-  const [division, setDivision] = useState(() => existingProfile?.division || 'A');
+  const [dept, setDept] = useState(() => existingProfile?.department || (isTechFest ? 'CodeSpark Participant' : 'CSE'));
+  const [sem, setSem] = useState(() => existingProfile?.semester || (isTechFest ? 'Tech Fest' : '4th Sem'));
+  const [division, setDivision] = useState(() => existingProfile?.division || (isTechFest ? 'Open' : 'A'));
   const [errors, setErrors] = useState<string[]>([]);
 
   // Token state
@@ -515,14 +525,14 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
         onStart({
           name: pName,
           rollNumber: pRoll,
-          department: existingProfile.department || 'Axent Candidate',
-          semester: existingProfile.semester || '4th Sem',
-          division: existingProfile.division || 'A',
-          course: existingProfile.course || exam.subject || 'MCQ Course',
+          department: existingProfile.department || (isTechFest ? 'CodeSpark Participant' : 'Axent Candidate'),
+          semester: isTechFest ? 'Tech Fest' : (existingProfile.semester || '4th Sem'),
+          division: isTechFest ? 'Open' : (existingProfile.division || 'A'),
+          course: existingProfile.course || (isTechFest ? 'Code Spark 2026' : (exam.subject || 'MCQ Course')),
           examType: (exam.examCategory as ExamCategory) || 'Aptitude',
           assignmentTitle: exam.title,
-          labId: existingProfile.labId || exam.assignedLabId || 'LAB-01',
-          labName: existingProfile.labName || exam.assignedLabName || `Exam: ${exam.title}`,
+          labId: isTechFest ? 'TECHFEST-ARENA' : (existingProfile.labId || exam.assignedLabId || 'LAB-01'),
+          labName: isTechFest ? 'CodeSpark Arena' : (existingProfile.labName || exam.assignedLabName || `Exam: ${exam.title}`),
           stationNumber: existingProfile.stationNumber || 'Station #01',
           examDurationMinutes: exam.durationMinutes,
           examMode: 'MCQ',
@@ -535,16 +545,16 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
       const rollDigits = pRoll.replace(/[^0-9]/g, '');
       const stationDigits = rollDigits.length > 0 ? String(parseInt(rollDigits.slice(-2), 10) || 1).padStart(2, '0') : '01';
       const stationNumber = existingProfile.stationNumber || `Station #${stationDigits}`;
-      const dedicatedLabId = existingProfile.labId || exam.assignedLabId || 'LAB-01';
-      const dedicatedLabName = existingProfile.labName || exam.assignedLabName || `Exam: ${exam.title}`;
+      const dedicatedLabId = isTechFest ? 'TECHFEST-ARENA' : (existingProfile.labId || exam.assignedLabId || 'LAB-01');
+      const dedicatedLabName = isTechFest ? 'CodeSpark Arena' : (existingProfile.labName || exam.assignedLabName || `Exam: ${exam.title}`);
 
       const studentData: StudentInfo = {
         name: pName,
         rollNumber: pRoll,
-        department: existingProfile.department || 'Axent Candidate',
-        semester: existingProfile.semester || '4th Sem',
-        division: existingProfile.division || 'A',
-        course: existingProfile.course || exam.subject || 'MCQ Course',
+        department: existingProfile.department || (isTechFest ? 'CodeSpark Participant' : 'Axent Candidate'),
+        semester: isTechFest ? 'Tech Fest' : (existingProfile.semester || '4th Sem'),
+        division: isTechFest ? 'Open' : (existingProfile.division || 'A'),
+        course: existingProfile.course || (isTechFest ? 'Code Spark 2026' : (exam.subject || 'MCQ Course')),
         examType: (exam.examCategory as ExamCategory) || 'Aptitude',
         assignmentTitle: exam.title,
         labId: dedicatedLabId,
@@ -573,11 +583,13 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
       errs.push('Candidate full name must contain at least 2 characters.');
     }
     if (!trimmedRoll || trimmedRoll.length < 2) {
-      errs.push('Roll number / University Seat Number (USN) must contain at least 2 characters.');
+      errs.push(isTechFest ? 'Candidate Access Key is required.' : 'Roll number / University Seat Number (USN) must contain at least 2 characters.');
     }
-    if (!dept.trim()) errs.push('Academic department is required.');
-    if (!sem.trim()) errs.push('Semester is required.');
-    if (!division.trim()) errs.push('Class division is required.');
+    if (!isTechFest) {
+      if (!dept.trim()) errs.push('Academic department is required.');
+      if (!sem.trim()) errs.push('Semester is required.');
+      if (!division.trim()) errs.push('Class division is required.');
+    }
 
     // Schedule timing guard: strictly prohibit early entry before exam.startTime
     if (exam.startTime && getSynchronizedNow() < exam.startTime) {
@@ -607,16 +619,16 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
     const stationDigits = rollDigits.length > 0 ? String(parseInt(rollDigits.slice(-2), 10) || 1).padStart(2, '0') : '01';
     const stationNumber = `Station #${stationDigits}`;
 
-    const dedicatedLabId = exam.assignedLabId || 'LAB-01';
-    const dedicatedLabName = exam.assignedLabName || `Exam: ${exam.title}`;
+    const dedicatedLabId = isTechFest ? 'TECHFEST-ARENA' : (exam.assignedLabId || 'LAB-01');
+    const dedicatedLabName = isTechFest ? 'CodeSpark Arena' : (exam.assignedLabName || `Exam: ${exam.title}`);
 
     const student: StudentInfo = {
       name: trimmedName,
       rollNumber: trimmedRoll,
-      department: dept.trim(),
-      semester: sem.trim(),
-      division: division.trim(),
-      course: exam.subject || 'MCQ Course',
+      department: isTechFest ? 'CodeSpark Participant' : dept.trim(),
+      semester: isTechFest ? 'Tech Fest' : sem.trim(),
+      division: isTechFest ? 'Open' : division.trim(),
+      course: isTechFest ? 'Code Spark 2026' : (exam.subject || 'MCQ Course'),
       examType: (exam.examCategory as ExamCategory) || 'Aptitude',
       assignmentTitle: exam.title,
       labId: dedicatedLabId,
@@ -661,14 +673,14 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
     const student: StudentInfo = {
       name: d.name?.trim() || 'Candidate',
       rollNumber: d.rollNumber?.trim() || 'USN-001',
-      department: d.department?.trim() || 'CSE',
-      semester: d.semester?.trim() || '4th Sem',
-      division: d.division?.trim() || 'A',
-      course: d.course || exam.subject || 'MCQ Course',
+      department: isTechFest ? 'CodeSpark Participant' : (d.department?.trim() || 'CSE'),
+      semester: isTechFest ? 'Tech Fest' : (d.semester?.trim() || '4th Sem'),
+      division: isTechFest ? 'Open' : (d.division?.trim() || 'A'),
+      course: isTechFest ? 'Code Spark 2026' : (d.course || exam.subject || 'MCQ Course'),
       examType: (exam.examCategory as ExamCategory) || 'Aptitude',
       assignmentTitle: exam.title,
-      labId: d.labId || 'LAB-01',
-      labName: d.labName || '',
+      labId: isTechFest ? 'TECHFEST-ARENA' : (d.labId || 'LAB-01'),
+      labName: isTechFest ? 'CodeSpark Arena' : (d.labName || ''),
       stationNumber,
       examDurationMinutes: d.examDurationMinutes || exam.durationMinutes,
       examMode: 'MCQ',
@@ -1142,62 +1154,68 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
                   />
                 </div>
 
-                {/* Row 2: Roll Number / USN (1fr) & Department (1fr) -> 1:1 */}
-                <div>
+                {/* Row 2: Roll Number / Candidate Key (1fr) & Department (1fr) */}
+                <div style={isTechFest ? { gridColumn: '1 / -1' } : undefined}>
                   <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
-                    Roll Number / USN *
+                    {isTechFest ? 'Candidate Access Key *' : 'Roll Number / USN *'}
                   </label>
                   <input
                     value={roll}
                     onChange={(e) => setRoll(e.target.value)}
-                    placeholder="Roll Number / USN"
+                    placeholder={isTechFest ? "Access Key (e.g. AXENT-5401)" : "Roll Number / USN"}
                     style={{ ...inputStyle, padding: '6px 10px', height: '32px', fontSize: '12px', borderRadius: '6px', background: 'var(--bg-surface)' }}
                     onKeyDown={(e) => e.key === 'Enter' && handleStartManual()}
                   />
                 </div>
 
-                <div>
-                  <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
-                    Department *
-                  </label>
-                  <SimpleSelect
-                    value={dept}
-                    onChange={(val) => {
-                      setDept(String(val));
-                      playSound('click');
-                    }}
-                    options={DEPARTMENT_OPTIONS}
-                  />
-                </div>
+                {!isTechFest && (
+                  <div>
+                    <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
+                      Department *
+                    </label>
+                    <SimpleSelect
+                      value={dept}
+                      onChange={(val) => {
+                        setDept(String(val));
+                        playSound('click');
+                      }}
+                      options={DEPARTMENT_OPTIONS}
+                    />
+                  </div>
+                )}
 
                 {/* Row 3: Semester (1fr) & Division (1fr) -> 1:1 */}
-                <div>
-                  <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
-                    Semester *
-                  </label>
-                  <SimpleSelect
-                    value={sem}
-                    onChange={(val) => {
-                      setSem(String(val));
-                      playSound('click');
-                    }}
-                    options={SEMESTER_OPTIONS}
-                  />
-                </div>
+                {!isTechFest && (
+                  <>
+                    <div>
+                      <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
+                        Semester *
+                      </label>
+                      <SimpleSelect
+                        value={sem}
+                        onChange={(val) => {
+                          setSem(String(val));
+                          playSound('click');
+                        }}
+                        options={SEMESTER_OPTIONS}
+                      />
+                    </div>
 
-                <div>
-                  <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
-                    Division *
-                  </label>
-                  <SimpleSelect
-                    value={division}
-                    onChange={(val) => {
-                      setDivision(String(val));
-                      playSound('click');
-                    }}
-                    options={DIVISION_OPTIONS}
-                  />
-                </div>
+                    <div>
+                      <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
+                        Division *
+                      </label>
+                      <SimpleSelect
+                        value={division}
+                        onChange={(val) => {
+                          setDivision(String(val));
+                          playSound('click');
+                        }}
+                        options={DIVISION_OPTIONS}
+                      />
+                    </div>
+                  </>
+                )}
 
                 <div style={{ gridColumn: '1 / -1', marginTop: '6px' }}>
                   <button
@@ -1295,10 +1313,12 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
                       <span style={{ color: 'var(--text-muted)' }}>Department: </span>
                       <span style={{ color: 'var(--text-secondary)' }}>{parsedToken.data.department || 'General'}</span>
                     </div>
-                    <div>
-                      <span style={{ color: 'var(--text-muted)' }}>Semester: </span>
-                      <span style={{ color: 'var(--text-secondary)' }}>{parsedToken.data.semester || 'N/A'}</span>
-                    </div>
+                    {!isTechFest && (
+                      <div>
+                        <span style={{ color: 'var(--text-muted)' }}>Semester: </span>
+                        <span style={{ color: 'var(--text-secondary)' }}>{parsedToken.data.semester || 'N/A'}</span>
+                      </div>
+                    )}
                     <div>
                       <span style={{ color: 'var(--text-muted)' }}>Exam Duration: </span>
                       <span style={{ color: 'var(--text-secondary)' }}>{parsedToken.data.examDurationMinutes || 45} mins</span>
@@ -1368,6 +1388,17 @@ interface WhatsAppHoldResultsViewProps {
 
 const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attempt, exam, onExit, onNewCandidate }) => {
   const [copiedHash, setCopiedHash] = useState(false);
+
+  const isTechFest = Boolean(
+    exam?.isCodeSpark ||
+    exam?.id === 'codespark-round1-aptitude' ||
+    (exam?.title && exam.title.toLowerCase().includes('spark')) ||
+    (typeof window !== 'undefined' && window.location.pathname.includes('/codespark')) ||
+    (typeof localStorage !== 'undefined' && Boolean(localStorage.getItem('codedna_codespark_active_candidate'))) ||
+    Boolean((attempt as any).accessKey) ||
+    attempt.studentDept === 'Axent Candidate' ||
+    attempt.studentSem === 'Tech Fest'
+  );
 
   useEffect(() => {
     triggerViewportReflow();
@@ -1535,10 +1566,10 @@ const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attem
 
               <div>
                 <span style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>
-                  Department & Class
+                  {isTechFest ? 'Event & Arena' : 'Department & Class'}
                 </span>
                 <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
-                  {attempt.studentDept} · {attempt.studentSem} (Div {attempt.studentDiv || 'A'})
+                  {isTechFest ? 'CodeSpark 2026 · Stage 01 Assessment' : `${attempt.studentDept} · ${attempt.studentSem} (Div ${attempt.studentDiv || 'A'})`}
                 </span>
               </div>
 
@@ -1692,6 +1723,17 @@ interface ResultsViewProps {
 }
 
 const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExplanations, onRestart, onExit, onNewCandidate }) => {
+  const isTechFest = Boolean(
+    exam?.isCodeSpark ||
+    exam?.id === 'codespark-round1-aptitude' ||
+    (exam?.title && exam.title.toLowerCase().includes('spark')) ||
+    (typeof window !== 'undefined' && window.location.pathname.includes('/codespark')) ||
+    (typeof localStorage !== 'undefined' && Boolean(localStorage.getItem('codedna_codespark_active_candidate'))) ||
+    Boolean((attempt as any).accessKey) ||
+    attempt.studentDept === 'Axent Candidate' ||
+    attempt.studentSem === 'Tech Fest'
+  );
+
   // STRICT INSTITUTIONAL GUARD:
   // If exam is configured for WhatsApp Group Release, hold results unless exam timed out or instant release is allowed
   const isWhatsAppRelease =
@@ -1834,8 +1876,17 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
             <div className="mcq-results-meta" style={{ display: 'flex', alignItems: 'center', gap: '6px 12px', flexWrap: 'wrap', fontSize: '12px', color: 'var(--text-secondary)' }}>
               <span>Candidate: <strong style={{ color: 'var(--text-primary)' }}>{attempt.studentName}</strong></span>
               <span>Roll: <strong style={{ color: 'var(--text-primary)' }}>{attempt.studentRoll}</strong></span>
-              <span>Dept: <strong>{attempt.studentDept || 'CSE'}</strong></span>
-              <span>Sem: <strong>{attempt.studentSem || '4th Sem'} ({attempt.studentDiv || 'A'})</strong></span>
+              {isTechFest ? (
+                <>
+                  <span>Event: <strong style={{ color: 'var(--text-primary)' }}>CodeSpark 2026</strong></span>
+                  <span>Stage: <strong>Round 1 (Aptitude & Reasoning)</strong></span>
+                </>
+              ) : (
+                <>
+                  <span>Dept: <strong>{attempt.studentDept || 'CSE'}</strong></span>
+                  <span>Sem: <strong>{attempt.studentSem || '4th Sem'} ({attempt.studentDiv || 'A'})</strong></span>
+                </>
+              )}
               {attempt?.submitTime && (() => {
                 try {
                   const d = new Date(attempt.submitTime);
@@ -1927,7 +1978,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
                 }}
               >
                 <LogOut size={12} />
-                <span className="mcq-btn-text-full">Exit & Catalog</span>
+                <span className="mcq-btn-text-full">{isTechFest ? 'Exit to CodeSpark' : 'Exit & Catalog'}</span>
                 <span className="mcq-btn-text-short">Exit</span>
               </button>
             )}
@@ -2249,25 +2300,50 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
             {/* Candidate & Proctoring Snapshot */}
             <div className="mcq-results-sidebar-card" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '18px', boxSizing: 'border-box', width: '100%', maxWidth: '100%' }}>
               <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Terminal Identity
+                {isTechFest ? 'Candidate Identity' : 'Terminal Identity'}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Department</span>
-                  <strong style={{ color: 'var(--text-primary)' }}>{attempt.studentDept || 'CSE'}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Semester & Div</span>
-                  <strong style={{ color: 'var(--text-primary)' }}>{attempt.studentSem || '4th Sem'} - {attempt.studentDiv || 'A'}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Lab Workstation</span>
-                  <strong style={{ color: 'var(--text-primary)' }}>LAB-01</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Integrity Protocol</span>
-                  <strong style={{ color: 'var(--success)' }}>Axent CCTV Sync</strong>
-                </div>
+                {isTechFest ? (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Event</span>
+                      <strong style={{ color: 'var(--text-primary)' }}>CodeSpark 2026</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Stage</span>
+                      <strong style={{ color: 'var(--text-primary)' }}>Stage 01: Cognitive Assessment</strong>
+                    </div>
+                    {(attempt as any).accessKey && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Access Key</span>
+                        <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{(attempt as any).accessKey}</strong>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Integrity Protocol</span>
+                      <strong style={{ color: 'var(--success)' }}>Axent CCTV Synced</strong>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Department</span>
+                      <strong style={{ color: 'var(--text-primary)' }}>{attempt.studentDept || 'CSE'}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Semester & Div</span>
+                      <strong style={{ color: 'var(--text-primary)' }}>{attempt.studentSem || '4th Sem'} - {attempt.studentDiv || 'A'}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Lab Workstation</span>
+                      <strong style={{ color: 'var(--text-primary)' }}>LAB-01</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Integrity Protocol</span>
+                      <strong style={{ color: 'var(--success)' }}>Axent CCTV Sync</strong>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -2324,7 +2400,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
                   }}
                 >
                   <LogOut size={14} />
-                  <span>Exit Examination</span>
+                  <span>{isTechFest ? 'Exit to CodeSpark' : 'Exit Examination'}</span>
                 </button>
               </div>
             )}
@@ -3678,7 +3754,9 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     setAnswers({});
     setSubmitted(false);
     setGradeResult(null);
-    if (onBack) {
+    if (exam?.isCodeSpark || exam?.id === 'codespark-round1-aptitude' || (typeof window !== 'undefined' && window.location.pathname.includes('/codespark'))) {
+      navigate('/codespark-portal', { replace: true });
+    } else if (onBack) {
       onBack();
     } else {
       navigate('/mcq', { replace: true });

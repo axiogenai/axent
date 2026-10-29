@@ -139,7 +139,7 @@ def send_codespark_emails(request):
         r_r2_key = str(r.get('round2Key', '')).strip()
         r_score = r.get('round1Score', 'N/A')
         r_max_score = r.get('round1MaxScore', 'N/A')
-        exam_url = str(r.get('examUrl', 'http://localhost:4000/codespark-exams?round=2')).strip()
+        exam_url = str(r.get('examUrl', 'https://axent.axiogen.in/codespark-exams?round=2')).strip()
         
         if not r_email or '@' not in r_email:
             failed_list.append({"email": r_email, "name": r_name, "reason": "Missing or invalid email address"})

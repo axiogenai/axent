@@ -336,19 +336,29 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       const totalMarks = importedQuestions.reduce((sum, q) => sum + (q.marks || 1), 0);
       const questionIds = importedQuestions.map((q) => q.id);
 
-      const baseExam = currentAssignedExam || ensureCodeSparkAptitudeExam();
+      const baseExam = currentAssignedExam;
       const updatedExam: MCQExamConfig = {
-        ...baseExam,
         id: baseExam?.id || `exam_codespark_r1_${Date.now()}`,
         title: baseExam?.title || 'CodeSpark 2026: Round 1 Aptitude & Logic Assessment',
         description: 'Official CodeSpark Round 1 Examination (Imported from Google Form / Quiz)',
+        instructions: baseExam?.instructions || 'Welcome to CodeSpark 2026 Round 1. Answer all questions within the allocated time.',
         subject: importedQuestions[0]?.subject || 'Cognitive Aptitude & Logic',
         topic: importedQuestions[0]?.topic || 'Problem Solving & Reasoning',
+        examCategory: baseExam?.examCategory || 'Aptitude',
+        durationMinutes: baseExam?.durationMinutes || 30,
         isCodeSpark: true,
         status: 'PUBLISHED',
         questionCount: importedQuestions.length,
         totalMarks: totalMarks,
         questionIds: questionIds,
+        shuffleQuestions: baseExam?.shuffleQuestions ?? true,
+        shuffleOptions: baseExam?.shuffleOptions ?? true,
+        negativeMarkingEnabled: baseExam?.negativeMarkingEnabled ?? true,
+        allowReview: baseExam?.allowReview ?? true,
+        showExplanationsAfterSubmit: baseExam?.showExplanationsAfterSubmit ?? false,
+        maxAttempts: baseExam?.maxAttempts || 1,
+        createdBy: baseExam?.createdBy || 'Admin',
+        createdAt: baseExam?.createdAt || Date.now(),
         updatedAt: Date.now()
       };
 
@@ -1025,6 +1035,124 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Active Paper Status or Unscheduled Warning Banner */}
+      {!currentAssignedExam ? (
+        <div
+          style={{
+            padding: '14px 18px',
+            borderRadius: '8px',
+            background: 'rgba(234, 26, 28, 0.1)',
+            border: '1px solid rgba(234, 26, 28, 0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <AlertTriangle size={18} color="#ea1a1c" />
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: 800, color: '#f4f4f5' }}>
+                Attention Proctor: No Active Paper Assigned to CodeSpark Round 1
+              </div>
+              <div style={{ fontSize: '12px', color: '#a1a1aa' }}>
+                Candidates will see &quot;Exam is not scheduled&quot; until you select a paper from the Paper Blueprint tab and save configuration.
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <select
+              value={selectedExamToAssign || ''}
+              onChange={(e) => setSelectedExamToAssign(e.target.value)}
+              style={{
+                padding: '7px 10px',
+                borderRadius: '6px',
+                border: '1px solid #3f3f46',
+                background: '#09090b',
+                color: '#f4f4f5',
+                fontSize: '12px',
+                colorScheme: 'dark'
+              }}
+            >
+              <option value="">-- Choose Exam Paper --</option>
+              {allExams.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.title} ({e.questionCount} Qs · {e.durationMinutes}m)
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => handleAssignPaper(selectedExamToAssign)}
+              disabled={!selectedExamToAssign}
+              style={{
+                padding: '7px 14px',
+                borderRadius: '6px',
+                background: '#f4f4f5',
+                color: '#09090b',
+                fontWeight: 700,
+                fontSize: '12px',
+                border: 'none',
+                cursor: selectedExamToAssign ? 'pointer' : 'not-allowed'
+              }}
+            >
+              Assign Paper Now
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div
+          style={{
+            padding: '10px 16px',
+            borderRadius: '6px',
+            background: '#121214',
+            border: '1px solid #27272a',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '8px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10b981' }} />
+            <span style={{ fontSize: '12px', color: '#71717a' }}>Active CodeSpark Paper:</span>
+            <strong style={{ fontSize: '13px', color: '#f4f4f5' }}>{currentAssignedExam.title}</strong>
+            <span
+              style={{
+                fontSize: '10px',
+                fontWeight: 800,
+                padding: '2px 6px',
+                borderRadius: '3px',
+                background: 'rgba(16, 185, 129, 0.12)',
+                color: '#10b981',
+                border: '1px solid rgba(16, 185, 129, 0.3)'
+              }}
+            >
+              CLOUD SYNCHRONIZED
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={() => setActiveTab('mcq_paper')}
+              style={{
+                background: 'transparent',
+                border: '1px solid #27272a',
+                color: '#a1a1aa',
+                borderRadius: '4px',
+                padding: '4px 10px',
+                fontSize: '11px',
+                cursor: 'pointer'
+              }}
+            >
+              Change Paper / Settings
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── 2. SUB-NAVIGATION TABS (High-Density Dark Pills) ── */}
       <div

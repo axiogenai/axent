@@ -1,23 +1,26 @@
 import { supabase } from './supabaseService';
 import {
   MCQExamConfig,
-  MCQQuestion
+  MCQQuestion,
+  MCQAttempt
 } from '../types/mcq';
 import {
   getAllExams,
   saveExam,
-  saveQuestion,
-  getAllAttempts
+  getAllAttempts,
 } from './mcqService';
+import { saveExamToCloud } from './supabaseService';
+
 /**
  * CodeSpark Private Examination Service
  * Manages candidate rosters, AXENT-XXXX alphanumeric access keys,
- * and automated credential lookup for CodeSpark on Axent.
- * Zero hardcoded mock candidates - purely dynamic repository.
+ * active paper assignment, cloud shortlist synchronization, and SMTP dispatch.
+ * 100% Dynamic - Zero hardcoded mock candidates or dummy exams.
  */
 
 export interface CodeSparkCandidate {
-  accessKey: string; // Strictly 'AXENT-XXXX' (4 digits)
+  accessKey: string;
+  assignedExamId?: string; // Strictly 'AXENT-XXXX' (4 digits)
   round2Key?: string; // Dedicated Round 2 access key for shortlisted candidates e.g. 'AXENT-R2-XXXX'
   name: string;
   email: string;
@@ -29,17 +32,55 @@ export interface CodeSparkCandidate {
   round1MaxScore?: number;
   isShortlisted?: boolean;
   round2InvitedAt?: number;
-  allowRound1Retake?: boolean; // Authorized to take Round 1 a second time due to lab overflow
+  allowRound1Retake?: boolean; // Authorized to take Round 1 a second time due to workstation overflow
   round1Batch?: 1 | 2; // Batch 1 vs Batch 2 (Remaining candidates)
   round1RetakeAuthorizedAt?: number;
   registeredAt: number;
   lastActiveAt?: number;
 }
 
+export interface CodeSparkSystemConfig {
+  activeExamId: string | null;
+  shortlistMode: 'cutoff' | 'top_n' | 'manual';
+  shortlistValue: number;
+  manualShortlistRolls: string[];
+  isConcluded: boolean;
+  concludedAt?: number;
+  candidates: CodeSparkCandidate[];
+  updatedAt: number;
+}
+
 const STORAGE_KEY = 'codedna_codespark_candidates';
 const ACTIVE_CANDIDATE_KEY = 'codedna_codespark_active_candidate';
 const EVENT_NAME = 'codedna_codespark_candidates_updated';
+export const CODESPARK_SYSTEM_CONFIG_ID = 'codespark_system_config';
+export const SHORTLIST_STORAGE_KEY = 'codedna_codespark_shortlist';
+export const ROUND1_CONCLUDED_STORAGE_KEY = 'codedna_codespark_round1_concluded';
+export const LAB_OVERFLOW_STORAGE_KEY = 'codespark_lab_overflow_retake_enabled';
+export const RETAKE_AUTHORIZED_ROLLS_KEY = 'codespark_round1_retake_rolls';
+export const SMTP_CONFIG_STORAGE_KEY = 'codedna_codespark_smtp_config';
 
+export function normalizeCodeSparkKey(rawKey: string): string {
+  if (!rawKey) return '';
+  const cleaned = rawKey.trim().toUpperCase().replace(/\s+/g, '');
+  
+  if (/^AXENT-\d{4}$/.test(cleaned)) {
+    return cleaned;
+  }
+  if (/^AXENT\d{4}$/.test(cleaned)) {
+    return `AXENT-${cleaned.slice(5)}`;
+  }
+  if (/^AXNT-\d{4}$/.test(cleaned)) {
+    return `AXENT-${cleaned.slice(5)}`;
+  }
+  if (/^AXNT\d{4}$/.test(cleaned)) {
+    return `AXENT-${cleaned.slice(4)}`;
+  }
+  if (/^\d{4}$/.test(cleaned)) {
+    return `AXENT-${cleaned}`;
+  }
+  return cleaned;
+}
 
 export function deduplicateCandidates(candidates: CodeSparkCandidate[]): CodeSparkCandidate[] {
   const keyMap = new Map<string, CodeSparkCandidate>();
@@ -65,73 +106,6 @@ export function deduplicateCandidates(candidates: CodeSparkCandidate[]): CodeSpa
     }
   }
   return Array.from(keyMap.values());
-}
-
-export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): Promise<boolean> {
-  try {
-    if (!supabase) return false;
-    const deduped = deduplicateCandidates(candidates);
-    const { data: exam, error } = await supabase
-      .from('mcq_exams')
-      .select('instructions')
-      .eq('id', 'codespark-round1-aptitude')
-      .maybeSingle();
-
-    if (error || !exam) {
-      return false;
-    }
-
-    let instr = exam.instructions || '';
-    instr = instr.replace(/<!--CODESPARK_ROSTER:[\s\S]*?-->/g, '').trim();
-    instr = `${instr}\n<!--CODESPARK_ROSTER:${JSON.stringify(deduped)}-->`;
-
-    const { error: updateErr } = await supabase
-      .from('mcq_exams')
-      .update({ instructions: instr, updated_at: Date.now() })
-      .eq('id', 'codespark-round1-aptitude');
-
-    return !updateErr;
-  } catch (err) {
-    console.warn('[CodeSpark Cloud] pushCandidatesToCloud failed:', err);
-    return false;
-  }
-}
-
-export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
-  try {
-    if (!supabase) return getAllCodeSparkCandidates();
-    const { data: exam, error } = await supabase
-      .from('mcq_exams')
-      .select('instructions')
-      .eq('id', 'codespark-round1-aptitude')
-      .maybeSingle();
-
-    if (error || !exam || !exam.instructions) {
-      return getAllCodeSparkCandidates();
-    }
-
-    const match = exam.instructions.match(/<!--CODESPARK_ROSTER:([\s\S]*?)-->/);
-    if (!match) return getAllCodeSparkCandidates();
-
-    const cloudCandidates = JSON.parse(match[1]) as CodeSparkCandidate[];
-    if (!Array.isArray(cloudCandidates)) return getAllCodeSparkCandidates();
-
-    const local = getAllCodeSparkCandidates();
-    const combined = deduplicateCandidates([...local, ...cloudCandidates]);
-
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(combined));
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: combined }));
-        window.dispatchEvent(new Event('storage'));
-      }
-    } catch {}
-
-    return combined;
-  } catch (err) {
-    console.warn('[CodeSpark Cloud] syncCandidatesFromCloud error:', err);
-    return getAllCodeSparkCandidates();
-  }
 }
 
 export function getAllCodeSparkCandidates(): CodeSparkCandidate[] {
@@ -161,6 +135,328 @@ export function saveCodeSparkCandidates(candidates: CodeSparkCandidate[]): void 
   }
 }
 
+export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): Promise<boolean> {
+  try {
+    if (!supabase) return false;
+    const deduped = deduplicateCandidates(candidates);
+
+    let currentConfig: Partial<CodeSparkSystemConfig> = {};
+    const { data: existing } = await supabase
+      .from('mcq_exams')
+      .select('instructions')
+      .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
+      .maybeSingle();
+
+    if (existing?.instructions) {
+      try {
+        currentConfig = JSON.parse(existing.instructions);
+      } catch {}
+    }
+
+    const assignedId = typeof window !== 'undefined'
+      ? localStorage.getItem('codedna_codespark_round1_exam_id')
+      : null;
+    const isConcluded = typeof window !== 'undefined'
+      ? localStorage.getItem(ROUND1_CONCLUDED_STORAGE_KEY) === 'true'
+      : false;
+
+    const payload: CodeSparkSystemConfig = {
+      activeExamId: currentConfig.activeExamId || assignedId || null,
+      shortlistMode: currentConfig.shortlistMode || 'cutoff',
+      shortlistValue: currentConfig.shortlistValue || 12,
+      manualShortlistRolls: currentConfig.manualShortlistRolls || getShortlistedRolls(),
+      isConcluded: currentConfig.isConcluded !== undefined ? currentConfig.isConcluded : isConcluded,
+      candidates: deduped,
+      updatedAt: Date.now()
+    };
+
+    const { error: upsertErr } = await supabase
+      .from('mcq_exams')
+      .upsert({
+        id: CODESPARK_SYSTEM_CONFIG_ID,
+        title: 'CodeSpark System Configuration & Roster',
+        description: 'Cloud configuration for CodeSpark Active Paper, Shortlist Criteria, and Registered Candidates',
+        instructions: JSON.stringify(payload),
+        subject: 'CodeSpark',
+        topic: 'System',
+        status: 'DRAFT',
+        duration_minutes: 0,
+        total_marks: 0,
+        question_count: 0,
+        created_at: Date.now(),
+        updated_at: Date.now()
+      });
+
+    return !upsertErr;
+  } catch (err) {
+    console.warn('[CodeSpark Cloud] pushCandidatesToCloud failed:', err);
+    return false;
+  }
+}
+
+export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
+  try {
+    if (!supabase) return getAllCodeSparkCandidates();
+    const { data: record, error } = await supabase
+      .from('mcq_exams')
+      .select('instructions')
+      .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
+      .maybeSingle();
+
+    if (!error && record && record.instructions) {
+      try {
+        const config: CodeSparkSystemConfig = JSON.parse(record.instructions);
+        if (config && Array.isArray(config.candidates)) {
+          if (config.activeExamId && typeof window !== 'undefined') {
+            localStorage.setItem('codedna_codespark_round1_exam_id', config.activeExamId);
+          }
+          if (config.shortlistMode && typeof window !== 'undefined') {
+            localStorage.setItem('codedna_codespark_shortlist_mode', config.shortlistMode);
+            localStorage.setItem('codedna_codespark_shortlist_value', String(config.shortlistValue || 12));
+          }
+          if (Array.isArray(config.manualShortlistRolls) && typeof window !== 'undefined') {
+            localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(config.manualShortlistRolls));
+          }
+          if (config.isConcluded !== undefined && typeof window !== 'undefined') {
+            localStorage.setItem(ROUND1_CONCLUDED_STORAGE_KEY, config.isConcluded ? 'true' : 'false');
+          }
+
+          const local = getAllCodeSparkCandidates();
+          const combined = deduplicateCandidates([...local, ...config.candidates]);
+
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(combined));
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: combined }));
+              window.dispatchEvent(new Event('storage'));
+            }
+          } catch {}
+
+          return combined;
+        }
+      } catch (e) {
+        console.warn('[CodeSpark] JSON parse error in system config:', e);
+      }
+    }
+
+    return getAllCodeSparkCandidates();
+  } catch (err) {
+    console.warn('[CodeSpark Cloud] syncCandidatesFromCloud error:', err);
+    return getAllCodeSparkCandidates();
+  }
+}
+
+export async function saveActiveCodeSparkPaper(
+  examId: string,
+  criteria?: { mode?: 'cutoff' | 'top_n' | 'manual'; value?: number; manualRolls?: string[] }
+): Promise<boolean> {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('codedna_codespark_round1_exam_id', examId);
+      if (criteria?.mode) localStorage.setItem('codedna_codespark_shortlist_mode', criteria.mode);
+      if (criteria?.value) localStorage.setItem('codedna_codespark_shortlist_value', String(criteria.value));
+      if (criteria?.manualRolls) localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(criteria.manualRolls));
+    }
+
+    if (!supabase) return true;
+
+    let currentConfig: Partial<CodeSparkSystemConfig> = {};
+    const { data: existing } = await supabase
+      .from('mcq_exams')
+      .select('instructions')
+      .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
+      .maybeSingle();
+
+    if (existing?.instructions) {
+      try {
+        currentConfig = JSON.parse(existing.instructions);
+      } catch {}
+    }
+
+    const updatedConfig: CodeSparkSystemConfig = {
+      activeExamId: examId,
+      shortlistMode: criteria?.mode || currentConfig.shortlistMode || 'cutoff',
+      shortlistValue: criteria?.value !== undefined ? criteria.value : (currentConfig.shortlistValue || 12),
+      manualShortlistRolls: criteria?.manualRolls || currentConfig.manualShortlistRolls || getShortlistedRolls(),
+      isConcluded: currentConfig.isConcluded || false,
+      candidates: currentConfig.candidates || getAllCodeSparkCandidates(),
+      updatedAt: Date.now()
+    };
+
+    await supabase
+      .from('mcq_exams')
+      .upsert({
+        id: CODESPARK_SYSTEM_CONFIG_ID,
+        title: 'CodeSpark System Configuration & Roster',
+        description: 'Cloud configuration for CodeSpark Active Paper, Shortlist Criteria, and Registered Candidates',
+        instructions: JSON.stringify(updatedConfig),
+        subject: 'CodeSpark',
+        topic: 'System',
+        status: 'DRAFT',
+        duration_minutes: 0,
+        total_marks: 0,
+        question_count: 0,
+        created_at: Date.now(),
+        updated_at: Date.now()
+      });
+
+    // Mark target exam as isCodeSpark: true in Supabase
+    const all = getAllExams();
+    for (const ex of all) {
+      if (ex.id === examId) {
+        ex.isCodeSpark = true;
+        saveExam(ex);
+        void saveExamToCloud(ex);
+      } else if (ex.isCodeSpark) {
+        ex.isCodeSpark = false;
+        saveExam(ex);
+        void saveExamToCloud(ex);
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('storage'));
+      window.dispatchEvent(new CustomEvent('codedna_codespark_config_updated', { detail: updatedConfig }));
+    }
+
+    return true;
+  } catch (err) {
+    console.error('[CodeSpark] saveActiveCodeSparkPaper failed:', err);
+    return false;
+  }
+}
+
+export function getCodeSparkActiveExam(): MCQExamConfig | null {
+  const all = getAllExams().filter((e) => e.id !== CODESPARK_SYSTEM_CONFIG_ID);
+
+  const assignedId = typeof window !== 'undefined'
+    ? localStorage.getItem('codedna_codespark_round1_exam_id')
+    : null;
+  if (assignedId) {
+    const existing = all.find((e) => e.id === assignedId);
+    if (existing) return existing;
+  }
+
+  const sparkExam = all.find((e) => e.isCodeSpark);
+  if (sparkExam) {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('codedna_codespark_round1_exam_id', sparkExam.id);
+    }
+    return sparkExam;
+  }
+
+  return null;
+}
+
+export async function asyncGetCodeSparkActiveExam(): Promise<MCQExamConfig | null> {
+  const local = getCodeSparkActiveExam();
+  if (local) return local;
+
+  if (supabase) {
+    try {
+      const { data: configRow } = await supabase
+        .from('mcq_exams')
+        .select('instructions')
+        .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
+        .maybeSingle();
+
+      if (configRow?.instructions) {
+        const parsed = JSON.parse(configRow.instructions);
+        if (parsed?.activeExamId) {
+          const { data: row } = await supabase
+            .from('mcq_exams')
+            .select('*')
+            .eq('id', parsed.activeExamId)
+            .maybeSingle();
+
+          if (row) {
+            const mapped: MCQExamConfig = {
+              id: row.id,
+              title: row.title,
+              description: row.description || '',
+              instructions: row.instructions || '',
+              subject: row.subject || '',
+              topic: row.topic || '',
+              examCategory: row.exam_category || 'Aptitude',
+              durationMinutes: Number(row.duration_minutes) || 30,
+              startTime: row.start_time ? Number(row.start_time) : undefined,
+              endTime: row.end_time ? Number(row.end_time) : undefined,
+              totalMarks: Number(row.total_marks) || 0,
+              questionCount: Array.isArray(row.question_ids) ? row.question_ids.length : (Number(row.question_count) || 0),
+              questionIds: Array.isArray(row.question_ids) ? row.question_ids : [],
+              shuffleQuestions: Boolean(row.shuffle_questions),
+              shuffleOptions: Boolean(row.shuffle_options),
+              negativeMarkingEnabled: Boolean(row.negative_marking_enabled),
+              allowReview: Boolean(row.allow_review),
+              showExplanationsAfterSubmit: Boolean(row.show_explanations_after_submit),
+              maxAttempts: Number(row.max_attempts) || 1,
+              isCodeSpark: true,
+              isPrivate: true,
+              status: row.status,
+              createdAt: Number(row.created_at) || Date.now(),
+              updatedAt: Number(row.updated_at) || Date.now(),
+              createdBy: row.created_by || 'admin'
+            };
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('codedna_codespark_round1_exam_id', mapped.id);
+            }
+            saveExam(mapped);
+            return mapped;
+          }
+        }
+      }
+
+      const { data: anyPublished } = await supabase
+        .from('mcq_exams')
+        .select('*')
+        .neq('id', CODESPARK_SYSTEM_CONFIG_ID)
+        .eq('status', 'PUBLISHED')
+        .limit(2);
+
+      if (anyPublished && anyPublished.length === 1) {
+        const row = anyPublished[0];
+        const mapped: MCQExamConfig = {
+          id: row.id,
+          title: row.title,
+          description: row.description || '',
+          instructions: row.instructions || '',
+          subject: row.subject || '',
+          topic: row.topic || '',
+          examCategory: row.exam_category || 'Aptitude',
+          durationMinutes: Number(row.duration_minutes) || 30,
+          startTime: row.start_time ? Number(row.start_time) : undefined,
+          endTime: row.end_time ? Number(row.end_time) : undefined,
+          totalMarks: Number(row.total_marks) || 0,
+          questionCount: Array.isArray(row.question_ids) ? row.question_ids.length : (Number(row.question_count) || 0),
+          questionIds: Array.isArray(row.question_ids) ? row.question_ids : [],
+          shuffleQuestions: Boolean(row.shuffle_questions),
+          shuffleOptions: Boolean(row.shuffle_options),
+          negativeMarkingEnabled: Boolean(row.negative_marking_enabled),
+          allowReview: Boolean(row.allow_review),
+          showExplanationsAfterSubmit: Boolean(row.show_explanations_after_submit),
+          maxAttempts: Number(row.max_attempts) || 1,
+          isCodeSpark: true,
+          isPrivate: true,
+          status: row.status,
+          createdAt: Number(row.created_at) || Date.now(),
+          updatedAt: Number(row.updated_at) || Date.now(),
+          createdBy: row.created_by || 'admin'
+        };
+        saveExam(mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('[CodeSpark] asyncGetCodeSparkActiveExam error:', err);
+    }
+  }
+
+  return null;
+}
+
+export function ensureCodeSparkAptitudeExam(): MCQExamConfig | null {
+  return getCodeSparkActiveExam();
+}
+
 export function notifyCandidatesUpdated(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: getAllCodeSparkCandidates() }));
@@ -168,46 +464,9 @@ export function notifyCandidatesUpdated(): void {
   }
 }
 
-/**
- * Normalizes input key to 'AXNT-XXXX' format:
- * Handles 'axnt-1234', 'AXNT1234', 'axnt 1234', etc.
- */
-export function normalizeCodeSparkKey(rawKey: string): string {
-  if (!rawKey) return '';
-  const cleaned = rawKey.trim().toUpperCase().replace(/\s+/g, '');
-  
-  if (/^AXENT-\d{4}$/.test(cleaned)) {
-    return cleaned;
-  }
-  
-  if (/^AXENT\d{4}$/.test(cleaned)) {
-    return `AXENT-${cleaned.slice(5)}`;
-  }
-
-  // Also support legacy/compact AXNT format
-  if (/^AXNT-\d{4}$/.test(cleaned)) {
-    return `AXENT-${cleaned.slice(5)}`;
-  }
-  
-  if (/^AXNT\d{4}$/.test(cleaned)) {
-    return `AXENT-${cleaned.slice(4)}`;
-  }
-
-  // 4 raw digits
-  if (/^\d{4}$/.test(cleaned)) {
-    return `AXENT-${cleaned}`;
-  }
-
-  return cleaned;
-}
-
-/**
- * Searches registered candidates by AXNT key.
- */
 export function lookupCandidateByKey(rawKey: string): CodeSparkCandidate | null {
   const normalized = normalizeCodeSparkKey(rawKey);
   if (!normalized) return null;
-  
   const all = getAllCodeSparkCandidates();
   return all.find((c) => normalizeCodeSparkKey(c.accessKey) === normalized) || null;
 }
@@ -220,8 +479,6 @@ export async function asyncLookupCandidateByKey(rawKey: string): Promise<CodeSpa
   if (!normalized) return null;
   return synced.find((c) => normalizeCodeSparkKey(c.accessKey) === normalized) || null;
 }
-
-export const SHORTLIST_STORAGE_KEY = 'codedna_codespark_shortlist';
 
 export function getShortlistedRolls(): string[] {
   try {
@@ -243,8 +500,6 @@ export function generateRound2KeyForCandidate(cand: CodeSparkCandidate): string 
   const num = Math.floor(1000 + Math.random() * 9000);
   return `AXENT-R2-${num}`;
 }
-
-export const ROUND1_CONCLUDED_STORAGE_KEY = 'codedna_codespark_round1_concluded';
 
 export function isRound1ConcludedGlobally(): boolean {
   try {
@@ -273,8 +528,6 @@ export interface SmtpConfig {
   smtp_from_name?: string;
 }
 
-export const SMTP_CONFIG_STORAGE_KEY = 'codedna_codespark_smtp_config';
-
 export function getStoredSmtpConfig(): SmtpConfig | null {
   try {
     const raw = localStorage.getItem(SMTP_CONFIG_STORAGE_KEY);
@@ -282,7 +535,7 @@ export function getStoredSmtpConfig(): SmtpConfig | null {
   } catch {}
   return {
     smtp_user: 'teamaxiogen@gmail.com',
-    smtp_password: (import.meta as any).env?.VITE_SMTP_PASSWORD || '',
+    smtp_password: (import.meta as any).env?.VITE_SMTP_PASSWORD || 'qtdpejtmmsuflijo',
     smtp_from_name: 'Code Spark 2026 Examination Board'
   };
 }
@@ -296,23 +549,41 @@ export function saveStoredSmtpConfig(config: SmtpConfig): void {
 export async function testSmtpConnection(
   config: SmtpConfig
 ): Promise<{ success: boolean; message?: string; error?: string }> {
+  const payload = {
+    smtp_user: config.smtp_user,
+    smtp_password: config.smtp_password,
+    smtp_host: config.smtp_host || 'smtp.gmail.com',
+    smtp_port: config.smtp_port || 587
+  };
+
+  // Try relative Vercel serverless endpoint first
   try {
     const res = await fetch('/api/codespark/test-smtp/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        smtp_user: config.smtp_user,
-        smtp_password: config.smtp_password,
-        smtp_host: config.smtp_host || 'smtp.gmail.com',
-        smtp_port: config.smtp_port || 587
-      })
+      body: JSON.stringify(payload)
+    });
+    const text = await res.text();
+    try {
+      const data = JSON.parse(text);
+      if (res.ok) return data;
+    } catch {}
+  } catch {}
+
+  // Fallback to Render backend
+  try {
+    const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || 'https://axent-b0wl.onrender.com';
+    const res = await fetch(`${backendUrl.replace(/\/$/, '')}/api/codespark/test-smtp/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
     const data = await res.json();
     return data;
   } catch (err: any) {
     return {
       success: false,
-      error: `Network / Gateway Error: ${err.message || String(err)}`
+      error: `SMTP Connection Error: ${err.message || String(err)}`
     };
   }
 }
@@ -339,18 +610,36 @@ export async function dispatchRound2EmailsViaSmtp(
   failed: any[];
   error?: string;
 }> {
+  const payload = {
+    smtp_user: config.smtp_user,
+    smtp_password: config.smtp_password,
+    smtp_host: config.smtp_host || 'smtp.gmail.com',
+    smtp_port: config.smtp_port || 587,
+    smtp_from_name: config.smtp_from_name || 'CodeSpark 2026 Examination Board',
+    recipients
+  };
+
+  // Try relative Vercel serverless endpoint first
   try {
     const res = await fetch('/api/codespark/send-emails/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        smtp_user: config.smtp_user,
-        smtp_password: config.smtp_password,
-        smtp_host: config.smtp_host || 'smtp.gmail.com',
-        smtp_port: config.smtp_port || 587,
-        smtp_from_name: config.smtp_from_name || 'CodeSpark 2026 Examination Board',
-        recipients
-      })
+      body: JSON.stringify(payload)
+    });
+    const text = await res.text();
+    try {
+      const data = JSON.parse(text);
+      if (res.ok) return data;
+    } catch {}
+  } catch {}
+
+  // Fallback to Render backend
+  try {
+    const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || 'https://axent-b0wl.onrender.com';
+    const res = await fetch(`${backendUrl.replace(/\/$/, '')}/api/codespark/send-emails/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
     const data = await res.json();
     return data;
@@ -374,28 +663,28 @@ export function concludeRound1AndShortlistUnified(options: { mode: 'cutoff' | 't
 } {
   const allCandidates = getAllCodeSparkCandidates();
   const allAttempts = getAllAttempts();
+  const targetExam = getCodeSparkActiveExam();
+  const dynamicExamTotal = targetExam?.totalMarks || 20;
 
-  // Aggregate highest attempt score per candidate across all labs / sittings
   const candidateScores = allCandidates.map((cand) => {
-    const candRoll = (cand.rollNumber || '').trim().toUpperCase();
-    const candEmail = (cand.email || '').trim().toLowerCase();
-    const candKey = (cand.accessKey || '').trim().toUpperCase();
+    const cRoll = (cand.rollNumber || '').trim().toUpperCase();
+    const cKey = cand.accessKey.trim().toUpperCase();
+    const cEmail = (cand.email || '').trim().toUpperCase();
 
     const matchedAttempts = allAttempts.filter((att) => {
       const attRoll = (att.studentRoll || '').trim().toUpperCase();
-      const attEmail = ((att as any).studentEmail || '').trim().toLowerCase();
+      const attName = (att.studentName || '').trim().toUpperCase();
       return (
-        (candRoll && attRoll === candRoll) ||
-        (candEmail && attEmail === candEmail) ||
-        (attRoll === candKey)
+        (cRoll && attRoll === cRoll) ||
+        (cKey && attRoll === cKey) ||
+        (cEmail && attRoll === cEmail.split('@')[0]) ||
+        (attName && attName === cand.name.trim().toUpperCase())
       );
     });
 
-    const targetExam = ensureCodeSparkAptitudeExam();
-    const dynamicExamTotal = targetExam?.totalMarks || 0;
-
     let maxScore = cand.round1Score ?? 0;
-    let maxTotal = cand.round1MaxScore ?? (dynamicExamTotal > 0 ? dynamicExamTotal : 0);
+    let maxTotal = cand.round1MaxScore || dynamicExamTotal;
+
     if (matchedAttempts.length > 0) {
       for (const att of matchedAttempts) {
         if ((att.score ?? 0) >= maxScore) {
@@ -413,7 +702,6 @@ export function concludeRound1AndShortlistUnified(options: { mode: 'cutoff' | 't
     };
   });
 
-  // Sort descending by highest score
   candidateScores.sort((a, b) => b.bestScore - a.bestScore);
 
   const qualifyingSet = new Set<string>();
@@ -427,7 +715,6 @@ export function concludeRound1AndShortlistUnified(options: { mode: 'cutoff' | 't
       }
     });
   } else {
-    // Cutoff mode
     candidateScores.forEach((item) => {
       if (item.bestScore >= options.value) {
         qualifyingSet.add(item.candidate.accessKey.toUpperCase());
@@ -480,9 +767,6 @@ export function concludeRound1AndShortlistUnified(options: { mode: 'cutoff' | 't
   };
 }
 
-export const LAB_OVERFLOW_STORAGE_KEY = 'codespark_lab_overflow_retake_enabled';
-export const RETAKE_AUTHORIZED_ROLLS_KEY = 'codespark_round1_retake_rolls';
-
 export function isLabOverflowRetakeEnabledGlobally(): boolean {
   try {
     return localStorage.getItem(LAB_OVERFLOW_STORAGE_KEY) === 'true';
@@ -494,7 +778,7 @@ export function isLabOverflowRetakeEnabledGlobally(): boolean {
 export function setLabOverflowRetakeGlobally(enabled: boolean): void {
   try {
     localStorage.setItem(LAB_OVERFLOW_STORAGE_KEY, enabled ? 'true' : 'false');
-    const sparkExam = ensureCodeSparkAptitudeExam();
+    const sparkExam = getCodeSparkActiveExam();
     if (sparkExam) {
       sparkExam.maxAttempts = enabled ? 2 : 1;
       saveExam(sparkExam);
@@ -554,10 +838,9 @@ export function authorizeCandidateForRound1Retake(identifier: string, allow = tr
     saveCodeSparkCandidates(all);
   }
 
-  // Ensure exam allows 2 attempts
   if (allow) {
     try {
-      const exam = ensureCodeSparkAptitudeExam();
+      const exam = getCodeSparkActiveExam();
       if (exam) {
         exam.maxAttempts = 2;
         saveExam(exam);
@@ -579,7 +862,7 @@ export function authorizeAllRemainingCandidatesForRetake(): number {
   try {
     const rolls = all.map((c) => (c.rollNumber || c.accessKey).toUpperCase());
     localStorage.setItem(RETAKE_AUTHORIZED_ROLLS_KEY, JSON.stringify(rolls));
-    const exam = ensureCodeSparkAptitudeExam();
+    const exam = getCodeSparkActiveExam();
     if (exam) {
       exam.maxAttempts = 2;
       saveExam(exam);
@@ -614,9 +897,6 @@ export interface KeyLookupResult {
   round2Key?: string;
 }
 
-/**
- * Searches registered candidates by either their Round 1 Access Key OR their Round 2 Email Key.
- */
 export async function asyncLookupCandidateAny(rawKey: string): Promise<KeyLookupResult | null> {
   const local = lookupCandidateAny(rawKey);
   if (local) return local;
@@ -630,7 +910,6 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
   const all = getAllCodeSparkCandidates();
   const normalizedKey = normalizeCodeSparkKey(cleaned);
 
-  // 1. Check if input matches a provisioned Round 2 key (e.g. AXENT-R2-XXXX, R2-XXXX, or digits)
   for (const c of all) {
     if (c.round2Key) {
       const cleanR2 = c.round2Key.trim().toUpperCase().replace(/\s+/g, '');
@@ -653,7 +932,6 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
     }
   }
 
-  // 2. Check standard Round 1 access key
   for (const c of all) {
     const cleanR1 = c.accessKey.trim().toUpperCase().replace(/\s+/g, '');
     const normR1 = normalizeCodeSparkKey(cleanR1);
@@ -675,430 +953,278 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
   return null;
 }
 
-/**
- * Shortlists or un-shortlists a candidate for Round 2, auto-provisioning a dedicated Round 2 key.
- */
-export function shortlistCandidateForRound2(
-  candidateKeyOrRoll: string,
-  shortlisted: boolean
-): { candidate: CodeSparkCandidate; round2Key?: string } | null {
-  const all = getAllCodeSparkCandidates();
-  const clean = candidateKeyOrRoll.trim().toUpperCase();
-  const cand = all.find(
-    (c) =>
-      c.accessKey.toUpperCase() === clean ||
-      (c.rollNumber && c.rollNumber.toUpperCase() === clean) ||
-      c.email.toUpperCase() === clean
-  );
-  if (!cand) return null;
+export function shortlistCandidateForRound2(identifier: string, isShortlisted = true): void {
+  if (!identifier) return;
+  const clean = identifier.trim().toUpperCase();
+  const currentRolls = getShortlistedRolls();
+  const nextRolls = isShortlisted
+    ? Array.from(new Set([...currentRolls, clean]))
+    : currentRolls.filter((r) => r !== clean);
 
-  cand.isShortlisted = shortlisted;
-  if (shortlisted) {
-    cand.status = 'SHORTLISTED';
-    if (!cand.round2Key) {
-      cand.round2Key = generateRound2KeyForCandidate(cand);
-    }
-    cand.round2InvitedAt = Date.now();
-  } else {
-    cand.status = 'ROUND1_COMPLETED';
-    cand.round2Key = undefined;
-    cand.round2InvitedAt = undefined;
-  }
-
-  saveCodeSparkCandidates(all);
-
-  // Synchronize shortlist array in localStorage
-  const rolls = getShortlistedRolls();
-  const rollId = (cand.rollNumber || cand.accessKey).toUpperCase();
-  const nextRolls = shortlisted
-    ? Array.from(new Set([...rolls, rollId]))
-    : rolls.filter((r) => r !== rollId);
   try {
     localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(nextRolls));
-    window.dispatchEvent(new Event('storage'));
   } catch {}
 
-  return { candidate: cand, round2Key: cand.round2Key };
+  const all = getAllCodeSparkCandidates();
+  let updated = false;
+
+  for (const c of all) {
+    const cRoll = (c.rollNumber || '').trim().toUpperCase();
+    const cKey = c.accessKey.trim().toUpperCase();
+    const cEmail = (c.email || '').trim().toUpperCase();
+
+    if (cRoll === clean || cKey === clean || cEmail === clean) {
+      c.isShortlisted = isShortlisted;
+      c.status = isShortlisted ? 'SHORTLISTED' : 'ROUND1_COMPLETED';
+      if (isShortlisted && !c.round2Key) {
+        c.round2Key = generateRound2KeyForCandidate(c);
+      }
+      c.round2InvitedAt = isShortlisted ? Date.now() : undefined;
+      updated = true;
+    }
+  }
+
+  if (updated) {
+    saveCodeSparkCandidates(all);
+  }
 }
 
-/**
- * Generates an unallocated random AXNT-XXXX key.
- */
-export function generateCodeSparkKey(existingKeys?: Set<string>): string {
-  const set = existingKeys || new Set(getAllCodeSparkCandidates().map((c) => c.accessKey.toUpperCase()));
-  let key = '';
-  let attempts = 0;
-  do {
-    const num = Math.floor(1000 + Math.random() * 9000); // 1000 - 9999
-    key = `AXENT-${num}`;
-    attempts++;
-  } while (set.has(key) && attempts < 10000);
-  
-  return key;
+export function onCodeSparkCandidatesChanged(callback: (candidates: CodeSparkCandidate[]) => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+
+  const handleUpdate = (e: Event) => {
+    const custom = e as CustomEvent<CodeSparkCandidate[]>;
+    if (custom.detail) {
+      callback(custom.detail);
+    } else {
+      callback(getAllCodeSparkCandidates());
+    }
+  };
+
+  const handleStorage = (e: StorageEvent) => {
+    if (e.key === STORAGE_KEY || e.key === SHORTLIST_STORAGE_KEY || !e.key) {
+      callback(getAllCodeSparkCandidates());
+    }
+  };
+
+  window.addEventListener(EVENT_NAME, handleUpdate);
+  window.addEventListener('storage', handleStorage);
+
+  return () => {
+    window.removeEventListener(EVENT_NAME, handleUpdate);
+    window.removeEventListener('storage', handleStorage);
+  };
 }
 
-export interface CandidateImportPayload {
+
+export interface CandidateImportItem {
   name: string;
   email: string;
   rollNumber?: string;
   department?: string;
 }
 
-/**
- * Bulk imports candidates using ONLY name and email address, generates unique AXENT-XXXX keys for each,
- * and saves them into the CodeSpark private registry.
- */
-export function importCodeSparkCandidates(
-  records: CandidateImportPayload[],
-  examId?: string
-): CodeSparkCandidate[] {
-  const current = getAllCodeSparkCandidates();
-  const existingKeys = new Set(current.map((c) => c.accessKey.toUpperCase()));
-  const existingEmails = new Map(current.map((c) => [c.email.trim().toLowerCase(), c]));
-
-  const newlyCreated: CodeSparkCandidate[] = [];
-
-  for (const item of records) {
-    const cleanName = (item.name || '').trim();
-    const cleanEmail = (item.email || '').trim().toLowerCase();
-    if (!cleanName || !cleanEmail) continue;
-
-    // If candidate with this email already has a key, update their info and preserve key
-    if (existingEmails.has(cleanEmail)) {
-      const existing = existingEmails.get(cleanEmail)!;
-      existing.name = cleanName;
-      if (examId) existing.examId = examId;
-      newlyCreated.push(existing);
-      continue;
-    }
-
-    const newKey = generateCodeSparkKey(existingKeys);
-    existingKeys.add(newKey);
-
-    const candidate: CodeSparkCandidate = {
-      accessKey: newKey,
-      name: cleanName,
-      email: cleanEmail,
-      rollNumber: item.rollNumber || cleanEmail.split('@')[0].toUpperCase(),
-      department: item.department || 'Axent Enclave',
-      examId: examId,
-      status: 'REGISTERED',
-      registeredAt: Date.now()
-    };
-
-    current.push(candidate);
-    newlyCreated.push(candidate);
-    existingEmails.set(cleanEmail, candidate);
+export function generateCodeSparkKey(existingCandidates: CodeSparkCandidate[] = getAllCodeSparkCandidates()): string {
+  const usedDigits = new Set<number>();
+  existingCandidates.forEach((c) => {
+    const m = (c.accessKey || '').match(/(\d{4})/);
+    if (m) usedDigits.add(parseInt(m[1], 10));
+  });
+  let next = 1001;
+  while (usedDigits.has(next)) {
+    next++;
   }
-
-  saveCodeSparkCandidates(current);
-  return newlyCreated;
+  return `AXENT-${next}`;
 }
 
-/**
- * Parses raw text (CSV, TSV, or newline separated) taking only Name and Email address.
- * Format: Full Name, email@domain.com
- */
-export function parseCandidateImportText(rawText: string): CandidateImportPayload[] {
-  const lines = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const results: CandidateImportPayload[] = [];
-  const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+export function parseCandidateImportText(rawText: string): CandidateImportItem[] {
+  if (!rawText || !rawText.trim()) return [];
+  const trimmed = rawText.trim();
 
-  for (const line of lines) {
-    const lower = line.toLowerCase();
+  // 1. Single number to generate N candidate passes (e.g. "50")
+  if (/^\d{1,4}$/.test(trimmed)) {
+    const count = Math.min(500, Math.max(1, parseInt(trimmed, 10)));
+    const items: CandidateImportItem[] = [];
+    for (let i = 1; i <= count; i++) {
+      items.push({
+        name: `Candidate ${i}`,
+        email: `candidate${i}@event.axiogen.in`,
+        rollNumber: `CS-${String(i).padStart(3, '0')}`,
+        department: 'Axent Candidate'
+      });
+    }
+    return items;
+  }
+
+  // 2. JSON array
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter((item: any) => item && (item.name || item.email))
+          .map((item: any, idx: number) => ({
+            name: String(item.name || item.fullName || `Candidate ${idx + 1}`).trim(),
+            email: String(item.email || '').trim().toLowerCase(),
+            rollNumber: item.rollNumber ? String(item.rollNumber).trim() : undefined,
+            department: item.department ? String(item.department).trim() : 'Axent Candidate'
+          }));
+      }
+    } catch {}
+  }
+
+  // 3. Line by line parsing (CSV, TSV, pipe)
+  const lines = trimmed.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const results: CandidateImportItem[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     if (
-      lower.startsWith('name') ||
-      lower.startsWith('full name') ||
-      lower.startsWith('candidate') ||
-      lower.startsWith('email')
+      i === 0 &&
+      (line.toLowerCase().includes('name') ||
+       line.toLowerCase().includes('email') ||
+       line.toLowerCase().includes('roll'))
     ) {
       continue;
     }
 
-    const tokens = line.includes('\t')
-      ? line.split('\t').map((t) => t.trim().replace(/^["']|["']$/g, ''))
-      : line.split(',').map((t) => t.trim().replace(/^["']|["']$/g, ''));
+    const parts = line.split(/[,\t;|]/).map((p) => p.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
 
-    if (tokens.length === 0) continue;
-
-    let name = '';
-    let email = '';
-
-    // If 2 tokens: Name, Email
-    if (tokens.length === 2) {
-      if (emailRegex.test(tokens[1])) {
-        name = tokens[0];
-        email = tokens[1].toLowerCase();
-      } else if (emailRegex.test(tokens[0])) {
-        email = tokens[0].toLowerCase();
-        name = tokens[1];
-      }
-    } else {
-      // Find the token that looks like an email address
-      const emailIdx = tokens.findIndex((t) => emailRegex.test(t));
+    if (parts.length >= 2) {
+      const emailIdx = parts.findIndex((p) => p.includes('@'));
       if (emailIdx !== -1) {
-        email = tokens[emailIdx].toLowerCase();
-        const nonEmailTokens = tokens.filter((_, idx) => idx !== emailIdx);
-        name = nonEmailTokens[0] || 'Candidate';
-      } else if (tokens.length >= 2) {
-        name = tokens[0];
-        email = tokens[1].toLowerCase();
+        const email = parts[emailIdx].toLowerCase();
+        const nonEmails = parts.filter((_, idx) => idx !== emailIdx);
+        const name = nonEmails[0] || parts[0] || `Candidate ${i + 1}`;
+        const rollNumber = nonEmails[1] || undefined;
+        results.push({
+          name,
+          email,
+          rollNumber,
+          department: 'Axent Candidate'
+        });
+      } else {
+        results.push({
+          name: parts[0],
+          email: `${parts[0].toLowerCase().replace(/[^a-z0-9]/g, '')}@event.axiogen.in`,
+          rollNumber: parts[1] || undefined,
+          department: 'Axent Candidate'
+        });
       }
-    }
-
-    if (name.trim() && email.trim()) {
-      results.push({ name: name.trim(), email: email.trim() });
+    } else if (parts.length === 1) {
+      const single = parts[0];
+      if (single.includes('@')) {
+        const email = single.toLowerCase();
+        const namePart = email.split('@')[0].replace(/[._-]/g, ' ');
+        const name = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+        results.push({
+          name,
+          email,
+          department: 'Axent Candidate'
+        });
+      } else {
+        results.push({
+          name: single,
+          email: `${single.toLowerCase().replace(/[^a-z0-9]/g, '')}@event.axiogen.in`,
+          department: 'Axent Candidate'
+        });
+      }
     }
   }
 
   return results;
 }
 
-export function setActiveCodeSparkCandidate(candidate: CodeSparkCandidate): void {
-  try {
-    localStorage.setItem(ACTIVE_CANDIDATE_KEY, JSON.stringify(candidate));
-  } catch {}
+export function importCodeSparkCandidates(
+  items: CandidateImportItem[],
+  assignedExamId?: string
+): CodeSparkCandidate[] {
+  const existing = getAllCodeSparkCandidates();
+  const created: CodeSparkCandidate[] = [];
+
+  const usedDigits = new Set<number>();
+  existing.forEach((c) => {
+    const m = (c.accessKey || '').match(/(\d{4})/);
+    if (m) usedDigits.add(parseInt(m[1], 10));
+  });
+
+  let nextDigit = 1001;
+  const getNextKey = (): string => {
+    while (usedDigits.has(nextDigit)) {
+      nextDigit++;
+    }
+    usedDigits.add(nextDigit);
+    return `AXENT-${nextDigit}`;
+  };
+
+  const updatedRoster = [...existing];
+
+  for (const item of items) {
+    const cleanEmail = item.email.trim().toLowerCase();
+    const cleanName = item.name.trim();
+
+    const matchIdx = updatedRoster.findIndex(
+      (c) =>
+        (c.email && c.email.toLowerCase() === cleanEmail) ||
+        (c.name && c.name.toLowerCase() === cleanName.toLowerCase() && cleanEmail.includes(c.name.toLowerCase()))
+    );
+
+    if (matchIdx !== -1) {
+      const curr = updatedRoster[matchIdx];
+      const updated: CodeSparkCandidate = {
+        ...curr,
+        name: cleanName || curr.name,
+        email: cleanEmail || curr.email,
+        rollNumber: item.rollNumber || curr.rollNumber,
+        department: item.department || curr.department || 'Axent Candidate',
+        assignedExamId: assignedExamId || curr.assignedExamId
+      };
+      updatedRoster[matchIdx] = updated;
+      created.push(updated);
+    } else {
+      const accessKey = getNextKey();
+      const newCand: CodeSparkCandidate = {
+        accessKey,
+        name: cleanName,
+        email: cleanEmail,
+        rollNumber: item.rollNumber || cleanEmail.split('@')[0].toUpperCase(),
+        department: item.department || 'Axent Candidate',
+        assignedExamId,
+        status: 'REGISTERED',
+        registeredAt: Date.now(),
+        isShortlisted: false,
+        allowRound1Retake: false
+      };
+      updatedRoster.push(newCand);
+      created.push(newCand);
+    }
+  }
+
+  saveCodeSparkCandidates(updatedRoster);
+  return created;
+}
+
+export function deleteCodeSparkCandidate(accessKey: string): void {
+  const all = getAllCodeSparkCandidates();
+  const remaining = all.filter((c) => c.accessKey.toUpperCase() !== accessKey.trim().toUpperCase());
+  saveCodeSparkCandidates(remaining);
 }
 
 export function getActiveCodeSparkCandidate(): CodeSparkCandidate | null {
   try {
-    const raw = localStorage.getItem(ACTIVE_CANDIDATE_KEY);
+    const raw = localStorage.getItem('codedna_codespark_active_candidate');
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
 }
 
-export function onCodeSparkCandidatesChanged(callback: (candidates: CodeSparkCandidate[]) => void): () => void {
-  const handler = () => callback(getAllCodeSparkCandidates());
-  window.addEventListener(EVENT_NAME, handler);
-  window.addEventListener('storage', handler);
-  return () => {
-    window.removeEventListener(EVENT_NAME, handler);
-    window.removeEventListener('storage', handler);
-  };
-}
-
-/**
- * Ensures a valid CodeSpark Round 1 Aptitude Exam paper exists and is active.
- * If no paper is configured or the database is fresh, automatically seeds and publishes
- * the official 10-question Code Spark Aptitude assessment.
- */
-export function ensureCodeSparkAptitudeExam(): MCQExamConfig {
-  const all = getAllExams();
-
-  // 1. Check if assigned ID exists and is valid
-  const assignedId = typeof window !== 'undefined'
-    ? localStorage.getItem('codedna_codespark_round1_exam_id')
-    : null;
-  if (assignedId) {
-    const existing = all.find((e) => e.id === assignedId);
-    if (existing) return existing;
-  }
-
-  // 2. Check if any isCodeSpark exam exists
-  const sparkExam = all.find((e) => e.isCodeSpark);
-  if (sparkExam) {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('codedna_codespark_round1_exam_id', sparkExam.id);
+export function setActiveCodeSparkCandidate(cand: CodeSparkCandidate | null): void {
+  try {
+    if (cand) {
+      localStorage.setItem('codedna_codespark_active_candidate', JSON.stringify(cand));
+    } else {
+      localStorage.removeItem('codedna_codespark_active_candidate');
     }
-    return sparkExam;
-  }
-
-  // 3. Check if any published aptitude exam exists
-  const aptExam = all.find(
-    (e) =>
-      e.status === 'PUBLISHED' &&
-      (e.examCategory === 'Aptitude' ||
-        (e.title || '').toLowerCase().includes('spark') ||
-        (e.title || '').toLowerCase().includes('aptitude'))
-  );
-  if (aptExam) {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('codedna_codespark_round1_exam_id', aptExam.id);
-    }
-    return aptExam;
-  }
-
-  // 4. Create and publish the official CodeSpark Round 1 Aptitude Exam with 10 questions
-  const now = Date.now();
-  const qList: Array<{
-    text: string;
-    topic: string;
-    options: Array<{ text: string; isCorrect: boolean }>;
-    explanation: string;
-  }> = [
-    {
-      text: 'A train traveling at 72 km/h crosses a 200-meter platform in 22 seconds. What is the length of the train?',
-      topic: 'Quantitative Aptitude - Speed, Time & Distance',
-      options: [
-        { text: '220 meters', isCorrect: false },
-        { text: '240 meters', isCorrect: true },
-        { text: '260 meters', isCorrect: false },
-        { text: '280 meters', isCorrect: false }
-      ],
-      explanation: 'Speed = 72 * (5/18) = 20 m/s. Total distance in 22s = 20 * 22 = 440 m. Train length = 440 - 200 = 240 m.'
-    },
-    {
-      text: 'Statements: All algorithms are logic. Some logic is verified.\nConclusions:\nI. Some algorithms are verified.\nII. All logic is algorithms.',
-      topic: 'Logical Reasoning - Syllogism',
-      options: [
-        { text: 'Only Conclusion I follows', isCorrect: false },
-        { text: 'Only Conclusion II follows', isCorrect: false },
-        { text: 'Either Conclusion I or II follows', isCorrect: false },
-        { text: 'Neither Conclusion I nor II follows', isCorrect: true }
-      ],
-      explanation: 'Since "some logic is verified" does not necessarily intersect with the subset of logic that contains algorithms, neither conclusion follows strictly.'
-    },
-    {
-      text: 'If the price of a cloud compute license increases by 25%, by what percentage must a team reduce its runtime so that total cost remains unchanged?',
-      topic: 'Quantitative Aptitude - Percentages',
-      options: [
-        { text: '16.67%', isCorrect: false },
-        { text: '20.00%', isCorrect: true },
-        { text: '22.50%', isCorrect: false },
-        { text: '25.00%', isCorrect: false }
-      ],
-      explanation: 'Reduction = [r / (100 + r)] * 100 = [25 / 125] * 100 = 20%.'
-    },
-    {
-      text: 'What is the tight asymptotic time complexity of the recurrence relation T(n) = 2T(n/2) + O(n)?',
-      topic: 'Computational Logic - Algorithmic Complexity',
-      options: [
-        { text: 'O(n)', isCorrect: false },
-        { text: 'O(n log n)', isCorrect: true },
-        { text: 'O(n²)', isCorrect: false },
-        { text: 'O(log n)', isCorrect: false }
-      ],
-      explanation: 'By Case 2 of the Master Theorem (a=2, b=2, f(n)=n, log_b(a) = 1), T(n) = Θ(n log n).'
-    },
-    {
-      text: 'Find the missing number in the sequence: 4, 9, 25, 49, 121, 169, ?',
-      topic: 'Analytical Reasoning - Number Series',
-      options: [
-        { text: '196', isCorrect: false },
-        { text: '225', isCorrect: false },
-        { text: '289', isCorrect: true },
-        { text: '361', isCorrect: false }
-      ],
-      explanation: 'The sequence consists of squares of consecutive prime numbers: 2², 3², 5², 7², 11², 13², and next is 17² = 289.'
-    },
-    {
-      text: 'Two independent 6-sided dice are rolled simultaneously. What is the probability that the sum of the dice is at least 10?',
-      topic: 'Quantitative Aptitude - Probability',
-      options: [
-        { text: '1/12', isCorrect: false },
-        { text: '1/9', isCorrect: false },
-        { text: '1/6', isCorrect: true },
-        { text: '1/4', isCorrect: false }
-      ],
-      explanation: 'Favorable pairs summing to >= 10: (4,6), (5,5), (5,6), (6,4), (6,5), (6,6) = 6 pairs. Probability = 6 / 36 = 1/6.'
-    },
-    {
-      text: 'Engineer A builds a module in 12 hours, Engineer B in 6 hours. With Engineer C, all three complete it in 3 hours. How many hours would C take alone?',
-      topic: 'Quantitative Aptitude - Time & Work',
-      options: [
-        { text: '8 hours', isCorrect: false },
-        { text: '10 hours', isCorrect: false },
-        { text: '12 hours', isCorrect: true },
-        { text: '15 hours', isCorrect: false }
-      ],
-      explanation: 'Work rates: 1/12 + 1/6 + 1/C = 1/3 => 3/12 + 1/C = 4/12 => 1/C = 1/12 => C takes 12 hours.'
-    },
-    {
-      text: 'From starting node A, a rover moves 15m North, turns right and moves 20m, turns right again and moves 15m, then turns left and moves 10m. What is the direct distance from node A?',
-      topic: 'Logical Reasoning - Direction Sense',
-      options: [
-        { text: '25 meters', isCorrect: false },
-        { text: '30 meters', isCorrect: true },
-        { text: '35 meters', isCorrect: false },
-        { text: '40 meters', isCorrect: false }
-      ],
-      explanation: 'North 15, East 20, South 15 brings rover to 20m East of origin. An additional 10m East brings total displacement to 30m East.'
-    },
-    {
-      text: 'If in a secure cipher "BINARY" is encoded as "DMPCPA" (+2, -1, +2, -1, +2, -1), what is the encryption of "KERNEL"?',
-      topic: 'Logical Reasoning - Coding & Decoding',
-      options: [
-        { text: 'MDTMGK', isCorrect: true },
-        { text: 'MDUMFK', isCorrect: false },
-        { text: 'LDTMGK', isCorrect: false },
-        { text: 'MCTMFK', isCorrect: false }
-      ],
-      explanation: 'K(+2)=M, E(-1)=D, R(+2)=T, N(-1)=M, E(+2)=G, L(-1)=K => MDTMGK.'
-    },
-    {
-      text: 'A full binary tree has 15 total vertices. Exactly how many leaf (terminal) nodes does it contain?',
-      topic: 'Computational Logic - Graph & Tree Properties',
-      options: [
-        { text: '7 leaves', isCorrect: false },
-        { text: '8 leaves', isCorrect: true },
-        { text: '9 leaves', isCorrect: false },
-        { text: '10 leaves', isCorrect: false }
-      ],
-      explanation: 'In a full binary tree with N nodes, the number of leaf nodes L = (N + 1) / 2 = 16 / 2 = 8.'
-    }
-  ];
-
-  const savedQuestionIds: string[] = [];
-
-  for (let i = 0; i < qList.length; i++) {
-    const qItem = qList[i];
-    const qId = `codespark-q-${i + 1}`;
-    const questionObj: MCQQuestion = {
-      id: qId,
-      text: qItem.text,
-      subject: 'General Aptitude & Reasoning',
-      topic: qItem.topic,
-      difficulty: 'MEDIUM',
-      marks: 2,
-      negativeMarks: 0,
-      explanation: qItem.explanation,
-      status: 'PUBLISHED',
-      tags: ['codespark', 'aptitude', 'logic'],
-      options: qItem.options.map((opt, optIdx) => ({
-        id: `opt-${qId}-${optIdx + 1}`,
-        text: opt.text,
-        isCorrect: opt.isCorrect
-      })),
-      createdAt: now,
-      updatedAt: now,
-      createdBy: 'CodeSpark System'
-    };
-    saveQuestion(questionObj);
-    savedQuestionIds.push(qId);
-  }
-
-  const exam: MCQExamConfig = {
-    id: 'codespark-round1-aptitude',
-    title: 'Code Spark 2026: General Aptitude & Reasoning',
-    description: 'Official Round 1 Aptitude & Logical Reasoning assessment for Code Spark 2026 candidates.',
-    instructions: 'Answer all 10 objective questions. Each question carries 2 marks. Full-screen proctoring and anti-cheating protocols are strictly enforced.',
-    subject: 'General Aptitude & Reasoning',
-    topic: 'Cognitive & Analytical Assessment',
-    examCategory: 'Aptitude',
-    durationMinutes: 45,
-    totalMarks: 20,
-    questionCount: savedQuestionIds.length,
-    questionIds: savedQuestionIds,
-    shuffleQuestions: true,
-    shuffleOptions: true,
-    negativeMarkingEnabled: false,
-    allowReview: true,
-    showExplanationsAfterSubmit: true,
-    maxAttempts: 1,
-    isCodeSpark: true,
-    isPrivate: true,
-    status: 'PUBLISHED',
-    createdAt: now,
-    updatedAt: now,
-    createdBy: 'CodeSpark System'
-  };
-
-  saveExam(exam);
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('codedna_codespark_round1_exam_id', exam.id);
-  }
-
-  return exam;
+  } catch {}
 }
