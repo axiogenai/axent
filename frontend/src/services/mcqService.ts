@@ -2733,25 +2733,28 @@ export async function syncFromSupabase(): Promise<void> {
 
 
 
-    // 3. Reconcile Attempts: Supabase cloud is authoritative (2-day retention window)
-
+        // 3. Reconcile Attempts: Supabase cloud is the ABSOLUTE SOURCE OF TRUTH
     if (cloudA !== null) {
-
       const cutoff = Date.now() - TWO_DAYS_MS;
-
       const recentCloudAttempts = cloudA.filter(
-
         (a) => a.status === 'IN_PROGRESS' || (a.submitTime || a.startTime || 0) >= cutoff
-
       );
-
+      // Supabase is authoritative. If Supabase is empty or an attempt was purged in cloud,
+      // purge it locally too! Only retain an in-progress attempt currently active on this specific device.
+      const cloudAttemptIds = new Set(recentCloudAttempts.map((a) => a.id));
       const localAttempts = getAllAttempts();
-
-      const reconciled = mergeAttempts(localAttempts, recentCloudAttempts);
-
+      const activeLocalId = typeof window !== 'undefined' ? localStorage.getItem(MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT) : null;
+      
+      const reconciled = [...recentCloudAttempts];
+      for (const loc of localAttempts) {
+        if (!cloudAttemptIds.has(loc.id) && loc.status === 'IN_PROGRESS' && loc.id === activeLocalId) {
+          reconciled.push(loc);
+        }
+      }
+      inMemoryAttempts = reconciled;
       save(MCQ_STORAGE_KEYS.ATTEMPTS, reconciled);
-
     }
+
 
 
 
