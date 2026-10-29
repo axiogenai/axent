@@ -1198,7 +1198,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             College Examination Grid
           </h2>
           <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-            {selectedLabId === 'all' ? (allLabs.length > 0 ? `All Laboratories (${allLabs.length} Active)` : 'All Laboratories') : currentLabInfo?.labName} &bull; {stations.length} {stations.length === 1 ? 'Active Workstation' : 'Active Workstations'}
+            {selectedLabId === 'all' ? (allLabs.length > 0 ? `All Laboratories (${allLabs.length} Active)` : 'All Laboratories') : currentLabInfo?.labName} • {stations.length} {stations.length === 1 ? 'Active Workstation' : 'Active Workstations'}
           </div>
         </div>
 
@@ -1684,7 +1684,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             <div>
               <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                Proctoring Room Listening &bull; Awaiting Workstations
+                Proctoring Room Listening • Awaiting Workstations
               </h3>
               <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '520px', lineHeight: 1.6 }}>
                 No active exam candidate is currently connected in {selectedLabId === 'all' ? 'any lab' : currentLabInfo?.labName || selectedLabId}.
@@ -2185,7 +2185,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {station.student.name || 'Candidate (Unregistered)'}
                     </h4>
                     <div style={{ fontSize: '12px', color: '#a1a1aa' }}>
-                      Candidate &bull; {station.examMode === 'MCQ' || station.language === 'MCQ' ? 'MCQ exam' : 'Practical coding'}{station.student.rollNumber ? ` &bull; ${station.student.rollNumber.replace(/^#/, '')}` : ''}
+                      Candidate • {station.examMode === 'MCQ' || station.language === 'MCQ' ? 'MCQ exam' : 'Practical coding'}{station.student.rollNumber ? ` • ${station.student.rollNumber.replace(/^#/, '')}` : ''}
                     </div>
                   </div>
 

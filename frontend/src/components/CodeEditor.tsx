@@ -1270,7 +1270,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
               }}
             >
               <ShieldAlert size={12} />
-              <span>Station: {student.stationNumber || 'Station #01'} ({student.labId || 'LAB-01'}) &bull; Read-Only Freeze Active</span>
+              <span>Station: {student.stationNumber || 'Station #01'} ({student.labId || 'LAB-01'}) • Read-Only Freeze Active</span>
             </div>
           </div>
         ) : isRegistrationRequired ? (

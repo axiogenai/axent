@@ -659,6 +659,34 @@ export function setRound1ConcludedGlobally(concluded: boolean): void {
       window.dispatchEvent(new Event('storage'));
     }
     notifyCandidatesUpdated();
+
+    // Async push to cloud
+    if (supabase) {
+      void (async () => {
+        try {
+          const { data: stRec } = await supabase
+            .from('candidate_stations')
+            .select('code, student')
+            .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
+            .maybeSingle();
+
+          if (stRec) {
+            let cfg = (stRec.student && typeof stRec.student === 'object') ? stRec.student : (stRec.code ? JSON.parse(stRec.code) : {});
+            cfg.isConcluded = concluded;
+            cfg.updatedAt = Date.now();
+            await supabase.from('candidate_stations').upsert({
+              id: CODESPARK_SYSTEM_CONFIG_ID,
+              lab_id: 'SYSTEM_CONFIG',
+              station_number: 'CONFIG',
+              status: 'CONFIG',
+              code: JSON.stringify(cfg),
+              student: cfg,
+              last_updated_timestamp: Date.now()
+            });
+          }
+        } catch {}
+      })();
+    }
   } catch {}
 }
 
@@ -894,13 +922,11 @@ export function concludeRound1AndShortlistUnified(options: { mode: 'cutoff' | 't
     }
   });
 
-  saveCodeSparkCandidates(allCandidates);
-
+  setRound1ConcludedGlobally(true);
   try {
     localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(newlyShortlistedRolls));
   } catch {}
-
-  setRound1ConcludedGlobally(true);
+  saveCodeSparkCandidates(allCandidates);
 
   return {
     shortlistedCount: newlyShortlistedRolls.length,
@@ -1052,7 +1078,9 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
   const all = getAllCodeSparkCandidates();
   const normalizedKey = normalizeCodeSparkKey(cleaned);
   const inputDigits = cleaned.replace(/\D/g, '');
+  const isConcluded = isRound1ConcludedGlobally();
 
+  // 1. First check dedicated Round 2 keys
   for (const c of all) {
     if (c.round2Key) {
       const cleanR2 = c.round2Key.trim().toUpperCase().replace(/\s+/g, '');
@@ -1061,8 +1089,10 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
       if (
         cleanR2 === cleaned ||
         cleanR2.replace('AXENT-', '') === cleaned ||
+        cleanR2.replace('AXENT-R2-', '') === cleaned ||
         (cleaned.includes('R2') && cleanR2.includes(cleaned)) ||
-        (rawR2Digits.length >= 4 && inputDigits === rawR2Digits && cleaned.includes('R2'))
+        (rawR2Digits.length >= 4 && inputDigits === rawR2Digits) ||
+        (inputDigits.length >= 4 && rawR2Digits.endsWith(inputDigits))
       ) {
         return {
           candidate: c,
@@ -1074,6 +1104,7 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
     }
   }
 
+  // 2. Check standard Round 1 keys
   for (const c of all) {
     const cleanR1 = c.accessKey.trim().toUpperCase().replace(/\s+/g, '');
     const normR1 = normalizeCodeSparkKey(cleanR1);
@@ -1091,9 +1122,13 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
         c.status === 'SHORTLISTED' ||
         isCandidateInShortlistStorage(c.rollNumber || c.accessKey)
       );
+
+      // If Round 1 is finished/concluded and candidate is shortlisted, automatically route to Round 2!
+      const targetRound = (isShortlisted && isConcluded) ? 'round2' : 'round1';
+
       return {
         candidate: c,
-        targetRound: 'round1',
+        targetRound,
         isShortlisted,
         round2Key: c.round2Key
       };

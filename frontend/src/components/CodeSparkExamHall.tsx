@@ -427,7 +427,7 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
                       marginBottom: '6px'
                     }}
                   >
-                    CODE SPARK 2026 &bull; ROUND 01 CONCLUDED
+                    CODE SPARK 2026 • ROUND 01 CONCLUDED
                   </div>
 
                   <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#f4f4f5', margin: '0 0 10px 0' }}>

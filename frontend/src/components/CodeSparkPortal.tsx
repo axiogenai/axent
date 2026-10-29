@@ -344,64 +344,106 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
 
   // Direct Key Authentication & One-Click Exam Launch
   const handleDigitsInput = (val: string) => {
-    const digits = val.replace(/\D/g, '').slice(0, 4);
-    setKeyDigits(digits);
+    // Clean spaces and convert to uppercase
+    const clean = val.toUpperCase().replace(/\s+/g, '');
+    setKeyDigits(clean);
     setKeyError(null);
 
-    const fullKey = digits ? `AXENT-${digits}` : '';
-    setAccessKey(fullKey);
-
-    if (digits.length === 4) {
-      const candidate = lookupCandidateByKey(fullKey);
-      if (candidate) {
-        setActiveCandidate(candidate);
-        setCandidateName(candidate.name || '');
-        setCandidateEmail(candidate.email || '');
-        setRollNumber(candidate.rollNumber || candidate.email.split('@')[0].toUpperCase());
-        setDepartment(candidate.department || 'Axent Candidate');
-        playSound('success');
-      } else {
-        // Asynchronously check Supabase cloud roster
-        void asyncLookupCandidateByKey(fullKey).then((cloudCand) => {
-          if (cloudCand) {
-            setActiveCandidate(cloudCand);
-            setCandidateName(cloudCand.name || '');
-            setCandidateEmail(cloudCand.email || '');
-            setRollNumber(cloudCand.rollNumber || cloudCand.email.split('@')[0].toUpperCase());
-            setDepartment(cloudCand.department || 'Axent Candidate');
+    const lookupRes = lookupCandidateAny(clean);
+    if (lookupRes) {
+      setActiveCandidate(lookupRes.candidate);
+      setCandidateName(lookupRes.candidate.name || '');
+      setCandidateEmail(lookupRes.candidate.email || '');
+      setRollNumber(lookupRes.candidate.rollNumber || lookupRes.candidate.email.split('@')[0].toUpperCase());
+      setDepartment(lookupRes.candidate.department || 'Axent Candidate');
+      playSound('success');
+    } else {
+      // Try async cloud lookup
+      if (clean.length >= 4) {
+        void asyncLookupCandidateAny(clean).then((res) => {
+          if (res) {
+            setActiveCandidate(res.candidate);
+            setCandidateName(res.candidate.name || '');
+            setCandidateEmail(res.candidate.email || '');
+            setRollNumber(res.candidate.rollNumber || res.candidate.email.split('@')[0].toUpperCase());
+            setDepartment(res.candidate.department || 'Axent Candidate');
             playSound('success');
           } else {
             setActiveCandidate(null);
           }
         });
+      } else {
+        setActiveCandidate(null);
       }
-    } else {
-      setActiveCandidate(null);
     }
   };
 
   const handleDirectExamLaunch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const digits = keyDigits.trim();
-    if (!digits) {
+    const rawInput = keyDigits.trim().toUpperCase();
+    if (!rawInput) {
       playSound('warning');
-      setKeyError('Please enter your 4-digit key number (e.g. 1234).');
+      setKeyError('Please enter your access key or 4-digit code.');
       return;
     }
 
-    if (digits.length < 4) {
-      playSound('warning');
-      setKeyError('Please enter all 4 digits of your key number.');
-      return;
-    }
-
-    const fullKey = `AXENT-${digits}`;
-    let anyLookup = lookupCandidateAny(fullKey) || lookupCandidateAny(digits);
+    let anyLookup = lookupCandidateAny(rawInput);
     if (!anyLookup) {
-      anyLookup = (await asyncLookupCandidateAny(fullKey)) || (await asyncLookupCandidateAny(digits));
+      anyLookup = await asyncLookupCandidateAny(rawInput);
     }
 
-    // Check if CodeSpark exam paper is active/scheduled in Supabase cloud
+    if (!anyLookup) {
+      playSound('warning');
+      setActiveCandidate(null);
+      setKeyError(`Candidate key "${rawInput}" is not registered for this event. Please verify your code provided by the proctor.`);
+      return;
+    }
+
+    const cand = anyLookup.candidate;
+    const isCandidateShortlisted = Boolean(
+      anyLookup.isShortlisted ||
+      cand.isShortlisted ||
+      cand.status === 'SHORTLISTED' ||
+      isCandidateInShortlistStorage(cand.rollNumber || cand.accessKey)
+    );
+
+    // If target round is Round 2, launch directly without needing Round 1 MCQ exam paper!
+    if (anyLookup.targetRound === 'round2' || (isCandidateShortlisted && isRound1Concluded)) {
+      if (!isCandidateShortlisted) {
+        playSound('warning');
+        setKeyError('Access Denied: Round 2 is restricted to shortlisted candidates only. Check your registered email.');
+        return;
+      }
+
+      const derivedRoll = cand.rollNumber || cand.email.split('@')[0].toUpperCase();
+      const codingProfile = {
+        name: cand.name.trim(),
+        email: cand.email.trim().toLowerCase(),
+        rollNumber: derivedRoll,
+        department: cand.department || 'Axent Candidate',
+        course: 'Code Spark 2026',
+        examType: 'Code Sprint',
+        assignmentTitle: 'Code Spark 2026: Algorithmic Code Sprint Arena',
+        examMode: 'CODING',
+        accessKey: cand.round2Key || cand.accessKey,
+        isShortlisted: true,
+        sessionStartTime: Date.now()
+      };
+      try {
+        localStorage.setItem('codedna_student_profile', JSON.stringify(codingProfile));
+        localStorage.setItem('codedna_active_exam_mode', 'CODING');
+        setActiveCodeSparkCandidate(cand);
+      } catch {}
+
+      playSound('success');
+      try {
+        await requestExamFullscreen();
+      } catch {}
+      navigate('/codespark-exams?round=2');
+      return;
+    }
+
+    // For Round 1, check active exam paper
     let targetExam = getCodeSparkActiveExam();
     if (!targetExam) {
       targetExam = await asyncGetCodeSparkActiveExam();
@@ -432,21 +474,6 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       return;
     }
 
-    if (!anyLookup) {
-      playSound('warning');
-      setActiveCandidate(null);
-      setKeyError(`Candidate key "${fullKey}" is not registered for this event. Please verify your 4-digit code provided by the proctor.`);
-      return;
-    }
-
-    const cand = anyLookup.candidate;
-    const isCandidateShortlisted = Boolean(
-      anyLookup.isShortlisted ||
-      cand.isShortlisted ||
-      cand.status === 'SHORTLISTED' ||
-      isCandidateInShortlistStorage(cand.rollNumber || cand.accessKey)
-    );
-
     // Update candidate status
     const allCandidates = getAllCodeSparkCandidates();
     const storedCand = allCandidates.find((c) => c.accessKey.toUpperCase() === cand.accessKey.toUpperCase()) || cand;
@@ -468,40 +495,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
         (a.status === 'SUBMITTED' || a.status === 'TIMED_OUT' || a.score !== undefined)
     );
 
-    // If student entered a Round 2 Key OR is attempting to launch Round 2:
-    if (anyLookup.targetRound === 'round2') {
-      if (!isCandidateShortlisted) {
-        playSound('warning');
-        setKeyError('Access Denied: Round 2 is restricted to shortlisted candidates only. Check your registered email.');
-        return;
-      }
-
-      const codingProfile = {
-        name: cand.name.trim(),
-        email: cand.email.trim().toLowerCase(),
-        rollNumber: derivedRoll,
-        department: cand.department || 'Axent Candidate',
-        course: 'Code Spark 2026',
-        examType: 'Code Sprint',
-        assignmentTitle: 'Code Spark 2026: Algorithmic Code Sprint Arena',
-        examMode: 'CODING',
-        accessKey: cand.round2Key || cand.accessKey,
-        isShortlisted: true,
-        sessionStartTime: Date.now()
-      };
-      try {
-        localStorage.setItem('codedna_student_profile', JSON.stringify(codingProfile));
-        localStorage.setItem('codedna_active_exam_mode', 'CODING');
-        setActiveCodeSparkCandidate(cand);
-      } catch {}
-
-      playSound('success');
-      try {
-        await requestExamFullscreen();
-      } catch {}
-      navigate('/codespark-exams?round=2');
-      return;
-    }
+    
 
     // Candidate entered standard Round 1 code:
     if (priorAttempt) {
@@ -1215,7 +1209,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
               <span className="w-1.5 h-1.5 rounded-full bg-[#ea1a1c] inline-block"></span>
               CODESPARK // TECH FEST 2026
             </span>
-            <span className="text-zinc-600 font-semibold">ARENA &bull; ROUND 01</span>
+            <span className="text-zinc-600 font-semibold">ARENA • ROUND 01</span>
           </div>
 
           <svg
@@ -1364,7 +1358,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                 <Clock size={12} />
                 <span>EXAM COUNTDOWN</span>
               </span>
-              <span className="text-zinc-400">03 NOV 2026 &bull; 09:00 IST</span>
+              <span className="text-zinc-400">03 NOV 2026 • 09:00 IST</span>
             </div>
 
             <div className="grid grid-cols-4 divide-x divide-zinc-800 text-center">
@@ -1431,7 +1425,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
             </div>
             <div className="flex items-center gap-2 text-zinc-600 font-semibold tracking-wider uppercase">
               <span className="hidden sm:inline">2-STAGE SPRINT</span>
-              <span className="text-[#ea1a1c]">&bull;</span>
+              <span className="text-[#ea1a1c]">•</span>
               <span className="text-black font-bold">01 APTITUDE &rarr; 02 CODE</span>
             </div>
           </div>
@@ -1593,7 +1587,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
           <div className="flex flex-col gap-2 mb-10">
             <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-zinc-500 font-bold">
               <span>// SPECIFICATION 03</span>
-              <span>&bull;</span>
+              <span>•</span>
               <span>AUTONOMOUS FORENSIC TELEMETRY</span>
             </div>
             <h2 className="text-3xl sm:text-5xl font-black uppercase text-black tracking-tight font-sans">
@@ -1667,7 +1661,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
             <div className="lg:col-span-5 flex flex-col gap-6">
               <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-zinc-600 font-bold">
                 <span>// GATEWAY ACCESS</span>
-                <span>&bull;</span>
+                <span>•</span>
                 <span className="text-[#ea1a1c]">SECTION 04</span>
               </div>
 
@@ -1722,7 +1716,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 bg-[#ea1a1c] inline-block" />
                   <span className="font-black text-black uppercase tracking-wider text-sm font-sans">
-                    NODE // TERMINAL-01 &bull; CODESPARK
+                    NODE // TERMINAL-01 • CODESPARK
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
@@ -1758,9 +1752,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                   <input
                     ref={keyInputRef}
                     type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={4}
+                    maxLength={20}
                     value={keyDigits}
                     onChange={(e) => handleDigitsInput(e.target.value)}
                     onKeyDown={(e) => {

@@ -59,7 +59,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
               <span>CODESPARK ON AXENT</span>
             </span>
             <span className="text-zinc-200 uppercase tracking-wider text-xs hidden sm:inline font-semibold">
-              03 NOV 2026 PRIVATE COMPETITIVE EXAM &bull; ROUND 1 APTITUDE ACTIVE &bull; PRIVATE KEY (AXNT-XXXX) REQUIRED
+              03 NOV 2026 PRIVATE COMPETITIVE EXAM • ROUND 1 APTITUDE ACTIVE • PRIVATE KEY (AXNT-XXXX) REQUIRED
             </span>
           </div>
 
@@ -103,7 +103,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
               className="inline-flex items-center gap-2 px-3.5 py-1.5 mb-4 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-mono uppercase tracking-widest text-white transition-all cursor-pointer select-none"
             >
               <Zap size={13} className="text-white" />
-              <span>CodeSpark on Axent &bull; 03 Nov 2026 Private Arena &rarr;</span>
+              <span>CodeSpark on Axent • 03 Nov 2026 Private Arena &rarr;</span>
             </div>
             <br />
             Autonomous Integrity,
