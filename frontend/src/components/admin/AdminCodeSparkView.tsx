@@ -177,6 +177,7 @@ import { GoogleFormImportModal } from '../mcq/GoogleFormImportModal';
 
 import { AIPaperGenerationResult } from '../../services/groqService';
 
+import { broadcastRemoteHardRefresh } from '../../services/remoteControlService';
 import { clearAllStationsFromCloud, clearAllAttemptsFromCloud, clearAllQuestionsFromCloud, deleteAttemptByRollOrKeyFromCloud, deleteStationFromCloud } from '../../services/supabaseService';
 
 

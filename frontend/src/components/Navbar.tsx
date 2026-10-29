@@ -15,7 +15,8 @@ import {
   Menu,
   X,
   Download,
-  Zap
+  Zap,
+  RefreshCw
 } from 'lucide-react';
 import { triggerInstallPrompt } from './ui/PWAInstallPrompt';
 import { ThemeMode } from '../types/dna';
@@ -27,6 +28,7 @@ import {
   AuthorityRole
 } from '../services/authService';
 import { ContinuousTabs } from './watermelon-ui';
+import { broadcastRemoteHardRefresh } from '../services/remoteControlService';
 
 interface NavbarProps {
   theme: ThemeMode;
@@ -111,6 +113,23 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isLandingRoute = location.pathname === '/';
   const isLoginRoute = location.pathname.startsWith('/login');
   const isAdminRoute = location.pathname.startsWith('/admin');
+  const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+
+  const handleRemoteRefreshAll = async () => {
+    if (!window.confirm('REMOTE HARD REFRESH: Remotely reload every connected candidate workstation and mobile device across all labs?')) {
+      return;
+    }
+    setIsRefreshingAll(true);
+    try {
+      await broadcastRemoteHardRefresh();
+      alert('Remote hard refresh signal dispatched to all devices via Supabase.');
+    } catch (err: any) {
+      alert(`Failed to send remote refresh: ${err.message || err}`);
+    } finally {
+      setIsRefreshingAll(false);
+    }
+  };
+
   const isPaperSetterRoute = location.pathname.startsWith('/paper-setter');
   const isMcqRoute = location.pathname.startsWith('/mcq');
 
@@ -280,6 +299,31 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <ShieldAlert size={13} color="#ef4444" />
                 <span>Admin CCTV</span>
+              </button>
+            )}
+
+                        {/* Remote Hard Refresh All Devices Trigger */}
+            {isAdminRoute && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={handleRemoteRefreshAll}
+                disabled={isRefreshingAll}
+                title="Force instant remote hard refresh across all student workstations & devices"
+                style={{
+                  height: '30px',
+                  padding: '0 10px',
+                  gap: '5px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  background: 'rgba(245, 158, 11, 0.12)',
+                  color: '#f59e0b',
+                  cursor: isRefreshingAll ? 'not-allowed' : 'pointer'
+                }}
+              >
+                <RefreshCw size={12} className={isRefreshingAll ? 'animate-spin' : ''} />
+                <span>{isRefreshingAll ? 'Refreshing...' : 'Remote Refresh All'}</span>
               </button>
             )}
 

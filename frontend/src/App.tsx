@@ -28,6 +28,7 @@ import { runRealCode } from './services/compilerService';
 import { verifyStudentCode } from './services/groqService';
 import { playSound } from './utils/sounds';
 import { initBackendKeepAlive } from './services/keepAliveService';
+import { initRemoteHardRefreshListener } from './services/remoteControlService';
 import { RefreshCw, FileCode, Play } from 'lucide-react';
 import { DEFAULT_LANGUAGE_TEMPLATES } from './components/CodeEditor';
 import { PWAInstallPrompt } from './components/ui/PWAInstallPrompt';
@@ -88,6 +89,12 @@ export const App: React.FC = () => {
   // Keep Render free-tier backend awake in background
   useEffect(() => {
     initBackendKeepAlive();
+  }, []);
+
+  // Remote Hard Refresh: Remotely triggers hard reload on every connected device
+  useEffect(() => {
+    const cleanup = initRemoteHardRefreshListener();
+    return cleanup;
   }, []);
 
   // Normalize malformed double-slash URLs (e.g. //invite -> /invite)
