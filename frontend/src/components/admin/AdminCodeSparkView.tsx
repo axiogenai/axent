@@ -103,7 +103,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
   onInspectReport
 }) => {
   // Navigation tabs: Round 1 MCQ CCTV, Round 1 Results, Shortlist & Keys, Round 2 Coding, Paper Blueprint, Candidate Roster, Specs
-  const [activeTab, setActiveTab] = useState<'mcq_cctv' | 'round1' | 'shortlist' | 'round2' | 'mcq_paper' | 'candidates' | 'overview'>('mcq_cctv');
+  const [activeTab, setActiveTab] = useState<'mcq_cctv' | 'round1' | 'shortlist' | 'round2' | 'candidates' | 'overview'>('mcq_cctv');
   const [registeredCandidates, setRegisteredCandidates] = useState<CodeSparkCandidate[]>(() => getAllCodeSparkCandidates());
   const [showImportModal, setShowImportModal] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -134,7 +134,6 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
   const [paperSaveSuccess, setPaperSaveSuccess] = useState<string | null>(null);
 
   // Active Question Inspector in MCQ Screens Tab
-  const [inspectedQuestionIdx, setInspectedQuestionIdx] = useState<number>(0);
 
   // Candidate Response Screen Modal
   const [selectedCandidateSheet, setSelectedCandidateSheet] = useState<any | null>(null);
@@ -1157,7 +1156,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button
               type="button"
-              onClick={() => setActiveTab('mcq_paper')}
+              onClick={() => setActiveTab('overview')}
               style={{
                 background: 'transparent',
                 border: '1px solid #27272a',
@@ -1189,7 +1188,6 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           { id: 'round1', label: `Round 1 Results & Sheets (${aptitudeCandidates.length})`, icon: Trophy },
           { id: 'shortlist', label: `Shortlist & Round 2 Keys (${shortlistedRolls.length})`, icon: ShieldCheck },
           { id: 'round2', label: `Round 2 Live Arena (${round2Stations.length})`, icon: Code2 },
-          { id: 'mcq_paper', label: `Assigned Paper Preview (${mcqQuestions.length})`, icon: BookOpen },
           { id: 'candidates', label: `Candidate Roster (${registeredCandidates.length})`, icon: Key },
           { id: 'overview', label: 'Paper Config & Specs', icon: FileText }
         ].map((tab) => (
@@ -2175,301 +2173,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       )}
 
       {/* ── TAB: MCQ PAPER & BLUEPRINT SOLUTIONS ── */}
-      {activeTab === 'mcq_paper' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Header Bar */}
-          <div style={{ ...darkCardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#f4f4f5' }}>
-                  CodeSpark Round 1 MCQ Examination Screen
-                </h4>
-                <span style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '3px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', fontWeight: 700 }}>
-                  LIVE CANDIDATE VIEW
-                </span>
-              </div>
-              <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#a1a1aa' }}>
-                Paper: <strong>{currentAssignedExam?.title}</strong> &bull; {mcqQuestions.length} Questions &bull; {currentAssignedExam?.durationMinutes || 30} Minutes &bull; {examTotalMarks} Total Marks
-              </p>
-            </div>
-
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={() => setShowGoogleFormModal(true)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '7px 14px',
-                  borderRadius: '6px',
-                  background: '#18181b',
-                  border: '1px solid #27272a',
-                  color: '#f4f4f5',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                <FileText size={13} color="#a1a1aa" />
-                <span>Import Google Form</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowAIPaperModal(true)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '7px 14px',
-                  borderRadius: '6px',
-                  background: '#18181b',
-                  border: '1px solid #27272a',
-                  color: '#f4f4f5',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                <Cpu size={13} color="#a1a1aa" />
-                <span>AI Paper Gen</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  window.open('/codespark-exams?round=1', '_blank');
-                  playSound('click');
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '7px 14px',
-                  borderRadius: '6px',
-                  background: '#18181b',
-                  border: '1px solid #27272a',
-                  color: '#f4f4f5',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                <Eye size={13} />
-                <span>Open Candidate Hall in New Window</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Interactive Question Browser */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
-            {/* Question Screen Card */}
-            <div style={{ ...darkCardStyle, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #27272a', paddingBottom: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ padding: '3px 8px', borderRadius: '4px', background: '#18181b', border: '1px solid #3f3f46', fontFamily: 'monospace', fontSize: '11px', fontWeight: 800, color: '#f4f4f5' }}>
-                    QUESTION {inspectedQuestionIdx + 1} OF {mcqQuestions.length}
-                  </span>
-                  <span style={{ fontSize: '11px', color: '#71717a' }}>
-                    +{(mcqQuestions[inspectedQuestionIdx]?.marks || 1).toFixed(1)} Marks &bull; -{(mcqQuestions[inspectedQuestionIdx]?.negativeMarks || 0).toFixed(1)} Negative
-                  </span>
-                </div>
-                <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.25)', fontWeight: 600 }}>
-                  {mcqQuestions[inspectedQuestionIdx]?.topic || 'Quantitative Aptitude'}
-                </span>
-              </div>
-
-              {/* Question Text */}
-              <div style={{ fontSize: '14.5px', fontWeight: 600, color: '#f4f4f5', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                {mcqQuestions[inspectedQuestionIdx]?.text || 'No question available'}
-              </div>
-
-              {/* Options */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {mcqQuestions[inspectedQuestionIdx]?.options.map((opt, oIdx) => {
-                  const letter = String.fromCharCode(65 + oIdx);
-                  const isCorrect = opt.isCorrect;
-                  return (
-                    <div
-                      key={oIdx}
-                      style={{
-                        padding: '12px 14px',
-                        borderRadius: '6px',
-                        background: isCorrect ? 'rgba(16, 185, 129, 0.08)' : '#18181b',
-                        border: isCorrect ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid #27272a',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '12px'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span
-                          style={{
-                            width: '24px',
-                            height: '24px',
-                            borderRadius: '4px',
-                            background: isCorrect ? '#10b981' : '#27272a',
-                            color: isCorrect ? '#09090b' : '#f4f4f5',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '11px',
-                            fontWeight: 800
-                          }}
-                        >
-                          {letter}
-                        </span>
-                        <span style={{ fontSize: '13px', color: isCorrect ? '#ffffff' : '#d4d4d8', fontWeight: isCorrect ? 600 : 400 }}>
-                          {opt.text}
-                        </span>
-                      </div>
-                      {isCorrect && (
-                        <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Check size={13} />
-                          <span>VERIFIED ANSWER</span>
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Explanation Card */}
-              {mcqQuestions[inspectedQuestionIdx]?.explanation && (
-                <div style={{ padding: '12px 14px', borderRadius: '6px', background: '#18181b', border: '1px solid #27272a' }}>
-                  <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#71717a', fontWeight: 700, marginBottom: '4px' }}>
-                    Official Mathematical / Logical Solution
-                  </div>
-                  <div style={{ fontSize: '12.5px', color: '#a1a1aa', lineHeight: 1.5 }}>
-                    {mcqQuestions[inspectedQuestionIdx].explanation}
-                  </div>
-                </div>
-              )}
-
-              {/* Prev / Next controls */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px' }}>
-                <button
-                  type="button"
-                  disabled={inspectedQuestionIdx <= 0}
-                  onClick={() => {
-                    setInspectedQuestionIdx((prev) => Math.max(0, prev - 1));
-                    playSound('click');
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '8px 14px',
-                    borderRadius: '5px',
-                    background: '#18181b',
-                    border: '1px solid #27272a',
-                    color: inspectedQuestionIdx <= 0 ? '#52525b' : '#f4f4f5',
-                    fontSize: '12px',
-                    cursor: inspectedQuestionIdx <= 0 ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  <ChevronLeft size={14} />
-                  <span>Previous</span>
-                </button>
-
-                <span style={{ fontSize: '12px', color: '#71717a', fontFamily: 'monospace' }}>
-                  {inspectedQuestionIdx + 1} / {mcqQuestions.length}
-                </span>
-
-                <button
-                  type="button"
-                  disabled={inspectedQuestionIdx >= mcqQuestions.length - 1}
-                  onClick={() => {
-                    setInspectedQuestionIdx((prev) => Math.min(mcqQuestions.length - 1, prev + 1));
-                    playSound('click');
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '8px 14px',
-                    borderRadius: '5px',
-                    background: '#18181b',
-                    border: '1px solid #27272a',
-                    color: inspectedQuestionIdx >= mcqQuestions.length - 1 ? '#52525b' : '#f4f4f5',
-                    fontSize: '12px',
-                    cursor: inspectedQuestionIdx >= mcqQuestions.length - 1 ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  <span>Next</span>
-                  <ChevronRight size={14} />
-                </button>
-              </div>
-            </div>
-
-            {/* Questions Grid & Blueprint Breakdown */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={darkCardStyle}>
-                <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 700, color: '#f4f4f5' }}>
-                  Question Navigation Grid
-                </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
-                  {mcqQuestions.map((_, qIdx) => (
-                    <button
-                      key={qIdx}
-                      type="button"
-                      onClick={() => {
-                        setInspectedQuestionIdx(qIdx);
-                        playSound('click');
-                      }}
-                      style={{
-                        padding: '10px 0',
-                        borderRadius: '6px',
-                        border: inspectedQuestionIdx === qIdx ? '1px solid #ffffff' : '1px solid #27272a',
-                        background: inspectedQuestionIdx === qIdx ? '#27272a' : '#18181b',
-                        color: inspectedQuestionIdx === qIdx ? '#ffffff' : '#a1a1aa',
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        textAlign: 'center'
-                      }}
-                    >
-                      Q{qIdx + 1}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Dynamic Topic Breakdown from Assigned Paper */}
-              <div style={darkCardStyle}>
-                <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 700, color: '#f4f4f5' }}>
-                  Paper Topic Breakdown
-                </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
-                  {mcqQuestions.length === 0 ? (
-                    <div style={{ color: '#71717a' }}>No questions assigned to paper yet.</div>
-                  ) : (
-                    (() => {
-                      const counts: Record<string, number> = {};
-                      mcqQuestions.forEach((q) => {
-                        const top = q.topic || 'General Aptitude';
-                        counts[top] = (counts[top] || 0) + 1;
-                      });
-                      return Object.entries(counts).map(([topic, count], idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: '#a1a1aa' }}>
-                          <span>{topic}</span>
-                          <strong style={{ color: '#f4f4f5' }}>
-                            {count} {count === 1 ? 'Question' : 'Questions'} ({Math.round((count / mcqQuestions.length) * 100)}%)
-                          </strong>
-                        </div>
-                      ));
-                    })()
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── TAB: ROUND 1 RESULTS & CANDIDATE MCQ ANSWER SHEETS ── */}
+            {/* ── TAB: ROUND 1 RESULTS & CANDIDATE MCQ ANSWER SHEETS ── */}
       {activeTab === 'round1' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {/* Action Bar */}
