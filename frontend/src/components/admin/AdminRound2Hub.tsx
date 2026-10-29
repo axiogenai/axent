@@ -573,7 +573,40 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
+  const handleQuickPasteSubmit = (textToParse?: string) => {
+    const raw = textToParse || quickPasteText;
+    if (!raw.trim()) return;
+    const parsed = parseQuestionsFromPlainText(raw);
+    if (parsed.length === 0) {
+      alert('Could not parse questions. Please paste questions numbered (1., 2., 3.) or separated by blank lines.');
+      return;
+    }
+    setProblems(parsed);
+    saveRound2Problems(parsed);
+    setActiveQTab(1);
+    setSaveSuccessMsg(`Successfully imported ${parsed.length} questions into pool and synced to cloud!`);
+    setQuickPasteText('');
+    setShowImportModal(false);
+    playSound('success');
+    setTimeout(() => setSaveSuccessMsg(null), 4000);
+  };
+
   const handleImportJson = () => {
+    setImportError(null);
+    try {
+      const formatted = parseQuestionsFromPlainText(importJsonText);
+      if (formatted.length > 0) {
+        setProblems(formatted);
+        saveRound2Problems(formatted);
+        setActiveQTab(1);
+        setSaveSuccessMsg(`Successfully imported ${formatted.length} coding questions to cloud pool!`);
+        setShowImportModal(false);
+        setImportJsonText('');
+        playSound('success');
+        setTimeout(() => setSaveSuccessMsg(null), 4000);
+        return;
+      }
+    } catch (e) {}
 
 
 
@@ -1827,6 +1860,33 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
+              </button>
+
+
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowImportModal(true);
+                  playSound('click');
+                }}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  background: '#10b981',
+                  border: 'none',
+                  color: '#ffffff',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                title="Paste 10 questions directly without manual difficulty or marks setup"
+              >
+                <Sparkles size={13} />
+                <span>⚡ Quick Paste 10 Questions</span>
               </button>
 
 
@@ -3250,6 +3310,61 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
           )}
 
 
+
+          {/* ⚡ DIRECT ON-SCREEN QUICK-PASTE 10 QUESTIONS BOX */}
+          <div style={{ background: '#121214', border: '1px solid #3b82f6', borderRadius: '8px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Sparkles size={16} color="#60a5fa" />
+                <strong style={{ fontSize: '13.5px', color: '#f4f4f5' }}>⚡ Quick-Paste 10 Questions (Zero Setup / No Form Filling)</strong>
+                <span style={{ fontSize: '11px', color: '#60a5fa', background: 'rgba(59, 130, 246, 0.15)', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Fast Mode</span>
+              </div>
+              <span style={{ fontSize: '11.5px', color: '#71717a' }}>Paste 10 questions directly — titles, 20 marks each, boilerplates & test cases are auto-configured!</span>
+            </div>
+            <textarea
+              value={quickPasteText}
+              onChange={(e) => setQuickPasteText(e.target.value)}
+              placeholder={"Paste your 10 questions here directly (Numbered 1., 2., 3. or one per line):\n\n1. Reverse a string: Write a program to reverse a given string.\n2. Maximum Subarray: Given an array, find the maximum contiguous subarray sum.\n3. Balanced Parentheses: Verify if brackets in an expression are balanced.\n4. Palindrome Check: Check if a string reads the same backwards and forwards.\n5. Binary Search: Find target integer in a sorted array.\n6. Fibonacci: Compute the N-th Fibonacci number.\n7. Two Sum: Return indices of two numbers that add up to target.\n8. Anagram Check: Determine if two strings are anagrams.\n9. Merge Sorted Arrays: Combine two sorted arrays into one.\n10. Count Set Bits: Count the number of 1s in binary representation."}
+              rows={4}
+              style={{
+                width: '100%',
+                background: '#09090b',
+                border: '1px solid #27272a',
+                borderRadius: '6px',
+                padding: '10px',
+                color: '#e4e4e7',
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                lineHeight: 1.5,
+                outline: 'none',
+                resize: 'vertical'
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11.5px', color: '#a1a1aa' }}>Ready to parse & save to cloud</span>
+              <button
+                type="button"
+                onClick={() => handleQuickPasteSubmit()}
+                disabled={!quickPasteText.trim()}
+                style={{
+                  padding: '7px 18px',
+                  borderRadius: '6px',
+                  background: quickPasteText.trim() ? '#2563eb' : '#27272a',
+                  border: 'none',
+                  color: '#ffffff',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: quickPasteText.trim() ? 'pointer' : 'not-allowed',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Check size={13} />
+                <span>⚡ Import & Set Active Pool Now</span>
+              </button>
+            </div>
+          </div>
 
           {/* Pool Allocation Notice */}
 
@@ -7231,7 +7346,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                Or Paste Custom Questions JSON Array (Round2Problem[]):
+                ⚡ Paste Your 10 Questions Directly (Plain Text or Numbered List):
 
 
 
@@ -7251,7 +7366,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                placeholder='[ { "title": "Custom Problem", "difficulty": "Medium", "description": "...", "sampleTestCases": [...] } ]'
+                placeholder='Paste your 10 questions here directly!\n\n1. Reverse a string: Write a function to reverse a string.\n2. Maximum Subarray: Find max subarray sum.\n3. Balanced Parentheses: Check if bracket expression is balanced.\n4. Palindrome Check: Check if string is palindrome.\n5. Binary Search: Implement search on sorted array.\n6. Fibonacci: Compute N-th Fibonacci number.\n7. Two Sum: Find two numbers that add to target.\n8. Anagram: Check if two strings are anagrams.\n9. Merge Sorted Arrays: Merge two arrays.\n10. Count Set Bits: Count bits in integer.'
 
 
 

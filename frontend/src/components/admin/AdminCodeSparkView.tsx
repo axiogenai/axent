@@ -3359,13 +3359,13 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                 }}
 
-                title="Purge demo stations and test attempts from Supabase & local cache"
+                title="Purge all candidate submissions and reset wall to 0 workstations"
 
               >
 
                 <Trash2 size={12} />
 
-                <span>Purge Demo Data</span>
+                <span>Purge Submissions & Reset Wall</span>
 
               </button>
 
@@ -4467,6 +4467,28 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                         <span>Warn</span>
 
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCandidateStation(station)}
+                        style={{
+                          padding: '7px 9px',
+                          borderRadius: '4px',
+                          background: 'rgba(239, 68, 68, 0.15)',
+                          border: '1px solid rgba(239, 68, 68, 0.4)',
+                          color: '#ef4444',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px'
+                        }}
+                        title={`Purge and delete workstation for ${station.student.name}`}
+                      >
+                        <Trash2 size={11} />
+                        <span>Purge</span>
                       </button>
 
                     </div>
