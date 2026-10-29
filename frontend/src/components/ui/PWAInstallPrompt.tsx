@@ -22,6 +22,10 @@ export function triggerInstallPrompt() {
 }
 
 export function PWAInstallPrompt() {
+  // Never show PWA install prompt on CodeSpark portal
+  if (typeof window !== 'undefined' && (window.location.pathname.includes('/codespark') || window.location.pathname.includes('/code-spark'))) {
+    return null;
+  }
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(
     () => (typeof window !== 'undefined' ? window.__axentDeferredPrompt || null : null)
   );
