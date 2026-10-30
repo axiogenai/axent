@@ -772,11 +772,8 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       if (station.id) {
         await deleteStationFromCloud(station.id);
       }
-      try {
-        const { clearAllAttemptsLocally } = await import('../../services/mcqService');
-        // Filter in-memory attempts
-        setAllAttempts((prev: any[]) => prev.filter(a => (a.studentRoll || a.student_roll || '').toUpperCase() !== candRoll.toUpperCase() && (a.candidateRollNumber || '').toUpperCase() !== candRoll.toUpperCase() && a.id !== station.id));
-      } catch {}
+      // Filter in-memory attempts
+      setAllAttempts((prev: any[]) => prev.filter(a => (a.studentRoll || a.student_roll || '').toUpperCase() !== candRoll.toUpperCase() && (a.candidateRollNumber || '').toUpperCase() !== candRoll.toUpperCase() && a.id !== station.id));
       setRegisteredCandidates((prev: any[]) => prev.filter(c => (c.rollNumber || '').toUpperCase() !== candRoll.toUpperCase() && (c.accessKey || '').toUpperCase() !== candRoll.toUpperCase()));
       setShortlistedRolls((prev: string[]) => prev.filter(r => r.toUpperCase() !== candRoll.toUpperCase()));
       playSound('success');

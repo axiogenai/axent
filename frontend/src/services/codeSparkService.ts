@@ -9,7 +9,7 @@ import {
   saveExam,
   getAllAttempts,
 } from './mcqService';
-import { saveExamToCloud } from './supabaseService';
+import { saveExamToCloud, deleteAttemptByRollOrKeyFromCloud } from './supabaseService';
 
 /**
  * CodeSpark Private Examination Service
@@ -1147,7 +1147,6 @@ export async function deleteCodeSparkCandidateComplete(accessKeyOrRoll: string):
   } catch {}
 
   try {
-    const { deleteAttemptByRollOrKeyFromCloud } = await import('./supabaseService');
     await deleteAttemptByRollOrKeyFromCloud(clean);
   } catch {}
 
