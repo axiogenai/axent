@@ -161,6 +161,8 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       recordRound2Violation(event.type === 'paste' ? 'Paste action blocked' : event.type === 'copy' ? 'Copy action blocked' : 'Cut action blocked');
     };
     const onContext = (event: Event) => event.preventDefault();
+    const onDrop = (event: DragEvent) => { event.preventDefault(); recordRound2Violation('External content drop blocked'); };
+    const onDragOver = (event: DragEvent) => event.preventDefault();
     const onKeys = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
       if ((event.ctrlKey || event.metaKey) && ['c','v','x','insert'].includes(key)) {
@@ -177,6 +179,8 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     document.addEventListener('cut', onClipboard, true);
     document.addEventListener('paste', onClipboard, true);
     document.addEventListener('contextmenu', onContext, true);
+    document.addEventListener('drop', onDrop, true);
+    document.addEventListener('dragover', onDragOver, true);
     window.addEventListener('keydown', onKeys, true);
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
@@ -186,6 +190,8 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       document.removeEventListener('cut', onClipboard, true);
       document.removeEventListener('paste', onClipboard, true);
       document.removeEventListener('contextmenu', onContext, true);
+      document.removeEventListener('drop', onDrop, true);
+      document.removeEventListener('dragover', onDragOver, true);
       window.removeEventListener('keydown', onKeys, true);
     };
   }, [recordRound2Violation, submission.isSubmitted]);
