@@ -362,6 +362,11 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       return;
     }
 
+    // Avoid sending partial keystrokes to the rate-limited server lookup.
+    const isLegacyRound1Pin = /^\d{4}$/.test(clean);
+    const isSecureAccessToken = /^[A-F0-9]{32}$/.test(clean);
+    if (!isLegacyRound1Pin && !isSecureAccessToken) return;
+
     void asyncLookupCandidateAny(clean)
       .then((result) => result || asyncLookupCandidateAny('AXENT-R2-' + clean))
       .then((result) => {
