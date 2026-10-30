@@ -76,10 +76,12 @@ export default async function handler(req, res) {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
 
-    if (req.method === "DELETE") {
-      const action = req.query?.action || "purge_all";
-      const roll = req.query?.roll || req.query?.key || "";
+    let bodyAction = "";
+    try { bodyAction = req.body?.action || (typeof req.body === "string" ? JSON.parse(req.body)?.action : ""); } catch {}
+    const action = req.query?.action || bodyAction || (req.method === "DELETE" ? "purge_all" : "");
+    const roll = req.query?.roll || req.query?.key || "";
 
+    if (req.method === "DELETE" || (req.method === "POST" && (action === "factory_reset_all_database" || action === "wipe_entire_database" || action === "reset_all" || action === "purge_all" || action === "purge_attempts"))) {
       // ── FACTORY RESET: Complete Database Erasure (Exams, Questions, Attempts, Stations, Submissions) ──
       if (action === "factory_reset_all_database" || action === "wipe_entire_database") {
         try {

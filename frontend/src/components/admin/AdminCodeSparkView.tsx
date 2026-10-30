@@ -1754,7 +1754,8 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
     const rawFiltered = stations.filter((s) => {
       const title = (s.student?.assignmentTitle || s.student?.course || '').toLowerCase();
       const mode = s.examMode || (s.language === 'MCQ' ? 'MCQ' : 'CODING');
-      return mode === 'CODING' || title.includes('spark') || title.includes('coding');
+      const isMcq = mode === 'MCQ' || s.language === 'MCQ' || title.includes('aptitude') || title.includes('mcq');
+      return !isMcq && (mode === 'CODING' || title.includes('sprint') || title.includes('coding'));
     });
 
     // Deduplicate strictly by candidate roll number / email / ID so one candidate = exactly 1 CCTV card

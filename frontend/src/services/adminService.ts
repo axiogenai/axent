@@ -1,4 +1,4 @@
-﻿import {
+import {
   CandidateStation,
   CollegeLabInfo,
   CodeSubmission,
@@ -774,7 +774,7 @@ function reconcileAttemptsIntoStations(stations: CandidateStation[]): CandidateS
                 maxMarks: a.maxScore || totalQ
               };
             }
-          } else {
+          } else if (!isDone && a.status === 'IN_PROGRESS') {
             const st: CandidateStation = {
               id: stationId,
               labId,

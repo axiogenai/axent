@@ -1365,7 +1365,8 @@ export async function clearAllAttemptsFromEverywhere(labId?: string): Promise<vo
   clearAllAttemptsLocally();
   try {
     await fetch('/api/codespark/roster?action=purge_attempts', {
-      method: 'DELETE',
+      method: 'POST',
+      body: JSON.stringify({ action: 'factory_reset_all_database' }),
       headers: { 'x-authority-role': 'admin' }
     });
   } catch (e) {
@@ -2901,12 +2902,31 @@ export async function wipeEntireDatabaseFromCloud(): Promise<boolean> {
   clearAllQuestions();
   try {
     await fetch('/api/codespark/roster?action=factory_reset_all_database', {
-      method: 'DELETE',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-authority-role': 'admin'
+      },
+      body: JSON.stringify({ action: 'factory_reset_all_database' })
+    });
+  } catch (e) {
+    console.warn('[mcqService] factory reset POST error:', e);
+  }
+  try {
+    await fetch('/api/codespark/roster?action=factory_reset_all_database', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'factory_reset_all_database' }),
       headers: { 'x-authority-role': 'admin' }
     });
   } catch (e) {
-    console.warn('[mcqService] factory reset error:', e);
+    console.warn('[mcqService] factory reset DELETE error:', e);
   }
+  try {
+    await clearAllAttemptsFromCloud();
+  } catch {}
+  try {
+    await clearAllStationsFromCloud();
+  } catch {}
 
   // Clear all local in-memory caches
   inMemoryAttempts = [];
@@ -2921,6 +2941,11 @@ export async function wipeEntireDatabaseFromCloud(): Promise<boolean> {
         MCQ_STORAGE_KEYS.QUESTIONS,
         MCQ_STORAGE_KEYS.EXAMS,
         MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT,
+        'codedna_mcq_attempts',
+        'codedna_mcq_questions',
+        'codedna_mcq_exams',
+        'codedna_college_stations',
+        'codedna_live_stations',
         'codedna_mcq_active_attempt_backup',
         'codedna_student_profile',
         'codedna_codespark_active_candidate',
@@ -2943,7 +2968,6 @@ export async function wipeEntireDatabaseFromCloud(): Promise<boolean> {
       }
     } catch {}
   }
-
   notifyMcqDataChanged();
   notifyExamsChanged();
   return true;
