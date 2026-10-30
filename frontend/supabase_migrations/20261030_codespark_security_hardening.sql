@@ -184,3 +184,15 @@ $$;
 
 REVOKE ALL ON FUNCTION public.save_codespark_round2_progress(text,text,jsonb,jsonb,text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.save_codespark_round2_progress(text,text,jsonb,jsonb,text) TO service_role;
+
+-- Per-candidate Round 2 evaluation throttling to prevent hidden-test probing and compiler abuse.
+CREATE TABLE IF NOT EXISTS public.codespark_round2_eval_attempts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  candidate_hash text NOT NULL,
+  attempted_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_codespark_round2_eval_attempts_candidate_time
+  ON public.codespark_round2_eval_attempts(candidate_hash, attempted_at DESC);
+ALTER TABLE public.codespark_round2_eval_attempts ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.codespark_round2_eval_attempts FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, DELETE ON public.codespark_round2_eval_attempts TO service_role;
