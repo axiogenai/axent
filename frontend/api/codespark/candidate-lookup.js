@@ -1,6 +1,5 @@
-import { getCodeSparkRosterConfig, isCandidateLookupRateLimited, readBody, recordFailedCandidateLookup, setApiHeaders, supabaseRest } from "./_security.js";
+import { getCodeSparkRosterConfig, isCandidateLookupRateLimited, readBody, recordFailedCandidateLookup, setApiHeaders } from "./_security.js";
 
-const CONFIG_ID = "codespark_system_config";
 const normalize = (value) => String(value || "").trim().toUpperCase().replace(/\s+/g, "").replace(/^(AXENT-R2-|AXENT-|R2-)/, "");
 
 export default async function handler(req, res) {
