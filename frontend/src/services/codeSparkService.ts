@@ -198,7 +198,17 @@ export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
     }
     return combined;
   } catch (err) {
-    console.warn("[CodeSpark Cloud] secure roster sync failed:", err);
+    // Candidate browsers may not have an authority session. Sync only safe public exam state.
+    try {
+      const response = await fetch('/api/codespark/public-config');
+      const publicConfig = await response.json();
+      if (response.ok) {
+        if (publicConfig.activeExamId) localStorage.setItem('codedna_codespark_round1_exam_id', publicConfig.activeExamId);
+        localStorage.setItem(ROUND1_CONCLUDED_STORAGE_KEY, publicConfig.isConcluded ? 'true' : 'false');
+        window.dispatchEvent(new CustomEvent('codedna_codespark_concluded_updated', { detail: Boolean(publicConfig.isConcluded) }));
+      }
+    } catch {}
+    console.warn("[CodeSpark Cloud] roster sync requires administrator authentication:", err);
     return getAllCodeSparkCandidates();
   }
 }
