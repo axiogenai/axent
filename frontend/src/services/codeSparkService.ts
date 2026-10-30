@@ -606,15 +606,16 @@ export function concludeRound1AndShortlistUnified(options: { mode: 'cutoff' | 't
     cand.isShortlisted = Boolean(isQual);
     if (isQual) {
       cand.status = 'SHORTLISTED';
-      if (!cand.round2Key) {
+      const existingRound2Suffix = String(cand.round2Key || '').toUpperCase().replace(/^AXENT-R2-/, '');
+      if (existingRound2Suffix.length < 8) {
         cand.round2Key = generateRound2KeyForCandidate(cand);
       }
       cand.round2InvitedAt = Date.now();
       newlyShortlistedRolls.push(candRoll || candKey);
     } else {
-      if (cand.status === 'SHORTLISTED') {
-        cand.status = 'ROUND1_COMPLETED';
-      }
+      if (cand.status === 'SHORTLISTED') cand.status = 'ROUND1_COMPLETED';
+      cand.round2Key = undefined;
+      cand.round2InvitedAt = undefined;
     }
   });
 
