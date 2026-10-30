@@ -1574,120 +1574,22 @@ export async function verifyRound2CodeWithAI(
 }
 
 export async function pushRound2LiveCodeToCloud(
-
-
-
   profile: { name: string; rollNumber: string; accessKey: string; stationNumber?: string; round2Key?: string },
-
-
-
   code: string,
-
-
-
   language: string,
-
-
-
   questionNumber: number
-
-
-
 ): Promise<void> {
-
-
-
-  if (!supabase) return;
-
-
-
   try {
-
-
-
-    const canonicalRoll = (profile.rollNumber || profile.accessKey || '').trim().toUpperCase().replace(/[^A-Za-z0-9_-]/g, '_');
-    const cloudId = `r2_station_${canonicalRoll}`;
-
-
-
-    await supabase.from('candidate_stations').upsert({
-
-
-
-      id: cloudId,
-
-
-
-      lab_id: 'ROUND_2_ARENA',
-
-
-
-      station_number: profile.stationNumber || 'Station #01',
-
-
-
-      status: 'IN_PROGRESS',
-
-
-
-      code: code,
-
-
-
-      language: language || 'Python',
-
-
-
-      student: {
-
-
-
-        name: profile.name,
-
-
-
-        rollNumber: profile.rollNumber,
-
-
-
-        accessKey: profile.accessKey,
-
-
-
-        round2Key: profile.round2Key,
-
-
-
-        currentQuestion: questionNumber
-
-
-
-      },
-
-
-
-      last_updated_timestamp: Date.now()
-
-
-
+    const key = profile.round2Key || profile.accessKey;
+    await fetch('/api/codespark/round2-live-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, code, language, questionNumber, stationNumber: profile.stationNumber })
     });
-
-
-
-  } catch (err) {
-
-
-
-    console.warn('[Round 2] pushRound2LiveCodeToCloud failed:', err);
-
-
-
+  } catch (error) {
+    console.warn('[Round 2] secure live-code sync unavailable:', error);
   }
-
-
-
 }
-
 
 
 export function extractCleanCandidateCode(rawCode?: string | null): string {
@@ -1775,203 +1677,26 @@ export function extractCleanCandidateCode(rawCode?: string | null): string {
 
 
 export async function pushRound2SubmissionToCloud(sub: Round2CandidateSubmission): Promise<boolean> {
-
-
-
-  if (!supabase) return false;
-
-
-
   try {
-
-
-
-    const cloudId = `r2_sub_${sub.candidateKey.replace(/[^A-Za-z0-9_-]/g, '_')}`;
-
-
-
-    const payload = {
-
-
-
-      ...sub,
-
-
-
-      updatedAt: Date.now()
-
-
-
-    };
-
-
-
-    // 1. Save to candidate_stations for universal instant access
-
-
-
-    await supabase.from('candidate_stations').upsert({
-
-
-
-      id: cloudId,
-
-
-
-      lab_id: 'ROUND_2_ARENA',
-
-
-
-      station_number: sub.stationNumber || 'Station #01',
-
-
-
-      status: sub.isSubmitted ? 'SUBMITTED' : 'IN_PROGRESS',
-
-
-
-      code: JSON.stringify(payload),
-
-
-
-      student: {
-
-
-
-        name: sub.candidateName,
-
-
-
-        rollNumber: sub.rollNumber,
-
-
-
-        email: sub.email,
-
-
-
-        accessKey: sub.candidateKey,
-
-
-
-        round2Key: sub.round2Key,
-
-
-
-        score: sub.totalScore,
-
-
-
-        maxScore: sub.maxScore,
-
-
-
-        isSubmitted: sub.isSubmitted
-
-
-
-      },
-
-
-
-      last_updated_timestamp: Date.now()
-
-
-
+    const response = await fetch('/api/codespark/round2-submissions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ submission: sub })
     });
-
-
-
-    // 2. Also save to code_submissions table
-
-
-
-    try {
-
-
-
-      await supabase.from('code_submissions').upsert({
-
-
-
-        id: cloudId,
-
-
-
-        student: {
-
-
-
-          name: sub.candidateName,
-
-
-
-          rollNumber: sub.rollNumber,
-
-
-
-          email: sub.email,
-
-
-
-          accessKey: sub.candidateKey,
-
-
-
-          score: sub.totalScore
-
-
-
-        },
-
-
-
-        language: sub.dominantLanguage || 'Python',
-
-
-
-        code: JSON.stringify(sub.questionReports),
-
-
-
-        status: sub.isSubmitted ? 'SUBMITTED' : 'IN_PROGRESS',
-
-
-
-        created_at: Date.now()
-
-
-
-      });
-
-
-
-    } catch {}
-
-
-
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      console.warn('[Round 2] Server submission sync rejected:', result.error || response.status);
+      return false;
+    }
+    if (sub.isSubmitted && result.submission) {
+      localStorage.setItem(`codedna_r2_sub_${sub.candidateKey.toUpperCase()}`, JSON.stringify(result.submission));
+    }
     return true;
-
-
-
-  } catch (err) {
-
-
-
-    console.warn('[Round 2] pushRound2SubmissionToCloud failed:', err);
-
-
-
+  } catch (error) {
+    console.warn('[Round 2] secure submission sync unavailable:', error);
     return false;
-
-
-
   }
-
-
-
 }
-
 
 
 export function getAllRound2Submissions(): Round2CandidateSubmission[] {
