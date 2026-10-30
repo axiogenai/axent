@@ -1,5 +1,5 @@
 import { getRound2AssignedProblems, normalizeRound2Key } from "./_round2-grader.js";
-import { readBody, setApiHeaders, supabaseRest } from "./_security.js";
+import { getCodeSparkRosterConfig, readBody, setApiHeaders, supabaseRest } from "./_security.js";
 
 const cleanId = (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9_-]/g, "_").slice(0, 80);
 
@@ -11,9 +11,22 @@ export default async function handler(req, res) {
   try { body = readBody(req); } catch { return res.status(400).json({ success: false, error: "Invalid request." }); }
   const key = normalizeRound2Key(body.key);
   const reason = String(body.reason || "").slice(0, 180);
-  if (key.length < 8 || !reason) return res.status(400).json({ success: false, error: "Invalid proctor event." });
+  if (key.length < 8) return res.status(400).json({ success: false, error: "Invalid Round 2 key." });
 
   try {
+    if (body.action === "status") {
+      const roster = await getCodeSparkRosterConfig();
+      const candidate = roster?.candidates?.find((item) => item.round2Key && normalizeRound2Key(item.round2Key) === key);
+      if (!candidate || !(candidate.isShortlisted || candidate.status === "SHORTLISTED")) {
+        return res.status(403).json({ success: false, error: "A valid shortlisted Round 2 key is required." });
+      }
+      const roll = String(candidate.rollNumber || candidate.email || candidate.name || "candidate").trim();
+      const rowId = `r2_station_${cleanId(roll)}`;
+      const rows = await supabaseRest(`candidate_stations?id=eq.${rowId}&select=student`);
+      const student = rows?.[0]?.student || {};
+      return res.status(200).json({ success: true, strikeCount: Number(student.proctorStrikeCount) || 0, locked: student.proctorLocked === true });
+    }
+    if (!reason) return res.status(400).json({ success: false, error: "Invalid proctor event." });
     const { candidate } = await getRound2AssignedProblems(key);
     const roll = String(candidate.rollNumber || candidate.email || candidate.name || "candidate").trim();
     const rowId = `r2_station_${cleanId(roll)}`;
