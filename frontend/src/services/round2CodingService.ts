@@ -1281,7 +1281,8 @@ export async function evaluateRound2Code(
   code: string,
   explicitLanguage?: 'C' | 'C++' | 'Python' | 'Java',
   timeTakenMs?: number,
-  customStdin?: string
+  customStdin?: string,
+  candidateKey?: string
 ): Promise<Round2QuestionReport> {
   const language = explicitLanguage || detectLanguageFromCode(code);
   const tests = [
@@ -1355,7 +1356,7 @@ export async function evaluateRound2Code(
   const parsedTimeSec = parseFloat(rawTimeStr.replace(/[^\d.]/g, ''));
   const runtimeMs = !Number.isNaN(parsedTimeSec) && parsedTimeSec > 0 ? parsedTimeSec * 1000 : undefined;
 
-  return {
+  const report: Round2QuestionReport = {
     questionNumber: problem.number,
     questionId: problem.id,
     questionTitle: problem.title,
@@ -1377,6 +1378,26 @@ export async function evaluateRound2Code(
     complexityExplanation: complexity.explanation,
     efficiencyRating: complexity.rating
   };
+
+  if (candidateKey) {
+    const response = await fetch('/api/codespark/grade-round2', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: candidateKey, problemId: problem.id, code, language })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || 'Authoritative server grading failed. Please retry.');
+    }
+    report.sampleResults = result.sampleResults || [];
+    report.hiddenResults = result.hiddenResults || [];
+    report.passedTests = Number(result.passedTests) || 0;
+    report.totalTests = Number(result.totalTests) || 0;
+    report.score = Number(result.score) || 0;
+    report.maxScore = Number(result.maxScore) || maxMarks;
+    report.status = result.status || 'PENDING';
+  }
+  return report;
 }
 
 export function getStoredRound2Submission(candidateKey: string): Round2CandidateSubmission | null {
