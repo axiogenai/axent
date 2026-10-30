@@ -124,7 +124,7 @@ import {
   CodeSparkCandidate,
 
   saveCodeSparkCandidates,
-
+  pushCandidatesToCloud,
   saveActiveCodeSparkPaper,
 
   ensureCodeSparkAptitudeExam,
@@ -951,7 +951,16 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
   const handleSendEmailsViaSmtp = async () => {
 
-
+    const rosterSynced = await pushCandidatesToCloud(getAllCodeSparkCandidates());
+    if (!rosterSynced) {
+      setSmtpSendResult({
+        success: false,
+        message: 'The latest shortlist and secure access keys could not be saved to the server. Please retry before sending invitations.',
+        sent: 0,
+        total: shortlistedRolls.length
+      });
+      return;
+    }
 
     if (shortlistedRolls.length === 0) {
 
