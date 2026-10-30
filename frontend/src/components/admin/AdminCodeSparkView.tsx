@@ -875,20 +875,6 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
   const handleTestSmtp = async () => {
 
-    if (!smtpUser.trim() || !smtpPassword.trim()) {
-
-      setSmtpTestResult({
-
-        success: false,
-
-        message: 'Please provide both your Gmail address and 16-character Google App Password.'
-
-      });
-
-      return;
-
-    }
-
     setSmtpTesting(true);
 
     setSmtpTestResult(null);
@@ -921,7 +907,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
           success: true,
 
-          message: res.message || `Connected to smtp.gmail.com:587 as ${smtpUser.trim()} successfully!`
+          message: res.message || 'Server-side SMTP connection verified successfully.'
 
         });
 
@@ -933,7 +919,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
           success: false,
 
-          message: res.error || 'SMTP Authentication failed. Verify your 16-character Google App Password.'
+          message: res.error || 'Server-side SMTP verification failed. Check the Vercel environment configuration.'
 
         });
 
@@ -964,20 +950,6 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
   const handleSendEmailsViaSmtp = async () => {
-
-    if (!smtpUser.trim() || !smtpPassword.trim()) {
-
-      setSmtpTestResult({
-
-        success: false,
-
-        message: 'Please enter your Gmail address and 16-character Google App Password first.'
-
-      });
-
-      return;
-
-    }
 
 
 
@@ -1021,7 +993,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
       const email = matchAttempt?.studentEmail || matchCand?.email || '';
 
-      const r2Key = matchCand?.round2Key || `AXENT-R2-${roll.slice(-4) || '9901'}`;
+      const r2Key = matchCand?.round2Key || '';
 
       const score = matchAttempt?.score ?? matchCand?.round1Score ?? 0;
 
@@ -1936,7 +1908,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
         c.isShortlisted ? 'YES' : 'NO',
 
-        c.round2Key || (c.isShortlisted ? 'AXENT-R2-' + c.studentRoll : 'N/A')
+        c.round2Key || 'NOT ISSUED'
 
       ])
 
@@ -5062,7 +5034,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                     const score = matchAttempt?.score !== undefined ? `${matchAttempt.score}/${matchAttempt.totalMarks}` : 'N/A';
 
-                    const r2Key = matchCand?.round2Key || `AXENT-R2-${roll.slice(-4) || '9901'}`;
+                    const r2Key = matchCand?.round2Key || '';
 
 
 
@@ -6764,7 +6736,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                   const email = matchAttempt?.studentEmail || matchCand?.email || 'student@domain.com';
 
-                  const r2Key = matchCand?.round2Key || `AXENT-R2-${roll.slice(-4) || '9901'}`;
+                  const r2Key = matchCand?.round2Key || '';
 
                   const score = matchAttempt?.score ?? matchCand?.round1Score ?? 0;
 
