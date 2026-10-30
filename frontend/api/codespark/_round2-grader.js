@@ -74,10 +74,9 @@ export async function gradeRound2Code(keyInput, problemIdInput, codeInput, langu
   if (key.length < 8 || key.length > 64 || code.length > 100000 || !LANGUAGE[language] || !problemId) {
     const error = new Error("Invalid code evaluation request."); error.statusCode = 400; throw error;
   }
-  const rosterRows = await supabaseRest("candidate_stations?id=eq.codespark_system_config&select=code,student");
-  const roster = parseCodeSparkConfig(rosterRows?.[0]);
+  const roster = await getCodeSparkRosterConfig();
   const candidate = roster?.candidates?.find((item) => item.round2Key && normalizeRound2Key(item.round2Key) === key);
-  if (!candidate || !(candidate.isShortlisted || candidate.status === "SHORTLISTED" || candidate.round2Key)) {
+  if (!candidate || !(candidate.isShortlisted || candidate.status === "SHORTLISTED")) {
     const error = new Error("A valid shortlisted Round 2 key is required."); error.statusCode = 403; throw error;
   }
   const problemRows = await supabaseRest("candidate_stations?id=eq.codespark_round2_questions&select=code,student");
