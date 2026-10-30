@@ -30,6 +30,9 @@ export default async function handler(req, res) {
 
     const isRound2 = Boolean(candidate.round2Key && entered === normalize(candidate.round2Key));
     const shortlisted = Boolean(candidate.isShortlisted || candidate.status === "SHORTLISTED");
+    if (!isRound2 && config.isConcluded) {
+      return res.status(403).json({ success: false, error: "Round 1 is closed. Use the dedicated Round 2 key sent to your registered email." });
+    }
     if (isRound2 && entered.length < 8) {
       return res.status(403).json({ success: false, error: "This Round 2 key is outdated. Ask the administrator to issue a new secure access key." });
     }
