@@ -1884,7 +1884,7 @@ export async function fetchRound2Leaderboard(): Promise<Round2LeaderboardEntry[]
     return {
       rank: 1,
       candidateKey: sub.candidateKey,
-      round2Key: '',
+      round2Key: sub.round2Key || '',
       candidateName: sub.candidateName,
       rollNumber: sub.rollNumber,
       email: sub.email,
