@@ -36,6 +36,7 @@ import {
   getStoredRound2Submission,
   saveStoredRound2Submission,
   pushRound2SubmissionToCloud,
+  finalizeRound2Submission,
   selectStudentRound2Problems,
   pushRound2LiveCodeToCloud
 } from '../../services/round2CodingService';
@@ -71,7 +72,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
   const cleanRoll = candidateProfile.rollNumber || candidateProfile.email.split('@')[0] || 'CANDIDATE';
   // --- 1. Problems State: Individualized 5 randomized questions from 10+ pool |
   const [problems, setProblems] = useState<Round2Problem[]>(() => {
-    const all = getAllRound2Problems();
+    const all = getAllRound2Problems().map((problem) => ({ ...problem, hiddenTestCases: [] }));
     return selectStudentRound2Problems(all, candidateKey);
   });
   const [loadingProblems, setLoadingProblems] = useState(true);
@@ -356,8 +357,11 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
         isSubmitted: true,
         submittedAt: Date.now()
       };
-      updateSubmissionState(finalSub);
-      await pushRound2SubmissionToCloud(finalSub);
+      const authoritativeSubmission = await finalizeRound2Submission(finalSub);
+      if (!authoritativeSubmission) {
+        throw new Error('The server could not verify your final submission. Please retry; your work is still saved locally.');
+      }
+      updateSubmissionState(authoritativeSubmission);
       setShowSubmitModal(false);
       playSound('success');
     } catch (err) {
