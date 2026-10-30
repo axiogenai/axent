@@ -184,6 +184,9 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
         const response = await fetch('/api/codespark/public-config', { cache: 'no-store' });
         if (response.ok) {
           const config = await response.json();
+          if (config?.activeExamId) {
+            localStorage.setItem('codedna_codespark_round1_exam_id', config.activeExamId);
+          }
           if (typeof config?.isConcluded === 'boolean') {
             setIsRound1Concluded(config.isConcluded);
             setRound1ConcludedGlobally(config.isConcluded);
@@ -1813,7 +1816,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                     </strong>
                   ) : isRound1Completed ? (
                     <strong className="text-zinc-700 font-bold">
-                      ROUND 1 COMPLETE ({round1Pct}%)
+                      ROUND 1 SUBMITTED
                     </strong>
                   ) : (
                     <strong className={isRound1Concluded ? "text-[#ea1a1c] font-black" : "text-zinc-500"}>{isRound1Concluded ? "ACTIVE NOW (CODING)" : "GATE-LOCKED"}</strong>
@@ -1947,8 +1950,8 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                           Tech Fest Arena Active
                         </span>
                       </div>
-                      <div className="text-sm font-black text-black">
-                        Score Logged: {candidateAttempt.score ?? 0}{dynamicTotalMarks > 0 ? ` / ${dynamicTotalMarks} Marks` : ' Marks'} ({round1Pct}%)
+                      <div className="text-sm font-black text-emerald-800 flex items-center gap-2">
+                        <span>Status: SUBMITTED &amp; RECORDED</span>
                       </div>
                       <p className="text-[11.5px] text-zinc-600 leading-relaxed border-t border-zinc-300 pt-2 mt-1">
                         Examinations are ongoing across campus laboratories (Lab A, Lab B &amp; overflow sessions). The Chief Proctor will conclude Round 1 and calculate the combined institutional shortlist once all laboratory sittings finish. Shortlisted candidates will receive their Round 2 key via email.

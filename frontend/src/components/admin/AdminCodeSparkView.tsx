@@ -550,6 +550,24 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
   const codingQuestions = useMemo(() => getAllCodingQuestions(), []);
 
+  // Auto-prune stale attempts from older/different exams so only active paper attempts exist in storage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('codedna_mcq_attempts');
+      if (raw && currentAssignedExam?.id) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter(a => a && (a.examId === currentAssignedExam.id || (a as any).isCodeSpark));
+          if (cleaned.length !== parsed.length) {
+            localStorage.setItem('codedna_mcq_attempts', JSON.stringify(cleaned));
+            setAllAttempts(cleaned);
+          }
+        }
+      }
+    } catch {}
+  }, [currentAssignedExam?.id]);
+
+
 
 
   useEffect(() => {
@@ -566,59 +584,54 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-  // Filter attempts for Code Spark Round 1
-
+    // Filter attempts for Code Spark Round 1 (strictly scoped to active exam and deduplicated)
   const aptitudeCandidates = useMemo(() => {
+    const activeExamId = currentAssignedExam?.id;
+    const activeTotalMarks = examTotalMarks || currentAssignedExam?.totalMarks || mcqQuestions.length || 7;
 
-    return allAttempts
+    // Filter attempts strictly belonging to the currently active CodeSpark exam
+    const relevantAttempts = allAttempts.filter((att) => {
+      if (!att) return false;
+      if (activeExamId) {
+        return att.examId === activeExamId || (att as any).isCodeSpark;
+      }
+      return Boolean((att as any).isCodeSpark || att.studentSem === 'Tech Fest' || att.studentDept === 'Axent Candidate');
+    });
 
-      .map((att) => {
+    // Deduplicate: Each candidate roll number appears at most ONCE (latest attempt wins)
+    const latestByRoll = new Map<string, any>();
+    relevantAttempts.forEach((att) => {
+      const roll = (att.studentRoll || '').trim().toUpperCase();
+      if (!roll) return;
+      const existing = latestByRoll.get(roll);
+      if (!existing || (att.submitTime || att.startTime || 0) > (existing.submitTime || existing.startTime || 0)) {
+        latestByRoll.set(roll, att);
+      }
+    });
 
-        const max = att.maxScore || currentAssignedExam?.totalMarks || 1;
-
-        const score = att.score ?? 0;
-
-        const pct = Math.round((score / max) * 100);
-
-        const roll = (att.studentRoll || '').toUpperCase();
-
-        const cand = registeredCandidates.find(
-
-          (c) =>
-
-            (c.rollNumber && c.rollNumber.toUpperCase() === roll) ||
-
-            c.accessKey.toUpperCase() === roll ||
-
-            c.email.toUpperCase() === (att.studentEmail || '').toUpperCase()
-
-        );
-
-        const isShortlisted = shortlistedRolls.includes(roll) || Boolean(cand?.isShortlisted);
-
-        return {
-
-          ...att,
-
-          candidateRecord: cand,
-
-          score,
-
-          totalMarks: max,
-
-          scorePct: pct,
-
-          isShortlisted,
-
-          round2Key: cand?.round2Key
-
-        };
-
-      })
-
-      .sort((a, b) => b.score - a.score);
-
-  }, [allAttempts, shortlistedRolls, registeredCandidates, currentAssignedExam]);
+    return Array.from(latestByRoll.values()).map((att) => {
+      const max = activeTotalMarks;
+      const score = att.score ?? 0;
+      const pct = Math.round((score / max) * 100);
+      const roll = (att.studentRoll || '').toUpperCase();
+      const cand = registeredCandidates.find(
+        (c) =>
+          (c.rollNumber && c.rollNumber.toUpperCase() === roll) ||
+          c.accessKey.toUpperCase() === roll ||
+          c.email.toUpperCase() === (att.studentEmail || '').toUpperCase()
+      );
+      const isShortlisted = shortlistedRolls.includes(roll) || Boolean(cand?.isShortlisted);
+      return {
+        ...att,
+        candidateRecord: cand,
+        score,
+        totalMarks: max,
+        scorePct: pct,
+        isShortlisted,
+        round2Key: cand?.round2Key
+      };
+    }).sort((a, b) => b.score - a.score);
+  }, [allAttempts, shortlistedRolls, registeredCandidates, currentAssignedExam, examTotalMarks, mcqQuestions]);
 
 
 
@@ -1066,7 +1079,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
       const score = matchAttempt?.score ?? matchCand?.round1Score ?? 0;
 
-      const maxScore = matchAttempt?.totalMarks || matchAttempt?.maxScore || examTotalMarks || 0;
+      const maxScore = examTotalMarks || currentAssignedExam?.totalMarks || mcqQuestions.length || 7;
 
 
 
@@ -6783,9 +6796,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                     const email = matchAttempt?.studentEmail || matchCand?.email || 'student@domain.com';
                     const r2Key = matchCand?.round2Key || 'AXENT-R2-PENDING';
                     const score = matchAttempt?.score ?? matchCand?.round1Score ?? 0;
-                    const maxScore = matchAttempt?.totalMarks || matchAttempt?.maxScore || examTotalMarks || 0;
+                    const maxScore = examTotalMarks || currentAssignedExam?.totalMarks || mcqQuestions.length || 7;
 
-                    const emailBody = `Subject: Code Spark 2026: You are Shortlisted for Round 2 (Coding Contest)!\n\nDear ${name},\n\nCongratulations! Based on your performance in the Round 1 General Aptitude Assessment (Score: ${score}/${maxScore}), you have successfully cleared the institutional cutoff and have been shortlisted for Round 2: Algorithmic Code Sprint Arena.\n\nYour Exclusive Round 2 Access Code: ${r2Key}\n\nHow to Start Round 2:\n1. Visit the portal at: ${window.location.origin}/code-spark\n2. Scroll down to candidate check-in.\n3. Enter your Round 2 code: ${r2Key}\n4. Enter the Secure Fullscreen Coding Arena.\n\nBest regards,\n${smtpFromName || 'Code Spark 2026 Examination Board'}`;
+                    const emailBody = `Subject: Code Spark 2026: You are Shortlisted for Round 2 (Coding Contest)!\n\nDear ${name},\n\nCongratulations! Based on your performance in the Round 1 General Aptitude Assessment, you have successfully cleared the institutional cutoff and have been shortlisted for Round 2: Algorithmic Code Sprint Arena.\n\nYour Exclusive Round 2 Access Code: ${r2Key}\n\nHow to Start Round 2:\n1. Visit the portal at: ${window.location.origin}/code-spark\n2. Scroll down to candidate check-in.\n3. Enter your Round 2 code: ${r2Key}\n4. Enter the Secure Fullscreen Coding Arena.\n\nBest regards,\n${smtpFromName || 'Code Spark 2026 Examination Board'}`;
 
                     return (
                       <div key={roll} style={{ background: t.bgCardElevated, border: `1px solid ${t.border}`, borderRadius: '6px', padding: '12px', marginBottom: '10px' }}>
@@ -7431,11 +7444,11 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                   const score = matchAttempt?.score ?? matchCand?.round1Score ?? 0;
 
-                  const maxScore = matchAttempt?.totalMarks || matchAttempt?.maxScore || examTotalMarks || 0;
+                  const maxScore = examTotalMarks || currentAssignedExam?.totalMarks || mcqQuestions.length || 7;
 
 
 
-                  const emailBody = `Subject: Code Spark 2026: You are Shortlisted for Round 2 (Coding Contest)!\n\nDear ${name},\n\nCongratulations! Based on your performance in the Round 1 General Aptitude Assessment (Score: ${score}/${maxScore}), you have successfully cleared the institutional cutoff and have been shortlisted for Round 2: Algorithmic Code Sprint Arena.\n\nYour Exclusive Round 2 Access Code: ${r2Key}\n\nHow to Start Round 2:\n1. Visit the portal at: ${window.location.origin}/code-spark\n2. Scroll down to candidate check-in.\n3. Enter your Round 2 code: ${r2Key}\n4. Enter the Secure Fullscreen Coding Arena.\n\nBest regards,\n${smtpFromName || 'Code Spark 2026 Examination Board'}`;
+                  const emailBody = `Subject: Code Spark 2026: You are Shortlisted for Round 2 (Coding Contest)!\n\nDear ${name},\n\nCongratulations! Based on your performance in the Round 1 General Aptitude Assessment, you have successfully cleared the institutional cutoff and have been shortlisted for Round 2: Algorithmic Code Sprint Arena.\n\nYour Exclusive Round 2 Access Code: ${r2Key}\n\nHow to Start Round 2:\n1. Visit the portal at: ${window.location.origin}/code-spark\n2. Scroll down to candidate check-in.\n3. Enter your Round 2 code: ${r2Key}\n4. Enter the Secure Fullscreen Coding Arena.\n\nBest regards,\n${smtpFromName || 'Code Spark 2026 Examination Board'}`;
 
 
 

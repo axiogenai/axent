@@ -377,8 +377,8 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
                       <span style={{ color: '#f4f4f5' }}>{effectiveRound1Exam?.title || 'CodeSpark Round 1 Aptitude'}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-                      <span style={{ color: '#71717a' }}>Assessment Score:</span>
-                      <strong style={{ color: '#10b981' }}>{round1Score} / {round1MaxScore} ({round1Pct}%)</strong>
+                      <span style={{ color: '#71717a' }}>Examination Status:</span>
+                      <strong style={{ color: '#10b981' }}>SUBMITTED &amp; RECORDED</strong>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
                       <span style={{ color: '#71717a' }}>Session Status:</span>

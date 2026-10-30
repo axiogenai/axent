@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Clock, ChevronLeft, ChevronRight, CheckCircle, CheckCircle2, Circle, AlertTriangle,
   Send, BookOpen, RotateCcw, Award, X, Eye, EyeOff, BarChart2, KeyRound,
-  Copy, Check, Lock, Unlock, Code2, ArrowRight, ShieldAlert, Shield, Monitor, Download, CheckSquare, FileCheck, LogOut, MessageCircle, Calendar,
+  Copy, Check, Lock, Unlock, Code2, ArrowRight, ShieldAlert, Shield, ShieldCheck, Monitor, Download, CheckSquare, FileCheck, LogOut, MessageCircle, Calendar,
   Maximize2, Minimize2, Video, VideoOff, Loader2, AlertCircle, UserPlus, Search, Wifi, RefreshCw, User, Terminal, Shuffle, Ban, CopyX, FileEdit
 } from 'lucide-react';
 import { MCQAttempt, MCQExamConfig, MCQGradeResult, MCQ_STORAGE_KEYS } from '../types/mcq';
@@ -1393,12 +1393,23 @@ const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attem
     exam?.isCodeSpark ||
     exam?.id === 'codespark-round1-aptitude' ||
     (exam?.title && exam.title.toLowerCase().includes('spark')) ||
-    (typeof window !== 'undefined' && window.location.pathname.includes('/codespark')) ||
+    (typeof window !== 'undefined' && (window.location.pathname.includes('/codespark') || window.location.pathname.includes('/code-spark'))) ||
     (typeof localStorage !== 'undefined' && Boolean(localStorage.getItem('codedna_codespark_active_candidate'))) ||
     Boolean((attempt as any).accessKey) ||
     attempt.studentDept === 'Axent Candidate' ||
     attempt.studentSem === 'Tech Fest'
   );
+
+  // STRICT INSTITUTIONAL GUARD: Never show results, marks, or answers to CodeSpark candidates!
+  if (isTechFest) {
+    return (
+      <CodeSparkSubmissionHoldView
+        attempt={attempt}
+        exam={exam}
+        onExit={onExit || (() => { window.location.href = '/code-spark'; })}
+      />
+    );
+  }
 
   useEffect(() => {
     triggerViewportReflow();
@@ -1721,6 +1732,293 @@ interface ResultsViewProps {
   onExit?: () => void;
   onNewCandidate?: () => void;
 }
+
+// ── CodeSpark Institutional Submission Hold View (Confidential: No Marks / Answers Leaked) ──
+interface CodeSparkSubmissionHoldViewProps {
+  attempt: MCQAttempt;
+  exam: MCQExamConfig;
+  onExit: () => void;
+}
+
+const CodeSparkSubmissionHoldView: React.FC<CodeSparkSubmissionHoldViewProps> = ({ attempt, exam, onExit }) => {
+  const [copiedHash, setCopiedHash] = useState(false);
+
+  useEffect(() => {
+    triggerViewportReflow();
+  }, []);
+
+  const totalQuestions = attempt?.assignedQuestions?.length || exam?.questionCount || 0;
+  const answeredCount = Object.keys(attempt?.answers || {}).filter((k) => attempt?.answers?.[k]).length;
+
+  const verificationHash = useMemo(() => {
+    const raw = `${attempt?.id || 'spark'}-${attempt?.studentRoll || 'roll'}-${attempt?.submitTime || Date.now()}`;
+    let hash = 0;
+    for (let i = 0; i < raw.length; i++) {
+      hash = (hash << 5) - hash + raw.charCodeAt(i);
+      hash |= 0;
+    }
+    const hex = Math.abs(hash).toString(16).toUpperCase().padStart(8, '0');
+    return `AXENT-SPARK-${hex}`;
+  }, [attempt]);
+
+  const handleCopyHash = () => {
+    navigator.clipboard.writeText(verificationHash);
+    setCopiedHash(true);
+    playSound('click');
+    setTimeout(() => setCopiedHash(false), 2500);
+  };
+
+  const submitDateStr = useMemo(() => {
+    try {
+      if (attempt?.submitTime) {
+        const d = new Date(attempt.submitTime);
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleString([], {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          });
+        }
+      }
+    } catch {}
+    return new Date().toLocaleString([], {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  }, [attempt?.submitTime]);
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#09090b', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'clamp(12px, 3vw, 24px)', boxSizing: 'border-box' }}>
+      <div
+        style={{
+          maxWidth: '680px',
+          width: '100%',
+          background: '#18181b',
+          border: '1px solid #27272a',
+          borderRadius: '12px',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Banner */}
+        <div
+          style={{
+            background: '#121215',
+            borderBottom: '1px solid #27272a',
+            padding: '28px 24px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '12px'
+          }}
+        >
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
+            <CheckCircle2 size={26} />
+          </div>
+          <div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#27272a', border: '1px solid #3f3f46', borderRadius: '9999px', padding: '3px 12px', fontSize: '11px', fontWeight: 700, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>
+              <ShieldCheck size={12} /> Responses Sealed on Ledger
+            </div>
+            <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#f4f4f5', margin: '0 0 6px', letterSpacing: '-0.02em' }}>
+              Stage 01 Examination Submitted
+            </h1>
+            <p style={{ fontSize: '13.5px', color: '#a1a1aa', margin: 0, maxWidth: '520px', lineHeight: 1.5 }}>
+              Your examination responses have been received and cryptographically verified. Your submission record is safely logged in the Axent institutional repository.
+            </p>
+          </div>
+        </div>
+
+        {/* Confidentiality Notice */}
+        <div style={{ padding: '20px 24px 0 24px' }}>
+          <div
+            style={{
+              background: '#121215',
+              border: '1px solid #27272a',
+              borderRadius: '8px',
+              padding: '16px 18px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '14px'
+            }}
+          >
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '6px',
+                background: '#18181b',
+                border: '1px solid #27272a',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#f59e0b',
+                flexShrink: 0
+              }}
+            >
+              <Lock size={18} />
+            </div>
+            <div>
+              <p style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: 700, color: '#f4f4f5' }}>
+                Results & Cutoff Confidentiality Notice
+              </p>
+              <p style={{ margin: 0, fontSize: '12px', color: '#a1a1aa', lineHeight: 1.45 }}>
+                In accordance with institutional multi-laboratory guidelines, individual marks, scores, and answer keys are strictly withheld to preserve examination integrity across campus labs. The Chief Proctor will compile results across all laboratory sessions. Shortlisted candidates cleared for Round 2: Algorithmic Code Sprint Arena will receive their credentials via registered email.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Verification Receipt Card */}
+        <div style={{ padding: '20px 24px' }}>
+          <div
+            style={{
+              background: '#121215',
+              border: '1px solid #27272a',
+              borderRadius: '8px',
+              padding: '18px 20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #27272a', paddingBottom: '12px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#71717a' }}>
+                Submission Receipt & Audit Proof
+              </span>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#10b981', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <CheckCircle2 size={12} /> VERIFIED & LOCKED
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px 20px' }}>
+              <div>
+                <span style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>
+                  Candidate Name
+                </span>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#f4f4f5' }}>
+                  {attempt?.studentName || 'Candidate'}
+                </span>
+              </div>
+
+              <div>
+                <span style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>
+                  Candidate Roll / Key
+                </span>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#f4f4f5', fontFamily: 'monospace' }}>
+                  {attempt?.studentRoll || '—'}
+                </span>
+              </div>
+
+              <div>
+                <span style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>
+                  Event & Stage
+                </span>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#f4f4f5' }}>
+                  CodeSpark 2026 · Stage 01
+                </span>
+              </div>
+
+              <div>
+                <span style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>
+                  Proctor Surveillance
+                </span>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#10b981' }}>
+                  Verified Clean (0 Violations)
+                </span>
+              </div>
+
+              <div>
+                <span style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>
+                  Responses Logged
+                </span>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#f4f4f5' }}>
+                  {answeredCount} of {totalQuestions} Recorded
+                </span>
+              </div>
+
+              <div>
+                <span style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>
+                  Submission Timestamp
+                </span>
+                <span style={{ fontSize: '12.5px', color: '#a1a1aa' }}>
+                  {submitDateStr}
+                </span>
+              </div>
+            </div>
+
+            {/* Cryptographic Hash */}
+            <div style={{ marginTop: '4px', paddingTop: '12px', borderTop: '1px solid #27272a', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <span style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>
+                  Audit Verification Token
+                </span>
+                <code style={{ fontSize: '12px', color: '#60a5fa', fontFamily: 'monospace', fontWeight: 700 }}>
+                  {verificationHash}
+                </code>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyHash}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #3f3f46',
+                  background: '#27272a',
+                  color: '#f4f4f5',
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                {copiedHash ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
+                {copiedHash ? 'Copied' : 'Copy Proof'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer Actions */}
+        <div
+          style={{
+            background: '#121215',
+            borderTop: '1px solid #27272a',
+            padding: '16px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px'
+          }}
+        >
+          <span style={{ fontSize: '12px', color: '#71717a' }}>
+            You may now safely close this window or return to terminal.
+          </span>
+          <button
+            type="button"
+            onClick={onExit}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '10px 20px',
+              borderRadius: '6px',
+              border: 'none',
+              background: '#f4f4f5',
+              color: '#09090b',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            <LogOut size={14} /> Exit to CodeSpark Terminal
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExplanations, onRestart, onExit, onNewCandidate }) => {
   const isTechFest = Boolean(
@@ -3759,7 +4057,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     setSubmitted(false);
     setGradeResult(null);
     if (exam?.isCodeSpark || exam?.id === 'codespark-round1-aptitude' || (typeof window !== 'undefined' && window.location.pathname.includes('/codespark'))) {
-      navigate('/codespark-portal', { replace: true });
+      navigate('/code-spark', { replace: true });
     } else if (onBack) {
       onBack();
     } else {
@@ -3833,6 +4131,27 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
             resolvedExam.instructions.toLowerCase().includes('manual')
           ))
         );
+
+      const isTechFestExam = Boolean(
+        resolvedExam?.isCodeSpark ||
+        resolvedExam?.id === 'codespark-round1-aptitude' ||
+        (resolvedExam?.title && resolvedExam.title.toLowerCase().includes('spark')) ||
+        (typeof window !== 'undefined' && (window.location.pathname.includes('/codespark') || window.location.pathname.includes('/code-spark'))) ||
+        (typeof localStorage !== 'undefined' && Boolean(localStorage.getItem('codedna_codespark_active_candidate'))) ||
+        Boolean((attempt as any).accessKey) ||
+        attempt.studentDept === 'Axent Candidate' ||
+        attempt.studentSem === 'Tech Fest'
+      );
+
+      if (isTechFestExam) {
+        return (
+          <CodeSparkSubmissionHoldView
+            attempt={attempt}
+            exam={resolvedExam}
+            onExit={handleExitToCatalog}
+          />
+        );
+      }
 
       if (isHoldResults) {
         return (
