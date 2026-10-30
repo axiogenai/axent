@@ -53,6 +53,7 @@ async function execute(code, language, stdin) {
 
 export async function getRound2AssignedProblems(keyInput) {
   const key = normalizeRound2Key(keyInput);
+  if (key.length < 8 || key.length > 64) { const error = new Error("This Round 2 key is outdated or invalid. Ask the administrator to issue a new secure key."); error.statusCode = 403; throw error; }
   const rosterRows = await supabaseRest("candidate_stations?id=eq.codespark_system_config&select=code,student");
   const roster = parseCodeSparkConfig(rosterRows?.[0]);
   const candidate = roster?.candidates?.find((item) => item.round2Key && normalizeRound2Key(item.round2Key) === key);
