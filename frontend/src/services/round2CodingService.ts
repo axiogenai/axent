@@ -435,193 +435,47 @@ export function saveRound2Problems(problems: Round2Problem[]): void {
 
 
 
-export async function saveRound2ProblemsToCloud(problems: Round2Problem[]): Promise<boolean> {
-
-
-
-  if (!supabase) return false;
-
-
-
-  try {
-
-
-
-    const payload = {
-
-
-
-      problems,
-
-
-
-      updatedAt: Date.now()
-
-
-
-    };
-
-
-
-    await supabase.from('candidate_stations').upsert({
-
-
-
-      id: ROUND2_QUESTIONS_CONFIG_ID,
-
-
-
-      lab_id: 'SYSTEM_CONFIG',
-
-
-
-      station_number: 'CONFIG',
-
-
-
-      status: 'CONFIG',
-
-
-
-      code: JSON.stringify(payload),
-
-
-
-      student: payload,
-
-
-
-      last_updated_timestamp: Date.now()
-
-
-
-    });
-
-
-
-    return true;
-
-
-
-  } catch (err) {
-
-
-
-    console.warn('[Round 2] Failed to save questions to cloud:', err);
-
-
-
-    return false;
-
-
-
-  }
-
-
-
+async function round2ApiHeaders(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token
+    ? { "Content-Type": "application/json", Authorization: `Bearer ${data.session.access_token}` }
+    : { "Content-Type": "application/json" };
 }
 
-
+export async function saveRound2ProblemsToCloud(problems: Round2Problem[]): Promise<boolean> {
+  try {
+    const headers = await round2ApiHeaders();
+    if (!headers.Authorization) throw new Error("Sign in as a CodeSpark administrator to publish questions.");
+    const response = await fetch("/api/codespark/round2-problems", {
+      method: "POST", headers, body: JSON.stringify({ problems })
+    });
+    return response.ok;
+  } catch (err) {
+    console.warn("[Round 2] Secure problem publication failed:", err);
+    return false;
+  }
+}
 
 export async function fetchRound2ProblemsFromCloud(): Promise<Round2Problem[]> {
-
-
-
-  if (!supabase) return getAllRound2Problems();
-
-
-
   try {
-
-
-
-    const { data: rec, error } = await supabase
-
-
-
-      .from('candidate_stations')
-
-
-
-      .select('code, student')
-
-
-
-      .eq('id', ROUND2_QUESTIONS_CONFIG_ID)
-
-
-
-      .maybeSingle();
-
-
-
-    if (!error && rec) {
-
-
-
-      const cfg =
-
-
-
-        rec.student && typeof rec.student === 'object' && Array.isArray((rec.student as any).problems)
-
-
-
-          ? (rec.student as any)
-
-
-
-          : rec.code
-
-
-
-          ? JSON.parse(rec.code)
-
-
-
-          : null;
-
-
-
-      if (cfg && Array.isArray(cfg.problems) && cfg.problems.length > 0) {
-
-
-
-        localStorage.setItem('codedna_codespark_r2_problems', JSON.stringify(cfg.problems));
-
-
-
-        return cfg.problems;
-
-
-
+    const headers = await round2ApiHeaders();
+    const response = await fetch("/api/codespark/round2-problems", { headers });
+    if (response.ok) {
+      const result = await response.json();
+      if (Array.isArray(result.problems)) {
+        localStorage.setItem("codedna_codespark_r2_problems", JSON.stringify(result.problems));
+        return result.problems;
       }
-
-
-
     }
-
-
-
-  } catch (e) {
-
-
-
-    console.warn('[Round 2] fetchRound2ProblemsFromCloud error:', e);
-
-
-
+  } catch (err) {
+    console.warn("[Round 2] Secure problem retrieval failed:", err);
   }
 
-
-
-  return getAllRound2Problems();
-
-
-
+  const local = getAllRound2Problems();
+  const { data } = await supabase.auth.getSession();
+  const isAdmin = data.session?.user?.app_metadata?.role === "admin";
+  return isAdmin ? local : local.map((problem) => ({ ...problem, hiddenTestCases: [] }));
 }
-
-
 
 /**
 
