@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readBody, requireAdmin, setApiHeaders, supabaseRest } from "./_security.js";
 import { getRound2AssignedProblems, gradeRound2Code, normalizeRound2Key } from "./_round2-grader.js";
 
@@ -17,6 +18,7 @@ export default async function handler(req, res) {
       }
       await supabaseRest("candidate_stations?id=like.r2_sub_*", { method: "DELETE" });
       await supabaseRest("candidate_stations?id=like.r2_station_*", { method: "DELETE" });
+      await supabaseRest("codespark_round2_finalizations", { method: "DELETE" });
       return res.status(200).json({ success: true });
     } catch (error) {
       console.error("[CodeSpark submissions admin]", error?.message || "request failed");
@@ -91,19 +93,50 @@ export default async function handler(req, res) {
     };
 
     const rowId = `r2_sub_${cleanId(roll)}`;
+    const stationNumber = String(submission.stationNumber || "Station #01").slice(0, 80);
+    const student = {
+      name: candidate.name, rollNumber: candidate.rollNumber || "",
+      email: candidate.email || "", score: safeSubmission.totalScore,
+      maxScore: safeSubmission.maxScore, isSubmitted
+    };
+    const candidateHash = createHash("sha256")
+      .update(`${key}:${process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`)
+      .digest("hex");
+
+    if (isSubmitted) {
+      const finalized = await supabaseRest("rpc/finalize_codespark_round2_submission", {
+        method: "POST",
+        body: JSON.stringify({
+          p_candidate_hash: candidateHash,
+          p_station_id: rowId,
+          p_submission: safeSubmission,
+          p_student: student,
+          p_station_number: stationNumber
+        })
+      });
+      const sealedSubmission = finalized?.submission || safeSubmission;
+      return res.status(200).json({
+        success: true,
+        alreadyFinalized: finalized?.created === false,
+        submission: { ...sealedSubmission, candidateKey: String(submission.candidateKey || submission.round2Key || "") }
+      });
+    }
+
+    const existingFinalization = await supabaseRest(`codespark_round2_finalizations?candidate_hash=eq.${candidateHash}&select=candidate_hash`);
+    const existingStation = await supabaseRest(`candidate_stations?id=eq.${rowId}&select=status`);
+    if ((existingFinalization?.length || 0) > 0 || existingStation?.[0]?.status === "SUBMITTED") {
+      return res.status(409).json({ success: false, error: "This Round 2 submission has already been finalized and cannot be changed." });
+    }
+
     await supabaseRest("candidate_stations?on_conflict=id", {
       method: "POST",
       headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
       body: JSON.stringify([{
         id: rowId, lab_id: "ROUND_2_ARENA",
-        station_number: String(submission.stationNumber || "Station #01").slice(0, 80),
-        status: isSubmitted ? "SUBMITTED" : "IN_PROGRESS",
+        station_number: stationNumber,
+        status: "IN_PROGRESS",
         code: JSON.stringify(safeSubmission),
-        student: {
-          name: candidate.name, rollNumber: candidate.rollNumber || "",
-          email: candidate.email || "", score: safeSubmission.totalScore,
-          maxScore: safeSubmission.maxScore, isSubmitted
-        },
+        student,
         last_updated_timestamp: Date.now()
       }])
     });
