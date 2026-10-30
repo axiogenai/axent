@@ -1,3 +1,5 @@
+export const config = { maxDuration: 60 };
+
 import { readBody, setApiHeaders } from "./_security.js";
 import { gradeRound2Code } from "./_round2-grader.js";
 
