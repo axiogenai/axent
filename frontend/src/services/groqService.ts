@@ -16,11 +16,7 @@ import {
 import { MCQQuestion, MCQExamConfig } from '../types/mcq';
 import { saveQuestion, saveExam } from './mcqService';
 
-const DEFAULT_KEY_POOL: string[] = [];
 const PRIMARY_MODEL = 'qwen/qwen3.8-27b';
-const FALLBACK_MODELS = ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
-
-let keyRoundRobinCounter = 0;
 
 export function getAllApiKeyPool(): string[] {
   // API credentials are server-only. Never read keys from localStorage or Vite env.
@@ -73,21 +69,6 @@ interface ChatMessage {
 
 export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function parseGroqWaitTime(errorBody: string, retryAfterHeader: string | null): number {
-  if (retryAfterHeader) {
-    const sec = parseFloat(retryAfterHeader);
-    if (!isNaN(sec) && sec > 0) return Math.ceil(sec * 1000) + 600;
-  }
-  const match = errorBody.match(/try again in ([0-9.]+)(m?s)/i);
-  if (match) {
-    const val = parseFloat(match[1]);
-    const unit = match[2].toLowerCase();
-    if (unit === 'ms') return Math.ceil(val) + 400;
-    if (unit === 's') return Math.ceil(val * 1000) + 600;
-    if (unit === 'm') return Math.ceil(val * 60 * 1000) + 600;
-  }
-  return 3600;
-}
 
 async function callGroqChat(
   messages: ChatMessage[],
