@@ -1791,28 +1791,19 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                   <span className="font-mono text-xl sm:text-2xl font-black text-black select-none tracking-[0.1em] sm:tracking-[0.25em] shrink-0">
                     {isRound1Concluded ? 'AXENT-R2-' : 'AXENT-'}
                   </span>
-                  <div className="flex items-center border-2 border-black bg-white focus-within:ring-2 focus-within:ring-[#ea1a1c]">
-                    {isRound1Concluded && (
-                      <span className="pl-3 pr-1 font-mono text-sm font-black text-[#ea1a1c] whitespace-nowrap">AXENT-R2-</span>
-                    )}
-                    <input
-                      ref={keyInputRef}
-                      type="text"
-                      maxLength={48}
-                      value={keyDigits}
-                      onChange={(e) => handleDigitsInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleDirectExamLaunch();
-                        }
-                      }}
-                      placeholder="XXXX"
-                      className="min-w-0 flex-1 outline-none"
-                    />
-                  </div>
-                  {false && <input
-                    autoFocus
+                  <input
+                    ref={keyInputRef}
+                    type="text"
+                    maxLength={48}
+                    value={keyDigits}
+                    onChange={(e) => handleDigitsInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleDirectExamLaunch();
+                      }
+                    }}
+                    placeholder="XXXX"
                     className="flex-1 min-w-0 bg-transparent border-none outline-none font-mono text-xl sm:text-2xl font-black tracking-[0.1em] sm:tracking-[0.25em] text-black placeholder-zinc-300 p-0 m-0"
                   />
                   {activeCandidate && keyDigits.length >= 4 && (
