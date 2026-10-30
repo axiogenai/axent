@@ -91,6 +91,8 @@ BEGIN
     RAISE EXCEPTION 'invalid Round 2 finalization payload' USING ERRCODE='22023';
   END IF;
 
+  PERFORM pg_advisory_xact_lock(hashtext(p_candidate_hash));
+
   SELECT result INTO v_existing
     FROM public.codespark_round2_finalizations
     WHERE candidate_hash = p_candidate_hash
@@ -126,3 +128,59 @@ $$;
 
 REVOKE ALL ON FUNCTION public.finalize_codespark_round2_submission(text,text,jsonb,jsonb,text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.finalize_codespark_round2_submission(text,text,jsonb,jsonb,text) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.save_codespark_round2_progress(
+  p_candidate_hash text,
+  p_station_id text,
+  p_submission jsonb,
+  p_student jsonb,
+  p_station_number text
+) RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_now bigint;
+  v_status text;
+BEGIN
+  IF p_candidate_hash IS NULL OR length(p_candidate_hash) <> 64
+     OR p_station_id IS NULL OR p_station_id !~ '^r2_sub_[A-Z0-9_-]{1,80}$'
+     OR p_submission IS NULL OR jsonb_typeof(p_submission) <> 'object'
+     OR COALESCE((p_submission->>'isSubmitted')::boolean, false) IS TRUE THEN
+    RAISE EXCEPTION 'invalid Round 2 progress payload' USING ERRCODE='22023';
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtext(p_candidate_hash));
+
+  IF EXISTS (SELECT 1 FROM public.codespark_round2_finalizations WHERE candidate_hash=p_candidate_hash) THEN
+    RETURN false;
+  END IF;
+
+  SELECT status INTO v_status
+    FROM public.candidate_stations
+    WHERE id=p_station_id
+    FOR UPDATE;
+  IF v_status='SUBMITTED' THEN RETURN false; END IF;
+
+  v_now := floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint;
+  INSERT INTO public.candidate_stations(
+    id, lab_id, station_number, status, code, student, last_updated_timestamp
+  ) VALUES (
+    p_station_id, 'ROUND_2_ARENA', COALESCE(NULLIF(p_station_number,''),'Station #01'),
+    'IN_PROGRESS', p_submission::text, COALESCE(p_student,'{}'::jsonb), v_now
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    lab_id=EXCLUDED.lab_id,
+    station_number=EXCLUDED.station_number,
+    status='IN_PROGRESS',
+    code=EXCLUDED.code,
+    student=EXCLUDED.student,
+    last_updated_timestamp=EXCLUDED.last_updated_timestamp
+  WHERE public.candidate_stations.status <> 'SUBMITTED';
+  RETURN true;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.save_codespark_round2_progress(text,text,jsonb,jsonb,text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.save_codespark_round2_progress(text,text,jsonb,jsonb,text) TO service_role;
