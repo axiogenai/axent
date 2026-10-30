@@ -59,4 +59,4 @@ Do not paste credentials into GitHub issues, commits, chat, or frontend environm
 - `/api/codespark/round2-submissions`: server-authoritative final grading, persistence, leaderboard retrieval and administrator reset.
 - `/api/codespark/public-exam`: exposes only the configured active exam's safe metadata.
 
-The service-role API routes require `SUPABASE_SERVICE_ROLE_KEY`. The persistent failed-key throttling requires the new migration table.
+The service-role API routes require `SUPABASE_SERVICE_ROLE_KEY`. Persistent failed-key throttling, per-candidate grading throttling, and one-time final-submission sealing require the tables and RPC functions in the new migration.
