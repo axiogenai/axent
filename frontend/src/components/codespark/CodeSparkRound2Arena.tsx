@@ -190,6 +190,26 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     };
   }, [recordRound2Violation, submission.isSubmitted]);
 
+
+  useEffect(() => {
+    if (submission.isSubmitted) return;
+    let active = true;
+    void fetch('/api/codespark/proctor-event', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'status', key: candidateKey })
+    }).then(async (response) => {
+      const result = await response.json();
+      if (!active || !response.ok || !result?.success) return;
+      const count = Math.max(0, Number(result.strikeCount) || 0);
+      setProctorStrikes(count);
+      if (result.locked) {
+        setProctorLocked(true);
+        setStrikeNotice({ strike: Math.max(3, count), reason: 'This workstation was previously locked by the examination proctoring system.' });
+      }
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [candidateKey, submission.isSubmitted]);
+
   // Current Active Question (1-indexed: 1 to 5)
   const [currentQIndex, setCurrentQIndex] = useState<number>(submission.currentQuestion || 1);
   const currentProblem: Round2Problem = useMemo(() => {
