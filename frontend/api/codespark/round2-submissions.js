@@ -69,7 +69,6 @@ export default async function handler(req, res) {
     const { candidate, problems } = await getRound2AssignedProblems(key, isSubmitted || true);
     const reports = submission.questionReports && typeof submission.questionReports === "object" ? submission.questionReports : {};
     const reportEntries = Object.values(reports).slice(0, 5);
-    const isSubmitted = submission.isSubmitted === true;
     const safeReports = {};
     let totalScore = 0;
     let maxScore = 0;
