@@ -1,5 +1,5 @@
-import { parseCodeSparkConfig, readBody, requireAdmin, setApiHeaders, supabaseRest } from "./_security.js";
-import { gradeRound2Code, normalizeRound2Key } from "./_round2-grader.js";
+import { readBody, requireAdmin, setApiHeaders, supabaseRest } from "./_security.js";
+import { getRound2AssignedProblems, gradeRound2Code, normalizeRound2Key } from "./_round2-grader.js";
 
 const cleanId = (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9_-]/g, "_").slice(0, 80);
 
@@ -34,44 +34,40 @@ export default async function handler(req, res) {
   }
 
   try {
-    const rosterRows = await supabaseRest("candidate_stations?id=eq.codespark_system_config&select=code,student");
-    const roster = parseCodeSparkConfig(rosterRows?.[0]);
-    const candidate = roster?.candidates?.find((item) => item.round2Key && normalizeRound2Key(item.round2Key) === key);
-    if (!candidate || !(candidate.isShortlisted || candidate.status === "SHORTLISTED" || candidate.round2Key)) {
-      return res.status(403).json({ success: false, error: "A valid shortlisted Round 2 key is required." });
-    }
-
+    const { candidate, problems } = await getRound2AssignedProblems(key);
     const reports = submission.questionReports && typeof submission.questionReports === "object" ? submission.questionReports : {};
-    const reportEntries = Object.entries(reports).slice(0, 5);
+    const reportEntries = Object.values(reports).slice(0, 5);
     const isSubmitted = submission.isSubmitted === true;
     const safeReports = {};
     let totalScore = 0;
     let maxScore = 0;
     let dominantLanguage = "Python";
 
-    for (const [number, raw] of reportEntries) {
-      const questionNumber = Number(number);
+    for (let index = 0; index < problems.length; index++) {
+      const problem = problems[index];
+      const raw = reportEntries.find((item) => String(item?.questionId || "") === String(problem.id)) || {};
       const code = String(raw?.code || "");
-      const language = String(raw?.language || "Python");
-      const questionId = String(raw?.questionId || "");
-      if (!Number.isInteger(questionNumber) || questionNumber < 1 || questionNumber > 5 || code.length > 100000) continue;
+      const language = ["Python", "C", "C++", "Java"].includes(String(raw?.language)) ? String(raw.language) : "Python";
+      const questionNumber = index + 1;
+      if (code.length > 100000) return res.status(400).json({ success: false, error: "A code submission exceeds the allowed size." });
 
       let report;
       if (isSubmitted) {
-        report = await gradeRound2Code(key, questionId, code, language);
+        report = await gradeRound2Code(key, problem.id, code, language);
         totalScore += report.score;
         maxScore += report.maxScore;
       } else {
         report = {
-          questionId, sampleResults: [], hiddenResults: [], passedTests: 0,
-          totalTests: 0, score: 0, maxScore: 0, status: "PENDING"
+          questionId: problem.id, sampleResults: [], hiddenResults: [], passedTests: 0,
+          totalTests: 0, score: 0, maxScore: Number(problem.marks) || 20, status: "PENDING"
         };
       }
       safeReports[questionNumber] = {
-        questionNumber, questionId, questionTitle: String(raw?.questionTitle || "").slice(0, 200),
+        questionNumber, questionId: problem.id,
+        questionTitle: String(problem.title || "").slice(0, 200),
         code, language, ...report, compiledAt: Date.now()
       };
-      if (language) dominantLanguage = language;
+      dominantLanguage = language;
     }
 
     const roll = String(candidate.rollNumber || candidate.email || candidate.name || "candidate").trim();
