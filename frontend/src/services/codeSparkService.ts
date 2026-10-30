@@ -727,10 +727,15 @@ export function getStoredSmtpConfig(): SmtpConfig | null {
     const raw = localStorage.getItem(SMTP_CONFIG_STORAGE_KEY);
     if (raw) {
       const saved = JSON.parse(raw);
+      const safePreferences = {
+        smtp_from_name: saved.smtp_from_name || "Code Spark 2026 Examination Board"
+      };
+      // Purge any SMTP credentials written by the legacy client-side settings.
+      localStorage.setItem(SMTP_CONFIG_STORAGE_KEY, JSON.stringify(safePreferences));
       return {
         smtp_user: "",
         smtp_password: "",
-        smtp_from_name: saved.smtp_from_name || "Code Spark 2026 Examination Board"
+        smtp_from_name: safePreferences.smtp_from_name
       };
     }
   } catch {}
