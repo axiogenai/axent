@@ -365,34 +365,32 @@ export const PaperSetterPortal: React.FC = () => {
             <span>{isSyncing ? 'Syncing...' : 'Sync'}</span>
           </button>
 
-          {/* 1-Click to Chief Proctor CCTV Control Room (For Admins) */}
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => {
-                playSound('click');
-                navigate('/admin');
-              }}
-              className="btn btn-secondary btn-sm"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '11.5px',
-                fontWeight: 600,
-                padding: '6px 14px',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid rgba(239, 68, 68, 0.4)',
-                background: 'rgba(239, 68, 68, 0.08)',
-                color: '#ef4444',
-                cursor: 'pointer'
-              }}
-              title="Return to Chief Proctor CCTV Live Surveillance Control Room"
-            >
-              <ShieldAlert size={13} color="#ef4444" />
-              <span>Chief Proctor CCTV</span>
-            </button>
-          )}
+          {/* 1-Click to Chief Proctor CCTV Control Room */}
+          <button
+            type="button"
+            onClick={() => {
+              playSound('click');
+              navigate('/admin');
+            }}
+            className="btn btn-secondary btn-sm"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '11.5px',
+              fontWeight: 600,
+              padding: '6px 14px',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              background: 'rgba(239, 68, 68, 0.08)',
+              color: '#ef4444',
+              cursor: 'pointer'
+            }}
+            title="Return to Chief Proctor CCTV Live Surveillance Control Room"
+          >
+            <ShieldAlert size={13} color="#ef4444" />
+            <span>Chief Proctor CCTV</span>
+          </button>
         </div>
       </div>
 

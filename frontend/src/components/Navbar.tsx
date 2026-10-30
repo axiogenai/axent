@@ -144,23 +144,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   } else if (isLoginRoute) {
     // Authority Gateway / Login — No student tabs!
     activeNavItems = [];
-  } else if (isAdminRoute) {
-    // Admin CCTV Surveillance — Always expose both Admin CCTV & Paper Setter Portal
+  } else if (isAdminRoute || isPaperSetterRoute) {
+    // Authority Gateway / Administration — Always expose both CCTV Live Proctoring & Paper Setter Portal
     activeNavItems = [
       { path: '/admin', label: 'CCTV Live Proctoring', icon: ShieldAlert, badge: 'PROCTOR', badgeColor: 'danger' },
       { path: '/paper-setter', label: 'Paper Setter Portal', icon: Layers }
     ];
-  } else if (isPaperSetterRoute) {
-    if (isAdmin) {
-      activeNavItems = [
-        { path: '/admin', label: 'CCTV Live Proctoring', icon: ShieldAlert, badge: 'PROCTOR', badgeColor: 'danger' },
-        { path: '/paper-setter', label: 'Paper Setter Portal', icon: Layers }
-      ];
-    } else {
-      activeNavItems = [
-        { path: '/paper-setter', label: 'Paper Setter Portal', icon: Layers }
-      ];
-    }
   } else if (isMcqRoute || examMode === 'MCQ') {
     activeNavItems = [];
   } else {
@@ -279,8 +268,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            {/* If in Paper Setter AND user has Admin privileges, provide 1-click switch back to Admin CCTV */}
-            {isPaperSetterRoute && isAdmin && (
+            {/* If in Paper Setter, provide 1-click switch back to Admin CCTV */}
+            {isPaperSetterRoute && (
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={() => navigate('/admin')}

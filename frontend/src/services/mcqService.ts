@@ -722,6 +722,30 @@ export function getAllExams(): MCQExamConfig[] {
     } catch {}
   }
 
+  // Self-healing recovery: If active exams list is empty but backup exists, restore valid exams
+  if (list.length === 0 && typeof window !== 'undefined') {
+    try {
+      const rawBackup = localStorage.getItem('codedna_mcq_exams_backup');
+      if (rawBackup) {
+        const parsedBackup = JSON.parse(rawBackup);
+        if (Array.isArray(parsedBackup) && parsedBackup.length > 0) {
+          let unDeletedAny = false;
+          parsedBackup.forEach((be: any) => {
+            if (be && be.id && deletedIds.has(be.id)) {
+              deletedIds.delete(be.id);
+              unDeletedAny = true;
+            }
+          });
+          if (unDeletedAny) {
+            localStorage.setItem(DELETED_EXAMS_KEY, JSON.stringify(Array.from(deletedIds)));
+          }
+          saveQuietly(MCQ_STORAGE_KEYS.EXAMS, parsedBackup);
+          return parsedBackup as MCQExamConfig[];
+        }
+      }
+    } catch {}
+  }
+
   return list;
 }
 
@@ -784,6 +808,9 @@ export function createExam(partial: Omit<MCQExamConfig, 'id' | 'createdAt' | 'up
   all.push(exam);
 
   save(MCQ_STORAGE_KEYS.EXAMS, all);
+  try {
+    localStorage.setItem('codedna_mcq_exams_backup', JSON.stringify(all));
+  } catch {}
 
   saveExamToCloud(exam);
 
@@ -854,6 +881,9 @@ export function saveExam(exam: MCQExamConfig): MCQExamConfig {
   }
 
   save(MCQ_STORAGE_KEYS.EXAMS, all);
+  try {
+    localStorage.setItem('codedna_mcq_exams_backup', JSON.stringify(all));
+  } catch {}
 
   saveExamToCloud(updated);
 
@@ -876,6 +906,9 @@ export async function deleteExam(id: string): Promise<boolean> {
   const all = getAllExams().filter((e) => e.id !== id);
 
   save(MCQ_STORAGE_KEYS.EXAMS, all);
+  try {
+    localStorage.setItem('codedna_mcq_exams_backup', JSON.stringify(all));
+  } catch {}
 
 
 
@@ -1108,6 +1141,9 @@ export function publishExam(id: string): string[] {
   all[idx] = { ...all[idx], status: 'PUBLISHED', publishedAt: Date.now(), updatedAt: Date.now() };
 
   save(MCQ_STORAGE_KEYS.EXAMS, all);
+  try {
+    localStorage.setItem('codedna_mcq_exams_backup', JSON.stringify(all));
+  } catch {}
 
   saveExamToCloud(all[idx]);
 
@@ -1134,6 +1170,9 @@ export function closeExam(id: string): void {
     all[idx] = { ...exam, status: 'CLOSED', updatedAt: Date.now() };
 
     save(MCQ_STORAGE_KEYS.EXAMS, all);
+  try {
+    localStorage.setItem('codedna_mcq_exams_backup', JSON.stringify(all));
+  } catch {}
 
     saveExamToCloud(all[idx]);
 
@@ -2720,36 +2759,21 @@ export async function syncFromSupabase(): Promise<void> {
 
 
 
-      // Supabase is authoritative across devices. A local exam is only uploaded if freshly created (< 5 mins).
-
-      // If older and missing from cloud, it was deleted on another device or by admin, so purge locally.
-
-      const fiveMinsAgo = Date.now() - 5 * 60 * 1000;
-
+      // Intelligently reconcile local and cloud exams.
+      // Cloud sync MUST NEVER destroy local papers or exams due to network delays or RLS restrictions!
       localExams.forEach((e) => {
-
         if (!deletedIds.has(e.id) && !mergedExamMap.has(e.id)) {
-
-          const isFreshDraft = (e.createdAt || 0) > fiveMinsAgo && e.status === 'DRAFT';
-
-          if (isFreshDraft) {
-
-            mergedExamMap.set(e.id, e);
-
-            void saveExamToCloud(e);
-
-          } else {
-
-            recordExamDeleted(e.id);
-
-          }
-
+          mergedExamMap.set(e.id, e);
+          // Re-attempt uploading to cloud in case previous attempt had network issue or RLS error
+          void saveExamToCloud(e);
         }
-
       });
 
-      save(MCQ_STORAGE_KEYS.EXAMS, Array.from(mergedExamMap.values()));
-
+      const reconciledExams = Array.from(mergedExamMap.values());
+      save(MCQ_STORAGE_KEYS.EXAMS, reconciledExams);
+      try {
+        localStorage.setItem('codedna_mcq_exams_backup', JSON.stringify(reconciledExams));
+      } catch {}
       notifyExamsChanged();
 
     }

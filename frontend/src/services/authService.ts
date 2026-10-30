@@ -40,11 +40,17 @@ export function getStoredAuthorityRole(): AuthorityRole {
 export function getCurrentAuthorityRole(): AuthorityRole | null {
   if (typeof window === 'undefined') return null;
   try {
-    // Cached metadata is a UI hint only; server APIs independently verify the live Supabase token.
+    // 1. Direct explicit role key set by ProtectedRoute / AuthorityLogin
+    const storedRole = sessionStorage.getItem(LOCAL_ROLE_KEY) || localStorage.getItem(LOCAL_ROLE_KEY);
+    if (storedRole === 'admin' || storedRole === 'paper_setter') {
+      return storedRole as AuthorityRole;
+    }
+
+    // 2. Cached metadata from live session
     const raw = sessionStorage.getItem(LOCAL_AUTH_KEY) || localStorage.getItem(LOCAL_AUTH_KEY);
     if (raw) {
       const session = JSON.parse(raw);
-      const metaRole = session?.user?.app_metadata?.role;
+      const metaRole = session?.user?.app_metadata?.role || session?.user?.user_metadata?.role;
       if (metaRole === 'admin' || metaRole === 'paper_setter') {
         return metaRole as AuthorityRole;
       }

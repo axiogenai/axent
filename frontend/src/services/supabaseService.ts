@@ -35,10 +35,24 @@ export function subscribeToMcqCloudChanges(onChange: () => void): () => void {
 
 export async function fetchQuestionsFromCloud(): Promise<MCQQuestion[] | null> {
   try {
-    const { data, error } = await supabase.from('mcq_questions').select('*').order('created_at', { ascending: false });
-    if (error) {
-      console.warn('[Supabase] Failed to fetch questions (table may not exist yet):', error.message);
-      return null;
+    let data: any[] | null = null;
+    const { data: directData, error } = await supabase.from('mcq_questions').select('*').order('created_at', { ascending: false });
+    if (!error && directData && directData.length > 0) {
+      data = directData;
+    } else {
+      // Fallback via serverless service-role proxy
+      try {
+        const res = await fetch('/api/mcq/questions');
+        if (res.ok) {
+          const body = await res.json();
+          if (body.success && Array.isArray(body.questions) && body.questions.length > 0) {
+            data = body.questions;
+          }
+        }
+      } catch {}
+      if (!data && directData) {
+        data = directData;
+      }
     }
     if (!data) return null;
 
@@ -67,17 +81,26 @@ export async function fetchQuestionsFromCloud(): Promise<MCQQuestion[] | null> {
 
 async function writeQuestionToCloud(q: MCQQuestion): Promise<boolean> {
   try {
+    let normalizedStatus = String(q.status || 'PUBLISHED').toUpperCase().trim();
+    if (normalizedStatus === 'ACTIVE') normalizedStatus = 'PUBLISHED';
+    const validStatus = ['DRAFT', 'PUBLISHED', 'ARCHIVED'].includes(normalizedStatus)
+      ? normalizedStatus
+      : 'PUBLISHED';
+
+    const normalizedDiff = String(q.difficulty || 'MEDIUM').toUpperCase().trim();
+    const validDiff = ['EASY', 'MEDIUM', 'HARD'].includes(normalizedDiff) ? normalizedDiff : 'MEDIUM';
+
     const row = {
       id: q.id,
       text: q.text,
       options: q.options,
       subject: q.subject,
       topic: q.topic,
-      difficulty: q.difficulty,
+      difficulty: validDiff,
       marks: q.marks,
       negative_marks: q.negativeMarks,
       explanation: q.explanation,
-      status: q.status,
+      status: validStatus,
       tags: q.tags,
       created_at: q.createdAt,
       updated_at: q.updatedAt,
@@ -86,7 +109,18 @@ async function writeQuestionToCloud(q: MCQQuestion): Promise<boolean> {
     };
     const { error } = await supabase.from('mcq_questions').upsert(row);
     if (error) {
-      console.warn('[Supabase] Question upsert warning:', error.message);
+      console.warn('[Supabase] Question direct upsert notice:', error.message);
+      try {
+        const res = await fetch('/api/mcq/questions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: row })
+        });
+        if (res.ok) {
+          const body = await res.json();
+          if (body.success) return true;
+        }
+      } catch {}
       return false;
     }
     return true;
@@ -99,7 +133,14 @@ async function writeQuestionToCloud(q: MCQQuestion): Promise<boolean> {
 async function writeDeleteQuestionFromCloud(id: string): Promise<boolean> {
   try {
     const { error } = await supabase.from('mcq_questions').delete().eq('id', id);
-    return !error;
+    if (error) {
+      try {
+        const res = await fetch(`/api/mcq/questions?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+        if (res.ok) return true;
+      } catch {}
+      return false;
+    }
+    return true;
   } catch {
     return false;
   }
@@ -123,10 +164,24 @@ export async function clearAllQuestionsFromCloud(): Promise<boolean> {
 
 export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
   try {
-    const { data, error } = await supabase.from('mcq_exams').select('*').order('created_at', { ascending: false });
-    if (error) {
-      console.warn('[Supabase] Failed to fetch exams:', error.message);
-      return null;
+    let data: any[] | null = null;
+    const { data: directData, error } = await supabase.from('mcq_exams').select('*').order('created_at', { ascending: false });
+    if (!error && directData && directData.length > 0) {
+      data = directData;
+    } else {
+      // Fallback via serverless service-role proxy
+      try {
+        const res = await fetch('/api/mcq/exams');
+        if (res.ok) {
+          const body = await res.json();
+          if (body.success && Array.isArray(body.exams) && body.exams.length > 0) {
+            data = body.exams;
+          }
+        }
+      } catch {}
+      if (!data && directData) {
+        data = directData;
+      }
     }
     if (!data) return null;
 
@@ -257,7 +312,20 @@ async function writeExamToCloud(e: MCQExamConfig): Promise<boolean> {
     };
     const { error } = await supabase.from('mcq_exams').upsert(row);
     if (error) {
-      console.warn('[Supabase] Exam upsert warning:', error.message);
+      console.warn('[Supabase] Exam direct upsert notice:', error.message);
+      try {
+        const res = await fetch('/api/mcq/exams', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ exam: row })
+        });
+        if (res.ok) {
+          const body = await res.json();
+          if (body.success) return true;
+        }
+      } catch (proxyErr) {
+        console.warn('[Supabase] Proxy exam upsert notice:', proxyErr);
+      }
       return false;
     }
     return true;
@@ -274,7 +342,11 @@ async function writeDeleteExamFromCloud(id: string): Promise<boolean> {
     } catch {}
     const { error } = await supabase.from('mcq_exams').delete().eq('id', id);
     if (error) {
-      console.warn('[Supabase] Delete exam from cloud warning:', error.message);
+      console.warn('[Supabase] Delete exam direct notice:', error.message);
+      try {
+        const res = await fetch(`/api/mcq/exams?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+        if (res.ok) return true;
+      } catch {}
       return false;
     }
     return true;
@@ -314,7 +386,15 @@ export async function deleteQuestionsByIdsFromCloud(questionIds: string[]): Prom
   try {
     const { error } = await supabase.from('mcq_questions').delete().in('id', questionIds);
     if (error) {
-      console.warn('[Supabase] Failed to bulk delete questions from cloud:', error.message);
+      console.warn('[Supabase] Failed to bulk delete questions direct notice:', error.message);
+      try {
+        const res = await fetch('/api/mcq/questions', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: questionIds })
+        });
+        if (res.ok) return true;
+      } catch {}
       return false;
     }
     return true;
