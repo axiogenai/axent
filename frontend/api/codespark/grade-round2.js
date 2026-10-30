@@ -1,7 +1,7 @@
 export const config = { maxDuration: 60 };
 
 import { isRound2EvaluationRateLimited, readBody, recordRound2Evaluation, setApiHeaders } from "./_security.js";
-import { gradeRound2Code } from "./_round2-grader.js";
+import { gradeRound2Code, normalizeRound2Key } from "./_round2-grader.js";
 
 export default async function handler(req, res) {
   setApiHeaders(req, res);
@@ -10,11 +10,11 @@ export default async function handler(req, res) {
   let body;
   try { body = readBody(req); } catch { return res.status(400).json({ success: false, error: "Invalid request." }); }
   try {
-    if (await isRound2EvaluationRateLimited(body.key)) {
+    if (await isRound2EvaluationRateLimited(normalizeRound2Key(body.key))) {
       return res.status(429).json({ success: false, error: "Evaluation limit reached. Please wait before running more tests." });
     }
     const result = await gradeRound2Code(body.key, body.problemId, body.code, body.language);
-    await recordRound2Evaluation(body.key);
+    await recordRound2Evaluation(normalizeRound2Key(body.key));
     return res.status(200).json({ success: true, ...result });
   } catch (error) {
     console.error("[CodeSpark grading]", error?.message || "grading failure");
