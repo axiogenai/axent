@@ -72,6 +72,8 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
   // --- 1. Problems State: Individualized 5 randomized questions from 10+ pool |
   const [problems, setProblems] = useState<Round2Problem[]>(() => {
     const all = getAllRound2Problems().map((problem) => ({ ...problem, hiddenTestCases: [] }));
+    // Purge any legacy hidden-test cache that may have been downloaded by older builds.
+    try { localStorage.setItem('codedna_codespark_r2_problems', JSON.stringify(all)); } catch {}
     return selectStudentRound2Problems(all, candidateKey);
   });
   const [loadingProblems, setLoadingProblems] = useState(true);
