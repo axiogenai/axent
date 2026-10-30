@@ -153,9 +153,9 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
 
   useEffect(() => {
     if (submission.isSubmitted) return;
-    const onVisibility = () => { if (document.visibilityState === 'hidden') recordRound2Violation('Switched away from the examination tab or window'); };
-    const onBlur = () => recordRound2Violation('Examination window lost focus');
-    const onFullscreen = () => { if (!document.fullscreenElement) recordRound2Violation('Exited required examination fullscreen'); };
+    const onVisibility = () => { /* Passive monitor - no strikes on visibility change */ };
+    const onBlur = () => { /* Passive monitor - no strikes on blur */ };
+    const onFullscreen = () => { /* Passive monitor - no strikes on fullscreen exit */ };
     const onClipboard = (event: Event) => {
       event.preventDefault();
       recordRound2Violation(event.type === 'paste' ? 'Paste action blocked' : event.type === 'copy' ? 'Copy action blocked' : 'Cut action blocked');

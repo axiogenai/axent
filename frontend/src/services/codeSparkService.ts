@@ -363,36 +363,15 @@ export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
       window.dispatchEvent(new CustomEvent("codedna_codespark_concluded_updated", { detail: config.isConcluded }));
     }
 
-    // Intelligently merge cloud roster with local roster so candidates are NEVER lost or overwritten
-    const localCandidates = getAllCodeSparkCandidates();
-    const candidateMap = new Map<string, CodeSparkCandidate>();
-
-    // 1. Add all cloud candidates
-    (config.candidates || []).forEach((c) => {
-      const key = (c.accessKey || '').toUpperCase().trim();
-      const email = (c.email || '').toLowerCase().trim();
-      if (key) candidateMap.set(key, c);
-      if (email) candidateMap.set(email, c);
-    });
-
-    // 2. Merge local candidates that might not have reached cloud yet
-    localCandidates.forEach((loc) => {
-      const locKey = (loc.accessKey || '').toUpperCase().trim();
-      const locEmail = (loc.email || '').toLowerCase().trim();
-      if (!candidateMap.has(locKey) && !candidateMap.has(locEmail)) {
-        if (locKey) candidateMap.set(locKey, loc);
-        else if (locEmail) candidateMap.set(locEmail, loc);
-      }
-    });
-
-    const combined = Array.from(new Set(candidateMap.values()));
-    const deduped = deduplicateCandidates(combined);
+    // Cloud roster is authoritative
+    const cloudCandidates = Array.isArray(config.candidates) ? config.candidates : [];
+    const deduped = deduplicateCandidates(cloudCandidates);
     const { roster, modified } = sanitizeCandidatesRoster(deduped);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(roster));
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: roster }));
       window.dispatchEvent(new Event("storage"));
-      if (modified || roster.length > (config.candidates || []).length) {
+      if (modified) {
         void pushCandidatesToCloud(roster);
       }
     }
@@ -604,13 +583,9 @@ export function isRound1ConcludedGlobally(): boolean {
   try {
     if (typeof localStorage !== 'undefined') {
       const val = localStorage.getItem(ROUND1_CONCLUDED_STORAGE_KEY);
-      if (val === 'false') return false;
-      if (val === 'true') return true;
+      return val === 'true';
     }
-    const shortlisted = getShortlistedRolls();
-    if (shortlisted.length === 0) return false;
-    const cands = getAllCodeSparkCandidates();
-    return cands.some(c => Boolean(c.round2Key) && (c.status === 'SHORTLISTED' || c.isShortlisted));
+    return false;
   } catch {
     return false;
   }
@@ -1368,8 +1343,29 @@ export async function deleteCodeSparkCandidateComplete(accessKeyOrRoll: string):
     localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(remainingShortlists));
   } catch {}
 
+  // Delete from Supabase via serverless service role
+  try {
+    await fetch(`/api/codespark/roster?action=delete_candidate&roll=${encodeURIComponent(clean)}`, {
+      method: 'DELETE',
+      headers: { 'x-authority-role': 'admin' }
+    });
+  } catch {}
+
   try {
     await deleteAttemptByRollOrKeyFromCloud(clean);
+  } catch {}
+
+  try {
+    const active = getActiveCodeSparkCandidate();
+    if (active && (
+      active.accessKey?.toUpperCase() === clean || 
+      active.rollNumber?.toUpperCase() === clean || 
+      active.email?.toUpperCase() === clean
+    )) {
+      localStorage.removeItem('codedna_codespark_active_candidate');
+      localStorage.removeItem('codedna_student_profile');
+      sessionStorage.removeItem('codedna_mcq_session_attempt');
+    }
   } catch {}
 
   await pushCandidatesToCloud(remaining);

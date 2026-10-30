@@ -54,7 +54,7 @@ import {
 
   BookOpen,
 
-  X,
+  X, RotateCcw,
 
   HelpCircle,
 
@@ -165,7 +165,8 @@ import {
 
   authorizeAllRemainingCandidatesForRetake,
   deleteCodeSparkCandidateComplete,
-  resetCodeSparkSystemInCloud
+  resetCodeSparkSystemInCloud,
+  ROUND1_CONCLUDED_STORAGE_KEY
 } from '../../services/codeSparkService';
 
 import { CodeSparkCandidateImportModal } from '../codespark/CodeSparkCandidateImportModal';
@@ -982,22 +983,41 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
     // Ensure all shortlisted candidates have a valid 4-digit Round 2 key (AXENT-R2-XXXX)
     let candidatesListChanged = false;
     const candidatesWithoutSecureKeys = shortlistedRolls.filter((roll) => {
-      const candidate = registeredCandidates.find((item) =>
+      let candidate = registeredCandidates.find((item) =>
         (item.rollNumber && item.rollNumber.toUpperCase() === roll) ||
         item.accessKey.toUpperCase() === roll ||
         item.email.toUpperCase() === roll
       );
-      if (!candidate) return true;
-      let suffix = String(candidate.round2Key || '').toUpperCase().replace(/^AXENT-R2-/, '');
-      if (!candidate.round2Key || suffix.length < 4) {
-        candidate.round2Key = generateRound2KeyForCandidate(candidate);
-        candidate.isShortlisted = true;
-        candidate.status = 'SHORTLISTED';
-        candidate.round2InvitedAt = Date.now();
+      if (!candidate) {
+        const matchAttempt = aptitudeCandidates.find((c) => (c.studentRoll || '').toUpperCase() === roll);
+        const newCand: CodeSparkCandidate = {
+          name: matchAttempt?.studentName || roll,
+          email: matchAttempt?.studentEmail || `${roll.toLowerCase().replace(/[^a-z0-9]/g, '')}@gmail.com`,
+          rollNumber: roll,
+          department: 'CodeSpark Candidate',
+          accessKey: `AXENT-${Math.floor(1000 + Math.random() * 9000)}`,
+          status: 'SHORTLISTED',
+          isShortlisted: true,
+          round2Key: `AXENT-R2-${Math.floor(1000 + Math.random() * 9000)}`,
+          round1Score: matchAttempt?.score,
+          round1MaxScore: matchAttempt?.maxScore,
+          registeredAt: Date.now()
+        };
+        registeredCandidates.push(newCand);
+        candidate = newCand;
         candidatesListChanged = true;
-        suffix = String(candidate.round2Key).toUpperCase().replace(/^AXENT-R2-/, '');
       }
-      return !candidate.round2Key || suffix.length < 4;
+      if (candidate) {
+        let suffix = String(candidate.round2Key || '').toUpperCase().replace(/^AXENT-R2-/, '');
+        if (!candidate.round2Key || suffix.length < 4) {
+          candidate.round2Key = generateRound2KeyForCandidate(candidate);
+          candidate.isShortlisted = true;
+          candidate.status = 'SHORTLISTED';
+          candidate.round2InvitedAt = Date.now();
+          candidatesListChanged = true;
+        }
+      }
+      return false;
     });
 
     if (candidatesListChanged) {
@@ -1904,6 +1924,59 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
+  
+  const handleEndExamAndResetAll = async () => {
+    if (!window.confirm('CRITICAL ACTION: Are you sure you want to END the exam and PERMANENTLY RESET EVERYTHING?\n\nThis will:\n1. Delete ALL student attempts from Supabase permanently.\n2. Delete all workstations and live sessions.\n3. Re-open Round 1 (resetting Stage 01 to active and locking Round 2).\n4. Force-refresh all student devices back to fresh check-in.')) {
+      return;
+    }
+    playSound('click');
+    try {
+      await fetch('/api/codespark/roster?action=reset_all', {
+        method: 'DELETE',
+        headers: { 'x-authority-role': 'admin' }
+      });
+    } catch (e) {
+      console.warn('Serverless reset failed:', e);
+    }
+
+    try {
+      await clearAllAttemptsFromEverywhere();
+    } catch {}
+
+    setRound1ConcludedGlobally(false);
+    setIsRound1Concluded(false);
+    setShortlistedRolls([]);
+    localStorage.removeItem(SHORTLIST_STORAGE_KEY);
+    localStorage.setItem(ROUND1_CONCLUDED_STORAGE_KEY, 'false');
+    localStorage.removeItem('codedna_codespark_active_candidate');
+    localStorage.removeItem('codedna_student_profile');
+
+    // Reset candidates back to clean registered state
+    const resetCands = registeredCandidates.map((c) => ({
+      ...c,
+      status: 'REGISTERED' as const,
+      round1Score: undefined,
+      round1MaxScore: undefined,
+      isShortlisted: false,
+      round2Key: undefined,
+      round2InvitedAt: undefined
+    }));
+    saveCodeSparkCandidates(resetCands);
+    setRegisteredCandidates(resetCands);
+    setAllAttempts([]);
+
+    try {
+      await pushCandidatesToCloud(resetCands);
+    } catch {}
+
+    try {
+      await broadcastRemoteHardRefresh();
+    } catch {}
+
+    playSound('success');
+    alert('Exam ended and system 100% reset! All database records wiped, Round 1 is active, and candidate screens refreshed.');
+  };
+
   const handlePurgeAllAttempts = async () => {
 
     if (!window.confirm('Are you sure you want to purge ALL Round 1 attempts from database and storage?')) return;
@@ -2501,7 +2574,27 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
             >
 
               Change Paper / Settings
-
+            </button>
+            <button
+              type="button"
+              onClick={handleEndExamAndResetAll}
+              title="One-click nuclear reset: end exam, delete all attempts from database, and reopen Round 1"
+              style={{
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                color: '#ef4444',
+                borderRadius: '4px',
+                padding: '4px 10px',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <RotateCcw size={11} />
+              <span>End Exam &amp; Reset All (1-Click)</span>
             </button>
 
           </div>
@@ -4631,7 +4724,26 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
               >
 
                 <Trash2 size={13} /> Purge Attempts
-
+              </button>
+              <button
+                type="button"
+                onClick={handleEndExamAndResetAll}
+                title="End exam, wipe all database attempts, and reset everything back to Round 1"
+                style={{
+                  padding: '7px 12px',
+                  borderRadius: '6px',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  color: '#ef4444',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}
+              >
+                <RotateCcw size={13} /> End Exam &amp; Reset (1-Click)
               </button>
 
             </div>

@@ -3318,7 +3318,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           isAwayRef.current = true;
           unfocusedStartRef.current = Date.now();
         }
-        triggerFocusLossInfraction('Tab switch detected: Navigated away from examination tab');
+        // Passive tab switch - no strike
       } else {
         if (isAwayRef.current || unfocusedStartRef.current !== null) {
           isAwayRef.current = false;
@@ -3348,7 +3348,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
           isAwayRef.current = true;
           unfocusedStartRef.current = now;
         }
-        triggerFocusLossInfraction('Window focus lost: Application or window switch detected');
+        // Passive focus loss - no strike
       }
     };
 
@@ -3396,7 +3396,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       const isFs = isCurrentlyFullscreen();
       setIsFullscreen(isFs);
       if (!isFs && !submitted && !showSubmitConfirm && !isSelectingScreenRef.current) {
-        triggerFocusLossInfraction('Fullscreen examination mode exited / window restored');
+        // Passive fullscreen change - no strike
       }
     };
 
