@@ -18,12 +18,22 @@ import { saveQuestion, saveExam } from './mcqService';
 
 const PRIMARY_MODEL = 'qwen/qwen3.8-27b';
 
+function purgeLegacyBrowserApiKeys(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem('codedna_groq_api_key');
+    localStorage.removeItem('axent_ai_api_key');
+  } catch {}
+}
+
 export function getAllApiKeyPool(): string[] {
   // API credentials are server-only. Never read keys from localStorage or Vite env.
+  purgeLegacyBrowserApiKeys();
   return [];
 }
 
 export function getStoredApiKey(): string {
+  purgeLegacyBrowserApiKeys();
   return '';
 }
 
