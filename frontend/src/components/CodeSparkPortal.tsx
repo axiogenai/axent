@@ -443,7 +443,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     if (anyLookup.targetRound === 'round2' || rawInput.includes('R2') || isRound1Concluded) {
       const enteredRound2Key = Boolean(
         cand.round2Key &&
-        rawInput.trim().toUpperCase() === cand.round2Key.trim().toUpperCase()
+        rawInput.trim().toUpperCase() === cand.round2Key.trim().toUpperCase().replace(/^AXENT-R2-/, '')
       );
       if (!isCandidateShortlisted || !enteredRound2Key) {
         playSound('warning');
@@ -1813,7 +1813,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                   <input
                     ref={keyInputRef}
                     type="text"
-                    maxLength={20}
+                    maxLength={48}
                     value={keyDigits}
                     onChange={(e) => handleDigitsInput(e.target.value)}
                     onKeyDown={(e) => {
