@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Key,
@@ -406,6 +406,22 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
         if (requestId === candidateLookupRequest.current) setActiveCandidate(null);
       });
   };
+
+  // Automatically read ?key=... URL query parameter (from candidate email button click)
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlKey = params.get('key');
+      if (urlKey && urlKey.trim()) {
+        const clean = urlKey.trim();
+        handleDigitsInput(clean);
+        const timer = setTimeout(() => {
+          scrollToTerminal();
+        }, 500);
+        return () => clearTimeout(timer);
+      }
+    } catch {}
+  }, []);
 
   const handleDirectExamLaunch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -1612,16 +1628,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
           <div className="absolute bottom-5 sm:bottom-8 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center">
             <button
               type="button"
-              onClick={() => {
-                const target = document.getElementById('p3') || document.getElementById('terminal');
-                if (target) {
-                  if (lenisRef.current) {
-                    lenisRef.current.scrollTo(target);
-                  } else {
-                    target.scrollIntoView({ behavior: 'smooth' });
-                  }
-                }
-              }}
+              onClick={scrollToForensics}
               className="group flex items-center gap-2 px-5 py-2.5 bg-white/95 hover:bg-black hover:text-white text-black border-2 border-black font-mono text-xs font-black uppercase tracking-widest shadow-[3px_3px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-[#ea1a1c]"></span>
@@ -1804,9 +1811,9 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                   onClick={() => keyInputRef.current?.focus()}
                   className={`w-full bg-white border-2 ${
                     keyError ? 'border-[#ea1a1c]' : 'border-black focus-within:border-[#ea1a1c]'
-                  } px-3 sm:px-5 py-3 sm:py-4 flex items-center transition-colors cursor-text overflow-hidden`}
+                  } px-2.5 sm:px-5 py-2.5 sm:py-4 flex items-center transition-colors cursor-text overflow-hidden`}
                 >
-                  <span className="font-mono text-xl sm:text-2xl font-black text-black select-none tracking-[0.1em] sm:tracking-[0.25em] shrink-0">
+                  <span className="font-mono text-base sm:text-xl md:text-2xl font-black text-black select-none tracking-[0.05em] sm:tracking-[0.25em] shrink-0">
                     {isRound1Concluded ? 'AXENT-R2-' : 'AXENT-'}
                   </span>
                   <input
@@ -1822,7 +1829,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                       }
                     }}
                     placeholder="XXXX"
-                    className="flex-1 min-w-0 bg-transparent border-none outline-none font-mono text-xl sm:text-2xl font-black tracking-[0.1em] sm:tracking-[0.25em] text-black placeholder-zinc-300 p-0 m-0"
+                    className="flex-1 min-w-0 bg-transparent border-none outline-none font-mono text-base sm:text-xl md:text-2xl font-black tracking-[0.05em] sm:tracking-[0.25em] text-black placeholder-zinc-300 p-0 m-0"
                   />
                   {activeCandidate && keyDigits.length >= 4 && (
                     <div className="ml-1 sm:ml-2 flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 bg-[#ea1a1c] text-white text-[10px] sm:text-xs font-black uppercase font-mono shrink-0">
@@ -1835,18 +1842,18 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
 
                 {/* Verified Candidate Card (Rendered ONLY when valid 4-digit key is typed) */}
                 {activeCandidate && keyDigits.length >= 4 && (
-                  <div className="p-4 bg-white border-2 border-black flex items-center justify-between gap-3 text-xs font-mono shadow-[3px_3px_0px_#0A0A0C]">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-black text-white flex items-center justify-center font-black">
+                  <div className="p-3.5 sm:p-4 bg-white border-2 border-black flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono shadow-[3px_3px_0px_#0A0A0C]">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 bg-black text-white flex items-center justify-center font-black shrink-0">
                         <Check size={16} className="text-[#ea1a1c]" />
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Candidate Identified</div>
-                        <strong className="text-sm font-black text-black">{activeCandidate.name}</strong>
-                        <span className="text-zinc-500 ml-2 font-mono text-xs">({activeCandidate.email})</span>
+                        <strong className="text-sm font-black text-black truncate block">{activeCandidate.name}</strong>
+                        <span className="text-zinc-500 font-mono text-xs truncate block">{activeCandidate.email}</span>
                       </div>
                     </div>
-                    <span className="text-[10px] font-black uppercase px-2 py-1 bg-green-100 text-green-800 border border-green-300">
+                    <span className="self-start sm:self-center text-[10px] font-black uppercase px-2.5 py-1 bg-green-100 text-green-800 border border-green-300 shrink-0">
                       Ready
                     </span>
                   </div>
