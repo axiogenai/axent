@@ -8,6 +8,7 @@ Set these in the Vercel project that deploys the `frontend` directory. Use **ser
 
 - `SUPABASE_URL`: the project URL (server-side copy).
 - `SUPABASE_ANON_KEY` (or `SUPABASE_PUBLISHABLE_KEY`): public/publishable Supabase key used only to verify the bearer session with Supabase Auth.
+- `SUPABASE_SERVICE_ROLE_KEY`: secret server-only key used by protected CodeSpark APIs to access protected roster, questions and submissions. Never expose it to the browser or prefix it with `VITE_`.
 - `SMTP_USER`: dedicated sender mailbox.
 - `SMTP_PASSWORD`: newly rotated Gmail App Password or SMTP credential.
 - `SMTP_HOST`: optional; defaults to `smtp.gmail.com`.
@@ -46,3 +47,15 @@ Do not paste credentials into GitHub issues, commits, chat, or frontend environm
 - Existing candidate roster storage, shortlist authority, and Round 2 grading still need a server-authoritative migration before the platform can be described as secure against candidate-side tampering. Do not treat client-side scores or local shortlist state as trusted evidence.
 - Run the frontend typecheck, lint, production build, staging smoke tests, and Supabase security advisors before merging. Test with one internal recipient before enabling bulk dispatch.
 - No software can honestly guarantee zero bugs or zero vulnerabilities. Production readiness requires staging and live-environment verification.
+
+## CodeSpark protected API routes added in this branch
+
+- `/api/codespark/roster`: administrator-only roster and shortlist configuration.
+- `/api/codespark/candidate-lookup`: exact candidate-key lookup; returns only the matching candidate record and throttles failed guesses.
+- `/api/codespark/round2-problems`: publishes public problem statements and sample cases; hidden cases are returned only to a verified administrator.
+- `/api/codespark/grade-round2`: server-side evaluation against all configured tests, including hidden cases.
+- `/api/codespark/round2-live-code`: validates the candidate's Round 2 key before syncing live code.
+- `/api/codespark/round2-submissions`: server-authoritative final grading, persistence, leaderboard retrieval and administrator reset.
+- `/api/codespark/public-exam`: exposes only the configured active exam's safe metadata.
+
+The service-role API routes require `SUPABASE_SERVICE_ROLE_KEY`. The persistent failed-key throttling requires the new migration table.
