@@ -436,15 +436,18 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     const isCandidateShortlisted = Boolean(
       anyLookup.isShortlisted ||
       cand.isShortlisted ||
-      cand.status === 'SHORTLISTED' ||
-      isCandidateInShortlistStorage(cand.rollNumber || cand.accessKey)
+      cand.status === 'SHORTLISTED'
     );
 
     // 1. If target round is Round 2 or Round 1 has concluded:
     if (anyLookup.targetRound === 'round2' || rawInput.includes('R2') || isRound1Concluded) {
-      if (!isCandidateShortlisted) {
+      const enteredRound2Key = Boolean(
+        cand.round2Key &&
+        rawInput.trim().toUpperCase() === cand.round2Key.trim().toUpperCase()
+      );
+      if (!isCandidateShortlisted || !enteredRound2Key) {
         playSound('warning');
-        setKeyError('Access Denied: Round 2 is restricted to shortlisted candidates only. Check your registered email.');
+        setKeyError('Access Denied: enter the dedicated Round 2 access key sent to your registered email. Round 1 keys cannot open the coding arena.');
         return;
       }
 
