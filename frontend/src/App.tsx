@@ -1,19 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import { Navbar } from './components/Navbar';
-import { Workspace } from './components/Workspace';
-import { FinalReport } from './components/FinalReport';
-import { AdminDashboard } from './components/AdminDashboard';
-import { MCQHub } from './components/MCQHub';
-import { AdminMCQTicketIssuer } from './components/AdminMCQTicketIssuer';
-import { PaperSetterPortal } from './components/PaperSetterPortal';
-import { AuthorityLogin, PaperSetterLogin, AdminLogin } from './components/auth/AuthorityLogin';
-import { AuthorityInvitePortal } from './components/auth/AuthorityInvitePortal';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
-import { LandingPage } from './components/LandingPage';
-import { LaunchFilmPlayer } from './components/LaunchFilmPlayer';
-import { CodeSparkPortal } from './components/CodeSparkPortal';
-import { CodeSparkExamHall } from './components/CodeSparkExamHall';
+
+// Lazy-load page components for ultra-fast initial page delivery (<200ms)
+const LandingPage = React.lazy(() => import('./components/LandingPage').then(m => ({ default: m.LandingPage })));
+const CodeSparkPortal = React.lazy(() => import('./components/CodeSparkPortal').then(m => ({ default: m.CodeSparkPortal })));
+const CodeSparkExamHall = React.lazy(() => import('./components/CodeSparkExamHall').then(m => ({ default: m.CodeSparkExamHall })));
+const Workspace = React.lazy(() => import('./components/Workspace').then(m => ({ default: m.Workspace })));
+const MCQHub = React.lazy(() => import('./components/MCQHub').then(m => ({ default: m.MCQHub })));
+const PaperSetterPortal = React.lazy(() => import('./components/PaperSetterPortal').then(m => ({ default: m.PaperSetterPortal })));
+const AdminDashboard = React.lazy(() => import('./components/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const AuthorityLogin = React.lazy(() => import('./components/auth/AuthorityLogin').then(m => ({ default: m.AuthorityLogin })));
+const PaperSetterLogin = React.lazy(() => import('./components/auth/AuthorityLogin').then(m => ({ default: m.PaperSetterLogin })));
+const AdminLogin = React.lazy(() => import('./components/auth/AuthorityLogin').then(m => ({ default: m.AdminLogin })));
+const AuthorityInvitePortal = React.lazy(() => import('./components/auth/AuthorityInvitePortal').then(m => ({ default: m.AuthorityInvitePortal })));
+const FinalReport = React.lazy(() => import('./components/FinalReport').then(m => ({ default: m.FinalReport })));
+const LaunchFilmPlayer = React.lazy(() => import('./components/LaunchFilmPlayer').then(m => ({ default: m.LaunchFilmPlayer })));
 import { SEOUpdater } from './components/SEOUpdater';
 import {
   CodeSubmission,
@@ -388,6 +391,11 @@ export const App: React.FC = () => {
           paddingTop: location.pathname !== '/' && location.pathname !== '/launch' && !location.pathname.startsWith('/mcq') && !location.pathname.startsWith('/code-spark') && !location.pathname.startsWith('/codespark') ? '52px' : 0
         }}
       >
+        <React.Suspense fallback={
+          <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: '22px', height: '22px', border: '2px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+          </div>
+        }>
         <Routes>
           <Route path="/" element={<LandingPage theme={theme} />} />
           <Route
@@ -585,6 +593,7 @@ export const App: React.FC = () => {
           {/* Catch-all fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </React.Suspense>
       </main>
       <PWAInstallPrompt />
     </div>
