@@ -86,6 +86,13 @@ export default async function handler(req, res) {
 
     const roll = String(candidate.rollNumber || candidate.email || candidate.name || "candidate").trim();
     const stableCandidateId = `candidate:${roll}`;
+    const rowId = `r2_sub_${cleanId(roll)}`;
+    const liveId = `r2_station_${cleanId(roll)}`;
+    const priorProgressRows = await supabaseRest(`candidate_stations?id=eq.${rowId}&select=code`);
+    let priorStartedAt = 0;
+    try { priorStartedAt = Number(JSON.parse(priorProgressRows?.[0]?.code || "{}").startedAt) || 0; } catch {}
+    const liveRows = await supabaseRest(`candidate_stations?id=eq.${liveId}&select=student`);
+    const serverStartedAt = priorStartedAt || Number(liveRows?.[0]?.student?.startedAt) || Date.now();
     const safeSubmission = {
       candidateKey: stableCandidateId,
       candidateName: candidate.name,
@@ -97,19 +104,18 @@ export default async function handler(req, res) {
       totalScore: isSubmitted ? totalScore : 0,
       maxScore: isSubmitted ? maxScore : 0,
       isSubmitted,
-      startedAt: Number(submission.startedAt) || Date.now(),
+      startedAt: serverStartedAt,
       submittedAt: isSubmitted ? Date.now() : undefined,
       dominantLanguage,
       assignedProblemIds: Object.values(safeReports).map((report) => report.questionId),
       updatedAt: Date.now()
     };
 
-    const rowId = `r2_sub_${cleanId(roll)}`;
     const stationNumber = String(submission.stationNumber || "Station #01").slice(0, 80);
     const student = {
       name: candidate.name, rollNumber: candidate.rollNumber || "",
       email: candidate.email || "", score: safeSubmission.totalScore,
-      maxScore: safeSubmission.maxScore, isSubmitted
+      maxScore: safeSubmission.maxScore, isSubmitted, startedAt: serverStartedAt
     };
     const candidateHash = createHash("sha256")
       .update(key)
