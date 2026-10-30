@@ -12,6 +12,7 @@ export interface AuthorityUser {
 
 const LOCAL_AUTH_KEY = 'axent_authority_session';
 const LOCAL_ROLE_KEY = 'axent_authority_role';
+// Privileged operations must always be authorized by a verified Supabase session.
 
 // ── Session & User Getters ───────────────────────────────────────────────────
 
