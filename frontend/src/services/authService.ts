@@ -40,21 +40,13 @@ export async function getAuthUser(): Promise<User | null> {
 }
 
 export function getStoredAuthorityRole(): AuthorityRole {
-  if (typeof window === 'undefined') return 'paper_setter';
-  const role = sessionStorage.getItem(LOCAL_ROLE_KEY) || localStorage.getItem(LOCAL_ROLE_KEY);
-  if (role === 'admin' || role === 'paper_setter') return role;
-  return 'paper_setter';
+  return getCurrentAuthorityRole() || 'paper_setter';
 }
 
 export function getCurrentAuthorityRole(): AuthorityRole | null {
   if (typeof window === 'undefined') return null;
   try {
-    // 1. Check direct authority role storage first
-    const storedRole = sessionStorage.getItem(LOCAL_ROLE_KEY) || localStorage.getItem(LOCAL_ROLE_KEY);
-    if (storedRole === 'admin' || storedRole === 'paper_setter') {
-      return storedRole as AuthorityRole;
-    }
-    // 2. Check cached authority session
+    // Cached metadata is a UI hint only; server APIs independently verify the live Supabase token.
     const raw = sessionStorage.getItem(LOCAL_AUTH_KEY) || localStorage.getItem(LOCAL_AUTH_KEY);
     if (raw) {
       const session = JSON.parse(raw);
@@ -83,18 +75,7 @@ export function setStoredAuthorityRole(role: AuthorityRole): void {
 export function onAuthStateChange(
   callback: (event: AuthChangeEvent, session: Session | null) => void
 ): () => void {
-  if (!isSupabaseConnected()) {
-    const listener = (e: StorageEvent) => {
-      if (e.key === LOCAL_AUTH_KEY) {
-        try {
-          const sess = e.newValue ? JSON.parse(e.newValue) : null;
-          callback('SIGNED_IN', sess);
-        } catch {}
-      }
-    };
-    window.addEventListener('storage', listener);
-    return () => window.removeEventListener('storage', listener);
-  }
+  if (!isSupabaseConnected()) return () => {};
 
   const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
     if (session) {
@@ -133,12 +114,10 @@ export async function signInWithPassword(
         return { user: null, session: null, error: error?.message || 'Invalid email or password.' };
       }
 
-      // Check both app_metadata and user_metadata
+      // Only trusted app_metadata can grant an authority role.
       const userRole = data.user.app_metadata?.role;
       // If user signed in via Paper Setter Portal, assign paper_setter session role; if via Admin Portal, assign admin
-      const effectiveRole: AuthorityRole = role === 'paper_setter'
-        ? 'paper_setter'
-        : (userRole === 'admin' ? 'admin' : (role === 'admin' ? 'admin' : (userRole === 'paper_setter' ? 'paper_setter' : role)));
+      const effectiveRole: AuthorityRole = userRole === 'admin' ? 'admin' : 'paper_setter';
       const roleAllowed = role === 'admin'
         ? userRole === 'admin'
         : userRole === 'paper_setter' || userRole === 'admin';
@@ -152,7 +131,7 @@ export async function signInWithPassword(
         };
       }
 
-      // If user was created directly in Supabase dashboard with no metadata, tag their user_metadata
+      // Role provisioning is an administrator-only Supabase operation; never self-assign a role here.
 
 
       try {
@@ -186,7 +165,7 @@ export async function signUpWithPassword(
     return { user: null, session: null, error: 'Password must be at least 8 characters long.' };
   }
 
-  setStoredAuthorityRole(role);
+  // Signup metadata is descriptive only. Privileged roles are provisioned separately by an administrator.
 
   // If Supabase is connected, register with Supabase Auth
   if (isSupabaseConnected()) {
