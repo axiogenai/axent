@@ -133,8 +133,17 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       const next = previous + 1;
       void fetch('/api/codespark/proctor-event', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: candidateKey, reason, strike: next })
-      }).catch(() => {});
+        body: JSON.stringify({ key: candidateKey, reason })
+      }).then(async (response) => {
+        const result = await response.json();
+        if (!response.ok || !result?.success) throw new Error('Proctor event sync failed');
+        setProctorStrikes(Number(result.strikeCount) || next);
+        setStrikeNotice({ strike: Number(result.strikeCount) || next, reason });
+        if (result.locked) setProctorLocked(true);
+      }).catch(() => {
+        // Fail closed locally if the event ledger cannot be reached.
+        if (next >= 3) setProctorLocked(true);
+      });
       playSound('warning');
       setStrikeNotice({ strike: next, reason });
       if (next >= 3) setProctorLocked(true);
