@@ -37,10 +37,13 @@ export default async function handler(req, res) {
     const email = String(recipient?.email || "").trim().toLowerCase();
     const roll = String(recipient?.rollNumber || recipient?.accessKey || "").trim().slice(0, 80);
     const key = String(recipient?.round2Key || "").trim().slice(0, 80);
-    const examUrl = String(recipient?.examUrl || "https://axent.axiogen.in/codespark-exams?round=2").trim();
+    const configuredPublicUrl = String(process.env.APP_PUBLIC_URL || "https://axent.axiogen.in").replace(/\/$/, "");
+    const examUrl = String(recipient?.examUrl || `${configuredPublicUrl}/code-spark`).trim();
     let parsedUrl;
-    try { parsedUrl = new URL(examUrl); } catch {}
-    if (!validEmail(email) || !key || !parsedUrl || parsedUrl.protocol !== "https:" || !["axent.axiogen.in"].includes(parsedUrl.hostname)) {
+    let publicHost = "";
+    try { publicHost = new URL(configuredPublicUrl).hostname; parsedUrl = new URL(examUrl); } catch {}
+    const allowedHosts = new Set([publicHost, "axent.axiogen.in", "axent-tau.vercel.app"].filter(Boolean));
+    if (!validEmail(email) || !key || !parsedUrl || parsedUrl.protocol !== "https:" || !allowedHosts.has(parsedUrl.hostname)) {
       failed.push({ email, name, reason: "Invalid recipient details or access URL." });
       continue;
     }
