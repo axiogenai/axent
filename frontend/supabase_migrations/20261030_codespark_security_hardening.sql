@@ -196,3 +196,15 @@ CREATE INDEX IF NOT EXISTS idx_codespark_round2_eval_attempts_candidate_time
 ALTER TABLE public.codespark_round2_eval_attempts ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.codespark_round2_eval_attempts FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, DELETE ON public.codespark_round2_eval_attempts TO service_role;
+
+-- Rate-limit the server-side AI proxy so the secret provider key cannot be abused.
+CREATE TABLE IF NOT EXISTS public.axent_ai_request_attempts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  ip_hash text NOT NULL,
+  attempted_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_axent_ai_request_attempts_ip_time
+  ON public.axent_ai_request_attempts(ip_hash, attempted_at DESC);
+ALTER TABLE public.axent_ai_request_attempts ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.axent_ai_request_attempts FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, DELETE ON public.axent_ai_request_attempts TO service_role;
