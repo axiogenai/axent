@@ -238,20 +238,16 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
 
   // 4. Shortlist Gatekeeper Check for Round 2
   const isCandidateShortlisted = useMemo(() => {
-    try {
-      const rawShortlist = localStorage.getItem('codedna_codespark_shortlist');
-      const shortlistedRolls: string[] = rawShortlist ? JSON.parse(rawShortlist) : [];
-      if (cleanRoll && shortlistedRolls.includes(cleanRoll)) return true;
-      if (candidateKey && shortlistedRolls.includes(candidateKey.toUpperCase())) return true;
-      if (candidateProfile?.isShortlisted || candidateProfile?.status === 'SHORTLISTED') return true;
-      if (candidateProfile?.round2Key) return true;
-      if (candidateKey && candidateKey.toUpperCase().includes('R2')) return true;
-      if (searchParams.get('round') === '2' && candidateProfile) return true;
-      return false;
-    } catch {
-      return false;
-    }
-  }, [cleanRoll, candidateKey, candidateProfile]);
+    // The portal must pass the dedicated Round 2 credential into the candidate profile.
+    // URL query parameters and a cached shortlist list are not sufficient to unlock the arena.
+    const issuedKey = String(candidateProfile?.round2Key || '').trim().toUpperCase();
+    const presentedKey = String(candidateProfile?.accessKey || '').trim().toUpperCase();
+    return Boolean(
+      issuedKey &&
+      presentedKey === issuedKey &&
+      (candidateProfile?.isShortlisted === true || candidateProfile?.status === 'SHORTLISTED')
+    );
+  }, [candidateProfile]);
 
   // Active Stage: derived from searchParams ?round=2
   const roundParam = searchParams.get('round');

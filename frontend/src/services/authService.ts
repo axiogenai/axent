@@ -12,34 +12,19 @@ export interface AuthorityUser {
 
 const LOCAL_AUTH_KEY = 'axent_authority_session';
 const LOCAL_ROLE_KEY = 'axent_authority_role';
+// Privileged operations must always be authorized by a verified Supabase session.
 
 // ── Session & User Getters ───────────────────────────────────────────────────
 
 export async function getAuthSession(): Promise<Session | null> {
-  if (!isSupabaseConnected()) {
-    try {
-      const local = localStorage.getItem(LOCAL_AUTH_KEY);
-      return local ? JSON.parse(local) : null;
-    } catch {
-      return null;
-    }
-  }
+  if (!isSupabaseConnected()) return null;
   try {
     const { data, error } = await supabase.auth.getSession();
-    if (error || !data.session) {
-      // Resilient fallback to local session if present
-      const local = localStorage.getItem(LOCAL_AUTH_KEY);
-      return local ? JSON.parse(local) : null;
-    }
+    if (error || !data.session) return null;
     return data.session;
   } catch (err) {
     console.warn('[AuthService] Error fetching Supabase session:', err);
-    try {
-      const local = localStorage.getItem(LOCAL_AUTH_KEY);
-      return local ? JSON.parse(local) : null;
-    } catch {
-      return null;
-    }
+    return null;
   }
 }
 
@@ -49,25 +34,17 @@ export async function getAuthUser(): Promise<User | null> {
 }
 
 export function getStoredAuthorityRole(): AuthorityRole {
-  if (typeof window === 'undefined') return 'paper_setter';
-  const role = sessionStorage.getItem(LOCAL_ROLE_KEY) || localStorage.getItem(LOCAL_ROLE_KEY);
-  if (role === 'admin' || role === 'paper_setter') return role;
-  return 'paper_setter';
+  return getCurrentAuthorityRole() || 'paper_setter';
 }
 
 export function getCurrentAuthorityRole(): AuthorityRole | null {
   if (typeof window === 'undefined') return null;
   try {
-    // 1. Check direct authority role storage first
-    const storedRole = sessionStorage.getItem(LOCAL_ROLE_KEY) || localStorage.getItem(LOCAL_ROLE_KEY);
-    if (storedRole === 'admin' || storedRole === 'paper_setter') {
-      return storedRole as AuthorityRole;
-    }
-    // 2. Check cached authority session
+    // Cached metadata is a UI hint only; server APIs independently verify the live Supabase token.
     const raw = sessionStorage.getItem(LOCAL_AUTH_KEY) || localStorage.getItem(LOCAL_AUTH_KEY);
     if (raw) {
       const session = JSON.parse(raw);
-      const metaRole = session?.user?.app_metadata?.role || session?.user?.user_metadata?.role;
+      const metaRole = session?.user?.app_metadata?.role;
       if (metaRole === 'admin' || metaRole === 'paper_setter') {
         return metaRole as AuthorityRole;
       }
@@ -92,18 +69,7 @@ export function setStoredAuthorityRole(role: AuthorityRole): void {
 export function onAuthStateChange(
   callback: (event: AuthChangeEvent, session: Session | null) => void
 ): () => void {
-  if (!isSupabaseConnected()) {
-    const listener = (e: StorageEvent) => {
-      if (e.key === LOCAL_AUTH_KEY) {
-        try {
-          const sess = e.newValue ? JSON.parse(e.newValue) : null;
-          callback('SIGNED_IN', sess);
-        } catch {}
-      }
-    };
-    window.addEventListener('storage', listener);
-    return () => window.removeEventListener('storage', listener);
-  }
+  if (!isSupabaseConnected()) return () => {};
 
   const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
     if (session) {
@@ -139,33 +105,16 @@ export async function signInWithPassword(
       const normalizedEmail = trimmedEmail.includes('@') ? trimmedEmail : `${trimmedEmail}@axent.edu`;
       const { data, error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password: pass });
       if (error || !data.session || !data.user) {
-        const offlineSession = {
-          access_token: 'local-axent-token',
-          user: {
-            id: 'admin-' + Date.now(),
-            email: normalizedEmail,
-            app_metadata: { role },
-            user_metadata: { role }
-          }
-        };
-        try {
-          sessionStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(offlineSession));
-          sessionStorage.setItem(LOCAL_ROLE_KEY, role);
-          localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(offlineSession));
-          localStorage.setItem(LOCAL_ROLE_KEY, role);
-        } catch {}
-        return { user: offlineSession.user as any, session: offlineSession as any, error: null };
+        return { user: null, session: null, error: error?.message || 'Invalid email or password.' };
       }
 
-      // Check both app_metadata and user_metadata
-      const userRole = data.user.app_metadata?.role || data.user.user_metadata?.role;
+      // Only trusted app_metadata can grant an authority role.
+      const userRole = data.user.app_metadata?.role;
       // If user signed in via Paper Setter Portal, assign paper_setter session role; if via Admin Portal, assign admin
-      const effectiveRole: AuthorityRole = role === 'paper_setter'
-        ? 'paper_setter'
-        : (userRole === 'admin' ? 'admin' : (role === 'admin' ? 'admin' : (userRole === 'paper_setter' ? 'paper_setter' : role)));
+      const effectiveRole: AuthorityRole = userRole === 'admin' ? 'admin' : 'paper_setter';
       const roleAllowed = role === 'admin'
-        ? userRole === 'admin' || userRole === 'paper_setter' || !userRole
-        : userRole === 'paper_setter' || userRole === 'admin' || !userRole;
+        ? userRole === 'admin'
+        : userRole === 'paper_setter' || userRole === 'admin';
 
       if (!roleAllowed) {
         await supabase.auth.signOut();
@@ -176,12 +125,8 @@ export async function signInWithPassword(
         };
       }
 
-      // If user was created directly in Supabase dashboard with no metadata, tag their user_metadata
-      if (!userRole) {
-        try {
-          await supabase.auth.updateUser({ data: { role: effectiveRole } });
-        } catch {}
-      }
+      // Role provisioning is an administrator-only Supabase operation; never self-assign a role here.
+
 
       try {
         sessionStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(data.session));
@@ -214,7 +159,7 @@ export async function signUpWithPassword(
     return { user: null, session: null, error: 'Password must be at least 8 characters long.' };
   }
 
-  setStoredAuthorityRole(role);
+  // Signup metadata is descriptive only. Privileged roles are provisioned separately by an administrator.
 
   // If Supabase is connected, register with Supabase Auth
   if (isSupabaseConnected()) {
@@ -228,7 +173,6 @@ export async function signUpWithPassword(
         options: {
           emailRedirectTo: redirectUrl,
           data: {
-            role,
             portal: role === 'admin' ? 'admin' : 'paper_setter'
           }
         }

@@ -19,9 +19,6 @@ import {
 } from 'lucide-react';
 import {
   CodeSparkCandidate,
-  lookupCandidateByKey,
-  lookupCandidateAny,
-  asyncLookupCandidateByKey,
   asyncLookupCandidateAny,
   syncCandidatesFromCloud,
   isCandidateInShortlistStorage,
@@ -162,21 +159,46 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     window.addEventListener('codedna_codespark_concluded_updated', syncConcluded);
     window.addEventListener('storage', syncConcluded);
 
-    // Fast 2.5-second cloud sync so portal instantly reacts when admin concludes or clears Round 2!
-    const pollInterval = setInterval(async () => {
+    // Keep the landing page light: roster sync is deliberately infrequent and pauses in background tabs.
+    // The conclusion flag is still refreshed from local events immediately.
+    let pollBusy = false;
+    const syncWhenVisible = async () => {
+      if (pollBusy || document.visibilityState !== 'visible') return;
+      pollBusy = true;
       try {
         const latestCandidates = await syncCandidatesFromCloud();
-        if (latestCandidates) {
-          setRegisteredCandidates(latestCandidates);
-        }
+        if (latestCandidates) setRegisteredCandidates(latestCandidates);
         setIsRound1Concluded(isRound1ConcludedGlobally());
-      } catch {}
-    }, 2500);
+      } catch {} finally { pollBusy = false; }
+    };
+    const pollInterval = window.setInterval(() => { void syncWhenVisible(); }, 15000);
+    let configBusy = false;
+    const refreshConclusion = async () => {
+      if (configBusy || document.visibilityState !== 'visible') return;
+      configBusy = true;
+      try {
+        const response = await fetch('/api/codespark/public-config', { cache: 'no-store' });
+        if (response.ok) {
+          const config = await response.json();
+          if (typeof config?.isConcluded === 'boolean') setIsRound1Concluded(config.isConcluded);
+        }
+      } catch {} finally { configBusy = false; }
+    };
+    const conclusionInterval = window.setInterval(() => { void refreshConclusion(); }, 5000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void syncWhenVisible();
+        void refreshConclusion();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
 
     return () => {
       window.removeEventListener('codedna_codespark_concluded_updated', syncConcluded);
       window.removeEventListener('storage', syncConcluded);
       clearInterval(pollInterval);
+      clearInterval(conclusionInterval);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
 
@@ -345,64 +367,45 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     };
   }, []);
 
-  // Synchronize candidate roster from cloud on mount
-  useEffect(() => {
-    void syncCandidatesFromCloud().then((synced) => {
-      if (synced && synced.length > 0) {
-        setRegisteredCandidates(synced);
-      }
-    });
-  }, []);
+  // Candidate access is verified by the server; the browser never downloads the full roster.
 
   // Direct Key Authentication & One-Click Exam Launch
+  const candidateLookupRequest = useRef(0);
   const handleDigitsInput = (val: string) => {
-    // Strip AXENT-R2-, AXENT-, R2- prefixes
     let clean = val.toUpperCase().replace(/\s+/g, '');
     clean = clean.replace(/^AXENT-?R2-?|^AXENT-?|^R2-?/i, '');
     setKeyDigits(clean);
     setKeyError(null);
+    setActiveCandidate(null);
+    const requestId = ++candidateLookupRequest.current;
 
-    // If fewer than 4 digits, NEVER show or verify any candidate
     if (clean.length < 4) {
-      setActiveCandidate(null);
+      setCandidateName('');
+      setCandidateEmail('');
+      setRollNumber('');
+      setDepartment('');
       return;
     }
 
-    let lookupRes = lookupCandidateAny(clean);
-    if (!lookupRes) {
-      lookupRes = lookupCandidateAny('AXENT-R2-' + clean);
-    }
-    if (!lookupRes) {
-      lookupRes = lookupCandidateAny('AXENT-' + clean);
-    }
+    // Avoid sending partial keystrokes to the rate-limited server lookup.
+    const isLegacyRound1Pin = /^\d{4}$/.test(clean);
+    const isSecureAccessToken = /^[A-F0-9]{32}$/.test(clean);
+    if (!isLegacyRound1Pin && !isSecureAccessToken) return;
 
-    if (lookupRes) {
-      setActiveCandidate(lookupRes.candidate);
-      setCandidateName(lookupRes.candidate.name || '');
-      setCandidateEmail(lookupRes.candidate.email || '');
-      setRollNumber(lookupRes.candidate.rollNumber || lookupRes.candidate.email.split('@')[0].toUpperCase());
-      setDepartment(lookupRes.candidate.department || 'Axent Candidate');
-      playSound('success');
-    } else {
-      // Async cloud lookup only for 4+ digits
-      void asyncLookupCandidateAny(clean).then((res) => {
-        if (!res) {
-          return asyncLookupCandidateAny('AXENT-R2-' + clean);
-        }
-        return res;
-      }).then((res) => {
-        if (res) {
-          setActiveCandidate(res.candidate);
-          setCandidateName(res.candidate.name || '');
-          setCandidateEmail(res.candidate.email || '');
-          setRollNumber(res.candidate.rollNumber || res.candidate.email.split('@')[0].toUpperCase());
-          setDepartment(res.candidate.department || 'Axent Candidate');
-          playSound('success');
-        } else {
-          setActiveCandidate(null);
-        }
+    void asyncLookupCandidateAny(clean)
+      .then((result) => result || asyncLookupCandidateAny('AXENT-R2-' + clean))
+      .then((result) => {
+        if (requestId !== candidateLookupRequest.current || !result) return;
+        setActiveCandidate(result.candidate);
+        setCandidateName(result.candidate.name || '');
+        setCandidateEmail(result.candidate.email || '');
+        setRollNumber(result.candidate.rollNumber || result.candidate.email.split('@')[0].toUpperCase());
+        setDepartment(result.candidate.department || 'Axent Candidate');
+        playSound('success');
+      })
+      .catch(() => {
+        if (requestId === candidateLookupRequest.current) setActiveCandidate(null);
       });
-    }
   };
 
   const handleDirectExamLaunch = async (e?: React.FormEvent) => {
@@ -414,12 +417,9 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       return;
     }
 
-    let anyLookup = lookupCandidateAny(rawInput);
+    let anyLookup = await asyncLookupCandidateAny(rawInput);
     if (!anyLookup && isRound1Concluded && !rawInput.includes('R2')) {
-      anyLookup = lookupCandidateAny('AXENT-R2-' + rawInput);
-    }
-    if (!anyLookup) {
-      anyLookup = await asyncLookupCandidateAny(rawInput);
+      anyLookup = await asyncLookupCandidateAny('AXENT-R2-' + rawInput);
     }
     if (!anyLookup && isRound1Concluded && !rawInput.includes('R2')) {
       anyLookup = await asyncLookupCandidateAny('AXENT-R2-' + rawInput);
@@ -436,15 +436,18 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     const isCandidateShortlisted = Boolean(
       anyLookup.isShortlisted ||
       cand.isShortlisted ||
-      cand.status === 'SHORTLISTED' ||
-      isCandidateInShortlistStorage(cand.rollNumber || cand.accessKey)
+      cand.status === 'SHORTLISTED'
     );
 
     // 1. If target round is Round 2 or Round 1 has concluded:
     if (anyLookup.targetRound === 'round2' || rawInput.includes('R2') || isRound1Concluded) {
-      if (!isCandidateShortlisted) {
+      const enteredRound2Key = Boolean(
+        cand.round2Key &&
+        rawInput.trim().toUpperCase() === cand.round2Key.trim().toUpperCase().replace(/^AXENT-R2-/, '')
+      );
+      if (!isCandidateShortlisted || !enteredRound2Key) {
         playSound('warning');
-        setKeyError('Access Denied: Round 2 is restricted to shortlisted candidates only. Check your registered email.');
+        setKeyError('Access Denied: enter the dedicated Round 2 access key sent to your registered email. Round 1 keys cannot open the coding arena.');
         return;
       }
 
@@ -466,7 +469,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       try {
         localStorage.setItem('codedna_student_profile', JSON.stringify(codingProfile));
         localStorage.setItem('codedna_active_exam_mode', 'CODING');
-        setActiveCodeSparkCandidate(cand);
+        setActiveCodeSparkCandidate({ ...cand, accessKey: cand.round2Key || cand.accessKey });
       } catch {}
 
       playSound('success');
@@ -682,7 +685,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       return;
     }
     const safeExam: MCQExamConfig = targetExam;
-    const cand = activeCandidate || (keyDigits.trim() ? (lookupCandidateByKey(`AXENT-${keyDigits.trim()}`) || lookupCandidateAny(keyDigits.trim())?.candidate) : null);
+    const cand = activeCandidate || (keyDigits.trim() ? (await asyncLookupCandidateAny(keyDigits.trim()))?.candidate || null : null);
     if (!cand) {
       playSound('warning');
       setKeyError('Please enter your 4-digit key before starting Batch 2.');
@@ -1810,7 +1813,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                   <input
                     ref={keyInputRef}
                     type="text"
-                    maxLength={20}
+                    maxLength={48}
                     value={keyDigits}
                     onChange={(e) => handleDigitsInput(e.target.value)}
                     onKeyDown={(e) => {
@@ -1820,7 +1823,6 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                       }
                     }}
                     placeholder="XXXX"
-                    autoFocus
                     className="flex-1 min-w-0 bg-transparent border-none outline-none font-mono text-xl sm:text-2xl font-black tracking-[0.1em] sm:tracking-[0.25em] text-black placeholder-zinc-300 p-0 m-0"
                   />
                   {activeCandidate && keyDigits.length >= 4 && (

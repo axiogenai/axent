@@ -135,189 +135,83 @@ export function saveCodeSparkCandidates(candidates: CodeSparkCandidate[]): void 
   }
 }
 
+async function getCodeSparkAdminHeaders(): Promise<Record<string, string>> {
+  const { data, error } = await supabase.auth.getSession();
+  if (error || !data.session?.access_token) throw new Error("Sign in with an administrator account to manage the CodeSpark roster.");
+  return { "Content-Type": "application/json", Authorization: `Bearer ${data.session.access_token}` };
+}
+
+async function fetchCodeSparkRosterConfig(): Promise<CodeSparkSystemConfig | null> {
+  const headers = await getCodeSparkAdminHeaders();
+  const response = await fetch("/api/codespark/roster", { headers });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "Unable to load the CodeSpark roster.");
+  return result.config || null;
+}
+
 export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): Promise<boolean> {
   try {
-    if (!supabase) return false;
-    const deduped = deduplicateCandidates(candidates);
-
-    let currentConfig: Partial<CodeSparkSystemConfig> = {};
-
-    // 1. Try reading existing config from candidate_stations (100% public read-write for anon and authenticated)
-    try {
-      const { data: stationRec } = await supabase
-        .from('candidate_stations')
-        .select('code, student')
-        .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-        .maybeSingle();
-
-      if (stationRec) {
-        if (stationRec.student && typeof stationRec.student === 'object' && Object.keys(stationRec.student).length > 0) {
-          currentConfig = stationRec.student as Partial<CodeSparkSystemConfig>;
-        } else if (stationRec.code) {
-          currentConfig = JSON.parse(stationRec.code);
-        }
-      }
-    } catch {}
-
-    // 2. Fallback read from mcq_exams if needed
-    if (!currentConfig.activeExamId) {
-      try {
-        const { data: existing } = await supabase
-          .from('mcq_exams')
-          .select('instructions')
-          .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-          .maybeSingle();
-
-        if (existing?.instructions) {
-          currentConfig = JSON.parse(existing.instructions);
-        }
-      } catch {}
-    }
-
-    const assignedId = typeof window !== 'undefined'
-      ? localStorage.getItem('codedna_codespark_round1_exam_id')
-      : null;
-    const isConcluded = typeof window !== 'undefined'
-      ? localStorage.getItem(ROUND1_CONCLUDED_STORAGE_KEY) === 'true'
-      : false;
-
+    const headers = await getCodeSparkAdminHeaders();
+    const currentConfig = await fetchCodeSparkRosterConfig();
+    const assignedId = typeof window !== "undefined" ? localStorage.getItem("codedna_codespark_round1_exam_id") : null;
+    const isConcluded = typeof window !== "undefined" ? localStorage.getItem(ROUND1_CONCLUDED_STORAGE_KEY) === "true" : false;
+    const storedMode = typeof window !== 'undefined' ? localStorage.getItem('codedna_codespark_shortlist_mode') : null;
+    const shortlistMode: CodeSparkSystemConfig['shortlistMode'] =
+      storedMode === 'top_n' || storedMode === 'manual' ? storedMode : currentConfig?.shortlistMode || 'cutoff';
     const payload: CodeSparkSystemConfig = {
-      activeExamId: currentConfig.activeExamId || assignedId || null,
-      shortlistMode: currentConfig.shortlistMode || 'cutoff',
-      shortlistValue: currentConfig.shortlistValue || 12,
-      manualShortlistRolls: currentConfig.manualShortlistRolls || getShortlistedRolls(),
-      isConcluded: currentConfig.isConcluded !== undefined ? currentConfig.isConcluded : isConcluded,
-      candidates: deduped,
+      activeExamId: assignedId || currentConfig?.activeExamId || null,
+      shortlistMode,
+      shortlistValue: Number(typeof window !== 'undefined' ? localStorage.getItem('codedna_codespark_shortlist_value') : null) || currentConfig?.shortlistValue || 12,
+      manualShortlistRolls: getShortlistedRolls(),
+      isConcluded,
+      candidates: deduplicateCandidates(candidates),
       updatedAt: Date.now()
     };
-
-    // 1. Save to candidate_stations (universally accessible by all phones and stations)
-    try {
-      await supabase
-        .from('candidate_stations')
-        .upsert({
-          id: CODESPARK_SYSTEM_CONFIG_ID,
-          lab_id: 'SYSTEM_CONFIG',
-          station_number: 'CONFIG',
-          status: 'CONFIG',
-          code: JSON.stringify(payload),
-          student: payload,
-          last_updated_timestamp: Date.now()
-        });
-    } catch (csErr) {
-      console.warn('[CodeSpark] candidate_stations upsert warning:', csErr);
-    }
-
-    // 2. Also save to mcq_exams with status: 'PUBLISHED'
-    try {
-      await supabase
-        .from('mcq_exams')
-        .upsert({
-          id: CODESPARK_SYSTEM_CONFIG_ID,
-          title: 'CodeSpark System Configuration & Roster',
-          description: 'Cloud configuration for CodeSpark Active Paper, Shortlist Criteria, and Registered Candidates',
-          instructions: JSON.stringify(payload),
-          subject: 'CodeSpark',
-          topic: 'System',
-          status: 'PUBLISHED',
-          duration_minutes: 0,
-          total_marks: 0,
-          question_count: 0,
-          created_at: Date.now(),
-          updated_at: Date.now()
-        });
-    } catch (meErr) {
-      console.warn('[CodeSpark] mcq_exams upsert warning:', meErr);
-    }
-
-    return true;
+    const response = await fetch("/api/codespark/roster", {
+      method: "POST", headers, body: JSON.stringify({ config: payload })
+    });
+    return response.ok;
   } catch (err) {
-    console.warn('[CodeSpark Cloud] pushCandidatesToCloud failed:', err);
+    console.warn("[CodeSpark Cloud] secure roster update failed:", err);
     return false;
   }
 }
 
 export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
   try {
-    if (!supabase) return getAllCodeSparkCandidates();
-
-    let config: CodeSparkSystemConfig | null = null;
-
-    // 1. Read from candidate_stations first (100% public read-write for anon and authenticated)
-    try {
-      const { data: stationRec, error: stationErr } = await supabase
-        .from('candidate_stations')
-        .select('code, student')
-        .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-        .maybeSingle();
-
-      if (!stationErr && stationRec) {
-        if (stationRec.student && typeof stationRec.student === 'object' && Array.isArray((stationRec.student as any).candidates)) {
-          config = stationRec.student as CodeSparkSystemConfig;
-        } else if (stationRec.code) {
-          const parsed = JSON.parse(stationRec.code);
-          if (parsed && Array.isArray(parsed.candidates)) {
-            config = parsed;
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('[CodeSpark] candidate_stations read error:', e);
+    const config = await fetchCodeSparkRosterConfig();
+    if (!config || !Array.isArray(config.candidates)) return getAllCodeSparkCandidates();
+    if (config.activeExamId && typeof window !== "undefined") localStorage.setItem("codedna_codespark_round1_exam_id", config.activeExamId);
+    if (config.shortlistMode && typeof window !== "undefined") {
+      localStorage.setItem("codedna_codespark_shortlist_mode", config.shortlistMode);
+      localStorage.setItem("codedna_codespark_shortlist_value", String(config.shortlistValue || 12));
     }
-
-    // 2. If not found in candidate_stations, fallback to mcq_exams
-    if (!config) {
-      try {
-        const { data: record, error } = await supabase
-          .from('mcq_exams')
-          .select('instructions')
-          .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-          .maybeSingle();
-
-        if (!error && record?.instructions) {
-          const parsed = JSON.parse(record.instructions);
-          if (parsed && Array.isArray(parsed.candidates)) {
-            config = parsed;
-          }
-        }
-      } catch (e) {
-        console.warn('[CodeSpark] mcq_exams read error:', e);
-      }
+    if (Array.isArray(config.manualShortlistRolls) && typeof window !== "undefined") {
+      localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(config.manualShortlistRolls));
     }
-
-    if (config && Array.isArray(config.candidates)) {
-      if (config.activeExamId && typeof window !== 'undefined') {
-        localStorage.setItem('codedna_codespark_round1_exam_id', config.activeExamId);
-      }
-      if (config.shortlistMode && typeof window !== 'undefined') {
-        localStorage.setItem('codedna_codespark_shortlist_mode', config.shortlistMode);
-        localStorage.setItem('codedna_codespark_shortlist_value', String(config.shortlistValue || 12));
-      }
-      if (Array.isArray(config.manualShortlistRolls) && typeof window !== 'undefined') {
-        localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(config.manualShortlistRolls));
-      }
-      if (config.isConcluded !== undefined && typeof window !== 'undefined') {
-        localStorage.setItem(ROUND1_CONCLUDED_STORAGE_KEY, config.isConcluded ? 'true' : 'false');
-        window.dispatchEvent(new CustomEvent('codedna_codespark_concluded_updated', { detail: config.isConcluded }));
-      }
-
-      const local = getAllCodeSparkCandidates();
-      const combined = deduplicateCandidates([...local, ...config.candidates]);
-
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(combined));
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: combined }));
-          window.dispatchEvent(new Event('storage'));
-        }
-      } catch {}
-
-      return combined;
+    if (config.isConcluded !== undefined && typeof window !== "undefined") {
+      localStorage.setItem(ROUND1_CONCLUDED_STORAGE_KEY, config.isConcluded ? "true" : "false");
+      window.dispatchEvent(new CustomEvent("codedna_codespark_concluded_updated", { detail: config.isConcluded }));
     }
-
-    return getAllCodeSparkCandidates();
+    const combined = deduplicateCandidates(config.candidates);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(combined));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: combined }));
+      window.dispatchEvent(new Event("storage"));
+    }
+    return combined;
   } catch (err) {
-    console.warn('[CodeSpark Cloud] syncCandidatesFromCloud error:', err);
+    // Candidate browsers may not have an authority session. Sync only safe public exam state.
+    try {
+      const response = await fetch('/api/codespark/public-config');
+      const publicConfig = await response.json();
+      if (response.ok) {
+        if (publicConfig.activeExamId) localStorage.setItem('codedna_codespark_round1_exam_id', publicConfig.activeExamId);
+        localStorage.setItem(ROUND1_CONCLUDED_STORAGE_KEY, publicConfig.isConcluded ? 'true' : 'false');
+        window.dispatchEvent(new CustomEvent('codedna_codespark_concluded_updated', { detail: Boolean(publicConfig.isConcluded) }));
+      }
+    } catch {}
+    console.warn("[CodeSpark Cloud] roster sync requires administrator authentication:", err);
     return getAllCodeSparkCandidates();
   }
 }
@@ -327,115 +221,38 @@ export async function saveActiveCodeSparkPaper(
   criteria?: { mode?: 'cutoff' | 'top_n' | 'manual'; value?: number; manualRolls?: string[] }
 ): Promise<boolean> {
   try {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('codedna_codespark_round1_exam_id', examId);
-      if (criteria?.mode) localStorage.setItem('codedna_codespark_shortlist_mode', criteria.mode);
-      if (criteria?.value) localStorage.setItem('codedna_codespark_shortlist_value', String(criteria.value));
-      if (criteria?.manualRolls) localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(criteria.manualRolls));
-    }
-
-    if (!supabase) return true;
-
-    let currentConfig: Partial<CodeSparkSystemConfig> = {};
-
-    // Read current config
-    try {
-      const { data: stationRec } = await supabase
-        .from('candidate_stations')
-        .select('code, student')
-        .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-        .maybeSingle();
-
-      if (stationRec) {
-        if (stationRec.student && typeof stationRec.student === 'object' && Object.keys(stationRec.student).length > 0) {
-          currentConfig = stationRec.student as Partial<CodeSparkSystemConfig>;
-        } else if (stationRec.code) {
-          currentConfig = JSON.parse(stationRec.code);
-        }
-      }
-    } catch {}
-
-    if (!currentConfig.candidates) {
-      try {
-        const { data: existing } = await supabase
-          .from('mcq_exams')
-          .select('instructions')
-          .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-          .maybeSingle();
-
-        if (existing?.instructions) {
-          currentConfig = JSON.parse(existing.instructions);
-        }
-      } catch {}
-    }
-
+    const current = await fetchCodeSparkRosterConfig();
     const updatedConfig: CodeSparkSystemConfig = {
       activeExamId: examId,
-      shortlistMode: criteria?.mode || currentConfig.shortlistMode || 'cutoff',
-      shortlistValue: criteria?.value !== undefined ? criteria.value : (currentConfig.shortlistValue || 12),
-      manualShortlistRolls: criteria?.manualRolls || currentConfig.manualShortlistRolls || getShortlistedRolls(),
-      isConcluded: currentConfig.isConcluded || false,
-      candidates: currentConfig.candidates || getAllCodeSparkCandidates(),
+      shortlistMode: criteria?.mode || current?.shortlistMode || 'cutoff',
+      shortlistValue: criteria?.value !== undefined ? criteria.value : (current?.shortlistValue || 12),
+      manualShortlistRolls: criteria?.manualRolls || current?.manualShortlistRolls || getShortlistedRolls(),
+      isConcluded: current?.isConcluded || false,
+      candidates: current?.candidates || getAllCodeSparkCandidates(),
       updatedAt: Date.now()
     };
-
-    // 1. Save to candidate_stations
-    try {
-      await supabase
-        .from('candidate_stations')
-        .upsert({
-          id: CODESPARK_SYSTEM_CONFIG_ID,
-          lab_id: 'SYSTEM_CONFIG',
-          station_number: 'CONFIG',
-          status: 'CONFIG',
-          code: JSON.stringify(updatedConfig),
-          student: updatedConfig,
-          last_updated_timestamp: Date.now()
-        });
-    } catch {}
-
-    // 2. Save to mcq_exams with status: 'PUBLISHED'
-    try {
-      await supabase
-        .from('mcq_exams')
-        .upsert({
-          id: CODESPARK_SYSTEM_CONFIG_ID,
-          title: 'CodeSpark System Configuration & Roster',
-          description: 'Cloud configuration for CodeSpark Active Paper, Shortlist Criteria, and Registered Candidates',
-          instructions: JSON.stringify(updatedConfig),
-          subject: 'CodeSpark',
-          topic: 'System',
-          status: 'PUBLISHED',
-          duration_minutes: 0,
-          total_marks: 0,
-          question_count: 0,
-          created_at: Date.now(),
-          updated_at: Date.now()
-        });
-    } catch {}
-
-    // Mark target exam as isCodeSpark: true in Supabase
-    const all = getAllExams();
-    for (const ex of all) {
-      if (ex.id === examId) {
-        ex.isCodeSpark = true;
-        saveExam(ex);
-        void saveExamToCloud(ex);
-      } else if (ex.isCodeSpark) {
-        ex.isCodeSpark = false;
-        saveExam(ex);
-        void saveExamToCloud(ex);
-      }
-    }
+    const headers = await getCodeSparkAdminHeaders();
+    const response = await fetch('/api/codespark/roster', {
+      method: 'POST', headers, body: JSON.stringify({ config: updatedConfig })
+    });
+    if (!response.ok) return false;
 
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('storage'));
-      window.dispatchEvent(new CustomEvent('codedna_codespark_config_updated', { detail: updatedConfig }));
+      localStorage.setItem('codedna_codespark_round1_exam_id', examId);
+      localStorage.setItem('codedna_codespark_shortlist_mode', updatedConfig.shortlistMode);
+      localStorage.setItem('codedna_codespark_shortlist_value', String(updatedConfig.shortlistValue));
+      localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(updatedConfig.manualShortlistRolls));
     }
-
+    const all = getAllExams();
+    for (const ex of all) {
+      if (ex.id === examId && !ex.isCodeSpark) { ex.isCodeSpark = true; saveExam(ex); void saveExamToCloud(ex); }
+      else if (ex.id !== examId && ex.isCodeSpark) { ex.isCodeSpark = false; saveExam(ex); void saveExamToCloud(ex); }
+    }
+    window.dispatchEvent(new Event('storage'));
+    window.dispatchEvent(new CustomEvent('codedna_codespark_config_updated', { detail: updatedConfig }));
     return true;
   } catch (err) {
-    console.error('[CodeSpark] saveActiveCodeSparkPaper failed:', err);
+    console.error('[CodeSpark] secure active paper update failed:', err);
     return false;
   }
 }
@@ -465,135 +282,45 @@ export function getCodeSparkActiveExam(): MCQExamConfig | null {
 export async function asyncGetCodeSparkActiveExam(): Promise<MCQExamConfig | null> {
   const local = getCodeSparkActiveExam();
   if (local) return local;
-
-  if (supabase) {
-    try {
-      let activeExamId: string | null = null;
-
-      // 1. Check candidate_stations
-      try {
-        const { data: stRec } = await supabase
-          .from('candidate_stations')
-          .select('code, student')
-          .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-          .maybeSingle();
-
-        if (stRec) {
-          const cfg = (stRec.student && typeof stRec.student === 'object' && (stRec.student as any).activeExamId)
-            ? (stRec.student as any)
-            : (stRec.code ? JSON.parse(stRec.code) : null);
-          if (cfg?.activeExamId) {
-            activeExamId = cfg.activeExamId;
-          }
-        }
-      } catch {}
-
-      // 2. Check mcq_exams
-      if (!activeExamId) {
-        try {
-          const { data: configRow } = await supabase
-            .from('mcq_exams')
-            .select('instructions')
-            .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-            .maybeSingle();
-
-          if (configRow?.instructions) {
-            const parsed = JSON.parse(configRow.instructions);
-            if (parsed?.activeExamId) {
-              activeExamId = parsed.activeExamId;
-            }
-          }
-        } catch {}
-      }
-
-      if (activeExamId) {
-        const { data: row } = await supabase
-          .from('mcq_exams')
-          .select('*')
-          .eq('id', activeExamId)
-          .maybeSingle();
-
-        if (row) {
-          const mapped: MCQExamConfig = {
-            id: row.id,
-            title: row.title,
-            description: row.description || '',
-            instructions: row.instructions || '',
-            subject: row.subject || '',
-            topic: row.topic || '',
-            examCategory: row.exam_category || 'Aptitude',
-            durationMinutes: Number(row.duration_minutes) || 30,
-            startTime: row.start_time ? Number(row.start_time) : undefined,
-            endTime: row.end_time ? Number(row.end_time) : undefined,
-            totalMarks: Number(row.total_marks) || 0,
-            questionCount: Array.isArray(row.question_ids) ? row.question_ids.length : (Number(row.question_count) || 0),
-            questionIds: Array.isArray(row.question_ids) ? row.question_ids : [],
-            shuffleQuestions: Boolean(row.shuffle_questions),
-            shuffleOptions: Boolean(row.shuffle_options),
-            negativeMarkingEnabled: Boolean(row.negative_marking_enabled),
-            allowReview: Boolean(row.allow_review),
-            showExplanationsAfterSubmit: Boolean(row.show_explanations_after_submit),
-            maxAttempts: Number(row.max_attempts) || 1,
-            isCodeSpark: true,
-            isPrivate: true,
-            status: row.status,
-            createdAt: Number(row.created_at) || Date.now(),
-            updatedAt: Number(row.updated_at) || Date.now(),
-            createdBy: row.created_by || 'admin'
-          };
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('codedna_codespark_round1_exam_id', mapped.id);
-          }
-          saveExam(mapped);
-          return mapped;
-        }
-      }
-
-      const { data: anyPublished } = await supabase
-        .from('mcq_exams')
-        .select('*')
-        .neq('id', CODESPARK_SYSTEM_CONFIG_ID)
-        .eq('status', 'PUBLISHED')
-        .limit(2);
-
-      if (anyPublished && anyPublished.length === 1) {
-        const row = anyPublished[0];
-        const mapped: MCQExamConfig = {
-          id: row.id,
-          title: row.title,
-          description: row.description || '',
-          instructions: row.instructions || '',
-          subject: row.subject || '',
-          topic: row.topic || '',
-          examCategory: row.exam_category || 'Aptitude',
-          durationMinutes: Number(row.duration_minutes) || 30,
-          startTime: row.start_time ? Number(row.start_time) : undefined,
-          endTime: row.end_time ? Number(row.end_time) : undefined,
-          totalMarks: Number(row.total_marks) || 0,
-          questionCount: Array.isArray(row.question_ids) ? row.question_ids.length : (Number(row.question_count) || 0),
-          questionIds: Array.isArray(row.question_ids) ? row.question_ids : [],
-          shuffleQuestions: Boolean(row.shuffle_questions),
-          shuffleOptions: Boolean(row.shuffle_options),
-          negativeMarkingEnabled: Boolean(row.negative_marking_enabled),
-          allowReview: Boolean(row.allow_review),
-          showExplanationsAfterSubmit: Boolean(row.show_explanations_after_submit),
-          maxAttempts: Number(row.max_attempts) || 1,
-          isCodeSpark: true,
-          isPrivate: true,
-          status: row.status,
-          createdAt: Number(row.created_at) || Date.now(),
-          updatedAt: Number(row.updated_at) || Date.now(),
-          createdBy: row.created_by || 'admin'
-        };
-        saveExam(mapped);
-        return mapped;
-      }
-    } catch (err) {
-      console.warn('[CodeSpark] asyncGetCodeSparkActiveExam error:', err);
-    }
+  try {
+    const response = await fetch('/api/codespark/public-exam');
+    const result = await response.json();
+    const row = result.exam;
+    if (!response.ok || !row) return null;
+    const mapped: MCQExamConfig = {
+      id: row.id,
+      title: row.title,
+      description: row.description || '',
+      instructions: row.instructions || '',
+      subject: row.subject || '',
+      topic: row.topic || '',
+      examCategory: row.exam_category || 'Aptitude',
+      durationMinutes: Number(row.duration_minutes) || 30,
+      startTime: row.start_time ? Number(row.start_time) : undefined,
+      endTime: row.end_time ? Number(row.end_time) : undefined,
+      totalMarks: Number(row.total_marks) || 0,
+      questionCount: Array.isArray(row.question_ids) ? row.question_ids.length : (Number(row.question_count) || 0),
+      questionIds: Array.isArray(row.question_ids) ? row.question_ids : [],
+      shuffleQuestions: Boolean(row.shuffle_questions),
+      shuffleOptions: Boolean(row.shuffle_options),
+      negativeMarkingEnabled: Boolean(row.negative_marking_enabled),
+      allowReview: Boolean(row.allow_review),
+      showExplanationsAfterSubmit: Boolean(row.show_explanations_after_submit),
+      maxAttempts: Number(row.max_attempts) || 1,
+      isCodeSpark: true,
+      isPrivate: true,
+      status: row.status,
+      createdAt: Number(row.created_at) || Date.now(),
+      updatedAt: Number(row.updated_at) || Date.now(),
+      createdBy: row.created_by || 'admin'
+    };
+    localStorage.setItem('codedna_codespark_round1_exam_id', mapped.id);
+    saveExam(mapped);
+    return mapped;
+  } catch (error) {
+    console.warn('[CodeSpark] Active exam metadata unavailable:', error);
+    return null;
   }
-
-  return null;
 }
 
 export function ensureCodeSparkAptitudeExam(): MCQExamConfig | null {
@@ -639,9 +366,14 @@ export function isCandidateInShortlistStorage(identifier: string): boolean {
   return rolls.includes(clean);
 }
 
-export function generateRound2KeyForCandidate(cand: CodeSparkCandidate): string {
-  const num = Math.floor(1000 + Math.random() * 9000);
-  return `AXENT-R2-${num}`;
+export function generateRound2KeyForCandidate(_cand: CodeSparkCandidate): string {
+  if (!globalThis.crypto?.getRandomValues) {
+    throw new Error('A secure browser context is required to generate Round 2 access keys.');
+  }
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  const token = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('').toUpperCase();
+  return `AXENT-R2-${token}`;
 }
 
 export function isRound1ConcludedGlobally(): boolean {
@@ -663,49 +395,15 @@ export function isRound1ConcludedGlobally(): boolean {
 export function setRound1ConcludedGlobally(concluded: boolean): void {
   try {
     localStorage.setItem(ROUND1_CONCLUDED_STORAGE_KEY, concluded ? 'true' : 'false');
-    if (!concluded) {
-      localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify([]));
-    }
+    if (!concluded) localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify([]));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('codedna_codespark_concluded_updated', { detail: concluded }));
       window.dispatchEvent(new Event('storage'));
     }
     notifyCandidatesUpdated();
-
-    // Async push to cloud
-    if (supabase) {
-      void (async () => {
-        try {
-          const { data: stRec } = await supabase
-            .from('candidate_stations')
-            .select('code, student')
-            .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-            .maybeSingle();
-
-          let cfg: any = {};
-          if (stRec) {
-            cfg = (stRec.student && typeof stRec.student === 'object') ? stRec.student : (stRec.code ? JSON.parse(stRec.code) : {});
-          }
-          cfg.isConcluded = concluded;
-          if (!concluded) {
-            cfg.manualShortlistRolls = [];
-          }
-          cfg.updatedAt = Date.now();
-          await supabase.from('candidate_stations').upsert({
-            id: CODESPARK_SYSTEM_CONFIG_ID,
-            lab_id: 'SYSTEM_CONFIG',
-            station_number: 'CONFIG',
-            status: 'CONFIG',
-            code: JSON.stringify(cfg),
-            student: cfg,
-            last_updated_timestamp: Date.now()
-          });
-        } catch (e) {
-          console.warn('[CodeSpark] setRound1ConcludedGlobally cloud push error:', e);
-        }
-      })();
-    }
-  } catch {}
+  } catch (error) {
+    console.warn('[CodeSpark] local conclusion state update failed:', error);
+  }
 }
 
 export interface SmtpConfig {
@@ -717,62 +415,56 @@ export interface SmtpConfig {
 }
 
 export function getStoredSmtpConfig(): SmtpConfig | null {
+  // SMTP credentials are server-only. Retain only harmless UI preferences locally.
   try {
     const raw = localStorage.getItem(SMTP_CONFIG_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      const safePreferences = {
+        smtp_from_name: saved.smtp_from_name || "Code Spark 2026 Examination Board"
+      };
+      // Purge any SMTP credentials written by the legacy client-side settings.
+      localStorage.setItem(SMTP_CONFIG_STORAGE_KEY, JSON.stringify(safePreferences));
+      return {
+        smtp_user: "",
+        smtp_password: "",
+        smtp_from_name: safePreferences.smtp_from_name
+      };
+    }
   } catch {}
-  return {
-    smtp_user: 'teamaxiogen@gmail.com',
-    smtp_password: (import.meta as any).env?.VITE_SMTP_PASSWORD || 'qtdpejtmmsuflijo',
-    smtp_from_name: 'Code Spark 2026 Examination Board'
-  };
+  return { smtp_user: "", smtp_password: "", smtp_from_name: "Code Spark 2026 Examination Board" };
 }
 
 export function saveStoredSmtpConfig(config: SmtpConfig): void {
   try {
-    localStorage.setItem(SMTP_CONFIG_STORAGE_KEY, JSON.stringify(config));
+    localStorage.setItem(SMTP_CONFIG_STORAGE_KEY, JSON.stringify({
+      smtp_from_name: config.smtp_from_name || "Code Spark 2026 Examination Board"
+    }));
   } catch {}
 }
 
-export async function testSmtpConnection(
-  config: SmtpConfig
-): Promise<{ success: boolean; message?: string; error?: string }> {
-  const payload = {
-    smtp_user: config.smtp_user,
-    smtp_password: config.smtp_password,
-    smtp_host: config.smtp_host || 'smtp.gmail.com',
-    smtp_port: config.smtp_port || 587
+async function getCodesparkAdminHeaders(): Promise<Record<string, string>> {
+  const { data, error } = await supabase.auth.getSession();
+  if (error || !data.session?.access_token) {
+    throw new Error("Please sign in with your administrator Supabase account.");
+  }
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${data.session.access_token}`
   };
+}
 
-  // Try relative Vercel serverless endpoint first
+export async function testSmtpConnection(
+  _config: SmtpConfig
+): Promise<{ success: boolean; message?: string; error?: string }> {
   try {
-    const res = await fetch('/api/codespark/test-smtp/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const text = await res.text();
-    try {
-      const data = JSON.parse(text);
-      if (res.ok) return data;
-    } catch {}
-  } catch {}
-
-  // Fallback to Render backend
-  try {
-    const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || 'https://axent-b0wl.onrender.com';
-    const res = await fetch(`${backendUrl.replace(/\/$/, '')}/api/codespark/test-smtp/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
+    const headers = await getCodesparkAdminHeaders();
+    const response = await fetch("/api/codespark/test-smtp/", { method: "POST", headers, body: "{}" });
+    const data = await response.json();
+    if (!response.ok) return { success: false, error: data.error || "SMTP verification failed." };
     return data;
-  } catch (err: any) {
-    return {
-      success: false,
-      error: `SMTP Connection Error: ${err.message || String(err)}`
-    };
+  } catch (error: any) {
+    return { success: false, error: error?.message || "SMTP verification failed." };
   }
 }
 
@@ -787,7 +479,7 @@ export interface SmtpRecipientPayload {
 }
 
 export async function dispatchRound2EmailsViaSmtp(
-  config: SmtpConfig,
+  _config: SmtpConfig,
   recipients: SmtpRecipientPayload[]
 ): Promise<{
   success: boolean;
@@ -798,48 +490,20 @@ export async function dispatchRound2EmailsViaSmtp(
   failed: any[];
   error?: string;
 }> {
-  const payload = {
-    smtp_user: config.smtp_user,
-    smtp_password: config.smtp_password,
-    smtp_host: config.smtp_host || 'smtp.gmail.com',
-    smtp_port: config.smtp_port || 587,
-    smtp_from_name: config.smtp_from_name || 'CodeSpark 2026 Examination Board',
-    recipients
-  };
-
-  // Try relative Vercel serverless endpoint first
   try {
-    const res = await fetch('/api/codespark/send-emails/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+    const headers = await getCodesparkAdminHeaders();
+    const response = await fetch("/api/codespark/send-emails/", {
+      method: "POST", headers, body: JSON.stringify({ recipients })
     });
-    const text = await res.text();
-    try {
-      const data = JSON.parse(text);
-      if (res.ok) return data;
-    } catch {}
-  } catch {}
-
-  // Fallback to Render backend
-  try {
-    const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || 'https://axent-b0wl.onrender.com';
-    const res = await fetch(`${backendUrl.replace(/\/$/, '')}/api/codespark/send-emails/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
+    const data = await response.json();
+    if (!response.ok && !data.error) data.error = "Email dispatch failed.";
     return data;
-  } catch (err: any) {
+  } catch (error: any) {
     return {
-      success: false,
-      total: recipients.length,
-      sent_count: 0,
-      failed_count: recipients.length,
-      sent: [],
-      failed: recipients.map((r) => ({ email: r.email, reason: err.message || 'Dispatch error' })),
-      error: err.message || 'Network error during email dispatch'
+      success: false, total: recipients.length, sent_count: 0,
+      failed_count: recipients.length, sent: [],
+      failed: recipients.map((recipient) => ({ email: recipient.email, reason: "Email dispatch failed." })),
+      error: error?.message || "Network error during email dispatch."
     };
   }
 }
@@ -928,15 +592,16 @@ export function concludeRound1AndShortlistUnified(options: { mode: 'cutoff' | 't
     cand.isShortlisted = Boolean(isQual);
     if (isQual) {
       cand.status = 'SHORTLISTED';
-      if (!cand.round2Key) {
+      const existingRound2Suffix = String(cand.round2Key || '').toUpperCase().replace(/^AXENT-R2-/, '');
+      if (existingRound2Suffix.length < 8) {
         cand.round2Key = generateRound2KeyForCandidate(cand);
       }
       cand.round2InvitedAt = Date.now();
       newlyShortlistedRolls.push(candRoll || candKey);
     } else {
-      if (cand.status === 'SHORTLISTED') {
-        cand.status = 'ROUND1_COMPLETED';
-      }
+      if (cand.status === 'SHORTLISTED') cand.status = 'ROUND1_COMPLETED';
+      cand.round2Key = undefined;
+      cand.round2InvitedAt = undefined;
     }
   });
 
@@ -1084,10 +749,26 @@ export interface KeyLookupResult {
 }
 
 export async function asyncLookupCandidateAny(rawKey: string): Promise<KeyLookupResult | null> {
-  const local = lookupCandidateAny(rawKey);
-  if (local) return local;
-  await syncCandidatesFromCloud();
-  return lookupCandidateAny(rawKey);
+  const key = String(rawKey || '').trim();
+  if (!key) return null;
+  try {
+    const response = await fetch('/api/codespark/candidate-lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success || !result.candidate) return null;
+    return {
+      candidate: result.candidate as CodeSparkCandidate,
+      targetRound: result.targetRound === 'round2' ? 'round2' : 'round1',
+      isShortlisted: Boolean(result.isShortlisted),
+      round2Key: result.targetRound === 'round2' ? result.candidate.round2Key : undefined
+    };
+  } catch (error) {
+    console.warn('[CodeSpark] Server candidate verification unavailable:', error);
+    return null;
+  }
 }
 
 function extractPureKeySuffix(k: string): string {
@@ -1153,17 +834,16 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
       const isShortlisted = Boolean(
         c.isShortlisted ||
         c.status === 'SHORTLISTED' ||
-        Boolean(c.round2Key) ||
-        isCandidateInShortlistStorage(c.rollNumber || c.accessKey)
+        Boolean(c.round2Key)
       );
 
       // If candidate is shortlisted and (has round2Key or round 1 is over), targetRound is round2!
-      if (isShortlisted && (c.round2Key || isRound1Over)) {
+      if (isShortlisted && c.round2Key) {
         return {
           candidate: c,
           targetRound: 'round2',
           isShortlisted: true,
-          round2Key: c.round2Key || generateRound2KeyForCandidate(c)
+          round2Key: c.round2Key
         };
       }
 
@@ -1202,7 +882,8 @@ export function shortlistCandidateForRound2(identifier: string, isShortlisted = 
     if (cRoll === clean || cKey === clean || cEmail === clean) {
       c.isShortlisted = isShortlisted;
       c.status = isShortlisted ? 'SHORTLISTED' : 'ROUND1_COMPLETED';
-      if (isShortlisted && !c.round2Key) {
+      const existingRound2Suffix = String(c.round2Key || '').toUpperCase().replace(/^AXENT-R2-/, '');
+      if (isShortlisted && existingRound2Suffix.length < 8) {
         c.round2Key = generateRound2KeyForCandidate(c);
       } else if (!isShortlisted) {
         c.round2Key = undefined;
@@ -1257,10 +938,12 @@ export function generateCodeSparkKey(existingCandidates: CodeSparkCandidate[] = 
   existingCandidates.forEach((c) => {
     if (c.accessKey) usedKeys.add(c.accessKey.trim().toUpperCase());
   });
+  if (!globalThis.crypto?.getRandomValues) throw new Error('A secure browser context is required to generate candidate access keys.');
   let key = '';
   do {
-    const pin = Math.floor(1000 + Math.random() * 9000);
-    key = `AXENT-${pin}`;
+    const bytes = new Uint8Array(16);
+    globalThis.crypto.getRandomValues(bytes);
+    key = `AXENT-${Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
   } while (usedKeys.has(key));
   return key;
 }
@@ -1381,10 +1064,12 @@ export function importCodeSparkCandidates(
     if (c.accessKey) usedKeys.add(c.accessKey.trim().toUpperCase());
   });
   const getNextKey = (): string => {
+    if (!globalThis.crypto?.getRandomValues) throw new Error('A secure browser context is required to generate candidate access keys.');
     let key = '';
     do {
-      const pin = Math.floor(1000 + Math.random() * 9000);
-      key = `AXENT-${pin}`;
+      const bytes = new Uint8Array(16);
+      globalThis.crypto.getRandomValues(bytes);
+      key = `AXENT-${Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
     } while (usedKeys.has(key));
     usedKeys.add(key);
     return key;
@@ -1469,31 +1154,18 @@ export async function deleteCodeSparkCandidateComplete(accessKeyOrRoll: string):
 }
 
 export async function resetCodeSparkSystemInCloud(): Promise<boolean> {
-  if (!supabase) return false;
   try {
+    const headers = await getCodesparkAdminHeaders();
     const emptyConfig: CodeSparkSystemConfig = {
-      activeExamId: null,
-      shortlistMode: 'cutoff',
-      shortlistValue: 12,
-      manualShortlistRolls: [],
-      isConcluded: false,
-      candidates: [],
-      updatedAt: Date.now()
+      activeExamId: null, shortlistMode: 'cutoff', shortlistValue: 12,
+      manualShortlistRolls: [], isConcluded: false, candidates: [], updatedAt: Date.now()
     };
-    await supabase
-      .from('candidate_stations')
-      .upsert({
-        id: CODESPARK_SYSTEM_CONFIG_ID,
-        lab_id: 'SYSTEM_CONFIG',
-        station_number: 'CONFIG',
-        status: 'CONFIG',
-        code: JSON.stringify(emptyConfig),
-        student: emptyConfig,
-        last_updated_timestamp: Date.now()
-      });
-    return true;
-  } catch (err) {
-    console.warn('[CodeSpark Cloud] resetCodeSparkSystemInCloud failed:', err);
+    const response = await fetch('/api/codespark/roster', {
+      method: 'POST', headers, body: JSON.stringify({ config: emptyConfig })
+    });
+    return response.ok;
+  } catch (error) {
+    console.warn('[CodeSpark Cloud] secure roster reset failed:', error);
     return false;
   }
 }

@@ -435,193 +435,47 @@ export function saveRound2Problems(problems: Round2Problem[]): void {
 
 
 
-export async function saveRound2ProblemsToCloud(problems: Round2Problem[]): Promise<boolean> {
-
-
-
-  if (!supabase) return false;
-
-
-
-  try {
-
-
-
-    const payload = {
-
-
-
-      problems,
-
-
-
-      updatedAt: Date.now()
-
-
-
-    };
-
-
-
-    await supabase.from('candidate_stations').upsert({
-
-
-
-      id: ROUND2_QUESTIONS_CONFIG_ID,
-
-
-
-      lab_id: 'SYSTEM_CONFIG',
-
-
-
-      station_number: 'CONFIG',
-
-
-
-      status: 'CONFIG',
-
-
-
-      code: JSON.stringify(payload),
-
-
-
-      student: payload,
-
-
-
-      last_updated_timestamp: Date.now()
-
-
-
-    });
-
-
-
-    return true;
-
-
-
-  } catch (err) {
-
-
-
-    console.warn('[Round 2] Failed to save questions to cloud:', err);
-
-
-
-    return false;
-
-
-
-  }
-
-
-
+async function round2ApiHeaders(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token
+    ? { "Content-Type": "application/json", Authorization: `Bearer ${data.session.access_token}` }
+    : { "Content-Type": "application/json" };
 }
 
-
+export async function saveRound2ProblemsToCloud(problems: Round2Problem[]): Promise<boolean> {
+  try {
+    const headers = await round2ApiHeaders();
+    if (!headers.Authorization) throw new Error("Sign in as a CodeSpark administrator to publish questions.");
+    const response = await fetch("/api/codespark/round2-problems", {
+      method: "POST", headers, body: JSON.stringify({ problems })
+    });
+    return response.ok;
+  } catch (err) {
+    console.warn("[Round 2] Secure problem publication failed:", err);
+    return false;
+  }
+}
 
 export async function fetchRound2ProblemsFromCloud(): Promise<Round2Problem[]> {
-
-
-
-  if (!supabase) return getAllRound2Problems();
-
-
-
   try {
-
-
-
-    const { data: rec, error } = await supabase
-
-
-
-      .from('candidate_stations')
-
-
-
-      .select('code, student')
-
-
-
-      .eq('id', ROUND2_QUESTIONS_CONFIG_ID)
-
-
-
-      .maybeSingle();
-
-
-
-    if (!error && rec) {
-
-
-
-      const cfg =
-
-
-
-        rec.student && typeof rec.student === 'object' && Array.isArray((rec.student as any).problems)
-
-
-
-          ? (rec.student as any)
-
-
-
-          : rec.code
-
-
-
-          ? JSON.parse(rec.code)
-
-
-
-          : null;
-
-
-
-      if (cfg && Array.isArray(cfg.problems) && cfg.problems.length > 0) {
-
-
-
-        localStorage.setItem('codedna_codespark_r2_problems', JSON.stringify(cfg.problems));
-
-
-
-        return cfg.problems;
-
-
-
+    const headers = await round2ApiHeaders();
+    const response = await fetch("/api/codespark/round2-problems", { headers });
+    if (response.ok) {
+      const result = await response.json();
+      if (Array.isArray(result.problems)) {
+        localStorage.setItem("codedna_codespark_r2_problems", JSON.stringify(result.problems));
+        return result.problems;
       }
-
-
-
     }
-
-
-
-  } catch (e) {
-
-
-
-    console.warn('[Round 2] fetchRound2ProblemsFromCloud error:', e);
-
-
-
+  } catch (err) {
+    console.warn("[Round 2] Secure problem retrieval failed:", err);
   }
 
-
-
-  return getAllRound2Problems();
-
-
-
+  const local = getAllRound2Problems();
+  const { data } = await supabase.auth.getSession();
+  const isAdmin = data.session?.user?.app_metadata?.role === "admin";
+  return isAdmin ? local : local.map((problem) => ({ ...problem, hiddenTestCases: [] }));
 }
-
-
 
 /**
 
@@ -1396,104 +1250,123 @@ export function analyzeCodeComplexity(
 
 
 function computeDynamicScore(
-  maxMarks: number, aiAligned: boolean, compileOk: boolean,
+  maxMarks: number, passRatio: number, allTestsPassed: boolean,
   timeComplexity: string, spaceComplexity: string, timeTakenMs: number
 ): number {
-  // HackerRank standard: If code does not compile or does not solve the problem, score is strictly 0!
-  if (!compileOk || !aiAligned) return 0;
+  if (passRatio <= 0) return 0;
+  let score = maxMarks * 0.8 * Math.min(1, passRatio);
+  if (!allTestsPassed) return Math.max(0, Math.round(score));
 
-  // Problem correctly solved: Start with 80% base score
-  let score = maxMarks * 0.80;
-
-  // Efficiency bonus (up to 15%)
   const tc = (timeComplexity || '').toLowerCase();
   const sc = (spaceComplexity || '').toLowerCase();
-  let cBonus = 0;
-  if (tc.includes('o(1)') || tc.includes('o(log')) cBonus += 0.08;
-  else if (tc.includes('o(n log') || tc.includes('o(nlog')) cBonus += 0.06;
-  else if (tc.includes('o(n)')) cBonus += 0.04;
-  else cBonus += 0.01;
-
-  if (sc.includes('o(1)')) cBonus += 0.07;
-  else if (sc.includes('o(n)') || sc.includes('o(log')) cBonus += 0.04;
-  else cBonus += 0.01;
-
-  score += maxMarks * Math.min(cBonus, 0.15);
-
-  // Speed bonus (up to 5% if finished within 20 mins)
+  let complexityBonus = 0;
+  if (tc.includes('o(1)') || tc.includes('o(log')) complexityBonus += 0.08;
+  else if (tc.includes('o(n log') || tc.includes('o(nlog')) complexityBonus += 0.06;
+  else if (tc.includes('o(n)')) complexityBonus += 0.04;
+  else complexityBonus += 0.01;
+  if (sc.includes('o(1)')) complexityBonus += 0.07;
+  else if (sc.includes('o(n)') || sc.includes('o(log')) complexityBonus += 0.04;
+  else complexityBonus += 0.01;
+  score += maxMarks * Math.min(complexityBonus, 0.15);
   const maxTimeMs = 20 * 60 * 1000;
-  score += maxMarks * 0.05 * Math.max(0, 1 - ((timeTakenMs || 0) / maxTimeMs));
-
+  score += maxMarks * 0.05 * Math.max(0, 1 - (Math.max(0, timeTakenMs || 0) / maxTimeMs));
   return Math.min(maxMarks, Math.max(0, Math.round(score)));
 }
+
+const normalizeProgramOutput = (value: unknown): string =>
+  String(value ?? '').replace(/\r\n/g, '\n').trim();
 
 export async function evaluateRound2Code(
   problem: Round2Problem,
   code: string,
   explicitLanguage?: 'C' | 'C++' | 'Python' | 'Java',
   timeTakenMs?: number,
-  customStdin?: string
+  customStdin?: string,
+  candidateKey?: string
 ): Promise<Round2QuestionReport> {
   const language = explicitLanguage || detectLanguageFromCode(code);
+  const tests = [
+    ...(Array.isArray(problem.sampleTestCases) ? problem.sampleTestCases : []),
+    ...(Array.isArray(problem.hiddenTestCases) ? problem.hiddenTestCases.map((test) => ({ ...test, isHidden: true })) : [])
+  ];
+  const complexity = analyzeCodeComplexity(code, language, '');
+  const sampleResults: Round2QuestionReport['sampleResults'] = [];
+  const hiddenResults: Round2QuestionReport['hiddenResults'] = [];
   let primaryCompilerResult: CompilerExecutionResult | null = null;
+  let passedTests = 0;
+  let compileFailure = false;
+  let runtimeFailure = false;
 
-  // Smart STDIN resolver: Custom input > Problem sample test input > Smart default for input-expecting programs
-  let stdinToUse = (customStdin !== undefined && customStdin !== null && customStdin.trim() !== '') ? customStdin : '';
-  if (!stdinToUse && problem.sampleTestCases && problem.sampleTestCases.length > 0) {
-    stdinToUse = problem.sampleTestCases[0].input || '';
+  const runCase = async (input: string): Promise<CompilerExecutionResult | null> => {
+    try {
+      return await runRealCode(code, language, input || '');
+    } catch {
+      return null;
+    }
+  };
+
+  // Keep the existing custom-input Run experience, but never let custom input replace official tests.
+  if (customStdin !== undefined && customStdin !== null && customStdin.trim() !== '') {
+    primaryCompilerResult = await runCase(customStdin);
   }
-  if (!stdinToUse) {
-    const expectsInput = /\b(scanf|cin|input\s*\(|Scanner|nextInt|readLine|stdin\.read)\b/.test(code);
-    if (expectsInput) {
-      stdinToUse = '10 20\n5 15\n100\n';
+  for (let index = 0; index < tests.length; index++) {
+    const test = tests[index];
+    const result = await runCase(test.input || '');
+    if (!primaryCompilerResult) primaryCompilerResult = result;
+    const compileError = Boolean(result?.compileOutput);
+    const runtimeError = !result || Boolean(result.isError);
+    if (compileError) compileFailure = true;
+    else if (runtimeError) runtimeFailure = true;
+    const passed = Boolean(
+      result &&
+      !compileError &&
+      !runtimeError &&
+      normalizeProgramOutput(result.stdout) === normalizeProgramOutput(test.expectedOutput)
+    );
+    if (passed) passedTests++;
+    if (test.isHidden) {
+      hiddenResults.push({ testCaseId: test.id, passed });
+    } else {
+      sampleResults.push({
+        testCaseId: test.id,
+        input: test.input || '',
+        expected: test.expectedOutput || '',
+        actual: result?.stdout || '',
+        passed,
+        error: result?.compileOutput || result?.stderr || undefined
+      });
     }
   }
 
-  try {
-    primaryCompilerResult = await runRealCode(code, language, stdinToUse);
-  } catch {}
-
-  const compileOk = !!(primaryCompilerResult && !primaryCompilerResult.compileOutput && !primaryCompilerResult.isError);
-  const complexity = analyzeCodeComplexity(code, language, '');
-
-  let aiVerification: Round2QuestionReport['aiVerification'] | undefined;
-  let aiAligned = false;
-  if (compileOk && code.trim().length > 20) {
-    try {
-      const aiResult = await verifyRound2CodeWithAI(
-        problem, code, language, stdinToUse, problem.sampleTestCases?.[0]?.expectedOutput || '', primaryCompilerResult?.stdout || ''
-      );
-      aiAligned = aiResult.isAlignedWithProblem;
-      aiVerification = aiResult;
-    } catch {}
-  }
-
+  const totalTests = tests.length;
+  const allTestsPassed = totalTests > 0 && passedTests === totalTests;
+  const passRatio = totalTests > 0 ? passedTests / totalTests : 0;
   const maxMarks = problem.marks || 20;
   const score = computeDynamicScore(
-    maxMarks, aiAligned, compileOk,
+    maxMarks, passRatio, allTestsPassed,
     complexity.timeComplexity, complexity.spaceComplexity, timeTakenMs || 0
   );
 
   let status: Round2QuestionReport['status'] = 'PARTIAL';
-  if (primaryCompilerResult?.compileOutput) status = 'COMPILE_ERROR';
-  else if (!compileOk) status = 'RUNTIME_ERROR';
-  else if (aiAligned) status = 'ACCEPTED';
+  if (compileFailure) status = 'COMPILE_ERROR';
+  else if (runtimeFailure && passedTests === 0) status = 'RUNTIME_ERROR';
+  else if (allTestsPassed) status = 'ACCEPTED';
 
   const rawTimeStr = primaryCompilerResult?.time || '';
   const parsedTimeSec = parseFloat(rawTimeStr.replace(/[^\d.]/g, ''));
-  const runtimeMs = !isNaN(parsedTimeSec) && parsedTimeSec > 0 ? parsedTimeSec * 1000 : undefined;
+  const runtimeMs = !Number.isNaN(parsedTimeSec) && parsedTimeSec > 0 ? parsedTimeSec * 1000 : undefined;
 
-  return {
+  const report: Round2QuestionReport = {
     questionNumber: problem.number,
     questionId: problem.id,
     questionTitle: problem.title,
     code,
     language,
     compilerResult: primaryCompilerResult,
-    sampleResults: [],
-    hiddenResults: [],
-    passedTests: aiAligned ? 1 : 0,
-    totalTests: 1,
+    sampleResults,
+    hiddenResults,
+    passedTests,
+    totalTests,
     score,
     maxScore: maxMarks,
     status,
@@ -1503,10 +1376,30 @@ export async function evaluateRound2Code(
     timeComplexity: complexity.timeComplexity,
     spaceComplexity: complexity.spaceComplexity,
     complexityExplanation: complexity.explanation,
-    efficiencyRating: complexity.rating,
-    aiVerification
+    efficiencyRating: complexity.rating
   };
+
+  if (candidateKey) {
+    const response = await fetch('/api/codespark/grade-round2', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: candidateKey, problemId: problem.id, code, language })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || 'Authoritative server grading failed. Please retry.');
+    }
+    report.sampleResults = result.sampleResults || [];
+    report.hiddenResults = result.hiddenResults || [];
+    report.passedTests = Number(result.passedTests) || 0;
+    report.totalTests = Number(result.totalTests) || 0;
+    report.score = Number(result.score) || 0;
+    report.maxScore = Number(result.maxScore) || maxMarks;
+    report.status = result.status || 'PENDING';
+  }
+  return report;
 }
+
 export function getStoredRound2Submission(candidateKey: string): Round2CandidateSubmission | null {
 
 
@@ -1661,8 +1554,8 @@ export function selectStudentRound2Problems(
 
 export async function verifyRound2CodeWithAI(
   problem: Round2Problem,
-  code: string,
-  language: 'C' | 'C++' | 'Python' | 'Java',
+  _code: string,
+  _language: 'C' | 'C++' | 'Python' | 'Java',
   _sampleInput?: string,
   _expectedOutput?: string,
   actualOutput?: string
@@ -1672,169 +1565,31 @@ export async function verifyRound2CodeWithAI(
   isAlignedWithProblem: boolean;
   analysis: string;
 }> {
-  const groqKey = localStorage.getItem('codedna_groq_api_key') || localStorage.getItem('GROQ_API_KEY') || (import.meta as any).env?.VITE_GROQ_API_KEY || (import.meta as any).env?.VITE_AI_API_KEY;
-  if (groqKey && code && code.trim()) {
-    try {
-      const prompt = `You are the CodeSpark 2026 AI Examiner. Analyze if this code correctly solves the problem.
-Problem: ${problem.title}
-Description: ${problem.description.slice(0, 400)}
-Language: ${language}
-Code:
-\`\`\`${language}
-${code.slice(0, 1500)}
-\`\`\`
-Actual output when run: ${actualOutput || '(not available)'}
-Return strict JSON only:
-{"verifiedQuestionTitle":"${problem.title}","predictedOutput":"...","isAlignedWithProblem":true,"analysis":"1 concise sentence on whether logic solves the question"}`;
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${groqKey}`
-        },
-        body: JSON.stringify({
-          model: (import.meta as any).env?.VITE_DEFAULT_MODEL || 'qwen/qwen3.8-27b',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.1,
-          response_format: { type: 'json_object' }
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const parsed = JSON.parse(data.choices[0].message.content);
-        return {
-          verifiedQuestionTitle: parsed.verifiedQuestionTitle || problem.title,
-          predictedOutput: parsed.predictedOutput || actualOutput || '',
-          isAlignedWithProblem: Boolean(parsed.isAlignedWithProblem),
-          analysis: parsed.analysis || 'AI verified solution logic.'
-        };
-      }
-    } catch {}
-  }
-  // Fallback: if code compiled and ran, consider partial alignment
   return {
     verifiedQuestionTitle: problem.title,
     predictedOutput: actualOutput || '',
     isAlignedWithProblem: false,
-    analysis: `Could not verify ${problem.title} with AI — no Groq key or network error.`
+    analysis: 'AI is not used as a correctness authority. Official evaluation compares program output against configured test cases.'
   };
 }
 
 export async function pushRound2LiveCodeToCloud(
-
-
-
   profile: { name: string; rollNumber: string; accessKey: string; stationNumber?: string; round2Key?: string },
-
-
-
   code: string,
-
-
-
   language: string,
-
-
-
   questionNumber: number
-
-
-
 ): Promise<void> {
-
-
-
-  if (!supabase) return;
-
-
-
   try {
-
-
-
-    const canonicalRoll = (profile.rollNumber || profile.accessKey || '').trim().toUpperCase().replace(/[^A-Za-z0-9_-]/g, '_');
-    const cloudId = `r2_station_${canonicalRoll}`;
-
-
-
-    await supabase.from('candidate_stations').upsert({
-
-
-
-      id: cloudId,
-
-
-
-      lab_id: 'ROUND_2_ARENA',
-
-
-
-      station_number: profile.stationNumber || 'Station #01',
-
-
-
-      status: 'IN_PROGRESS',
-
-
-
-      code: code,
-
-
-
-      language: language || 'Python',
-
-
-
-      student: {
-
-
-
-        name: profile.name,
-
-
-
-        rollNumber: profile.rollNumber,
-
-
-
-        accessKey: profile.accessKey,
-
-
-
-        round2Key: profile.round2Key,
-
-
-
-        currentQuestion: questionNumber
-
-
-
-      },
-
-
-
-      last_updated_timestamp: Date.now()
-
-
-
+    const key = profile.round2Key || profile.accessKey;
+    await fetch('/api/codespark/round2-live-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, code, language, questionNumber, stationNumber: profile.stationNumber })
     });
-
-
-
-  } catch (err) {
-
-
-
-    console.warn('[Round 2] pushRound2LiveCodeToCloud failed:', err);
-
-
-
+  } catch (error) {
+    console.warn('[Round 2] secure live-code sync unavailable:', error);
   }
-
-
-
 }
-
 
 
 export function extractCleanCandidateCode(rawCode?: string | null): string {
@@ -1922,203 +1677,64 @@ export function extractCleanCandidateCode(rawCode?: string | null): string {
 
 
 export async function pushRound2SubmissionToCloud(sub: Round2CandidateSubmission): Promise<boolean> {
-
-
-
-  if (!supabase) return false;
-
-
-
   try {
-
-
-
-    const cloudId = `r2_sub_${sub.candidateKey.replace(/[^A-Za-z0-9_-]/g, '_')}`;
-
-
-
-    const payload = {
-
-
-
-      ...sub,
-
-
-
-      updatedAt: Date.now()
-
-
-
-    };
-
-
-
-    // 1. Save to candidate_stations for universal instant access
-
-
-
-    await supabase.from('candidate_stations').upsert({
-
-
-
-      id: cloudId,
-
-
-
-      lab_id: 'ROUND_2_ARENA',
-
-
-
-      station_number: sub.stationNumber || 'Station #01',
-
-
-
-      status: sub.isSubmitted ? 'SUBMITTED' : 'IN_PROGRESS',
-
-
-
-      code: JSON.stringify(payload),
-
-
-
-      student: {
-
-
-
-        name: sub.candidateName,
-
-
-
-        rollNumber: sub.rollNumber,
-
-
-
-        email: sub.email,
-
-
-
-        accessKey: sub.candidateKey,
-
-
-
-        round2Key: sub.round2Key,
-
-
-
-        score: sub.totalScore,
-
-
-
-        maxScore: sub.maxScore,
-
-
-
-        isSubmitted: sub.isSubmitted
-
-
-
-      },
-
-
-
-      last_updated_timestamp: Date.now()
-
-
-
+    const response = await fetch('/api/codespark/round2-submissions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ submission: sub })
     });
-
-
-
-    // 2. Also save to code_submissions table
-
-
-
-    try {
-
-
-
-      await supabase.from('code_submissions').upsert({
-
-
-
-        id: cloudId,
-
-
-
-        student: {
-
-
-
-          name: sub.candidateName,
-
-
-
-          rollNumber: sub.rollNumber,
-
-
-
-          email: sub.email,
-
-
-
-          accessKey: sub.candidateKey,
-
-
-
-          score: sub.totalScore
-
-
-
-        },
-
-
-
-        language: sub.dominantLanguage || 'Python',
-
-
-
-        code: JSON.stringify(sub.questionReports),
-
-
-
-        status: sub.isSubmitted ? 'SUBMITTED' : 'IN_PROGRESS',
-
-
-
-        created_at: Date.now()
-
-
-
-      });
-
-
-
-    } catch {}
-
-
-
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      console.warn('[Round 2] Server submission sync rejected:', result.error || response.status);
+      return false;
+    }
+    if (sub.isSubmitted && result.submission) {
+      localStorage.setItem(`codedna_r2_sub_${sub.candidateKey.toUpperCase()}`, JSON.stringify(result.submission));
+    }
     return true;
-
-
-
-  } catch (err) {
-
-
-
-    console.warn('[Round 2] pushRound2SubmissionToCloud failed:', err);
-
-
-
+  } catch (error) {
+    console.warn('[Round 2] secure submission sync unavailable:', error);
     return false;
-
-
-
   }
-
-
-
 }
 
+
+export async function finalizeRound2Submission(sub: Round2CandidateSubmission): Promise<Round2CandidateSubmission | null> {
+  try {
+    const response = await fetch('/api/codespark/round2-submissions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ submission: { ...sub, isSubmitted: true } })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success || !result.submission) {
+      throw new Error(result.error || 'Final submission was not accepted by the server.');
+    }
+    return result.submission as Round2CandidateSubmission;
+  } catch (error) {
+    console.error('[Round 2] secure finalization failed:', error);
+    return null;
+  }
+}
+
+
+export async function fetchRound2SubmissionFromCloud(candidateKey: string): Promise<Round2CandidateSubmission | null> {
+  try {
+    const response = await fetch('/api/codespark/round2-submissions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'get', key: candidateKey })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success || !result.submission) return null;
+    const submission = result.submission as Round2CandidateSubmission;
+    localStorage.setItem(`codedna_r2_sub_${candidateKey.toUpperCase()}`, JSON.stringify(submission));
+    return submission;
+  } catch (error) {
+    console.warn('[Round 2] finalized submission recovery unavailable:', error);
+    return null;
+  }
+}
 
 
 export function getAllRound2Submissions(): Round2CandidateSubmission[] {
@@ -2233,342 +1849,79 @@ export interface Round2LeaderboardEntry {
 
 
 
+async function round2AdminHeaders(): Promise<Record<string, string>> {
+  const { data, error } = await supabase.auth.getSession();
+  if (error || !data.session?.access_token) throw new Error("Administrator sign-in is required.");
+  return { "Content-Type": "application/json", Authorization: `Bearer ${data.session.access_token}` };
+}
+
 export async function clearRound2Leaderboard(): Promise<void> {
-  try { localStorage.removeItem('codedna_codespark_r2_submissions'); } catch {}
-  if (supabase) {
-    try {
-      await supabase.from('candidate_stations').delete().like('id', 'r2_sub_%');
-      await supabase.from('candidate_stations').delete().like('id', 'r2_station_%');
-      if (typeof window !== 'undefined') {
-        const keysToRemove: string[] = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i);
-          if (k && (k.startsWith('codedna_r2_sub_') || k.startsWith('codedna_codespark_r2_'))) {
-            keysToRemove.push(k);
-          }
-        }
-        keysToRemove.forEach(k => localStorage.removeItem(k));
-      }
-    } catch (e) { console.warn('[Round 2] clearRound2Leaderboard error:', e); }
+  try {
+    const headers = await round2AdminHeaders();
+    const response = await fetch('/api/codespark/round2-submissions', { method: 'DELETE', headers });
+    if (!response.ok) throw new Error("Server refused to clear Round 2 submissions.");
+    localStorage.removeItem(ROUND2_SUBMISSIONS_STORAGE_KEY);
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('codedna_r2_sub_')) keysToRemove.push(key);
+    }
+    keysToRemove.forEach((key) => localStorage.removeItem(key));
+  } catch (error) {
+    console.warn('[Round 2] secure leaderboard reset failed:', error);
   }
 }
+
 export async function fetchRound2Leaderboard(): Promise<Round2LeaderboardEntry[]> {
-
-
-
-  const localList = getAllRound2Submissions();
-
-
-
   const subMap = new Map<string, Round2CandidateSubmission>();
-
-
-
-  localList.forEach((s) => subMap.set(s.candidateKey.toUpperCase(), s));
-
-
-
-  // Query Supabase candidate_stations for all r2_sub_ records
-
-
-
-  if (supabase) {
-
-
-
-    try {
-
-
-
-      const { data: records, error } = await supabase
-
-
-
-        .from('candidate_stations')
-
-
-
-        .select('code, student')
-
-
-
-        .like('id', 'r2_sub_%');
-
-
-
-      if (!error && records) {
-
-
-
-        for (const row of records) {
-
-
-
-          const sub: Round2CandidateSubmission | null =
-
-
-
-            row.code ? JSON.parse(row.code) : null;
-
-
-
-          if (sub && sub.candidateKey) {
-
-
-
-            const key = sub.candidateKey.toUpperCase();
-
-
-
-            const existing = subMap.get(key);
-
-
-
-            if (!existing || (sub.totalScore >= existing.totalScore)) {
-
-
-
-              subMap.set(key, sub);
-
-
-
-            }
-
-
-
-          }
-
-
-
-        }
-
-
-
+  try {
+    const headers = await round2AdminHeaders();
+    const response = await fetch('/api/codespark/round2-submissions', { headers });
+    const result = await response.json();
+    if (response.ok && Array.isArray(result.submissions)) {
+      for (const row of result.submissions) {
+        let sub: Round2CandidateSubmission | null = null;
+        try { sub = row.code ? JSON.parse(row.code) : null; } catch {}
+        if (sub?.candidateKey) subMap.set(sub.candidateKey.toUpperCase(), sub);
       }
-
-
-
-    } catch (e) {
-
-
-
-      console.warn('[Round 2] fetchRound2Leaderboard cloud query error:', e);
-
-
-
     }
-
-
-
+  } catch (error) {
+    console.warn('[Round 2] secure leaderboard fetch failed:', error);
   }
 
-
-
-  const allSubs = Array.from(subMap.values());
-
-
-
-  // Build Leaderboard
-
-
-
-  const entries: Round2LeaderboardEntry[] = allSubs.map((sub) => {
-
-
-
+  const entries: Round2LeaderboardEntry[] = Array.from(subMap.values()).map((sub) => {
     let solvedCount = 0;
-
-
-
-    const qStatus: Record<number, 'ACCEPTED' | 'PARTIAL' | 'FAILED' | 'PENDING'> = {};
-
-
-
-    for (let q = 1; q <= 5; q++) {
-
-
-
-      const report = sub.questionReports?.[q];
-
-
-
-      if (!report) {
-
-
-
-        qStatus[q] = 'PENDING';
-
-
-
-      } else if (report.status === 'ACCEPTED') {
-
-
-
-        qStatus[q] = 'ACCEPTED';
-
-
-
-        solvedCount++;
-
-
-
-      } else if (report.score > 0) {
-
-
-
-        qStatus[q] = 'PARTIAL';
-
-
-
-      } else {
-
-
-
-        qStatus[q] = 'FAILED';
-
-
-
-      }
-
-
-
+    const questionStatus: Record<number, 'ACCEPTED' | 'PARTIAL' | 'FAILED' | 'PENDING'> = {};
+    for (let question = 1; question <= 5; question++) {
+      const report = sub.questionReports?.[question];
+      if (!report) questionStatus[question] = 'PENDING';
+      else if (report.status === 'ACCEPTED') { questionStatus[question] = 'ACCEPTED'; solvedCount++; }
+      else if (report.score > 0) questionStatus[question] = 'PARTIAL';
+      else questionStatus[question] = 'FAILED';
     }
-
-
-
-    const elapsedMs = (sub.submittedAt || Date.now()) - (sub.startedAt || Date.now());
-
-
-
-    const timeTakenMinutes = Math.max(1, Math.round(elapsedMs / 60000));
-
-
-
+    const elapsed = (sub.submittedAt || Date.now()) - (sub.startedAt || Date.now());
     return {
-
-
-
       rank: 1,
-
-
-
       candidateKey: sub.candidateKey,
-
-
-
-      round2Key: sub.round2Key,
-
-
-
+      round2Key: sub.round2Key || '',
       candidateName: sub.candidateName,
-
-
-
       rollNumber: sub.rollNumber,
-
-
-
       email: sub.email,
-
-
-
       totalScore: sub.totalScore || 0,
-
-
-
       maxScore: sub.maxScore || 100,
-
-
-
       solvedCount,
-
-
-
-      questionStatus: qStatus,
-
-
-
+      questionStatus,
       dominantLanguage: sub.dominantLanguage || 'Python',
-
-
-
-      timeTakenMinutes,
-
-
-
+      timeTakenMinutes: Math.max(1, Math.round(elapsed / 60000)),
       isSubmitted: Boolean(sub.isSubmitted),
-
-
-
       submission: sub
-
-
-
     };
-
-
-
   });
-
-
-
-  // Sort by:
-
-
-
-  // 1. totalScore desc
-
-
-
-  // 2. solvedCount desc
-
-
-
-  // 3. timeTakenMinutes asc
-
-
-
-  entries.sort((a, b) => {
-
-
-
-    if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-
-
-
-    if (b.solvedCount !== a.solvedCount) return b.solvedCount - a.solvedCount;
-
-
-
-    return a.timeTakenMinutes - b.timeTakenMinutes;
-
-
-
-  });
-
-
-
-  // Assign ranks
-
-
-
-  entries.forEach((e, idx) => {
-
-
-
-    e.rank = idx + 1;
-
-
-
-  });
-
-
-
+  entries.sort((a, b) => b.totalScore - a.totalScore || b.solvedCount - a.solvedCount || a.timeTakenMinutes - b.timeTakenMinutes);
+  entries.forEach((entry, index) => { entry.rank = index + 1; });
   return entries;
-
-
-
 }
+
 
 export function parseQuestionsFromPlainText(text: string): Round2Problem[] {
   if (!text || !text.trim()) return [];

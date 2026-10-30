@@ -16,72 +16,36 @@ import {
 import { MCQQuestion, MCQExamConfig } from '../types/mcq';
 import { saveQuestion, saveExam } from './mcqService';
 
-const DEFAULT_KEY_POOL: string[] = [];
 const PRIMARY_MODEL = 'qwen/qwen3.8-27b';
-const FALLBACK_MODELS = ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
 
-let keyRoundRobinCounter = 0;
+function purgeLegacyBrowserApiKeys(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem('codedna_groq_api_key');
+    localStorage.removeItem('axent_ai_api_key');
+  } catch {}
+}
 
 export function getAllApiKeyPool(): string[] {
-  const keys = new Set<string>();
-
-  // 1. Check custom localStorage key
-  if (typeof window !== 'undefined') {
-    const customKey = localStorage.getItem('axent_ai_api_key') || localStorage.getItem('codedna_groq_api_key');
-    if (customKey && customKey.trim()) {
-      customKey.split(',').forEach((k) => {
-        const trimmed = k.trim();
-        if (trimmed && trimmed.startsWith('gsk_')) keys.add(trimmed);
-      });
-    }
-  }
-
-  // 2. Check multiple env vars (Key 1, Key 2, Multi-key list)
-  const envKeysRaw = [
-    import.meta.env.VITE_AI_API_KEY,
-    import.meta.env.VITE_GROQ_API_KEY,
-    import.meta.env.VITE_AI_API_KEY_2,
-    import.meta.env.VITE_GROQ_API_KEY_2,
-    ...(import.meta.env.VITE_GROQ_API_KEYS ? String(import.meta.env.VITE_GROQ_API_KEYS).split(',') : [])
-  ];
-
-  for (const envK of envKeysRaw) {
-    if (envK && typeof envK === 'string') {
-      const trimmed = envK.trim();
-      if (trimmed && trimmed.startsWith('gsk_')) {
-        keys.add(trimmed);
-      }
-    }
-  }
-
-  // 3. Fallback to production default dual-key pool
-  for (const defK of DEFAULT_KEY_POOL) {
-    keys.add(defK);
-  }
-
-  return Array.from(keys);
+  // API credentials are server-only. Never read keys from localStorage or Vite env.
+  purgeLegacyBrowserApiKeys();
+  return [];
 }
 
 export function getStoredApiKey(): string {
-  const pool = getAllApiKeyPool();
-  if (pool.length === 0) return '';
-  keyRoundRobinCounter = (keyRoundRobinCounter + 1) % pool.length;
-  return pool[keyRoundRobinCounter];
+  purgeLegacyBrowserApiKeys();
+  return '';
 }
 
-export function setStoredApiKey(key: string): void {
+export function setStoredApiKey(_key: string): void {
   if (typeof window !== 'undefined') {
-    if (!key || key.trim() === '') {
-      localStorage.removeItem('codedna_groq_api_key');
-      localStorage.removeItem('axent_ai_api_key');
-    } else {
-      localStorage.setItem('codedna_groq_api_key', key.trim());
-      localStorage.setItem('axent_ai_api_key', key.trim());
-    }
+    localStorage.removeItem('codedna_groq_api_key');
+    localStorage.removeItem('axent_ai_api_key');
   }
 }
 
 export function getStoredModel(): string {
+  purgeLegacyBrowserApiKeys();
   if (typeof window !== 'undefined') {
     const customModel = localStorage.getItem('codedna_groq_model');
     if (customModel && customModel.trim()) {
@@ -116,159 +80,27 @@ interface ChatMessage {
 
 export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function parseGroqWaitTime(errorBody: string, retryAfterHeader: string | null): number {
-  if (retryAfterHeader) {
-    const sec = parseFloat(retryAfterHeader);
-    if (!isNaN(sec) && sec > 0) return Math.ceil(sec * 1000) + 600;
-  }
-  const match = errorBody.match(/try again in ([0-9.]+)(m?s)/i);
-  if (match) {
-    const val = parseFloat(match[1]);
-    const unit = match[2].toLowerCase();
-    if (unit === 'ms') return Math.ceil(val) + 400;
-    if (unit === 's') return Math.ceil(val * 1000) + 600;
-    if (unit === 'm') return Math.ceil(val * 60 * 1000) + 600;
-  }
-  return 3600;
-}
 
 async function callGroqChat(
   messages: ChatMessage[],
   temperature = 0.1,
   jsonMode = false
 ): Promise<{ content: string; modelUsed: string }> {
-  const keyPool = getAllApiKeyPool();
   const preferredModel = getStoredModel();
-  const modelsToTry = [preferredModel, ...FALLBACK_MODELS.filter((m) => m !== preferredModel)];
-
-  let lastError: Error | null = null;
-  // Round-robin index across calls for even load balancing
-  const startIndex = keyRoundRobinCounter++ % (keyPool.length || 1);
-
-  for (const model of modelsToTry) {
-    let keyAttempts = 0;
-    // Iterate through all keys in pool for instant failover if one hits rate-limit (429)
-    for (let k = 0; k < keyPool.length; k++) {
-      const activeKey = keyPool[(startIndex + k) % keyPool.length];
-      keyAttempts++;
-
-      try {
-        const payload: Record<string, unknown> = {
-          model,
-          messages,
-          temperature,
-          max_tokens: 4096
-        };
-
-        // openai/gpt-oss-20b fails Groq server grammar validator (json_validate_failed) because it outputs reasoning tokens first.
-        // Never pass response_format to gpt-oss-20b; client-side parseQuestionsFromAIOutput extracts the JSON cleanly.
-        if (jsonMode && model !== 'openai/gpt-oss-20b') {
-          payload.response_format = { type: 'json_object' };
-        }
-
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${activeKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
-        });
-
-        if (!res.ok) {
-          const errorBody = await res.text();
-          if (res.status === 429) {
-            // Instant failover: If there is another key in the pool, try it immediately without delay!
-            if (k < keyPool.length - 1) {
-              console.warn(`[Dual-Key AI Engine] Key ...${activeKey.slice(-6)} rate-limited (429). Instantly switching to secondary key in pool...`);
-              continue;
-            } else {
-              // All keys in pool exhausted their limits; cool down minimally
-              const waitMs = parseGroqWaitTime(errorBody, res.headers.get('retry-after'));
-              console.warn(`[Dual-Key AI Engine] All ${keyPool.length} keys rate-limited. Cooling ${waitMs}ms before next model...`);
-              await sleep(waitMs);
-              continue;
-            }
-          }
-
-          // If Groq's grammar validator failed (json_validate_failed), immediately retry WITHOUT response_format!
-          if (jsonMode && (errorBody.includes('json_validate_failed') || res.status === 400)) {
-            console.warn(`[Dual-Key AI Engine] Model ${model} failed json_validate_failed on Groq grammar. Retrying with free-form JSON generation...`);
-            try {
-              const retryPayload = { ...payload };
-              delete retryPayload.response_format;
-              const retryRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${activeKey}`,
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(retryPayload)
-              });
-              if (retryRes.ok) {
-                const retryData = await retryRes.json();
-                const choice = retryData.choices?.[0];
-                let contentStr = (choice?.message?.content || '').trim();
-                const reasoningStr = (choice?.message?.reasoning || '').trim();
-                if (contentStr.includes('<think>')) {
-                  contentStr = contentStr.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-                }
-                if (!contentStr && reasoningStr) {
-                  const firstBrace = reasoningStr.indexOf('{');
-                  const lastBrace = reasoningStr.lastIndexOf('}');
-                  if (firstBrace !== -1 && lastBrace > firstBrace) {
-                    contentStr = reasoningStr.slice(firstBrace, lastBrace + 1).trim();
-                  }
-                }
-                if (contentStr) {
-                  return { content: contentStr, modelUsed: model };
-                }
-              }
-            } catch (retryErr) {
-              console.warn(`[Dual-Key AI Engine] Immediate fallback without response_format failed on ${model}:`, retryErr);
-            }
-          }
-
-          throw new Error(`Reasoning Engine Error (${res.status} on ${model}): ${errorBody}`);
-        }
-
-        const data = await res.json();
-        const choice = data.choices?.[0];
-        let contentStr = (choice?.message?.content || '').trim();
-        const reasoningStr = (choice?.message?.reasoning || '').trim();
-
-        if (contentStr.includes('<think>')) {
-          contentStr = contentStr.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-        }
-
-        // If content is empty or contains no JSON, check if reasoning has a JSON structure:
-        if (!contentStr && reasoningStr) {
-          const firstBrace = reasoningStr.indexOf('{');
-          const lastBrace = reasoningStr.lastIndexOf('}');
-          if (firstBrace !== -1 && lastBrace > firstBrace) {
-            contentStr = reasoningStr.slice(firstBrace, lastBrace + 1).trim();
-          }
-        }
-
-        // If content is still empty, throw to failover to the next fallback model (e.g. qwen/qwen3.8-27b)
-        if (!contentStr) {
-          throw new Error(`Model ${model} produced empty content (reasoning exhausted without JSON). Failing over...`);
-        }
-
-        return { content: contentStr, modelUsed: model };
-      } catch (err: unknown) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        console.warn(`[Dual-Key AI Engine] Key ...${activeKey.slice(-6)} on ${model} attempt failed:`, lastError.message);
-        // If it's a 400 or 404 error on this model, trying other keys with the same invalid model/payload will only repeat the error.
-        // Fast-failover directly to the next fallback model in modelsToTry!
-        if (lastError.message.includes('400 on ') || lastError.message.includes('404 on ') || lastError.message.includes('json_validate_failed')) {
-          break;
-        }
-      }
-    }
+  const response = await fetch('/api/ai/groq', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, temperature, jsonMode, model: preferredModel })
+  });
+  let result: any = {};
+  try { result = await response.json(); } catch {}
+  if (!response.ok) {
+    throw new Error(result.error || `AI service request failed (${response.status}).`);
   }
-
-  throw lastError || new Error('Connection to Autonomous AI Reasoning Engine failed across all keys and models.');
+  if (typeof result.content !== 'string' || !result.content.trim()) {
+    throw new Error('AI service returned an empty response.');
+  }
+  return { content: result.content, modelUsed: result.modelUsed || preferredModel };
 }
 
 function cleanJsonString(raw: string): string {

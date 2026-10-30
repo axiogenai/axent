@@ -7,13 +7,9 @@ import {
   CheckCircle2,
   AlertCircle,
   RefreshCw,
-  Eye,
-  EyeOff,
-  Wifi
+    Wifi
 } from 'lucide-react';
 import {
-  getStoredApiKey,
-  setStoredApiKey,
   getStoredModel,
   setStoredModel
 } from '../services/groqService';
@@ -51,16 +47,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   onConfigChanged
 }) => {
-  const [apiKey, setApiKey] = useState<string>(getStoredApiKey());
   const [selectedModel, setSelectedModel] = useState<string>(getStoredModel());
-  const [showKey, setShowKey] = useState<boolean>(false);
   const [testStatus, setTestStatus] = useState<TestStatus>('idle');
   const [testMessage, setTestMessage] = useState<string>('');
 
   if (!isOpen) return null;
 
   const handleSave = () => {
-    setStoredApiKey(apiKey.trim());
     setStoredModel(selectedModel);
     onConfigChanged();
     onClose();
@@ -71,21 +64,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setTestMessage('Verifying connection with Reasoning Engine API...');
 
     try {
-      const payload: Record<string, unknown> = {
+      const payload = {
         model: selectedModel,
         messages: [{ role: 'user', content: 'Say "connected" in JSON format {"status":"ok"}' }],
-        temperature: 0.1
+        temperature: 0.1,
+        jsonMode: selectedModel !== 'openai/gpt-oss-20b'
       };
-      if (selectedModel !== 'openai/gpt-oss-20b') {
-        payload.response_format = { type: 'json_object' };
-      }
 
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      const res = await fetch('/api/ai/groq', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey.trim()}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
@@ -218,7 +206,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             gap: '18px'
           }}
         >
-          {/* API Key field */}
+          {/* AI provider credentials are configured server-side */}
           <div>
             <label
               style={{
@@ -236,61 +224,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <Key size={11} color="var(--text-muted)" />
               Reasoning Engine API Key
             </label>
-
-            <div style={{ position: 'relative' }}>
-              <input
-                type={showKey ? 'text' : 'password'}
-                value={apiKey}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setApiKey(e.target.value)}
-                placeholder="key_..."
-                style={{
-                  width: '100%',
-                  padding: '10px 40px 10px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-primary)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '12.5px',
-                  outline: 'none',
-                  transition: 'all 0.18s cubic-bezier(0.16, 1, 0.3, 1)'
-                }}
-                onFocus={(e: React.FocusEvent<HTMLInputElement>) => {
-                  e.currentTarget.style.borderColor = 'var(--border-strong)';
-                }}
-                onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
-                  e.currentTarget.style.borderColor = 'var(--border)';
-                }}
-              />
-              {/* Show/hide toggle */}
-              <button
-                type="button"
-                onClick={() => setShowKey((v) => !v)}
-                style={{
-                  position: 'absolute',
-                  right: '10px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '2px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  color: 'var(--text-muted)',
-                  transition: 'all 0.18s cubic-bezier(0.16, 1, 0.3, 1)'
-                }}
-                title={showKey ? 'Hide key' : 'Show key'}
-              >
-                {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
-            </div>
-
+            <input
+              type="text"
+              value="Managed securely by the platform"
+              disabled
+              readOnly
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                borderRadius: 'var(--radius-md)',
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                color: 'var(--text-muted)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '12.5px',
+                outline: 'none'
+              }}
+            />
             <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.5 }}>
-              Stored securely in local environment. Used for live code execution and forensic analysis.
+              AI provider credentials are stored on the server. No API key is saved in this browser.
             </p>
           </div>
-
           <SectionDivider />
 
           {/* Model selection */}
@@ -386,8 +340,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <button
             className="btn btn-secondary btn-sm"
             onClick={handleTestConnection}
-            disabled={testStatus === 'testing' || !apiKey.trim()}
-            style={{ gap: '6px', opacity: !apiKey.trim() ? 0.5 : 1 }}
+            disabled={testStatus === 'testing'}
+            style={{ gap: '6px' }}
           >
             {testStatus === 'testing' ? (
               <>
@@ -410,8 +364,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <button
               className="btn btn-primary btn-sm"
               onClick={handleSave}
-              disabled={!apiKey.trim()}
-              style={{ opacity: !apiKey.trim() ? 0.5 : 1 }}
+              disabled={false}
             >
               Save Changes
             </button>

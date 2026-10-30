@@ -32,10 +32,11 @@ import {
   detectLanguageFromCode,
   evaluateRound2Code,
   fetchRound2ProblemsFromCloud,
+  fetchRound2SubmissionFromCloud,
   getAllRound2Problems,
   getStoredRound2Submission,
   saveStoredRound2Submission,
-  pushRound2SubmissionToCloud,
+  finalizeRound2Submission,
   selectStudentRound2Problems,
   pushRound2LiveCodeToCloud
 } from '../../services/round2CodingService';
@@ -71,7 +72,9 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
   const cleanRoll = candidateProfile.rollNumber || candidateProfile.email.split('@')[0] || 'CANDIDATE';
   // --- 1. Problems State: Individualized 5 randomized questions from 10+ pool |
   const [problems, setProblems] = useState<Round2Problem[]>(() => {
-    const all = getAllRound2Problems();
+    const all = getAllRound2Problems().map((problem) => ({ ...problem, hiddenTestCases: [] }));
+    // Purge any legacy hidden-test cache that may have been downloaded by older builds.
+    try { localStorage.setItem('codedna_codespark_r2_problems', JSON.stringify(all)); } catch {}
     return selectStudentRound2Problems(all, candidateKey);
   });
   const [loadingProblems, setLoadingProblems] = useState(true);
@@ -115,6 +118,104 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       dominantLanguage: 'Python'
     };
   });
+
+  // Round 2 integrity controls: three-strike policy aligned with the MCQ exam.
+  const [proctorStrikes, setProctorStrikes] = useState(0);
+  const [strikeNotice, setStrikeNotice] = useState<{strike:number;reason:string}|null>(null);
+  const [proctorLocked, setProctorLocked] = useState(false);
+  const lastViolationAt = useRef(0);
+  const recordRound2Violation = useCallback((reason: string) => {
+    if (submission.isSubmitted || proctorLocked) return;
+    const now = Date.now();
+    if (now - lastViolationAt.current < 1400) return;
+    lastViolationAt.current = now;
+    setProctorStrikes((previous) => {
+      const next = previous + 1;
+      void fetch('/api/codespark/proctor-event', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: candidateKey, reason })
+      }).then(async (response) => {
+        const result = await response.json();
+        if (!response.ok || !result?.success) throw new Error('Proctor event sync failed');
+        setProctorStrikes(Number(result.strikeCount) || next);
+        setStrikeNotice({ strike: Number(result.strikeCount) || next, reason });
+        if (result.locked) setProctorLocked(true);
+      }).catch(() => {
+        // Fail closed locally if the event ledger cannot be reached.
+        if (next >= 3) setProctorLocked(true);
+      });
+      playSound('warning');
+      setStrikeNotice({ strike: next, reason });
+      if (next >= 3) setProctorLocked(true);
+      return next;
+    });
+  }, [candidateKey, proctorLocked, submission.isSubmitted]);
+
+  useEffect(() => {
+    if (submission.isSubmitted) return;
+    const onVisibility = () => { if (document.visibilityState === 'hidden') recordRound2Violation('Switched away from the examination tab or window'); };
+    const onBlur = () => recordRound2Violation('Examination window lost focus');
+    const onFullscreen = () => { if (!document.fullscreenElement) recordRound2Violation('Exited required examination fullscreen'); };
+    const onClipboard = (event: Event) => {
+      event.preventDefault();
+      recordRound2Violation(event.type === 'paste' ? 'Paste action blocked' : event.type === 'copy' ? 'Copy action blocked' : 'Cut action blocked');
+    };
+    const onContext = (event: Event) => event.preventDefault();
+    const onDrop = (event: DragEvent) => { event.preventDefault(); recordRound2Violation('External content drop blocked'); };
+    const onDragOver = (event: DragEvent) => event.preventDefault();
+    const onKeys = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if ((event.ctrlKey || event.metaKey) && ['c','v','x','insert'].includes(key)) {
+        event.preventDefault(); event.stopPropagation();
+        recordRound2Violation(key === 'v' || key === 'insert' ? 'Paste shortcut blocked' : 'Copy/cut shortcut blocked');
+      } else if (key === 'printscreen') {
+        event.preventDefault(); recordRound2Violation('Print Screen shortcut detected');
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('fullscreenchange', onFullscreen);
+    document.addEventListener('copy', onClipboard, true);
+    document.addEventListener('cut', onClipboard, true);
+    document.addEventListener('paste', onClipboard, true);
+    document.addEventListener('contextmenu', onContext, true);
+    document.addEventListener('drop', onDrop, true);
+    document.addEventListener('dragover', onDragOver, true);
+    window.addEventListener('keydown', onKeys, true);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('fullscreenchange', onFullscreen);
+      document.removeEventListener('copy', onClipboard, true);
+      document.removeEventListener('cut', onClipboard, true);
+      document.removeEventListener('paste', onClipboard, true);
+      document.removeEventListener('contextmenu', onContext, true);
+      document.removeEventListener('drop', onDrop, true);
+      document.removeEventListener('dragover', onDragOver, true);
+      window.removeEventListener('keydown', onKeys, true);
+    };
+  }, [recordRound2Violation, submission.isSubmitted]);
+
+
+  useEffect(() => {
+    if (submission.isSubmitted) return;
+    let active = true;
+    void fetch('/api/codespark/proctor-event', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'status', key: candidateKey })
+    }).then(async (response) => {
+      const result = await response.json();
+      if (!active || !response.ok || !result?.success) return;
+      const count = Math.max(0, Number(result.strikeCount) || 0);
+      setProctorStrikes(count);
+      if (result.locked) {
+        setProctorLocked(true);
+        setStrikeNotice({ strike: Math.max(3, count), reason: 'This workstation was previously locked by the examination proctoring system.' });
+      }
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [candidateKey, submission.isSubmitted]);
+
   // Current Active Question (1-indexed: 1 to 5)
   const [currentQIndex, setCurrentQIndex] = useState<number>(submission.currentQuestion || 1);
   const currentProblem: Round2Problem = useMemo(() => {
@@ -136,6 +237,22 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     }
     return map;
   });
+
+  useEffect(() => {
+    if (submission.isSubmitted) return;
+    let mounted = true;
+    void fetchRound2SubmissionFromCloud(candidateKey).then((serverSubmission) => {
+      if (!mounted || !serverSubmission?.isSubmitted) return;
+      setSubmission(serverSubmission);
+      setCurrentQIndex(serverSubmission.currentQuestion || 1);
+      const recoveredCode: Record<number, string> = {};
+      for (const [number, report] of Object.entries(serverSubmission.questionReports || {})) {
+        recoveredCode[Number(number)] = report.code || '';
+      }
+      setCodeMap((previous) => ({ ...previous, ...recoveredCode }));
+    });
+    return () => { mounted = false; };
+  }, [candidateKey, submission.isSubmitted]);
   // Language selection & Auto-detect
   const [explicitLanguageMap, setExplicitLanguageMap] = useState<Record<number, 'Auto' | 'Python' | 'C++' | 'C' | 'Java'>>({
     1: 'Auto',
@@ -224,7 +341,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       const qTimestamps = submission.questionTimestamps || {};
       const qStart = qTimestamps[currentQIndex]?.startedAt || Date.now();
       const timeTakenMs = Date.now() - qStart;
-      const report = await evaluateRound2Code(currentProblem, activeCode, effectiveLang, timeTakenMs, showCustomInput ? customInputText : undefined);
+      const report = await evaluateRound2Code(currentProblem, activeCode, effectiveLang, timeTakenMs, showCustomInput ? customInputText : undefined, candidateProfile.round2Key || candidateProfile.accessKey);
       // Track question start and compiled timestamps
       report.startedAt = qStart;
       report.startedAtFormatted = new Date(qStart).toLocaleTimeString();
@@ -351,13 +468,34 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     setIsSubmittingFinal(true);
     playSound('click');
     try {
+      const finalReports = { ...submission.questionReports };
+      for (const problem of problems) {
+        const questionNumber = problem.number;
+        const code = codeMap[questionNumber] || finalReports[questionNumber]?.code || '';
+        const selectedLanguage = explicitLanguageMap[questionNumber] || 'Auto';
+        const language = selectedLanguage === 'Auto'
+          ? detectLanguageFromCode(code)
+          : selectedLanguage;
+        finalReports[questionNumber] = {
+          ...(finalReports[questionNumber] || {}),
+          questionNumber,
+          questionId: problem.id,
+          questionTitle: problem.title,
+          code,
+          language
+        } as Round2QuestionReport;
+      }
       const finalSub: Round2CandidateSubmission = {
         ...submission,
+        questionReports: finalReports,
         isSubmitted: true,
         submittedAt: Date.now()
       };
-      updateSubmissionState(finalSub);
-      await pushRound2SubmissionToCloud(finalSub);
+      const authoritativeSubmission = await finalizeRound2Submission(finalSub);
+      if (!authoritativeSubmission) {
+        throw new Error('The server could not verify your final submission. Please retry; your work is still saved locally.');
+      }
+      updateSubmissionState(authoritativeSubmission);
       setShowSubmitModal(false);
       playSound('success');
     } catch (err) {
@@ -1515,6 +1653,16 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {strikeNotice && (
+        <div role="alertdialog" aria-modal="true" style={{position:'fixed',inset:0,zIndex:100000,background:'rgba(0,0,0,.88)',display:'grid',placeItems:'center',padding:20}}>
+          <div style={{width:'min(460px,100%)',background:'#18181b',border:'1px solid #ef4444',borderRadius:12,padding:28,color:'#f4f4f5',textAlign:'center'}}>
+            <div style={{fontSize:11,fontWeight:800,letterSpacing:'.14em',color:'#f87171',textTransform:'uppercase'}}>Academic integrity · Strike {strikeNotice.strike}/3</div>
+            <h2 style={{fontSize:24,fontWeight:900,margin:'12px 0'}}>{strikeNotice.strike >= 3 ? 'Examination Locked' : 'Proctor Warning'}</h2>
+            <p style={{fontSize:13,lineHeight:1.6,color:'#d4d4d8'}}>{strikeNotice.reason}</p>
+            {strikeNotice.strike >= 3 ? <p style={{fontSize:12,color:'#fca5a5'}}>Your workstation is frozen after three violations. Contact the invigilator. Your saved code is preserved.</p> : <><p style={{fontSize:12,color:'#fbbf24'}}>Further violations may freeze your examination.</p><button type="button" onClick={()=>setStrikeNotice(null)} style={{marginTop:16,padding:'10px 22px',border:0,borderRadius:6,background:'#f4f4f5',color:'#09090b',fontWeight:800,cursor:'pointer'}}>I Understand</button></>}
           </div>
         </div>
       )}

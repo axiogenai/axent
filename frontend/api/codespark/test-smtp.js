@@ -1,58 +1,26 @@
-/* global process */
-/* eslint-disable no-undef */
-import nodemailer from 'nodemailer';
+import nodemailer from "nodemailer";
+import { requireAdmin, setApiHeaders, smtpConfiguration } from "./_security.js";
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  setApiHeaders(req, res);
+  if (req.method === "OPTIONS") return res.status(204).end();
+  if (req.method !== "POST") return res.status(405).json({ success: false, error: "POST method required." });
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ success: false, error: 'POST method required.' });
-  }
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+  const smtp = smtpConfiguration();
+  if (!smtp) return res.status(503).json({ success: false, error: "SMTP is not configured on the server. Configure SMTP_USER, SMTP_PASSWORD and optional SMTP_HOST/SMTP_PORT." });
 
   try {
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
-    const smtp_user = String(body.smtp_user || process.env.VITE_SMTP_USER || 'teamaxiogen@gmail.com').trim();
-    const smtp_password = String(body.smtp_password || process.env.VITE_SMTP_PASSWORD || 'qtdpejtmmsuflijo').replace(/\s+/g, '').trim();
-    const smtp_host = String(body.smtp_host || 'smtp.gmail.com').trim();
-    const smtp_port = Number(body.smtp_port) || 587;
-
-    if (!smtp_user || !smtp_password) {
-      return res.status(400).json({
-        success: false,
-        error: 'Both Gmail address and 16-digit App Password are required.'
-      });
-    }
-
     const transporter = nodemailer.createTransport({
-      host: smtp_host,
-      port: smtp_port,
-      secure: smtp_port === 465,
-      auth: {
-        user: smtp_user,
-        pass: smtp_password
-      },
-      connectionTimeout: 15000,
-      greetingTimeout: 15000,
-      socketTimeout: 15000
+      host: smtp.host, port: smtp.port, secure: smtp.port === 465,
+      auth: { user: smtp.user, pass: smtp.password },
+      connectionTimeout: 12000, greetingTimeout: 12000, socketTimeout: 12000
     });
-
     await transporter.verify();
-
-    return res.status(200).json({
-      success: true,
-      message: `SMTP connection verified successfully for ${smtp_user}! Ready to dispatch Round 2 access codes.`
-    });
-  } catch (err) {
-    console.error('SMTP test error:', err);
-    return res.status(200).json({
-      success: false,
-      error: `SMTP Authentication / Connection Error: ${err.message || String(err)}`
-    });
+    return res.status(200).json({ success: true, message: "Server SMTP connection verified successfully." });
+  } catch (error) {
+    console.error("[CodeSpark SMTP] verification failed:", error?.code || "SMTP_ERROR");
+    return res.status(502).json({ success: false, error: "SMTP verification failed. Check the server-side SMTP configuration." });
   }
 }

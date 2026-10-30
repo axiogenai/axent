@@ -264,12 +264,12 @@ END;
 $$;
 
 -- ============================================================================
--- 6. Supabase Auth Role Provisioner
--- Run this to grant 'admin' role in app_metadata to all users created via Supabase dashboard:
+-- 6. Supabase Auth Role Provisioning (manual, trusted operation)
+-- NEVER grant admin to every user and NEVER put authority roles in user_metadata.
+-- Provision each approved authority from the Supabase Dashboard / trusted admin API:
+--   app_metadata.role = 'admin'        (platform administrator)
+--   app_metadata.role = 'paper_setter' (paper setter)
+-- Do not execute a blanket UPDATE against auth.users.
 -- ============================================================================
-UPDATE auth.users
-SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb) || '{"role": "admin"}'::jsonb,
-    raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || '{"role": "admin"}'::jsonb
-WHERE raw_app_meta_data->>'role' IS NULL;
 
 
