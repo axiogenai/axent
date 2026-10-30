@@ -208,115 +208,38 @@ export async function saveActiveCodeSparkPaper(
   criteria?: { mode?: 'cutoff' | 'top_n' | 'manual'; value?: number; manualRolls?: string[] }
 ): Promise<boolean> {
   try {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('codedna_codespark_round1_exam_id', examId);
-      if (criteria?.mode) localStorage.setItem('codedna_codespark_shortlist_mode', criteria.mode);
-      if (criteria?.value) localStorage.setItem('codedna_codespark_shortlist_value', String(criteria.value));
-      if (criteria?.manualRolls) localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(criteria.manualRolls));
-    }
-
-    if (!supabase) return true;
-
-    let currentConfig: Partial<CodeSparkSystemConfig> = {};
-
-    // Read current config
-    try {
-      const { data: stationRec } = await supabase
-        .from('candidate_stations')
-        .select('code, student')
-        .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-        .maybeSingle();
-
-      if (stationRec) {
-        if (stationRec.student && typeof stationRec.student === 'object' && Object.keys(stationRec.student).length > 0) {
-          currentConfig = stationRec.student as Partial<CodeSparkSystemConfig>;
-        } else if (stationRec.code) {
-          currentConfig = JSON.parse(stationRec.code);
-        }
-      }
-    } catch {}
-
-    if (!currentConfig.candidates) {
-      try {
-        const { data: existing } = await supabase
-          .from('mcq_exams')
-          .select('instructions')
-          .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-          .maybeSingle();
-
-        if (existing?.instructions) {
-          currentConfig = JSON.parse(existing.instructions);
-        }
-      } catch {}
-    }
-
+    const current = await fetchCodeSparkRosterConfig();
     const updatedConfig: CodeSparkSystemConfig = {
       activeExamId: examId,
-      shortlistMode: criteria?.mode || currentConfig.shortlistMode || 'cutoff',
-      shortlistValue: criteria?.value !== undefined ? criteria.value : (currentConfig.shortlistValue || 12),
-      manualShortlistRolls: criteria?.manualRolls || currentConfig.manualShortlistRolls || getShortlistedRolls(),
-      isConcluded: currentConfig.isConcluded || false,
-      candidates: currentConfig.candidates || getAllCodeSparkCandidates(),
+      shortlistMode: criteria?.mode || current?.shortlistMode || 'cutoff',
+      shortlistValue: criteria?.value !== undefined ? criteria.value : (current?.shortlistValue || 12),
+      manualShortlistRolls: criteria?.manualRolls || current?.manualShortlistRolls || getShortlistedRolls(),
+      isConcluded: current?.isConcluded || false,
+      candidates: current?.candidates || getAllCodeSparkCandidates(),
       updatedAt: Date.now()
     };
-
-    // 1. Save to candidate_stations
-    try {
-      await supabase
-        .from('candidate_stations')
-        .upsert({
-          id: CODESPARK_SYSTEM_CONFIG_ID,
-          lab_id: 'SYSTEM_CONFIG',
-          station_number: 'CONFIG',
-          status: 'CONFIG',
-          code: JSON.stringify(updatedConfig),
-          student: updatedConfig,
-          last_updated_timestamp: Date.now()
-        });
-    } catch {}
-
-    // 2. Save to mcq_exams with status: 'PUBLISHED'
-    try {
-      await supabase
-        .from('mcq_exams')
-        .upsert({
-          id: CODESPARK_SYSTEM_CONFIG_ID,
-          title: 'CodeSpark System Configuration & Roster',
-          description: 'Cloud configuration for CodeSpark Active Paper, Shortlist Criteria, and Registered Candidates',
-          instructions: JSON.stringify(updatedConfig),
-          subject: 'CodeSpark',
-          topic: 'System',
-          status: 'PUBLISHED',
-          duration_minutes: 0,
-          total_marks: 0,
-          question_count: 0,
-          created_at: Date.now(),
-          updated_at: Date.now()
-        });
-    } catch {}
-
-    // Mark target exam as isCodeSpark: true in Supabase
-    const all = getAllExams();
-    for (const ex of all) {
-      if (ex.id === examId) {
-        ex.isCodeSpark = true;
-        saveExam(ex);
-        void saveExamToCloud(ex);
-      } else if (ex.isCodeSpark) {
-        ex.isCodeSpark = false;
-        saveExam(ex);
-        void saveExamToCloud(ex);
-      }
-    }
+    const headers = await getCodeSparkAdminHeaders();
+    const response = await fetch('/api/codespark/roster', {
+      method: 'POST', headers, body: JSON.stringify({ config: updatedConfig })
+    });
+    if (!response.ok) return false;
 
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('storage'));
-      window.dispatchEvent(new CustomEvent('codedna_codespark_config_updated', { detail: updatedConfig }));
+      localStorage.setItem('codedna_codespark_round1_exam_id', examId);
+      localStorage.setItem('codedna_codespark_shortlist_mode', updatedConfig.shortlistMode);
+      localStorage.setItem('codedna_codespark_shortlist_value', String(updatedConfig.shortlistValue));
+      localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(updatedConfig.manualShortlistRolls));
     }
-
+    const all = getAllExams();
+    for (const ex of all) {
+      if (ex.id === examId && !ex.isCodeSpark) { ex.isCodeSpark = true; saveExam(ex); void saveExamToCloud(ex); }
+      else if (ex.id !== examId && ex.isCodeSpark) { ex.isCodeSpark = false; saveExam(ex); void saveExamToCloud(ex); }
+    }
+    window.dispatchEvent(new Event('storage'));
+    window.dispatchEvent(new CustomEvent('codedna_codespark_config_updated', { detail: updatedConfig }));
     return true;
   } catch (err) {
-    console.error('[CodeSpark] saveActiveCodeSparkPaper failed:', err);
+    console.error('[CodeSpark] secure active paper update failed:', err);
     return false;
   }
 }
