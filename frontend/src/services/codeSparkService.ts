@@ -391,39 +391,22 @@ export function setRound1ConcludedGlobally(concluded: boolean): void {
     }
     notifyCandidatesUpdated();
 
-    // Async push to cloud
-    if (supabase) {
-      void (async () => {
-        try {
-          const { data: stRec } = await supabase
-            .from('candidate_stations')
-            .select('code, student')
-            .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-            .maybeSingle();
-
-          let cfg: any = {};
-          if (stRec) {
-            cfg = (stRec.student && typeof stRec.student === 'object') ? stRec.student : (stRec.code ? JSON.parse(stRec.code) : {});
-          }
-          cfg.isConcluded = concluded;
-          if (!concluded) {
-            cfg.manualShortlistRolls = [];
-          }
-          cfg.updatedAt = Date.now();
-          await supabase.from('candidate_stations').upsert({
-            id: CODESPARK_SYSTEM_CONFIG_ID,
-            lab_id: 'SYSTEM_CONFIG',
-            station_number: 'CONFIG',
-            status: 'CONFIG',
-            code: JSON.stringify(cfg),
-            student: cfg,
-            last_updated_timestamp: Date.now()
-          });
-        } catch (e) {
-          console.warn('[CodeSpark] setRound1ConcludedGlobally cloud push error:', e);
-        }
-      })();
-    }
+    // Persist authority-only state through the authenticated server API.
+    void (async () => {
+      try {
+        const cfg = await fetchCodeSparkRosterConfig();
+        if (!cfg) return;
+        cfg.isConcluded = concluded;
+        if (!concluded) cfg.manualShortlistRolls = [];
+        cfg.updatedAt = Date.now();
+        const headers = await getCodesparkAdminHeaders();
+        await fetch('/api/codespark/roster', {
+          method: 'POST', headers, body: JSON.stringify({ config: cfg })
+        });
+      } catch (error) {
+        console.warn('[CodeSpark] secure conclusion update failed:', error);
+      }
+    })();
   } catch {}
 }
 
@@ -1169,31 +1152,18 @@ export async function deleteCodeSparkCandidateComplete(accessKeyOrRoll: string):
 }
 
 export async function resetCodeSparkSystemInCloud(): Promise<boolean> {
-  if (!supabase) return false;
   try {
+    const headers = await getCodesparkAdminHeaders();
     const emptyConfig: CodeSparkSystemConfig = {
-      activeExamId: null,
-      shortlistMode: 'cutoff',
-      shortlistValue: 12,
-      manualShortlistRolls: [],
-      isConcluded: false,
-      candidates: [],
-      updatedAt: Date.now()
+      activeExamId: null, shortlistMode: 'cutoff', shortlistValue: 12,
+      manualShortlistRolls: [], isConcluded: false, candidates: [], updatedAt: Date.now()
     };
-    await supabase
-      .from('candidate_stations')
-      .upsert({
-        id: CODESPARK_SYSTEM_CONFIG_ID,
-        lab_id: 'SYSTEM_CONFIG',
-        station_number: 'CONFIG',
-        status: 'CONFIG',
-        code: JSON.stringify(emptyConfig),
-        student: emptyConfig,
-        last_updated_timestamp: Date.now()
-      });
-    return true;
-  } catch (err) {
-    console.warn('[CodeSpark Cloud] resetCodeSparkSystemInCloud failed:', err);
+    const response = await fetch('/api/codespark/roster', {
+      method: 'POST', headers, body: JSON.stringify({ config: emptyConfig })
+    });
+    return response.ok;
+  } catch (error) {
+    console.warn('[CodeSpark Cloud] secure roster reset failed:', error);
     return false;
   }
 }
