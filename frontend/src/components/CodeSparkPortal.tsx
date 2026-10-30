@@ -172,7 +172,8 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
         setIsRound1Concluded(isRound1ConcludedGlobally());
       } catch {} finally { pollBusy = false; }
     };
-    const pollInterval = window.setInterval(() => { void syncWhenVisible(); }, 15000);
+    void syncWhenVisible(); // Immediate sync on mount across all devices
+    const pollInterval = window.setInterval(() => { void syncWhenVisible(); }, 10000);
     let configBusy = false;
     const refreshConclusion = async () => {
       if (configBusy || document.visibilityState !== 'visible') return;
@@ -388,24 +389,50 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       return;
     }
 
-    // Avoid sending partial keystrokes to the rate-limited server lookup.
-    const isValidKeyFormat = /^[A-Za-z0-9]{4,32}$/.test(clean);
+    // 1. Fast local / synced match (0ms latency)
+    const localMatch = lookupCandidateAny(clean)
+      || lookupCandidateAny('AXENT-' + clean)
+      || lookupCandidateAny('AXENT-R2-' + clean);
+
+    if (localMatch && localMatch.candidate) {
+      setActiveCandidate(localMatch.candidate);
+      setCandidateName(localMatch.candidate.name || '');
+      setCandidateEmail(localMatch.candidate.email || '');
+      setRollNumber(localMatch.candidate.rollNumber || localMatch.candidate.email.split('@')[0].toUpperCase());
+      setDepartment(localMatch.candidate.department || 'Axent Candidate');
+      playSound('success');
+      return;
+    }
+
+    // 2. Server lookup with fast cloud sync retry
+    const isValidKeyFormat = /^[A-Za-z0-9-]{4,36}$/.test(clean);
     if (!isValidKeyFormat) return;
 
-    void asyncLookupCandidateAny(clean)
-      .then((result) => result || asyncLookupCandidateAny('AXENT-R2-' + clean))
-      .then((result) => {
-        if (requestId !== candidateLookupRequest.current || !result) return;
-        setActiveCandidate(result.candidate);
-        setCandidateName(result.candidate.name || '');
-        setCandidateEmail(result.candidate.email || '');
-        setRollNumber(result.candidate.rollNumber || result.candidate.email.split('@')[0].toUpperCase());
-        setDepartment(result.candidate.department || 'Axent Candidate');
-        playSound('success');
-      })
-      .catch(() => {
-        if (requestId === candidateLookupRequest.current) setActiveCandidate(null);
-      });
+    void (async () => {
+      let result = await asyncLookupCandidateAny(clean);
+      if (!result && !clean.startsWith('AXENT-R2-')) {
+        result = await asyncLookupCandidateAny('AXENT-R2-' + clean);
+      }
+      if (!result && !clean.startsWith('AXENT-')) {
+        result = await asyncLookupCandidateAny('AXENT-' + clean);
+      }
+      if (!result) {
+        await syncCandidatesFromCloud();
+        const retryMatch = lookupCandidateAny(clean)
+          || lookupCandidateAny('AXENT-' + clean)
+          || lookupCandidateAny('AXENT-R2-' + clean);
+        if (retryMatch) result = retryMatch;
+      }
+      if (requestId !== candidateLookupRequest.current || !result) return;
+      setActiveCandidate(result.candidate);
+      setCandidateName(result.candidate.name || '');
+      setCandidateEmail(result.candidate.email || '');
+      setRollNumber(result.candidate.rollNumber || result.candidate.email.split('@')[0].toUpperCase());
+      setDepartment(result.candidate.department || 'Axent Candidate');
+      playSound('success');
+    })().catch(() => {
+      if (requestId === candidateLookupRequest.current) setActiveCandidate(null);
+    });
   };
 
   // Automatically read ?key=... URL query parameter (from candidate email button click)
@@ -446,6 +473,15 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       anyLookup = lookupCandidateAny(rawInput)
         || lookupCandidateAny('AXENT-' + rawInput)
         || lookupCandidateAny('AXENT-R2-' + rawInput);
+    }
+
+    // Final fallback: trigger immediate cloud sync and retry
+    if (!anyLookup) {
+      await syncCandidatesFromCloud();
+      anyLookup = lookupCandidateAny(rawInput)
+        || lookupCandidateAny('AXENT-' + rawInput)
+        || lookupCandidateAny('AXENT-R2-' + rawInput)
+        || await asyncLookupCandidateAny(rawInput);
     }
 
     if (!anyLookup) {

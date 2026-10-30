@@ -1,4 +1,4 @@
-import { parseCodeSparkConfig, readBody, requireAdmin, setApiHeaders, supabaseRest } from "./_security.js";
+import { parseCodeSparkConfig, readBody, requireAdmin, setApiHeaders, supabaseRest, invalidateRosterCache } from "./_security.js";
 
 const CONFIG_ID = "codespark_system_config";
 
@@ -28,6 +28,8 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, error: "Invalid CodeSpark roster configuration." });
     }
     const payload = { ...config, updatedAt: Date.now() };
+
+    // Dual-write: write to candidate_stations table
     await supabaseRest("candidate_stations?on_conflict=id", {
       method: "POST",
       headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
@@ -37,6 +39,25 @@ export default async function handler(req, res) {
         last_updated_timestamp: Date.now()
       }])
     });
+
+    // Dual-write: also write to mcq_exams table for maximum redundancy
+    try {
+      await supabaseRest("mcq_exams?on_conflict=id", {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify([{
+          id: CONFIG_ID,
+          title: "CodeSpark System Configuration",
+          description: "CodeSpark System Configuration Roster",
+          instructions: JSON.stringify(payload),
+          status: "PUBLISHED",
+          created_at: Date.now(),
+          updated_at: Date.now()
+        }])
+      });
+    } catch {}
+
+    invalidateRosterCache();
     return res.status(200).json({ success: true });
   } catch (error) {
     console.error("[CodeSpark roster API]", error?.message || "storage error");

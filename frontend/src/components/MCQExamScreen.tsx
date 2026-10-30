@@ -3395,7 +3395,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     const handleFsChange = () => {
       const isFs = isCurrentlyFullscreen();
       setIsFullscreen(isFs);
-      if (!isFs && !submitted) {
+      if (!isFs && !submitted && !showSubmitConfirm && !isSelectingScreenRef.current) {
         triggerFocusLossInfraction('Fullscreen examination mode exited / window restored');
       }
     };
@@ -3561,13 +3561,6 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       return;
     }
     setCurrentIdx(newIdx);
-    // Auto-minimize (exit fullscreen) when candidate navigates to the final question before submitting
-    if (newIdx === totalQ - 1 && totalQ > 0) {
-      void exitExamFullscreen();
-      try {
-        if (document.exitPointerLock) document.exitPointerLock();
-      } catch {}
-    }
     if (attempt) {
       try {
         localStorage.setItem(`codedna_mcq_current_idx_${attempt.id}`, String(newIdx));
@@ -4310,6 +4303,7 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
                 playSound('click');
                 setActiveStrikeModal(null);
                 setProctorWarning(null);
+                void requestExamFullscreen().then((ok) => { if (ok) setIsFullscreen(true); });
               }}
               aria-label="Dismiss notice"
               className="no-touch-expand"
@@ -5059,8 +5053,6 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
             <button
               onClick={() => {
-                void exitExamFullscreen();
-                try { if (document.exitPointerLock) document.exitPointerLock(); } catch {}
                 setShowSubmitConfirm(true);
               }}
               style={{

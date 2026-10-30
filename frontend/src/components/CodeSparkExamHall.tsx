@@ -492,51 +492,7 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
                     </div>
                   </div>
 
-                  {/* Lab Overflow Notice & Batch 2 Sitting Action */}
-                  <div
-                    style={{
-                      background: 'rgba(245, 158, 11, 0.08)',
-                      border: '1px solid rgba(245, 158, 11, 0.3)',
-                      borderRadius: '6px',
-                      padding: '14px 16px',
-                      textAlign: 'left',
-                      marginBottom: '20px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '10px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
-                      <strong style={{ fontSize: '12px', color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                        Lab Capacity Overflow (Batch 2 / 2nd Attempt)
-                      </strong>
-                    </div>
-                    <p style={{ margin: 0, fontSize: '12px', color: '#d4d4d8', lineHeight: 1.5 }}>
-                      If there was no place or available computer in the lab during slot 1, you are eligible to take Round 1 now in Batch 2.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleLaunchBatch2Retake}
-                      style={{
-                        padding: '10px 18px',
-                        borderRadius: '4px',
-                        background: '#f59e0b',
-                        color: '#09090b',
-                        fontSize: '12px',
-                        fontWeight: 800,
-                        border: 'none',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px'
-                      }}
-                    >
-                      <span>Take Round 1 in Batch 2 (2nd Attempt)</span>
-                      <ArrowRight size={13} />
-                    </button>
-                  </div>
+                  
 
                   <button
                     type="button"
