@@ -41,6 +41,23 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method not allowed." });
   let body;
   try { body = readBody(req); } catch { return res.status(400).json({ success: false, error: "Invalid request." }); }
+  if (body.action === "get") {
+    const key = normalizeRound2Key(body.key);
+    if (key.length < 8 || key.length > 64) return res.status(400).json({ success: false, error: "Invalid Round 2 key." });
+    try {
+      const candidateHash = createHash("sha256").update(key).digest("hex");
+      const rows = await supabaseRest(`codespark_round2_finalizations?candidate_hash=eq.${candidateHash}&select=result`);
+      if (!rows?.[0]?.result) return res.status(404).json({ success: false, error: "No finalized submission was found." });
+      return res.status(200).json({
+        success: true,
+        submission: { ...rows[0].result, candidateKey: String(body.key || "") }
+      });
+    } catch (error) {
+      console.error("[CodeSpark submission retrieval]", error?.message || "lookup failed");
+      return res.status(503).json({ success: false, error: "Final submission retrieval is temporarily unavailable." });
+    }
+  }
+
   const submission = body.submission;
   const key = normalizeRound2Key(submission?.round2Key || submission?.candidateKey);
   if (!submission || typeof submission !== "object" || key.length < 8) {
