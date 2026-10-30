@@ -31,6 +31,26 @@ CREATE POLICY "CodeSpark trusted admin access"
   USING (auth.uid() IS NOT NULL AND auth.jwt()->'app_metadata'->>'role' = 'admin')
   WITH CHECK (auth.uid() IS NOT NULL AND auth.jwt()->'app_metadata'->>'role' = 'admin');
 
+-- Remove permissive public policies left by the original schema and the MCQ hardening migration.
+-- Candidate MCQ operations continue through the token-validated SECURITY DEFINER RPCs.
+DROP POLICY IF EXISTS "Allow public read-write for mcq_exams" ON public.mcq_exams;
+DROP POLICY IF EXISTS "Allow public read-write for mcq_questions" ON public.mcq_questions;
+DROP POLICY IF EXISTS "Allow public read-write for mcq_attempts" ON public.mcq_attempts;
+
+-- Lab metadata remains publicly readable for station discovery, but only admins may mutate it.
+DROP POLICY IF EXISTS "Allow public read-write for college_labs" ON public.college_labs;
+DROP POLICY IF EXISTS "Public can read college labs" ON public.college_labs;
+DROP POLICY IF EXISTS "Trusted admin manages college labs" ON public.college_labs;
+ALTER TABLE public.college_labs ENABLE ROW LEVEL SECURITY;
+GRANT SELECT ON public.college_labs TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON public.college_labs TO authenticated;
+CREATE POLICY "Public can read college labs"
+  ON public.college_labs FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Trusted admin manages college labs"
+  ON public.college_labs FOR ALL TO authenticated
+  USING (auth.uid() IS NOT NULL AND auth.jwt()->'app_metadata'->>'role' = 'admin')
+  WITH CHECK (auth.uid() IS NOT NULL AND auth.jwt()->'app_metadata'->>'role' = 'admin');
+
 -- Keep code submissions visible to trusted administrators only.
 DROP POLICY IF EXISTS "Allow public read-write for code_submissions" ON public.code_submissions;
 DROP POLICY IF EXISTS "Code submissions admin access" ON public.code_submissions;
