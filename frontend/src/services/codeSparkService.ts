@@ -940,10 +940,12 @@ export function generateCodeSparkKey(existingCandidates: CodeSparkCandidate[] = 
   existingCandidates.forEach((c) => {
     if (c.accessKey) usedKeys.add(c.accessKey.trim().toUpperCase());
   });
+  if (!globalThis.crypto?.getRandomValues) throw new Error('A secure browser context is required to generate candidate access keys.');
   let key = '';
   do {
-    const pin = Math.floor(1000 + Math.random() * 9000);
-    key = `AXENT-${pin}`;
+    const bytes = new Uint8Array(16);
+    globalThis.crypto.getRandomValues(bytes);
+    key = `AXENT-${Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
   } while (usedKeys.has(key));
   return key;
 }
@@ -1064,10 +1066,12 @@ export function importCodeSparkCandidates(
     if (c.accessKey) usedKeys.add(c.accessKey.trim().toUpperCase());
   });
   const getNextKey = (): string => {
+    if (!globalThis.crypto?.getRandomValues) throw new Error('A secure browser context is required to generate candidate access keys.');
     let key = '';
     do {
-      const pin = Math.floor(1000 + Math.random() * 9000);
-      key = `AXENT-${pin}`;
+      const bytes = new Uint8Array(16);
+      globalThis.crypto.getRandomValues(bytes);
+      key = `AXENT-${Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
     } while (usedKeys.has(key));
     usedKeys.add(key);
     return key;
