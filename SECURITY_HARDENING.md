@@ -15,6 +15,7 @@ Set these in the Vercel project that deploys the `frontend` directory. Use **ser
 - `SMTP_PORT`: optional; must be `587` (STARTTLS) or `465` (TLS).
 - `SMTP_FROM_NAME`: optional display name.
 - `APP_ALLOWED_ORIGINS`: optional comma-separated list of exact HTTPS origins. Defaults to `https://axent.axiogen.in`; Vercel's deployment origin is also allowed via `VERCEL_URL`.
+- `APP_PUBLIC_URL`: optional canonical HTTPS production URL used in Round 2 invitation links. Set this to the actual public Axent domain.
 
 The legacy Render/Django SMTP routes now return HTTP 410 and no longer accept caller-supplied SMTP credentials. The frontend calls only the authenticated Vercel routes.
 
