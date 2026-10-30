@@ -353,8 +353,26 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     setIsSubmittingFinal(true);
     playSound('click');
     try {
+      const finalReports = { ...submission.questionReports };
+      for (const problem of problems) {
+        const questionNumber = problem.number;
+        const code = codeMap[questionNumber] || finalReports[questionNumber]?.code || '';
+        const selectedLanguage = explicitLanguageMap[questionNumber] || 'Auto';
+        const language = selectedLanguage === 'Auto'
+          ? detectLanguageFromCode(code)
+          : selectedLanguage;
+        finalReports[questionNumber] = {
+          ...(finalReports[questionNumber] || {}),
+          questionNumber,
+          questionId: problem.id,
+          questionTitle: problem.title,
+          code,
+          language
+        } as Round2QuestionReport;
+      }
       const finalSub: Round2CandidateSubmission = {
         ...submission,
+        questionReports: finalReports,
         isSubmitted: true,
         submittedAt: Date.now()
       };
