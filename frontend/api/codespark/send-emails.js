@@ -73,7 +73,7 @@ export default async function handler(req, res) {
     const secureKeySuffix = key.toUpperCase().replace(/^AXENT-R2-/, "");
     if (!validEmail(email) || secureKeySuffix.length < 8 || !parsedUrl || parsedUrl.protocol !== "https:" || !allowedHosts.has(parsedUrl.hostname)) {
       failed.push({ email, name, reason: "Invalid recipient details or access URL." });
-      continue;
+      return;
     }
 
     const safeName = escapeHtml(name);
