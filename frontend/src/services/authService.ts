@@ -17,13 +17,7 @@ const LOCAL_ROLE_KEY = 'axent_authority_role';
 // ── Session & User Getters ───────────────────────────────────────────────────
 
 export async function getAuthSession(): Promise<Session | null> {
-  if (!isSupabaseConnected()) {
-    try {
-      return null;
-    } catch {
-      return null;
-    }
-  }
+  if (!isSupabaseConnected()) return null;
   try {
     const { data, error } = await supabase.auth.getSession();
     if (error || !data.session) return null;
