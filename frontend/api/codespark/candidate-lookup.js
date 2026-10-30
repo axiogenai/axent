@@ -26,6 +26,9 @@ export default async function handler(req, res) {
 
     const isRound2 = Boolean(candidate.round2Key && entered === normalize(candidate.round2Key));
     const shortlisted = Boolean(candidate.isShortlisted || candidate.status === "SHORTLISTED" || candidate.round2Key);
+    if (isRound2 && entered.length < 8) {
+      return res.status(403).json({ success: false, error: "This Round 2 key is outdated. Ask the administrator to issue a new secure access key." });
+    }
     if (isRound2 && !shortlisted) return res.status(403).json({ success: false, error: "Candidate is not shortlisted." });
 
     const safeCandidate = {
