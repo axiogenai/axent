@@ -392,32 +392,15 @@ export function isRound1ConcludedGlobally(): boolean {
 export function setRound1ConcludedGlobally(concluded: boolean): void {
   try {
     localStorage.setItem(ROUND1_CONCLUDED_STORAGE_KEY, concluded ? 'true' : 'false');
-    if (!concluded) {
-      localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify([]));
-    }
+    if (!concluded) localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify([]));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('codedna_codespark_concluded_updated', { detail: concluded }));
       window.dispatchEvent(new Event('storage'));
     }
     notifyCandidatesUpdated();
-
-    // Persist authority-only state through the authenticated server API.
-    void (async () => {
-      try {
-        const cfg = await fetchCodeSparkRosterConfig();
-        if (!cfg) return;
-        cfg.isConcluded = concluded;
-        if (!concluded) cfg.manualShortlistRolls = [];
-        cfg.updatedAt = Date.now();
-        const headers = await getCodesparkAdminHeaders();
-        await fetch('/api/codespark/roster', {
-          method: 'POST', headers, body: JSON.stringify({ config: cfg })
-        });
-      } catch (error) {
-        console.warn('[CodeSpark] secure conclusion update failed:', error);
-      }
-    })();
-  } catch {}
+  } catch (error) {
+    console.warn('[CodeSpark] local conclusion state update failed:', error);
+  }
 }
 
 export interface SmtpConfig {
