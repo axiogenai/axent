@@ -1,4 +1,4 @@
-import { isCandidateLookupRateLimited, parseCodeSparkConfig, readBody, recordFailedCandidateLookup, setApiHeaders, supabaseRest } from "./_security.js";
+import { getCodeSparkRosterConfig, isCandidateLookupRateLimited, readBody, recordFailedCandidateLookup, setApiHeaders, supabaseRest } from "./_security.js";
 
 const CONFIG_ID = "codespark_system_config";
 const normalize = (value) => String(value || "").trim().toUpperCase().replace(/\s+/g, "").replace(/^(AXENT-R2-|AXENT-|R2-)/, "");
@@ -16,8 +16,7 @@ export default async function handler(req, res) {
     if (await isCandidateLookupRateLimited(req)) {
       return res.status(429).json({ success: false, error: "Too many incorrect access-key attempts. Please wait 15 minutes before trying again." });
     }
-    const rows = await supabaseRest(`candidate_stations?id=eq.${CONFIG_ID}&select=code,student`);
-    const config = parseCodeSparkConfig(rows?.[0]);
+    const config = await getCodeSparkRosterConfig();
     if (!config || !Array.isArray(config.candidates)) return res.status(503).json({ success: false, error: "Candidate roster is unavailable." });
 
     const candidate = config.candidates.find((item) => {
