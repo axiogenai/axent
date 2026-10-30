@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 export const config = { maxDuration: 60 };
 
-import { escapeHtml, parseCodeSparkConfig, readBody, requireAdmin, setApiHeaders, smtpConfiguration, supabaseRest } from "./_security.js";
+import { escapeHtml, getCodeSparkRosterConfig, readBody, requireAdmin, setApiHeaders, smtpConfiguration } from "./_security.js";
 
 const validEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || ""));
 
@@ -33,8 +33,7 @@ export default async function handler(req, res) {
   });
   let rosterConfig;
   try {
-    const rows = await supabaseRest("candidate_stations?id=eq.codespark_system_config&select=code,student");
-    rosterConfig = parseCodeSparkConfig(rows?.[0]);
+    rosterConfig = await getCodeSparkRosterConfig();
   } catch {
     return res.status(503).json({ success: false, error: "The verified candidate roster is unavailable." });
   }
