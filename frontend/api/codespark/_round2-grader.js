@@ -59,6 +59,13 @@ export async function getRound2AssignedProblems(keyInput) {
   if (!candidate || !(candidate.isShortlisted || candidate.status === "SHORTLISTED")) {
     const error = new Error("A valid shortlisted Round 2 key is required."); error.statusCode = 403; throw error;
   }
+  const roll = String(candidate.rollNumber || candidate.email || candidate.name || "candidate").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "_").slice(0, 80);
+  const proctorRows = await supabaseRest(`candidate_stations?id=eq.r2_station_${roll}&select=student`);
+  if (proctorRows?.[0]?.student?.proctorLocked === true) {
+    const error = new Error("This Round 2 workstation is locked after three proctoring violations. Contact the invigilator.");
+    error.statusCode = 423;
+    throw error;
+  }
   const problemRows = await supabaseRest("candidate_stations?id=eq.codespark_round2_questions&select=code,student");
   const problemConfig = problemRows?.[0]?.student && typeof problemRows[0].student === "object"
     ? problemRows[0].student
