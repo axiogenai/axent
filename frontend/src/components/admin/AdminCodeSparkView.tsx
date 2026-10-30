@@ -1732,14 +1732,12 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
     const roll = rollNumber.trim().toUpperCase();
 
     const isNowShortlisted = !shortlistedRolls.includes(roll);
+    if (!isNowShortlisted && shortlistedRolls.length <= 1) setRound1ConcludedGlobally(false);
 
     shortlistCandidateForRound2(roll, isNowShortlisted);
     const updatedRolls = getShortlistedRolls();
     setShortlistedRolls(updatedRolls);
     setRegisteredCandidates(getAllCodeSparkCandidates());
-    if (updatedRolls.length === 0) {
-      setRound1ConcludedGlobally(false);
-    }
     playSound('success');
 
   };
@@ -1784,6 +1782,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
     try {
 
+      setRound1ConcludedGlobally(false);
       localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify([]));
 
       const all = getAllCodeSparkCandidates();
