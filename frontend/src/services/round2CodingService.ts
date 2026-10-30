@@ -1830,342 +1830,79 @@ export interface Round2LeaderboardEntry {
 
 
 
+async function round2AdminHeaders(): Promise<Record<string, string>> {
+  const { data, error } = await supabase.auth.getSession();
+  if (error || !data.session?.access_token) throw new Error("Administrator sign-in is required.");
+  return { "Content-Type": "application/json", Authorization: `Bearer ${data.session.access_token}` };
+}
+
 export async function clearRound2Leaderboard(): Promise<void> {
-  try { localStorage.removeItem('codedna_codespark_r2_submissions'); } catch {}
-  if (supabase) {
-    try {
-      await supabase.from('candidate_stations').delete().like('id', 'r2_sub_%');
-      await supabase.from('candidate_stations').delete().like('id', 'r2_station_%');
-      if (typeof window !== 'undefined') {
-        const keysToRemove: string[] = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i);
-          if (k && (k.startsWith('codedna_r2_sub_') || k.startsWith('codedna_codespark_r2_'))) {
-            keysToRemove.push(k);
-          }
-        }
-        keysToRemove.forEach(k => localStorage.removeItem(k));
-      }
-    } catch (e) { console.warn('[Round 2] clearRound2Leaderboard error:', e); }
+  try {
+    const headers = await round2AdminHeaders();
+    const response = await fetch('/api/codespark/round2-submissions', { method: 'DELETE', headers });
+    if (!response.ok) throw new Error("Server refused to clear Round 2 submissions.");
+    localStorage.removeItem(ROUND2_SUBMISSIONS_STORAGE_KEY);
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('codedna_r2_sub_')) keysToRemove.push(key);
+    }
+    keysToRemove.forEach((key) => localStorage.removeItem(key));
+  } catch (error) {
+    console.warn('[Round 2] secure leaderboard reset failed:', error);
   }
 }
+
 export async function fetchRound2Leaderboard(): Promise<Round2LeaderboardEntry[]> {
-
-
-
-  const localList = getAllRound2Submissions();
-
-
-
   const subMap = new Map<string, Round2CandidateSubmission>();
-
-
-
-  localList.forEach((s) => subMap.set(s.candidateKey.toUpperCase(), s));
-
-
-
-  // Query Supabase candidate_stations for all r2_sub_ records
-
-
-
-  if (supabase) {
-
-
-
-    try {
-
-
-
-      const { data: records, error } = await supabase
-
-
-
-        .from('candidate_stations')
-
-
-
-        .select('code, student')
-
-
-
-        .like('id', 'r2_sub_%');
-
-
-
-      if (!error && records) {
-
-
-
-        for (const row of records) {
-
-
-
-          const sub: Round2CandidateSubmission | null =
-
-
-
-            row.code ? JSON.parse(row.code) : null;
-
-
-
-          if (sub && sub.candidateKey) {
-
-
-
-            const key = sub.candidateKey.toUpperCase();
-
-
-
-            const existing = subMap.get(key);
-
-
-
-            if (!existing || (sub.totalScore >= existing.totalScore)) {
-
-
-
-              subMap.set(key, sub);
-
-
-
-            }
-
-
-
-          }
-
-
-
-        }
-
-
-
+  try {
+    const headers = await round2AdminHeaders();
+    const response = await fetch('/api/codespark/round2-submissions', { headers });
+    const result = await response.json();
+    if (response.ok && Array.isArray(result.submissions)) {
+      for (const row of result.submissions) {
+        let sub: Round2CandidateSubmission | null = null;
+        try { sub = row.code ? JSON.parse(row.code) : null; } catch {}
+        if (sub?.candidateKey) subMap.set(sub.candidateKey.toUpperCase(), sub);
       }
-
-
-
-    } catch (e) {
-
-
-
-      console.warn('[Round 2] fetchRound2Leaderboard cloud query error:', e);
-
-
-
     }
-
-
-
+  } catch (error) {
+    console.warn('[Round 2] secure leaderboard fetch failed:', error);
   }
 
-
-
-  const allSubs = Array.from(subMap.values());
-
-
-
-  // Build Leaderboard
-
-
-
-  const entries: Round2LeaderboardEntry[] = allSubs.map((sub) => {
-
-
-
+  const entries: Round2LeaderboardEntry[] = Array.from(subMap.values()).map((sub) => {
     let solvedCount = 0;
-
-
-
-    const qStatus: Record<number, 'ACCEPTED' | 'PARTIAL' | 'FAILED' | 'PENDING'> = {};
-
-
-
-    for (let q = 1; q <= 5; q++) {
-
-
-
-      const report = sub.questionReports?.[q];
-
-
-
-      if (!report) {
-
-
-
-        qStatus[q] = 'PENDING';
-
-
-
-      } else if (report.status === 'ACCEPTED') {
-
-
-
-        qStatus[q] = 'ACCEPTED';
-
-
-
-        solvedCount++;
-
-
-
-      } else if (report.score > 0) {
-
-
-
-        qStatus[q] = 'PARTIAL';
-
-
-
-      } else {
-
-
-
-        qStatus[q] = 'FAILED';
-
-
-
-      }
-
-
-
+    const questionStatus: Record<number, 'ACCEPTED' | 'PARTIAL' | 'FAILED' | 'PENDING'> = {};
+    for (let question = 1; question <= 5; question++) {
+      const report = sub.questionReports?.[question];
+      if (!report) questionStatus[question] = 'PENDING';
+      else if (report.status === 'ACCEPTED') { questionStatus[question] = 'ACCEPTED'; solvedCount++; }
+      else if (report.score > 0) questionStatus[question] = 'PARTIAL';
+      else questionStatus[question] = 'FAILED';
     }
-
-
-
-    const elapsedMs = (sub.submittedAt || Date.now()) - (sub.startedAt || Date.now());
-
-
-
-    const timeTakenMinutes = Math.max(1, Math.round(elapsedMs / 60000));
-
-
-
+    const elapsed = (sub.submittedAt || Date.now()) - (sub.startedAt || Date.now());
     return {
-
-
-
       rank: 1,
-
-
-
       candidateKey: sub.candidateKey,
-
-
-
-      round2Key: sub.round2Key,
-
-
-
+      round2Key: '',
       candidateName: sub.candidateName,
-
-
-
       rollNumber: sub.rollNumber,
-
-
-
       email: sub.email,
-
-
-
       totalScore: sub.totalScore || 0,
-
-
-
       maxScore: sub.maxScore || 100,
-
-
-
       solvedCount,
-
-
-
-      questionStatus: qStatus,
-
-
-
+      questionStatus,
       dominantLanguage: sub.dominantLanguage || 'Python',
-
-
-
-      timeTakenMinutes,
-
-
-
+      timeTakenMinutes: Math.max(1, Math.round(elapsed / 60000)),
       isSubmitted: Boolean(sub.isSubmitted),
-
-
-
       submission: sub
-
-
-
     };
-
-
-
   });
-
-
-
-  // Sort by:
-
-
-
-  // 1. totalScore desc
-
-
-
-  // 2. solvedCount desc
-
-
-
-  // 3. timeTakenMinutes asc
-
-
-
-  entries.sort((a, b) => {
-
-
-
-    if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-
-
-
-    if (b.solvedCount !== a.solvedCount) return b.solvedCount - a.solvedCount;
-
-
-
-    return a.timeTakenMinutes - b.timeTakenMinutes;
-
-
-
-  });
-
-
-
-  // Assign ranks
-
-
-
-  entries.forEach((e, idx) => {
-
-
-
-    e.rank = idx + 1;
-
-
-
-  });
-
-
-
+  entries.sort((a, b) => b.totalScore - a.totalScore || b.solvedCount - a.solvedCount || a.timeTakenMinutes - b.timeTakenMinutes);
+  entries.forEach((entry, index) => { entry.rank = index + 1; });
   return entries;
-
-
-
 }
+
 
 export function parseQuestionsFromPlainText(text: string): Round2Problem[] {
   if (!text || !text.trim()) return [];
