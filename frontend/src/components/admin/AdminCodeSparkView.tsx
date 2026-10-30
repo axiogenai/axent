@@ -1086,7 +1086,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
           success: true,
 
-          message: `Dispatched ${result.sent_count} of ${recipients.length} Round 2 keys via smtp.gmail.com!`,
+          message: `Dispatched ${result.sent_count} of ${recipients.length} Round 2 keys through the configured SMTP server!`,
 
           sent: result.sent_count,
 
@@ -5073,7 +5073,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                           <span style={{ padding: '3px 8px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.25)', fontFamily: 'monospace', fontWeight: 800, color: '#60a5fa' }}>
 
-                            {r2Key}
+                            {r2Key || 'NOT ISSUED'}
 
                           </span>
 
@@ -6363,7 +6363,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                     <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', marginBottom: '4px' }}>
 
-                      Gmail Account Address
+                      SMTP Sender Address (configured on server)
 
                     </label>
 
@@ -6551,7 +6551,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                     onClick={handleTestSmtp}
 
-                    disabled={smtpTesting || !smtpUser.trim() || !smtpPassword.trim()}
+                    disabled={smtpTesting}
 
                     style={{
 
@@ -6569,7 +6569,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                       fontWeight: 700,
 
-                      cursor: smtpTesting || !smtpUser.trim() || !smtpPassword.trim() ? 'not-allowed' : 'pointer',
+                      cursor: smtpTesting ? 'not-allowed' : 'pointer',
 
                       display: 'inline-flex',
 
@@ -6583,7 +6583,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                     <RefreshCw size={12} className={smtpTesting ? 'animate-spin' : ''} />
 
-                    <span>{smtpTesting ? 'Testing SMTP TLS...' : 'Test Gmail SMTP Connection'}</span>
+                    <span>{smtpTesting ? 'Testing server SMTP...' : 'Test Server SMTP Connection'}</span>
 
                   </button>
 
@@ -6595,7 +6595,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                     onClick={handleSendEmailsViaSmtp}
 
-                    disabled={smtpSending || shortlistedRolls.length === 0 || !smtpUser.trim() || !smtpPassword.trim()}
+                    disabled={smtpSending || shortlistedRolls.length === 0}
 
                     style={{
 
@@ -6613,7 +6613,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                       fontWeight: 800,
 
-                      cursor: smtpSending || shortlistedRolls.length === 0 || !smtpUser.trim() || !smtpPassword.trim() ? 'not-allowed' : 'pointer',
+                      cursor: smtpSending || shortlistedRolls.length === 0 ? 'not-allowed' : 'pointer',
 
                       display: 'inline-flex',
 
@@ -6629,7 +6629,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                     <Send size={12} color="#09090b" className={smtpSending ? 'animate-pulse' : ''} />
 
-                    <span>{smtpSending ? 'Dispatching via Gmail...' : `Dispatch Round 2 Codes to ${shortlistedRolls.length} Shortlisted Candidates`}</span>
+                    <span>{smtpSending ? 'Dispatching email invitations...' : `Dispatch Round 2 Codes to ${shortlistedRolls.length} Shortlisted Candidates`}</span>
 
                   </button>
 
