@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readBody, setApiHeaders, supabaseRest } from "./_security.js";
 import { getRound2AssignedProblems, normalizeRound2Key } from "./_round2-grader.js";
 
@@ -18,6 +19,11 @@ export default async function handler(req, res) {
   }
   try {
     const { candidate, problems } = await getRound2AssignedProblems(key);
+    const candidateHash = createHash("sha256").update(normalizeRound2Key(key)).digest("hex");
+    const finalized = await supabaseRest(`codespark_round2_finalizations?candidate_hash=eq.${candidateHash}&select=candidate_hash`);
+    if (finalized?.length) {
+      return res.status(409).json({ success: false, error: "This Round 2 submission has already been finalized." });
+    }
     const problem = problems[questionNumber - 1];
     if (!problem) return res.status(403).json({ success: false, error: "Question is not assigned to this candidate." });
     const roll = String(candidate.rollNumber || candidate.email || candidate.name || "candidate").trim();
