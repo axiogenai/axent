@@ -269,135 +269,45 @@ export function getCodeSparkActiveExam(): MCQExamConfig | null {
 export async function asyncGetCodeSparkActiveExam(): Promise<MCQExamConfig | null> {
   const local = getCodeSparkActiveExam();
   if (local) return local;
-
-  if (supabase) {
-    try {
-      let activeExamId: string | null = null;
-
-      // 1. Check candidate_stations
-      try {
-        const { data: stRec } = await supabase
-          .from('candidate_stations')
-          .select('code, student')
-          .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-          .maybeSingle();
-
-        if (stRec) {
-          const cfg = (stRec.student && typeof stRec.student === 'object' && (stRec.student as any).activeExamId)
-            ? (stRec.student as any)
-            : (stRec.code ? JSON.parse(stRec.code) : null);
-          if (cfg?.activeExamId) {
-            activeExamId = cfg.activeExamId;
-          }
-        }
-      } catch {}
-
-      // 2. Check mcq_exams
-      if (!activeExamId) {
-        try {
-          const { data: configRow } = await supabase
-            .from('mcq_exams')
-            .select('instructions')
-            .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-            .maybeSingle();
-
-          if (configRow?.instructions) {
-            const parsed = JSON.parse(configRow.instructions);
-            if (parsed?.activeExamId) {
-              activeExamId = parsed.activeExamId;
-            }
-          }
-        } catch {}
-      }
-
-      if (activeExamId) {
-        const { data: row } = await supabase
-          .from('mcq_exams')
-          .select('*')
-          .eq('id', activeExamId)
-          .maybeSingle();
-
-        if (row) {
-          const mapped: MCQExamConfig = {
-            id: row.id,
-            title: row.title,
-            description: row.description || '',
-            instructions: row.instructions || '',
-            subject: row.subject || '',
-            topic: row.topic || '',
-            examCategory: row.exam_category || 'Aptitude',
-            durationMinutes: Number(row.duration_minutes) || 30,
-            startTime: row.start_time ? Number(row.start_time) : undefined,
-            endTime: row.end_time ? Number(row.end_time) : undefined,
-            totalMarks: Number(row.total_marks) || 0,
-            questionCount: Array.isArray(row.question_ids) ? row.question_ids.length : (Number(row.question_count) || 0),
-            questionIds: Array.isArray(row.question_ids) ? row.question_ids : [],
-            shuffleQuestions: Boolean(row.shuffle_questions),
-            shuffleOptions: Boolean(row.shuffle_options),
-            negativeMarkingEnabled: Boolean(row.negative_marking_enabled),
-            allowReview: Boolean(row.allow_review),
-            showExplanationsAfterSubmit: Boolean(row.show_explanations_after_submit),
-            maxAttempts: Number(row.max_attempts) || 1,
-            isCodeSpark: true,
-            isPrivate: true,
-            status: row.status,
-            createdAt: Number(row.created_at) || Date.now(),
-            updatedAt: Number(row.updated_at) || Date.now(),
-            createdBy: row.created_by || 'admin'
-          };
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('codedna_codespark_round1_exam_id', mapped.id);
-          }
-          saveExam(mapped);
-          return mapped;
-        }
-      }
-
-      const { data: anyPublished } = await supabase
-        .from('mcq_exams')
-        .select('*')
-        .neq('id', CODESPARK_SYSTEM_CONFIG_ID)
-        .eq('status', 'PUBLISHED')
-        .limit(2);
-
-      if (anyPublished && anyPublished.length === 1) {
-        const row = anyPublished[0];
-        const mapped: MCQExamConfig = {
-          id: row.id,
-          title: row.title,
-          description: row.description || '',
-          instructions: row.instructions || '',
-          subject: row.subject || '',
-          topic: row.topic || '',
-          examCategory: row.exam_category || 'Aptitude',
-          durationMinutes: Number(row.duration_minutes) || 30,
-          startTime: row.start_time ? Number(row.start_time) : undefined,
-          endTime: row.end_time ? Number(row.end_time) : undefined,
-          totalMarks: Number(row.total_marks) || 0,
-          questionCount: Array.isArray(row.question_ids) ? row.question_ids.length : (Number(row.question_count) || 0),
-          questionIds: Array.isArray(row.question_ids) ? row.question_ids : [],
-          shuffleQuestions: Boolean(row.shuffle_questions),
-          shuffleOptions: Boolean(row.shuffle_options),
-          negativeMarkingEnabled: Boolean(row.negative_marking_enabled),
-          allowReview: Boolean(row.allow_review),
-          showExplanationsAfterSubmit: Boolean(row.show_explanations_after_submit),
-          maxAttempts: Number(row.max_attempts) || 1,
-          isCodeSpark: true,
-          isPrivate: true,
-          status: row.status,
-          createdAt: Number(row.created_at) || Date.now(),
-          updatedAt: Number(row.updated_at) || Date.now(),
-          createdBy: row.created_by || 'admin'
-        };
-        saveExam(mapped);
-        return mapped;
-      }
-    } catch (err) {
-      console.warn('[CodeSpark] asyncGetCodeSparkActiveExam error:', err);
-    }
+  try {
+    const response = await fetch('/api/codespark/public-exam');
+    const result = await response.json();
+    const row = result.exam;
+    if (!response.ok || !row) return null;
+    const mapped: MCQExamConfig = {
+      id: row.id,
+      title: row.title,
+      description: row.description || '',
+      instructions: row.instructions || '',
+      subject: row.subject || '',
+      topic: row.topic || '',
+      examCategory: row.exam_category || 'Aptitude',
+      durationMinutes: Number(row.duration_minutes) || 30,
+      startTime: row.start_time ? Number(row.start_time) : undefined,
+      endTime: row.end_time ? Number(row.end_time) : undefined,
+      totalMarks: Number(row.total_marks) || 0,
+      questionCount: Array.isArray(row.question_ids) ? row.question_ids.length : (Number(row.question_count) || 0),
+      questionIds: Array.isArray(row.question_ids) ? row.question_ids : [],
+      shuffleQuestions: Boolean(row.shuffle_questions),
+      shuffleOptions: Boolean(row.shuffle_options),
+      negativeMarkingEnabled: Boolean(row.negative_marking_enabled),
+      allowReview: Boolean(row.allow_review),
+      showExplanationsAfterSubmit: Boolean(row.show_explanations_after_submit),
+      maxAttempts: Number(row.max_attempts) || 1,
+      isCodeSpark: true,
+      isPrivate: true,
+      status: row.status,
+      createdAt: Number(row.created_at) || Date.now(),
+      updatedAt: Number(row.updated_at) || Date.now(),
+      createdBy: row.created_by || 'admin'
+    };
+    localStorage.setItem('codedna_codespark_round1_exam_id', mapped.id);
+    saveExam(mapped);
+    return mapped;
+  } catch (error) {
+    console.warn('[CodeSpark] Active exam metadata unavailable:', error);
+    return null;
   }
-
-  return null;
 }
 
 export function ensureCodeSparkAptitudeExam(): MCQExamConfig | null {
