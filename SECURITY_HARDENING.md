@@ -9,6 +9,7 @@ Set these in the Vercel project that deploys the `frontend` directory. Use **ser
 - `SUPABASE_URL`: the project URL (server-side copy).
 - `SUPABASE_ANON_KEY` (or `SUPABASE_PUBLISHABLE_KEY`): public/publishable Supabase key used only to verify the bearer session with Supabase Auth.
 - `SUPABASE_SERVICE_ROLE_KEY`: secret server-only key used by protected CodeSpark APIs to access protected roster, questions and submissions. Never expose it to the browser or prefix it with `VITE_`.
+- `GROQ_API_KEY`: server-only Groq API key used by the AI proxy. Remove any `VITE_GROQ_API_KEY`, `VITE_AI_API_KEY`, or browser-local Groq keys.
 - `SMTP_USER`: dedicated sender mailbox.
 - `SMTP_PASSWORD`: newly rotated Gmail App Password or SMTP credential.
 - `SMTP_HOST`: optional; defaults to `smtp.gmail.com`.
