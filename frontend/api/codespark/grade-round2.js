@@ -1,7 +1,7 @@
-export const config = { maxDuration: 60 };
-
 import { isRound2EvaluationRateLimited, readBody, recordRound2Evaluation, setApiHeaders } from "./_security.js";
 import { gradeRound2Code, normalizeRound2Key } from "./_round2-grader.js";
+
+export const config = { maxDuration: 60 };
 
 export default async function handler(req, res) {
   setApiHeaders(req, res);
