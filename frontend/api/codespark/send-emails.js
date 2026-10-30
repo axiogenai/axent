@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
-export const config = { maxDuration: 60 };
-
 import { escapeHtml, getCodeSparkRosterConfig, readBody, requireAdmin, setApiHeaders, smtpConfiguration } from "./_security.js";
+
+export const config = { maxDuration: 60 };
 
 const validEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || ""));
 
