@@ -107,7 +107,10 @@ export default async function handler(req, res) {
         last_updated_timestamp: Date.now()
       }])
     });
-    return res.status(200).json({ success: true, submission: safeSubmission });
+    return res.status(200).json({
+      success: true,
+      submission: { ...safeSubmission, candidateKey: String(submission.candidateKey || submission.round2Key || "") }
+    });
   } catch (error) {
     console.error("[CodeSpark submission]", error?.message || "submission failed");
     return res.status(error.statusCode || 503).json({
