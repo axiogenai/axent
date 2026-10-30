@@ -102,7 +102,7 @@ export default async function handler(req, res) {
       maxScore: safeSubmission.maxScore, isSubmitted
     };
     const candidateHash = createHash("sha256")
-      .update(`${key}:${process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`)
+      .update(key)
       .digest("hex");
 
     if (isSubmitted) {
