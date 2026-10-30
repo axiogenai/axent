@@ -51,6 +51,21 @@ async function execute(code, language, stdin) {
   }
 }
 
+export async function getRound2AssignedProblems(keyInput) {
+  const key = normalizeRound2Key(keyInput);
+  const rosterRows = await supabaseRest("candidate_stations?id=eq.codespark_system_config&select=code,student");
+  const roster = parseCodeSparkConfig(rosterRows?.[0]);
+  const candidate = roster?.candidates?.find((item) => item.round2Key && normalizeRound2Key(item.round2Key) === key);
+  if (!candidate || !(candidate.isShortlisted || candidate.status === "SHORTLISTED" || candidate.round2Key)) {
+    const error = new Error("A valid shortlisted Round 2 key is required."); error.statusCode = 403; throw error;
+  }
+  const problemRows = await supabaseRest("candidate_stations?id=eq.codespark_round2_questions&select=code,student");
+  const problemConfig = problemRows?.[0]?.student && typeof problemRows[0].student === "object"
+    ? problemRows[0].student
+    : (() => { try { return JSON.parse(problemRows?.[0]?.code || "{}"); } catch { return {}; } })();
+  return { candidate, problems: assignedProblems(Array.isArray(problemConfig.problems) ? problemConfig.problems : [], candidate.round2Key) };
+}
+
 export async function gradeRound2Code(keyInput, problemIdInput, codeInput, languageInput) {
   const key = normalizeRound2Key(keyInput);
   const code = String(codeInput || "");
