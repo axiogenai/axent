@@ -1699,6 +1699,25 @@ export async function pushRound2SubmissionToCloud(sub: Round2CandidateSubmission
 }
 
 
+export async function finalizeRound2Submission(sub: Round2CandidateSubmission): Promise<Round2CandidateSubmission | null> {
+  try {
+    const response = await fetch('/api/codespark/round2-submissions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ submission: { ...sub, isSubmitted: true } })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success || !result.submission) {
+      throw new Error(result.error || 'Final submission was not accepted by the server.');
+    }
+    return result.submission as Round2CandidateSubmission;
+  } catch (error) {
+    console.error('[Round 2] secure finalization failed:', error);
+    return null;
+  }
+}
+
+
 export function getAllRound2Submissions(): Round2CandidateSubmission[] {
 
 
