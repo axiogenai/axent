@@ -141,3 +141,20 @@ export async function getCodeSparkRosterConfig() {
   }
   return config;
 }
+
+const candidateHash = (value) => createHash("sha256").update(String(value || "").trim().toUpperCase()).digest("hex");
+
+export async function isRound2EvaluationRateLimited(key) {
+  const hash = candidateHash(key);
+  const since = encodeURIComponent(new Date(Date.now() - 60 * 60 * 1000).toISOString());
+  const rows = await supabaseRest(`codespark_round2_eval_attempts?candidate_hash=eq.${hash}&attempted_at=gte.${since}&select=id`);
+  return Array.isArray(rows) && rows.length >= 120;
+}
+
+export async function recordRound2Evaluation(key) {
+  await supabaseRest("codespark_round2_eval_attempts", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify([{ candidate_hash: candidateHash(key) }])
+  });
+}
