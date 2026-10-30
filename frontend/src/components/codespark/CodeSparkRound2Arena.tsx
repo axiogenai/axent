@@ -550,7 +550,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       >
         <div
           style={{
-            maxWidth: '620px',
+            maxWidth: '560px',
             width: '100%',
             background: '#121214',
             border: '1px solid #27272a',
@@ -597,160 +597,46 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
             Assessment Successfully Completed
           </h2>
           <p style={{ fontSize: '13px', color: '#a1a1aa', margin: '0 0 28px 0', lineHeight: 1.6 }}>
-            Candidate <strong>{submission.candidateName}</strong> ({submission.rollNumber}), your coding solutions and compiler reports have been encrypted and submitted to the institutional leaderboard.
+            Candidate <strong>{submission.candidateName}</strong> ({submission.rollNumber}), your coding solutions and compilation telemetry have been encrypted and submitted to the institutional leaderboard.
           </p>
-          {/* Score & Metrics Cards */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '12px',
-              marginBottom: '28px',
-              textAlign: 'left'
-            }}
-          >
-            <div
-              style={{
-                background: '#18181b',
-                border: '1px solid #27272a',
-                borderRadius: '8px',
-                padding: '16px'
-              }}
-            >
-              <div style={{ fontSize: '11px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>
-                Score
-              </div>
-              <div style={{ fontSize: '24px', fontWeight: 900, color: '#f4f4f5', marginTop: '4px' }}>
-                {submission.totalScore}{' '}
-                <span style={{ fontSize: '13px', color: '#71717a', fontWeight: 500 }}>/ 100</span>
-              </div>
-            </div>
-            <div
-              style={{
-                background: '#18181b',
-                border: '1px solid #27272a',
-                borderRadius: '8px',
-                padding: '16px'
-              }}
-            >
-              <div style={{ fontSize: '11px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>
-                Solved
-              </div>
-              <div style={{ fontSize: '24px', fontWeight: 900, color: '#10b981', marginTop: '4px' }}>
-                {solvedCount}{' '}
-                <span style={{ fontSize: '13px', color: '#71717a', fontWeight: 500 }}>/ 5</span>
-              </div>
-            </div>
-            <div
-              style={{
-                background: '#18181b',
-                border: '1px solid #27272a',
-                borderRadius: '8px',
-                padding: '16px'
-              }}
-            >
-              <div style={{ fontSize: '11px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>
-                Language
-              </div>
-              <div style={{ fontSize: '20px', fontWeight: 800, color: '#f4f4f5', marginTop: '6px' }}>
-                {submission.dominantLanguage || 'Python'}
-              </div>
-            </div>
-          </div>
-          {/* Question Breakdown */}
+
+          {/* Institutional Receipt Card (Confidential: No Marks / Answers Leaked) */}
           <div
             style={{
               background: '#18181b',
               border: '1px solid #27272a',
               borderRadius: '8px',
-              padding: '16px',
+              padding: '20px',
               marginBottom: '28px',
               textAlign: 'left'
             }}
           >
-            <div style={{ fontSize: '12px', fontWeight: 700, color: '#a1a1aa', marginBottom: '12px' }}>
-              Problem Breakdown
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <span style={{ fontSize: '11px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>
+                Examination Dossier
+              </span>
+              <span
+                style={{
+                  fontSize: '10.5px',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  color: '#10b981',
+                  border: '1px solid rgba(16, 185, 129, 0.3)'
+                }}
+              >
+                FINALIZED &amp; RECORDED
+              </span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {[1, 2, 3, 4, 5].map((qNum) => {
-                const rep = submission.questionReports[qNum];
-                const prob = problems.find((p) => p.number === qNum);
-                const title = prob?.title || `Question ${qNum}`;
-                const status = rep ? rep.status : 'PENDING';
-                const score = rep ? rep.score : 0;
-                return (
-                  <div
-                    key={qNum}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      fontSize: '12.5px',
-                      padding: '6px 8px',
-                      borderRadius: '6px',
-                      background: '#121214',
-                      border: '1px solid #27272a'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontWeight: 700, color: '#71717a' }}>Q{qNum}.</span>
-                      <span style={{ color: '#f4f4f5' }}>{title}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      {rep && (
-                        <>
-                          <span style={{ fontSize: '11px', color: '#71717a', fontFamily: 'monospace' }}>
-                            {rep.executionTime || '35 ms'}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              background: '#18181b',
-                              border: '1px solid #27272a',
-                              color: '#10b981'
-                            }}
-                          >
-                            {rep.timeComplexity || 'O(N)'}
-                          </span>
-                        </>
-                      )}
-                      <span
-                        style={{
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          background:
-                            status === 'ACCEPTED'
-                              ? 'rgba(16, 185, 129, 0.15)'
-                              : status === 'PARTIAL'
-                              ? 'rgba(245, 158, 11, 0.15)'
-                              : 'rgba(239, 68, 68, 0.15)',
-                          color:
-                            status === 'ACCEPTED'
-                              ? '#10b981'
-                              : status === 'PARTIAL'
-                              ? '#f59e0b'
-                              : '#ef4444'
-                        }}
-                      >
-                        {status}
-                      </span>
-                      <span style={{ fontWeight: 800, color: '#f4f4f5', minWidth: '45px', textAlign: 'right' }}>
-                        {score} / 20
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
+            <div style={{ fontSize: '12.5px', color: '#a1a1aa', lineHeight: 1.6 }}>
+              All code implementations, test evaluations, and anti-cheat telemetry have been sealed into your institutional transcript. The Chief Proctor will declare the final shortlist centrally.
             </div>
           </div>
+
           <button
             type="button"
-            onClick={onExit}
+            onClick={onExit || (() => { window.location.href = '/code-spark'; })}
             style={{
               width: '100%',
               padding: '12px 24px',
@@ -768,7 +654,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
             }}
           >
             <LogOut size={15} />
-            <span>Return to CodeSpark Portal</span>
+            <span>Exit Coding Arena</span>
           </button>
         </div>
       </div>
@@ -1178,7 +1064,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                 color: '#f4f4f5'
               }}
             >
-              Score: <span style={{ color: '#10b981' }}>{submission.totalScore}</span> / 100
+              Passed: <span style={{ color: '#10b981' }}>{[1, 2, 3, 4, 5].filter((qNum) => submission.questionReports?.[qNum]?.status === 'ACCEPTED').length}</span> / 5 Solved
             </div>
             <button
               type="button"
@@ -1570,36 +1456,6 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
               </div>
             </div>
 
-            {/* Optional Custom Input Drawer */}
-            {showCustomInput && (
-              <div style={{ background: '#09090b', borderBottom: '1px solid #27272a', padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', color: '#a1a1aa', fontWeight: 600, fontFamily: 'monospace' }}>
-                    STDIN (Input for scanf / cin / input / Scanner):
-                  </span>
-                  <span style={{ fontSize: '10px', color: '#71717a' }}>Pass arguments or test lines</span>
-                </div>
-                <textarea
-                  value={customInputText}
-                  onChange={(e) => setCustomInputText(e.target.value)}
-                  placeholder="Enter input to feed into stdin (e.g. 10 20)..."
-                  rows={2}
-                  style={{
-                    width: '100%',
-                    background: '#121214',
-                    border: '1px solid #27272a',
-                    borderRadius: '4px',
-                    color: '#f4f4f5',
-                    fontFamily: "'Consolas', monospace",
-                    fontSize: '12px',
-                    padding: '6px 8px',
-                    resize: 'vertical',
-                    outline: 'none'
-                  }}
-                />
-              </div>
-            )}
-
             {/* Monaco Editor Canvas */}
             <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
               <Editor
@@ -1684,7 +1540,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
             {!isMobileScreen && (
               <div
                 style={{
-                  height: activeReport || compileError ? '240px' : '90px',
+                  height: activeReport || compileError || showCustomInput ? '240px' : '90px',
                   borderTop: '1px solid #27272a',
                   background: '#121214',
                   display: 'flex',

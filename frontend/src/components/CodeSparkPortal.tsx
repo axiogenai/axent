@@ -690,15 +690,9 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
         }
 
         playSound('warning');
-        if (!isRound1ConcludedGlobally()) {
-          setKeyError(
-            `Round 1 attempt logged (Score: ${priorAttempt.score ?? 0}/${priorAttempt.maxScore || safeExam.totalMarks}). Testing is currently ongoing across all competition terminals. The Chief Proctor will conclude Round 1 and announce the finalists once all candidates finish. Shortlisted candidates will receive their Round 2 key via email.`
-          );
-        } else {
-          setKeyError(
-            `Round 1 assessment has concluded across all laboratories (Score: ${priorAttempt.score ?? 0}/${priorAttempt.maxScore || safeExam.totalMarks}). Minimum qualifying cutoff was not met.`
-          );
-        }
+        setKeyError(
+          'This Access Key has already been used and submitted for Round 1. Re-entry is strictly prohibited. The Chief Proctor will conclude Round 1 and calculate the combined institutional shortlist once all laboratory sittings finish.'
+        );
         return;
       }
     }

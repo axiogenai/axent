@@ -946,6 +946,8 @@ export interface KeyLookupResult {
   targetRound: 'round1' | 'round2';
   isShortlisted: boolean;
   round2Key?: string;
+  isBlocked?: boolean;
+  error?: string;
 }
 
 export async function asyncLookupCandidateAny(rawKey: string): Promise<KeyLookupResult | null> {
@@ -958,6 +960,15 @@ export async function asyncLookupCandidateAny(rawKey: string): Promise<KeyLookup
       body: JSON.stringify({ key })
     });
     const result = await response.json();
+    if (response.status === 403 || result.error) {
+      return {
+        candidate: (result.candidate || { name: '', email: '', rollNumber: '', accessKey: key, status: 'SUBMITTED' }) as CodeSparkCandidate,
+        targetRound: 'round1',
+        isShortlisted: false,
+        isBlocked: true,
+        error: result.error || 'This access key has already been used and submitted for Round 1. Re-entry is strictly prohibited.'
+      };
+    }
     if (!response.ok || !result.success || !result.candidate) return null;
     return {
       candidate: result.candidate as CodeSparkCandidate,

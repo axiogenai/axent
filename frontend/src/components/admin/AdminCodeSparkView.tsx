@@ -80,7 +80,7 @@ import {
 
   Cpu
 
-, AlertCircle } from 'lucide-react';
+, AlertCircle, Database } from 'lucide-react';
 
 import { CandidateStation, CollegeLabInfo } from '../../types/dna';
 
@@ -103,7 +103,8 @@ import {
   clearAllAttemptsFromEverywhere,
   clearAllAttemptsLocally,
 
-  clearAllQuestions
+  clearAllQuestions,
+  wipeEntireDatabaseFromCloud
 
 } from '../../services/mcqService';
 
@@ -828,9 +829,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
       localStorage.removeItem('codedna_mcq_attempts');
 
-      localStorage.removeItem('codedna_mcq_questions');
-
-      localStorage.removeItem('codedna_mcq_exams');
+      // Preserve exam papers and questions during candidate station purge
 
       localStorage.removeItem('codedna_college_stations');
 
@@ -846,9 +845,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
       localStorage.removeItem('codedna_codespark_round1_exam_id');
 
-      clearAllQuestions();
-
-      await clearAllQuestionsFromCloud();
+      // Questions preserved
 
       saveAllStations([]);
 
@@ -2007,13 +2004,36 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
     alert('Exam ended and system 100% reset! All database records wiped, Round 1 is active, and candidate screens refreshed.');
   };
 
+  
+  const handleWipeEntireDatabase = async () => {
+    if (!window.confirm('⚠️ CRITICAL DATABASE WIPE ⚠️\n\nAre you sure you want to completely WIPE THE ENTIRE DATABASE?\n\nThis will permanently delete from cloud:\n• All exams & question banks\n• All student attempts, scores & answer sheets\n• All workstations & live sessions\n• All Round 2 coding submissions & leaderboards\n\nThis action cannot be undone. Click OK to wipe everything.')) {
+      return;
+    }
+    playSound('click');
+    try {
+      await wipeEntireDatabaseFromCloud();
+      setAllAttempts([]);
+      setRegisteredCandidates([]);
+      setShortlistedRolls([]);
+      setAssignedExamId('');
+      setAllExams([]);
+      saveAllStations([]);
+      try {
+        await broadcastRemoteHardRefresh();
+      } catch {}
+      playSound('success');
+      alert('DATABASE 100% WIPED: All exams, questions, attempts, and stations have been permanently deleted from Supabase cloud.');
+      window.location.reload();
+    } catch (err: any) {
+      alert('Failed to wipe database: ' + (err?.message || 'Network error'));
+    }
+  };
+
   const handlePurgeAllAttempts = async () => {
 
     if (!window.confirm('Are you sure you want to purge ALL Round 1 attempts from database and storage?')) return;
 
     await clearAllAttemptsFromEverywhere();
-
-    clearAllQuestions();
 
     setAllAttempts([]);
 
@@ -3510,6 +3530,28 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                 <span>Purge Submissions & Reset Wall</span>
 
               </button>
+              <button
+                type="button"
+                onClick={handleWipeEntireDatabase}
+                style={{
+                  background: '#dc2626',
+                  color: '#ffffff',
+                  border: '1px solid #b91c1c',
+                  padding: '7px 12px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                }}
+                title="Permanently wipe all exams, questions, attempts, stations, and submissions from database"
+              >
+                <Database size={12} />
+                <span>Clear Database (Wipe Everything)</span>
+              </button>
 
             </div>
 
@@ -4735,6 +4777,28 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                 <Trash2 size={13} /> Purge Attempts
               </button>
+              <button
+                type="button"
+                onClick={handleWipeEntireDatabase}
+                style={{
+                  padding: '7px 12px',
+                  borderRadius: '6px',
+                  background: '#dc2626',
+                  border: '1px solid #b91c1c',
+                  color: '#ffffff',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                }}
+                title="Permanently wipe all exams, questions, attempts, stations, and submissions from database"
+              >
+                <Database size={13} /> Clear Database (Wipe Everything)
+              </button>
+
               
 
             </div>
@@ -6807,7 +6871,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                             <strong style={{ color: t.textPrimary, fontSize: '13px' }}>{name}</strong>
                             <span style={{ color: t.textMuted, fontSize: '11px', marginLeft: '6px' }}>&lt;{email}&gt;</span>
                             <span style={{ marginLeft: '10px', fontSize: '11px', color: '#10b981', fontFamily: 'monospace', fontWeight: 700 }}>
-                              Score: {score}/{maxScore}
+                              Status: Qualified
                             </span>
                             <span style={{ marginLeft: '8px', fontSize: '11px', padding: '2px 8px', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', fontFamily: 'monospace', fontWeight: 800, borderRadius: '4px' }}>
                               {r2Key}
@@ -7466,7 +7530,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                           <span style={{ marginLeft: '10px', fontSize: '11px', color: '#10b981', fontFamily: 'monospace', fontWeight: 700 }}>
 
-                            Score: {score}/{maxScore}
+                            Status: Qualified
 
                           </span>
 

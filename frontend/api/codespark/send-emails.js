@@ -108,7 +108,6 @@ Congratulations! You have been officially shortlisted for Round 2 of CodeSpark 2
 
 Candidate: ${name}
 Roll: ${roll}
-Round 1 Score: ${score} / ${maxScore}
 Status: QUALIFIED // SHORTLISTED FOR ROUND 2
 
 YOUR ROUND 2 ACCESS CODE:
@@ -150,7 +149,7 @@ Axent Platform · Axiogen Cloud Infrastructure`;
         ${safeKey}
       </div>
       <div style="font-size:12px;color:#a1a1aa;margin-top:6px;">
-        Roll / USN: <strong style="color:#f4f4f5;">${safeRoll || 'Verified Candidate'}</strong> &bull; Score: <strong style="color:#10b981;">${escapeHtml(score)} / ${escapeHtml(maxScore)}</strong>
+        Roll / USN: <strong style="color:#f4f4f5;">${safeRoll || 'Verified Candidate'}</strong> &bull; Status: <strong style="color:#10b981;">Qualified for Round 2</strong>
       </div>
     </div>
 

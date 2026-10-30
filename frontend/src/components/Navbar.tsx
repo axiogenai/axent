@@ -16,7 +16,8 @@ import {
   X,
   Download,
   Zap,
-  RefreshCw
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 import { triggerInstallPrompt } from './ui/PWAInstallPrompt';
 import { ThemeMode } from '../types/dna';
@@ -29,6 +30,7 @@ import {
 } from '../services/authService';
 import { ContinuousTabs } from './watermelon-ui';
 import { broadcastRemoteHardRefresh } from '../services/remoteControlService';
+import { wipeEntireDatabaseFromCloud } from '../services/mcqService';
 
 interface NavbarProps {
   theme: ThemeMode;
@@ -114,6 +116,23 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isLoginRoute = location.pathname.startsWith('/login');
   const isAdminRoute = location.pathname.startsWith('/admin');
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+
+  
+  const handleGlobalWipeDatabase = async () => {
+    if (!window.confirm('⚠️ CRITICAL DATABASE WIPE ⚠️\n\nAre you sure you want to completely WIPE THE ENTIRE DATABASE?\n\nThis will permanently delete from cloud:\n• All exams & question banks\n• All student attempts, scores & answer sheets\n• All workstations & live sessions\n• All Round 2 coding submissions & leaderboards\n\nThis action cannot be undone. Click OK to wipe everything.')) {
+      return;
+    }
+    try {
+      await wipeEntireDatabaseFromCloud();
+      try {
+        await broadcastRemoteHardRefresh();
+      } catch {}
+      alert('DATABASE 100% WIPED: All exams, questions, attempts, and stations have been permanently deleted from Supabase cloud.');
+      window.location.reload();
+    } catch (err: any) {
+      alert('Failed to wipe database: ' + (err?.message || 'Network error'));
+    }
+  };
 
   const handleRemoteRefreshAll = async () => {
     if (!window.confirm('REMOTE HARD REFRESH: Remotely reload every connected candidate workstation and mobile device across all labs?')) {
@@ -312,6 +331,32 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>{isRefreshingAll ? 'Refreshing...' : 'Remote Refresh All'}</span>
               </button>
             )}
+            {/* If in Admin, provide 1-click Clear Database button */}
+            {isAdminRoute && (
+              <button
+                className="btn btn-sm"
+                onClick={handleGlobalWipeDatabase}
+                title="Permanently wipe all exams, questions, attempts, and stations from database"
+                style={{
+                  height: '30px',
+                  padding: '0 10px',
+                  gap: '5px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  color: '#ef4444',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center'
+                }}
+              >
+                <Trash2 size={12} />
+                <span>Clear Database</span>
+              </button>
+            )}
+
 
             {/* If in Admin, provide 1-click switch to Paper Setter */}
             {isAdminRoute && (

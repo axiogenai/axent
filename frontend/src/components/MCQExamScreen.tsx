@@ -2032,6 +2032,17 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
     attempt.studentSem === 'Tech Fest'
   );
 
+  // STRICT INSTITUTIONAL GUARD: Never show results, marks, or answers to CodeSpark candidates!
+  if (isTechFest) {
+    return (
+      <CodeSparkSubmissionHoldView
+        attempt={attempt}
+        exam={exam}
+        onExit={onExit || (() => { window.location.href = '/code-spark'; })}
+      />
+    );
+  }
+
   // STRICT INSTITUTIONAL GUARD:
   // If exam is configured for WhatsApp Group Release, hold results unless exam timed out or instant release is allowed
   const isWhatsAppRelease =

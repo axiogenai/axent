@@ -1685,75 +1685,9 @@ export function startAttempt(
   }
 
   if (rawQuestions.length === 0) {
-    const fallbackCertified: MCQQuestion[] = [
-      {
-        id: `q_${exam.id}_1`,
-        text: "Find the missing term in the sequence: 4, 9, 25, 49, 121, ___",
-        options: [
-          { id: "opt_1", text: "169", isCorrect: true },
-          { id: "opt_2", text: "144", isCorrect: false },
-          { id: "opt_3", text: "196", isCorrect: false },
-          { id: "opt_4", text: "225", isCorrect: false }
-        ],
-        subject: exam.subject || "General Aptitude & Reasoning",
-        topic: exam.topic || "Logical Reasoning",
-        difficulty: "EASY",
-        marks: 1,
-        negativeMarks: 0.25,
-        explanation: "Prime squares series: 2^2, 3^2, 5^2, 7^2, 11^2, 13^2 = 169.",
-        status: "PUBLISHED",
-        tags: ["Aptitude"],
-        createdBy: "System",
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      },
-      {
-        id: `q_${exam.id}_2`,
-        text: "A train running at 54 km/hr takes 20 seconds to pass a platform. Next, it takes 12 seconds to pass a man standing on the platform. What is the length of the platform?",
-        options: [
-          { id: "opt_1", text: "120 meters", isCorrect: true },
-          { id: "opt_2", text: "150 meters", isCorrect: false },
-          { id: "opt_3", text: "100 meters", isCorrect: false },
-          { id: "opt_4", text: "180 meters", isCorrect: false }
-        ],
-        subject: exam.subject || "General Aptitude & Reasoning",
-        topic: exam.topic || "Quantitative Aptitude",
-        difficulty: "MEDIUM",
-        marks: 1,
-        negativeMarks: 0.25,
-        explanation: "Speed = 15 m/s. Train = 180m. Total distance in 20s = 300m. Platform = 120m.",
-        status: "PUBLISHED",
-        tags: ["Aptitude"],
-        createdBy: "System",
-        createdAt: Date.now() + 1,
-        updatedAt: Date.now() + 1
-      },
-      {
-        id: `q_${exam.id}_3`,
-        text: "Select the word that is most nearly OPPOSITE in meaning to 'METICULOUS':",
-        options: [
-          { id: "opt_1", text: "Careless", isCorrect: true },
-          { id: "opt_2", text: "Diligent", isCorrect: false },
-          { id: "opt_3", text: "Punctual", isCorrect: false },
-          { id: "opt_4", text: "Precise", isCorrect: false }
-        ],
-        subject: exam.subject || "General Aptitude & Reasoning",
-        topic: exam.topic || "Verbal Ability",
-        difficulty: "EASY",
-        marks: 1,
-        negativeMarks: 0.25,
-        explanation: "Meticulous means very careful and precise. The opposite is careless.",
-        status: "PUBLISHED",
-        tags: ["Aptitude"],
-        createdBy: "System",
-        createdAt: Date.now() + 2,
-        updatedAt: Date.now() + 2
-      }
-    ];
-    for (const q of fallbackCertified) {
-      saveQuestion(q);
-      rawQuestions.push(q);
-    }
+    const allQ = getAllQuestions();
+    const matching = allQ.filter(q => assignedIds.includes(q.id) || (q.bankGroup && q.bankGroup === exam.title));
+    rawQuestions.push(...matching);
   }
 
   // Guarantee every question prompt is 100% unique (prevent duplicate question text)
@@ -2499,6 +2433,19 @@ export function submitAttempt(
 
   void saveAttemptToCloud(finalAttempt);
 
+  // Invalidate and consume access key on cloud ledger
+  try {
+    const candidateKey = (finalAttempt as any).accessKey || 
+      (typeof localStorage !== 'undefined' ? (JSON.parse(localStorage.getItem('codedna_codespark_active_candidate') || '{}').accessKey) : '');
+    if (candidateKey || finalAttempt.studentRoll) {
+      void fetch('/api/codespark/roster?action=consume_key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: candidateKey, rollNumber: finalAttempt.studentRoll })
+      });
+    }
+  } catch {}
+
   return grade;
 
 }
@@ -2897,7 +2844,7 @@ export async function syncFromSupabase(): Promise<void> {
       for (const loc of localAttempts) {
         if (!cloudAttemptIds.has(loc.id)) {
           // Never purge an in-progress attempt currently active on this machine!
-          if (loc.status === 'IN_PROGRESS' || loc.id === activeLocalId || loc.id === activeSessionId || (loc.startTime && (Date.now() - loc.startTime) < 24 * 3600 * 1000)) {
+          if (loc.status === 'IN_PROGRESS' && (loc.id === activeLocalId || loc.id === activeSessionId)) {
             reconciled.push(loc);
             void saveAttemptToCloud(loc);
           }
@@ -2948,3 +2895,56 @@ if (typeof window !== 'undefined') {
 
 
 
+
+export async function wipeEntireDatabaseFromCloud(): Promise<boolean> {
+  clearAllAttemptsLocally();
+  clearAllQuestions();
+  try {
+    await fetch('/api/codespark/roster?action=factory_reset_all_database', {
+      method: 'DELETE',
+      headers: { 'x-authority-role': 'admin' }
+    });
+  } catch (e) {
+    console.warn('[mcqService] factory reset error:', e);
+  }
+
+  // Clear all local in-memory caches
+  inMemoryAttempts = [];
+  save(MCQ_STORAGE_KEYS.EXAMS, []);
+  save(MCQ_STORAGE_KEYS.QUESTIONS, []);
+  save(MCQ_STORAGE_KEYS.ATTEMPTS, []);
+
+  if (typeof window !== 'undefined') {
+    try {
+      const keysToClear = [
+        MCQ_STORAGE_KEYS.ATTEMPTS,
+        MCQ_STORAGE_KEYS.QUESTIONS,
+        MCQ_STORAGE_KEYS.EXAMS,
+        MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT,
+        'codedna_mcq_active_attempt_backup',
+        'codedna_student_profile',
+        'codedna_codespark_active_candidate',
+        'codedna_codespark_candidates',
+        'codedna_codespark_shortlisted_rolls',
+        'codedna_codespark_round1_exam_id',
+        'codedna_codespark_active_exam_id',
+        'codedna_codespark_r2_submissions',
+        'codedna_codespark_r2_active_key'
+      ];
+      keysToClear.forEach(k => {
+        localStorage.removeItem(k);
+        sessionStorage.removeItem(k);
+      });
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('codedna_') || key.startsWith('mcq_') || key.startsWith('spark_'))) {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch {}
+  }
+
+  notifyMcqDataChanged();
+  notifyExamsChanged();
+  return true;
+}
