@@ -28,6 +28,8 @@ export default async function handler(req, res) {
     if (!problem) return res.status(403).json({ success: false, error: "Question is not assigned to this candidate." });
     const roll = String(candidate.rollNumber || candidate.email || candidate.name || "candidate").trim();
     const rowId = `r2_station_${cleanId(roll)}`;
+    const existingRows = await supabaseRest(`candidate_stations?id=eq.${rowId}&select=student`);
+    const startedAt = Number(existingRows?.[0]?.student?.startedAt) || Date.now();
     await supabaseRest("candidate_stations?on_conflict=id", {
       method: "POST",
       headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
@@ -37,7 +39,7 @@ export default async function handler(req, res) {
         status: "IN_PROGRESS", code, language,
         student: {
           name: candidate.name, rollNumber: candidate.rollNumber || "",
-          email: candidate.email || "", currentQuestion: questionNumber
+          email: candidate.email || "", currentQuestion: questionNumber, startedAt
         },
         last_updated_timestamp: Date.now()
       }])
