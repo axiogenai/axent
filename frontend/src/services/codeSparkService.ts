@@ -717,62 +717,51 @@ export interface SmtpConfig {
 }
 
 export function getStoredSmtpConfig(): SmtpConfig | null {
+  // SMTP credentials are server-only. Retain only harmless UI preferences locally.
   try {
     const raw = localStorage.getItem(SMTP_CONFIG_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      return {
+        smtp_user: "",
+        smtp_password: "",
+        smtp_from_name: saved.smtp_from_name || "Code Spark 2026 Examination Board"
+      };
+    }
   } catch {}
-  return {
-    smtp_user: 'teamaxiogen@gmail.com',
-    smtp_password: (import.meta as any).env?.VITE_SMTP_PASSWORD || 'qtdpejtmmsuflijo',
-    smtp_from_name: 'Code Spark 2026 Examination Board'
-  };
+  return { smtp_user: "", smtp_password: "", smtp_from_name: "Code Spark 2026 Examination Board" };
 }
 
 export function saveStoredSmtpConfig(config: SmtpConfig): void {
   try {
-    localStorage.setItem(SMTP_CONFIG_STORAGE_KEY, JSON.stringify(config));
+    localStorage.setItem(SMTP_CONFIG_STORAGE_KEY, JSON.stringify({
+      smtp_from_name: config.smtp_from_name || "Code Spark 2026 Examination Board"
+    }));
   } catch {}
 }
 
-export async function testSmtpConnection(
-  config: SmtpConfig
-): Promise<{ success: boolean; message?: string; error?: string }> {
-  const payload = {
-    smtp_user: config.smtp_user,
-    smtp_password: config.smtp_password,
-    smtp_host: config.smtp_host || 'smtp.gmail.com',
-    smtp_port: config.smtp_port || 587
+async function getCodesparkAdminHeaders(): Promise<Record<string, string>> {
+  const { data, error } = await supabase.auth.getSession();
+  if (error || !data.session?.access_token) {
+    throw new Error("Please sign in with your administrator Supabase account.");
+  }
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${data.session.access_token}`
   };
+}
 
-  // Try relative Vercel serverless endpoint first
+export async function testSmtpConnection(
+  _config: SmtpConfig
+): Promise<{ success: boolean; message?: string; error?: string }> {
   try {
-    const res = await fetch('/api/codespark/test-smtp/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const text = await res.text();
-    try {
-      const data = JSON.parse(text);
-      if (res.ok) return data;
-    } catch {}
-  } catch {}
-
-  // Fallback to Render backend
-  try {
-    const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || 'https://axent-b0wl.onrender.com';
-    const res = await fetch(`${backendUrl.replace(/\/$/, '')}/api/codespark/test-smtp/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
+    const headers = await getCodesparkAdminHeaders();
+    const response = await fetch("/api/codespark/test-smtp/", { method: "POST", headers, body: "{}" });
+    const data = await response.json();
+    if (!response.ok) return { success: false, error: data.error || "SMTP verification failed." };
     return data;
-  } catch (err: any) {
-    return {
-      success: false,
-      error: `SMTP Connection Error: ${err.message || String(err)}`
-    };
+  } catch (error: any) {
+    return { success: false, error: error?.message || "SMTP verification failed." };
   }
 }
 
@@ -787,7 +776,7 @@ export interface SmtpRecipientPayload {
 }
 
 export async function dispatchRound2EmailsViaSmtp(
-  config: SmtpConfig,
+  _config: SmtpConfig,
   recipients: SmtpRecipientPayload[]
 ): Promise<{
   success: boolean;
@@ -798,48 +787,20 @@ export async function dispatchRound2EmailsViaSmtp(
   failed: any[];
   error?: string;
 }> {
-  const payload = {
-    smtp_user: config.smtp_user,
-    smtp_password: config.smtp_password,
-    smtp_host: config.smtp_host || 'smtp.gmail.com',
-    smtp_port: config.smtp_port || 587,
-    smtp_from_name: config.smtp_from_name || 'CodeSpark 2026 Examination Board',
-    recipients
-  };
-
-  // Try relative Vercel serverless endpoint first
   try {
-    const res = await fetch('/api/codespark/send-emails/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+    const headers = await getCodesparkAdminHeaders();
+    const response = await fetch("/api/codespark/send-emails/", {
+      method: "POST", headers, body: JSON.stringify({ recipients })
     });
-    const text = await res.text();
-    try {
-      const data = JSON.parse(text);
-      if (res.ok) return data;
-    } catch {}
-  } catch {}
-
-  // Fallback to Render backend
-  try {
-    const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || 'https://axent-b0wl.onrender.com';
-    const res = await fetch(`${backendUrl.replace(/\/$/, '')}/api/codespark/send-emails/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
+    const data = await response.json();
+    if (!response.ok && !data.error) data.error = "Email dispatch failed.";
     return data;
-  } catch (err: any) {
+  } catch (error: any) {
     return {
-      success: false,
-      total: recipients.length,
-      sent_count: 0,
-      failed_count: recipients.length,
-      sent: [],
-      failed: recipients.map((r) => ({ email: r.email, reason: err.message || 'Dispatch error' })),
-      error: err.message || 'Network error during email dispatch'
+      success: false, total: recipients.length, sent_count: 0,
+      failed_count: recipients.length, sent: [],
+      failed: recipients.map((recipient) => ({ email: recipient.email, reason: "Email dispatch failed." })),
+      error: error?.message || "Network error during email dispatch."
     };
   }
 }
