@@ -46,10 +46,15 @@ export default async function handler(req, res) {
   for (const recipient of recipients) {
     const requestedEmail = String(recipient?.email || "").trim().toLowerCase();
     const requestedRoll = String(recipient?.rollNumber || recipient?.accessKey || "").trim().toUpperCase().slice(0, 80);
-    const matchedCandidate = rosterConfig.candidates.find((candidate) =>
-      (requestedEmail && String(candidate.email || "").trim().toLowerCase() === requestedEmail) ||
-      (requestedRoll && String(candidate.rollNumber || "").trim().toUpperCase() === requestedRoll)
-    );
+    const matchedByEmail = requestedEmail
+      ? rosterConfig.candidates.find((candidate) => String(candidate.email || "").trim().toLowerCase() === requestedEmail)
+      : null;
+    const matchedByRoll = requestedRoll
+      ? rosterConfig.candidates.find((candidate) => String(candidate.rollNumber || "").trim().toUpperCase() === requestedRoll)
+      : null;
+    const matchedCandidate = matchedByEmail && matchedByRoll && matchedByEmail.accessKey !== matchedByRoll.accessKey
+      ? null
+      : matchedByEmail || matchedByRoll;
     const name = String(matchedCandidate?.name || recipient?.name || "Candidate").trim().slice(0, 120);
     const email = String(matchedCandidate?.email || requestedEmail).trim().toLowerCase();
     const roll = String(matchedCandidate?.rollNumber || requestedRoll).trim().slice(0, 80);
@@ -74,15 +79,15 @@ export default async function handler(req, res) {
     const safeRoll = escapeHtml(roll);
     const safeKey = escapeHtml(key);
     const safeUrl = escapeHtml(parsedUrl.toString());
-    const score = escapeHtml(recipient?.round1Score ?? "—");
-    const maxScore = escapeHtml(recipient?.round1MaxScore ?? "—");
+    const score = escapeHtml(matchedCandidate.round1Score ?? "—");
+    const maxScore = escapeHtml(matchedCandidate.round1MaxScore ?? "—");
     const textBody = `Hello ${name},
 
 Congratulations! You have been shortlisted for Round 2 of CodeSpark 2026.
 
 Candidate: ${name}
 Roll Number: ${roll}
-Round 1 Score: ${recipient?.round1Score ?? "—"} / ${recipient?.round1MaxScore ?? "—"}
+Round 1 Score: ${matchedCandidate.round1Score ?? "—"} / ${matchedCandidate.round1MaxScore ?? "—"}
 Your Round 2 Access Key: ${key}
 
 Enter the arena: ${parsedUrl.toString()}
