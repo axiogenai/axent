@@ -973,6 +973,25 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
+    const candidatesWithoutSecureKeys = shortlistedRolls.filter((roll) => {
+      const candidate = registeredCandidates.find((item) =>
+        (item.rollNumber && item.rollNumber.toUpperCase() === roll) ||
+        item.accessKey.toUpperCase() === roll ||
+        item.email.toUpperCase() === roll
+      );
+      const suffix = String(candidate?.round2Key || '').toUpperCase().replace(/^AXENT-R2-/, '');
+      return !candidate || suffix.length < 8;
+    });
+    if (candidatesWithoutSecureKeys.length > 0) {
+      setSmtpSendResult({
+        success: false,
+        message: `${candidatesWithoutSecureKeys.length} shortlisted candidate(s) do not have a secure Round 2 key. Re-conclude Round 1 or re-shortlist them to issue new keys before sending invitations.`,
+        sent: 0,
+        total: shortlistedRolls.length
+      });
+      return;
+    }
+
     const recipients = shortlistedRolls.map((roll) => {
 
       const matchAttempt = aptitudeCandidates.find((c) => (c.studentRoll || '').toUpperCase() === roll);
