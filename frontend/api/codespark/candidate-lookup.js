@@ -1,4 +1,4 @@
-import { parseCodeSparkConfig, readBody, setApiHeaders, supabaseRest } from "./_security.js";
+import { isCandidateLookupRateLimited, parseCodeSparkConfig, readBody, recordFailedCandidateLookup, setApiHeaders, supabaseRest } from "./_security.js";
 
 const CONFIG_ID = "codespark_system_config";
 const normalize = (value) => String(value || "").trim().toUpperCase().replace(/\s+/g, "").replace(/^(AXENT-R2-|AXENT-|R2-)/, "");
@@ -13,6 +13,9 @@ export default async function handler(req, res) {
   if (entered.length < 4 || entered.length > 64) return res.status(400).json({ success: false, error: "Enter a valid access key." });
 
   try {
+    if (await isCandidateLookupRateLimited(req)) {
+      return res.status(429).json({ success: false, error: "Too many incorrect access-key attempts. Please wait 15 minutes before trying again." });
+    }
     const rows = await supabaseRest(`candidate_stations?id=eq.${CONFIG_ID}&select=code,student`);
     const config = parseCodeSparkConfig(rows?.[0]);
     if (!config || !Array.isArray(config.candidates)) return res.status(503).json({ success: false, error: "Candidate roster is unavailable." });
@@ -22,7 +25,10 @@ export default async function handler(req, res) {
       const r2 = normalize(item?.round2Key);
       return entered === r1 || (r2 && entered === r2);
     });
-    if (!candidate) return res.status(404).json({ success: false, error: "Access key not recognized." });
+    if (!candidate) {
+      await recordFailedCandidateLookup(req);
+      return res.status(404).json({ success: false, error: "Access key not recognized." });
+    }
 
     const isRound2 = Boolean(candidate.round2Key && entered === normalize(candidate.round2Key));
     const shortlisted = Boolean(candidate.isShortlisted || candidate.status === "SHORTLISTED" || candidate.round2Key);
