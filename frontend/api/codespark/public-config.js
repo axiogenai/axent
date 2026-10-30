@@ -1,4 +1,4 @@
-import { getCodeSparkRosterConfig, setApiHeaders, supabaseRest } from "./_security.js";
+import { getCodeSparkRosterConfig, setApiHeaders } from "./_security.js";
 
 export default async function handler(req, res) {
   setApiHeaders(req, res);
