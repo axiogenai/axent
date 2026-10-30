@@ -172,13 +172,32 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       } catch {} finally { pollBusy = false; }
     };
     const pollInterval = window.setInterval(() => { void syncWhenVisible(); }, 15000);
-    const onVisible = () => { if (document.visibilityState === 'visible') void syncWhenVisible(); };
+    let configBusy = false;
+    const refreshConclusion = async () => {
+      if (configBusy || document.visibilityState !== 'visible') return;
+      configBusy = true;
+      try {
+        const response = await fetch('/api/codespark/public-config', { cache: 'no-store' });
+        if (response.ok) {
+          const config = await response.json();
+          if (typeof config?.isConcluded === 'boolean') setIsRound1Concluded(config.isConcluded);
+        }
+      } catch {} finally { configBusy = false; }
+    };
+    const conclusionInterval = window.setInterval(() => { void refreshConclusion(); }, 5000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void syncWhenVisible();
+        void refreshConclusion();
+      }
+    };
     document.addEventListener('visibilitychange', onVisible);
 
     return () => {
       window.removeEventListener('codedna_codespark_concluded_updated', syncConcluded);
       window.removeEventListener('storage', syncConcluded);
       clearInterval(pollInterval);
+      clearInterval(conclusionInterval);
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
