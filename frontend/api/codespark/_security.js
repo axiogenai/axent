@@ -69,3 +69,35 @@ export function smtpConfiguration() {
   if (!user || !password || !host || ![465, 587].includes(port)) return null;
   return { user, password, host, port, fromName };
 }
+
+export async function requireServiceRole() {
+  const base = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!base || !key) throw new Error("Supabase service configuration is missing.");
+  return { base, key };
+}
+
+export async function supabaseRest(path, options = {}) {
+  const { base, key } = await requireServiceRole();
+  const response = await fetch(`${base}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      ...(options.headers || {})
+    }
+  });
+  const raw = await response.text();
+  if (!response.ok) throw new Error(`Supabase request failed (${response.status}).`);
+  return raw ? JSON.parse(raw) : null;
+}
+
+export function parseCodeSparkConfig(row) {
+  if (!row) return null;
+  if (row.student && typeof row.student === "object" && Array.isArray(row.student.candidates)) return row.student;
+  if (row.code) {
+    try { const parsed = JSON.parse(row.code); if (Array.isArray(parsed.candidates)) return parsed; } catch {}
+  }
+  return null;
+}
