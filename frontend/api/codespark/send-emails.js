@@ -44,7 +44,7 @@ export default async function handler(req, res) {
   const sent = [];
   const failed = [];
 
-  for (const recipient of recipients) {
+  const sendOne = async (recipient) => {
     const requestedEmail = String(recipient?.email || "").trim().toLowerCase();
     const requestedRoll = String(recipient?.rollNumber || recipient?.accessKey || "").trim().toUpperCase().slice(0, 80);
     const matchedByEmail = requestedEmail
@@ -62,7 +62,7 @@ export default async function handler(req, res) {
     const key = String(matchedCandidate?.round2Key || "").trim().slice(0, 80);
     if (!matchedCandidate || !(matchedCandidate.isShortlisted || matchedCandidate.status === "SHORTLISTED")) {
       failed.push({ email, name, reason: "Candidate is not present on the verified Round 2 shortlist." });
-      continue;
+      return;
     }
     const configuredPublicUrl = String(process.env.APP_PUBLIC_URL || "https://axent.axiogen.in").replace(/\/$/, "");
     const examUrl = String(recipient?.examUrl || `${configuredPublicUrl}/code-spark`).trim();
@@ -110,7 +110,15 @@ Axent Platform`;
       console.error("[CodeSpark email] delivery failed:", error?.code || "SMTP_SEND_ERROR");
       failed.push({ email, name, reason: "Email delivery failed. Check server SMTP logs." });
     }
-  }
+  };
+
+  let nextRecipient = 0;
+  await Promise.all(Array.from({ length: Math.min(8, recipients.length) }, async () => {
+    while (nextRecipient < recipients.length) {
+      const index = nextRecipient++;
+      await sendOne(recipients[index]);
+    }
+  }));
 
   return res.status(sent.length ? 200 : 502).json({
     success: failed.length === 0,
