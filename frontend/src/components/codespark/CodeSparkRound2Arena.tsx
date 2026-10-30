@@ -118,6 +118,69 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       dominantLanguage: 'Python'
     };
   });
+
+  // Round 2 integrity controls: three-strike policy aligned with the MCQ exam.
+  const [proctorStrikes, setProctorStrikes] = useState(0);
+  const [strikeNotice, setStrikeNotice] = useState<{strike:number;reason:string}|null>(null);
+  const [proctorLocked, setProctorLocked] = useState(false);
+  const lastViolationAt = useRef(0);
+  const recordRound2Violation = useCallback((reason: string) => {
+    if (submission.isSubmitted || proctorLocked) return;
+    const now = Date.now();
+    if (now - lastViolationAt.current < 1400) return;
+    lastViolationAt.current = now;
+    setProctorStrikes((previous) => {
+      const next = previous + 1;
+      void fetch('/api/codespark/proctor-event', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: candidateKey, reason, strike: next })
+      }).catch(() => {});
+      playSound('warning');
+      setStrikeNotice({ strike: next, reason });
+      if (next >= 3) setProctorLocked(true);
+      return next;
+    });
+  }, [candidateKey, proctorLocked, submission.isSubmitted]);
+
+  useEffect(() => {
+    if (submission.isSubmitted) return;
+    const onVisibility = () => { if (document.visibilityState === 'hidden') recordRound2Violation('Switched away from the examination tab or window'); };
+    const onBlur = () => recordRound2Violation('Examination window lost focus');
+    const onFullscreen = () => { if (!document.fullscreenElement) recordRound2Violation('Exited required examination fullscreen'); };
+    const onClipboard = (event: Event) => {
+      event.preventDefault();
+      recordRound2Violation(event.type === 'paste' ? 'Paste action blocked' : event.type === 'copy' ? 'Copy action blocked' : 'Cut action blocked');
+    };
+    const onContext = (event: Event) => event.preventDefault();
+    const onKeys = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if ((event.ctrlKey || event.metaKey) && ['c','v','x','insert'].includes(key)) {
+        event.preventDefault(); event.stopPropagation();
+        recordRound2Violation(key === 'v' || key === 'insert' ? 'Paste shortcut blocked' : 'Copy/cut shortcut blocked');
+      } else if (key === 'printscreen') {
+        event.preventDefault(); recordRound2Violation('Print Screen shortcut detected');
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('fullscreenchange', onFullscreen);
+    document.addEventListener('copy', onClipboard, true);
+    document.addEventListener('cut', onClipboard, true);
+    document.addEventListener('paste', onClipboard, true);
+    document.addEventListener('contextmenu', onContext, true);
+    window.addEventListener('keydown', onKeys, true);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('fullscreenchange', onFullscreen);
+      document.removeEventListener('copy', onClipboard, true);
+      document.removeEventListener('cut', onClipboard, true);
+      document.removeEventListener('paste', onClipboard, true);
+      document.removeEventListener('contextmenu', onContext, true);
+      window.removeEventListener('keydown', onKeys, true);
+    };
+  }, [recordRound2Violation, submission.isSubmitted]);
+
   // Current Active Question (1-indexed: 1 to 5)
   const [currentQIndex, setCurrentQIndex] = useState<number>(submission.currentQuestion || 1);
   const currentProblem: Round2Problem = useMemo(() => {
@@ -1555,6 +1618,16 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {strikeNotice && (
+        <div role="alertdialog" aria-modal="true" style={{position:'fixed',inset:0,zIndex:100000,background:'rgba(0,0,0,.88)',display:'grid',placeItems:'center',padding:20}}>
+          <div style={{width:'min(460px,100%)',background:'#18181b',border:'1px solid #ef4444',borderRadius:12,padding:28,color:'#f4f4f5',textAlign:'center'}}>
+            <div style={{fontSize:11,fontWeight:800,letterSpacing:'.14em',color:'#f87171',textTransform:'uppercase'}}>Academic integrity · Strike {strikeNotice.strike}/3</div>
+            <h2 style={{fontSize:24,fontWeight:900,margin:'12px 0'}}>{strikeNotice.strike >= 3 ? 'Examination Locked' : 'Proctor Warning'}</h2>
+            <p style={{fontSize:13,lineHeight:1.6,color:'#d4d4d8'}}>{strikeNotice.reason}</p>
+            {strikeNotice.strike >= 3 ? <p style={{fontSize:12,color:'#fca5a5'}}>Your workstation is frozen after three violations. Contact the invigilator. Your saved code is preserved.</p> : <><p style={{fontSize:12,color:'#fbbf24'}}>Further violations may freeze your examination.</p><button type="button" onClick={()=>setStrikeNotice(null)} style={{marginTop:16,padding:'10px 22px',border:0,borderRadius:6,background:'#f4f4f5',color:'#09090b',fontWeight:800,cursor:'pointer'}}>I Understand</button></>}
           </div>
         </div>
       )}
