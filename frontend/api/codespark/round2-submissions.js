@@ -1,3 +1,5 @@
+export const config = { maxDuration: 60 };
+
 import { createHash } from "node:crypto";
 import { readBody, requireAdmin, setApiHeaders, supabaseRest } from "./_security.js";
 import { getRound2AssignedProblems, gradeRound2Code, normalizeRound2Key } from "./_round2-grader.js";
