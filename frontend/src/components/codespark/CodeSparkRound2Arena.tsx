@@ -32,6 +32,7 @@ import {
   detectLanguageFromCode,
   evaluateRound2Code,
   fetchRound2ProblemsFromCloud,
+  fetchRound2SubmissionFromCloud,
   getAllRound2Problems,
   getStoredRound2Submission,
   saveStoredRound2Submission,
@@ -138,6 +139,22 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     }
     return map;
   });
+
+  useEffect(() => {
+    if (submission.isSubmitted) return;
+    let mounted = true;
+    void fetchRound2SubmissionFromCloud(candidateKey).then((serverSubmission) => {
+      if (!mounted || !serverSubmission?.isSubmitted) return;
+      setSubmission(serverSubmission);
+      setCurrentQIndex(serverSubmission.currentQuestion || 1);
+      const recoveredCode: Record<number, string> = {};
+      for (const [number, report] of Object.entries(serverSubmission.questionReports || {})) {
+        recoveredCode[Number(number)] = report.code || '';
+      }
+      setCodeMap((previous) => ({ ...previous, ...recoveredCode }));
+    });
+    return () => { mounted = false; };
+  }, [candidateKey, submission.isSubmitted]);
   // Language selection & Auto-detect
   const [explicitLanguageMap, setExplicitLanguageMap] = useState<Record<number, 'Auto' | 'Python' | 'C++' | 'C' | 'Java'>>({
     1: 'Auto',
