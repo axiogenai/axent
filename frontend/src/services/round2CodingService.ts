@@ -1679,8 +1679,8 @@ export function selectStudentRound2Problems(
 
 export async function verifyRound2CodeWithAI(
   problem: Round2Problem,
-  code: string,
-  language: 'C' | 'C++' | 'Python' | 'Java',
+  _code: string,
+  _language: 'C' | 'C++' | 'Python' | 'Java',
   _sampleInput?: string,
   _expectedOutput?: string,
   actualOutput?: string
@@ -1690,51 +1690,11 @@ export async function verifyRound2CodeWithAI(
   isAlignedWithProblem: boolean;
   analysis: string;
 }> {
-  const groqKey = localStorage.getItem('codedna_groq_api_key') || localStorage.getItem('GROQ_API_KEY') || (import.meta as any).env?.VITE_GROQ_API_KEY || (import.meta as any).env?.VITE_AI_API_KEY;
-  if (groqKey && code && code.trim()) {
-    try {
-      const prompt = `You are the CodeSpark 2026 AI Examiner. Analyze if this code correctly solves the problem.
-Problem: ${problem.title}
-Description: ${problem.description.slice(0, 400)}
-Language: ${language}
-Code:
-\`\`\`${language}
-${code.slice(0, 1500)}
-\`\`\`
-Actual output when run: ${actualOutput || '(not available)'}
-Return strict JSON only:
-{"verifiedQuestionTitle":"${problem.title}","predictedOutput":"...","isAlignedWithProblem":true,"analysis":"1 concise sentence on whether logic solves the question"}`;
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${groqKey}`
-        },
-        body: JSON.stringify({
-          model: (import.meta as any).env?.VITE_DEFAULT_MODEL || 'qwen/qwen3.8-27b',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.1,
-          response_format: { type: 'json_object' }
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const parsed = JSON.parse(data.choices[0].message.content);
-        return {
-          verifiedQuestionTitle: parsed.verifiedQuestionTitle || problem.title,
-          predictedOutput: parsed.predictedOutput || actualOutput || '',
-          isAlignedWithProblem: Boolean(parsed.isAlignedWithProblem),
-          analysis: parsed.analysis || 'AI verified solution logic.'
-        };
-      }
-    } catch {}
-  }
-  // Fallback: if code compiled and ran, consider partial alignment
   return {
     verifiedQuestionTitle: problem.title,
     predictedOutput: actualOutput || '',
     isAlignedWithProblem: false,
-    analysis: `Could not verify ${problem.title} with AI — no Groq key or network error.`
+    analysis: 'AI is not used as a correctness authority. Official evaluation compares program output against configured test cases.'
   };
 }
 
