@@ -58,7 +58,7 @@ export default async function handler(req, res) {
             attempts: [],
             isConcluded: false,
             manualShortlistRolls: [],
-            candidates: action === "reset_all" ? [] : ((cfg && cfg.candidates) ? cfg.candidates.map(c => ({
+            candidates: (req.query?.wipe_candidates === "true" || action === "wipe_all_candidates") ? [] : ((cfg && cfg.candidates) ? cfg.candidates.map(c => ({
               ...c,
               status: "REGISTERED",
               round1Score: undefined,

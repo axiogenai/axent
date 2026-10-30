@@ -692,7 +692,7 @@ export async function dispatchRound2EmailsViaSmtp(
 }> {
   try {
     const headers = await getCodesparkAdminHeaders();
-    const response = await fetch("/api/codespark/send-emails/", {
+    const response = await fetch("/api/codespark/send-emails", {
       method: "POST", headers, body: JSON.stringify({ recipients })
     });
     const data = await response.json();

@@ -80,7 +80,7 @@ import {
 
   Cpu
 
-} from 'lucide-react';
+, AlertCircle } from 'lucide-react';
 
 import { CandidateStation, CollegeLabInfo } from '../../types/dna';
 
@@ -172,6 +172,7 @@ import {
 import { CodeSparkCandidateImportModal } from '../codespark/CodeSparkCandidateImportModal';
 
 import { AdminRound2Hub } from './AdminRound2Hub';
+import { clearRound2Leaderboard } from '../../services/round2CodingService';
 
 import { AIPaperGeneratorModal } from '../AIPaperGeneratorModal';
 
@@ -293,6 +294,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
   // Email Dispatch Modal
 
   const [showEmailDispatchModal, setShowEmailDispatchModal] = useState<boolean>(false);
+  const [showCustomSmtpInputs, setShowCustomSmtpInputs] = useState<boolean>(false);
 
 
 
@@ -1023,6 +1025,11 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
     if (candidatesListChanged) {
       saveCodeSparkCandidates(registeredCandidates);
       setRegisteredCandidates([...registeredCandidates]);
+      try {
+        await pushCandidatesToCloud(registeredCandidates);
+      } catch (e) {
+        console.warn('Failed to push assigned R2 keys to cloud:', e);
+      }
     }
 
     if (candidatesWithoutSecureKeys.length > 0) {
@@ -1926,7 +1933,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
   
   const handleEndExamAndResetAll = async () => {
-    if (!window.confirm('CRITICAL ACTION: Are you sure you want to END the exam and PERMANENTLY RESET EVERYTHING?\n\nThis will:\n1. Delete ALL student attempts from Supabase permanently.\n2. Delete all workstations and live sessions.\n3. Re-open Round 1 (resetting Stage 01 to active and locking Round 2).\n4. Force-refresh all student devices back to fresh check-in.')) {
+    if (!window.confirm('CRITICAL ACTION: Are you sure you want to END the exam and PERMANENTLY RESET EVERYTHING?\n\nThis will:\n1. Delete ALL student attempts from Supabase permanently.\n2. Delete all Round 2 coding submissions and leaderboards.\n3. Delete all workstations and live sessions.\n4. Re-open Round 1 (resetting Stage 01 to active and locking Round 2).\n5. Force-refresh all student devices back to fresh Round 1 check-in.')) {
       return;
     }
     playSound('click');
@@ -1940,7 +1947,17 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
     }
 
     try {
+      await clearRound2Leaderboard();
+    } catch (e) {
+      console.warn('R2 leaderboard clear failed:', e);
+    }
+
+    try {
       await clearAllAttemptsFromEverywhere();
+    } catch {}
+
+    try {
+      await clearAllStationsFromCloud();
     } catch {}
 
     setRound1ConcludedGlobally(false);
@@ -2575,27 +2592,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
               Change Paper / Settings
             </button>
-            <button
-              type="button"
-              onClick={handleEndExamAndResetAll}
-              title="One-click nuclear reset: end exam, delete all attempts from database, and reopen Round 1"
-              style={{
-                background: 'rgba(239, 68, 68, 0.15)',
-                border: '1px solid rgba(239, 68, 68, 0.4)',
-                color: '#ef4444',
-                borderRadius: '4px',
-                padding: '4px 10px',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
-            >
-              <RotateCcw size={11} />
-              <span>End Exam &amp; Reset All (1-Click)</span>
-            </button>
+            
 
           </div>
 
@@ -4725,26 +4722,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                 <Trash2 size={13} /> Purge Attempts
               </button>
-              <button
-                type="button"
-                onClick={handleEndExamAndResetAll}
-                title="End exam, wipe all database attempts, and reset everything back to Round 1"
-                style={{
-                  padding: '7px 12px',
-                  borderRadius: '6px',
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  border: '1px solid rgba(239, 68, 68, 0.4)',
-                  color: '#ef4444',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px'
-                }}
-              >
-                <RotateCcw size={13} /> End Exam &amp; Reset (1-Click)
-              </button>
+              
 
             </div>
 
@@ -5321,6 +5299,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           sendProctorLockCommand={sendProctorLockCommand}
 
           isDark={isDark}
+          onEndExamAndResetAll={handleEndExamAndResetAll}
 
         />
 
@@ -6317,6 +6296,566 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
             {/* Modal Footer */}
 
             <div style={{ padding: '14px 20px', borderTop: `1px solid ${t.border}`, display: 'flex', justifyContent: 'flex-end' }}>
+
+              <button
+
+                type="button"
+
+                onClick={() => setSelectedCandidateSheet(null)}
+
+                style={{
+
+                  padding: '8px 16px',
+
+                  borderRadius: '6px',
+
+                  background: t.btnPrimaryBg,
+
+                  color: t.btnPrimaryColor,
+
+                  fontSize: '12px',
+
+                  fontWeight: 700,
+
+                  border: 'none',
+
+                  cursor: 'pointer'
+
+                }}
+
+              >
+
+                Close Answer Sheet
+
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      )}
+
+
+
+      {/* ── MODAL 2: SHORTLIST EMAIL INVITATION & REAL GMAIL SMTP DISPATCH ENGINE ── */}
+
+      {showEmailDispatchModal && (
+
+        <div
+
+          onClick={() => setShowEmailDispatchModal(false)}
+
+          style={{
+
+            position: 'fixed',
+
+            inset: 0,
+
+            background: isDark ? 'rgba(9, 9, 11, 0.85)' : 'rgba(15, 23, 42, 0.5)',
+
+            backdropFilter: 'blur(6px)',
+
+            zIndex: 9999,
+
+            display: 'flex',
+
+            alignItems: 'center',
+
+            justifyContent: 'center',
+
+            padding: '20px'
+
+          }}
+
+        >
+
+          <div
+
+            onClick={(e) => e.stopPropagation()}
+
+            style={{
+
+              background: t.bgCard,
+
+              border: `1px solid ${t.border}`,
+
+              borderRadius: '8px',
+
+              maxWidth: '820px',
+
+              width: '100%',
+
+              maxHeight: '92vh',
+
+              display: 'flex',
+
+              flexDirection: 'column',
+
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
+
+            }}
+
+          >
+
+            {/* Modal Header */}
+
+            <div style={{ padding: '16px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+
+                <Mail size={16} color={t.textPrimary} />
+
+                <div>
+
+                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: t.textPrimary }}>
+
+                    Round 2 Shortlist Notification &amp; Gmail SMTP Dispatcher
+
+                  </h3>
+
+                  <div style={{ fontSize: '11.5px', color: '#a1a1aa', marginTop: '2px' }}>
+
+                    {shortlistedRolls.length} Shortlisted Candidates Cleared for Round 2: Algorithmic Code Sprint
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              <button
+
+                type="button"
+
+                onClick={() => setShowEmailDispatchModal(false)}
+
+                style={{ background: 'none', border: 'none', color: '#a1a1aa', cursor: 'pointer', padding: '4px' }}
+
+              >
+
+                <X size={18} />
+
+              </button>
+
+            </div>
+
+
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+              {/* 1. Server SMTP Status & Control Box */}
+              <div style={{ background: t.bgCardElevated, border: `1px solid ${t.border}`, borderRadius: '6px', padding: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '999px', background: '#10b981', display: 'inline-block' }} />
+                    <strong style={{ fontSize: '13px', color: t.textPrimary }}>Server SMTP Engine: Ready &amp; Connected</strong>
+                  </div>
+                  <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.25)', padding: '2px 8px', borderRadius: '4px' }}>
+                    teamaxiogen@gmail.com &bull; Port 587 TLS
+                  </span>
+                </div>
+
+                <div style={{ fontSize: '11.5px', color: t.textMuted, lineHeight: 1.5, marginBottom: '12px' }}>
+                  Axiogen Cloud high-speed connection pool is active. Shortlist notification emails are delivered in parallel (&lt;2s total dispatch).
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={handleTestSmtp}
+                    disabled={smtpTesting}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '4px',
+                      background: t.btnSecondaryBg,
+                      border: `1px solid ${t.btnSecondaryBorder}`,
+                      color: t.btnSecondaryColor,
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      cursor: smtpTesting ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                  >
+                    <RefreshCw size={12} className={smtpTesting ? 'animate-spin' : ''} />
+                    <span>{smtpTesting ? 'Testing Server SMTP...' : 'Test Server SMTP'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomSmtpInputs(!showCustomSmtpInputs)}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '4px',
+                      background: 'transparent',
+                      border: `1px solid ${t.border}`,
+                      color: t.textMuted,
+                      fontSize: '11.5px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {showCustomSmtpInputs ? 'Hide Custom Credentials' : 'Custom Credentials (Optional Override)'}
+                  </button>
+                </div>
+
+                {/* Optional Custom SMTP Override */}
+                {showCustomSmtpInputs && (
+                  <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: `1px solid ${t.border}`, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', marginBottom: '4px' }}>
+                        SMTP Sender Email
+                      </label>
+                      <input
+                        type="email"
+                        value={smtpUser}
+                        onChange={(e) => setSmtpUser(e.target.value)}
+                        placeholder="teamaxiogen@gmail.com"
+                        style={{ width: '100%', padding: '7px 10px', background: t.bgInput, border: `1px solid ${t.borderStrong}`, borderRadius: '4px', color: t.textPrimary, fontSize: '12px', fontFamily: 'monospace' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', marginBottom: '4px' }}>
+                        Google App Password (16-char)
+                      </label>
+                      <input
+                        type="password"
+                        value={smtpPassword}
+                        onChange={(e) => setSmtpPassword(e.target.value)}
+                        placeholder="Preconfigured on server"
+                        style={{ width: '100%', padding: '7px 10px', background: t.bgInput, border: `1px solid ${t.borderStrong}`, borderRadius: '4px', color: t.textPrimary, fontSize: '12px', fontFamily: 'monospace' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', marginBottom: '4px' }}>
+                        Sender Display Name
+                      </label>
+                      <input
+                        type="text"
+                        value={smtpFromName}
+                        onChange={(e) => setSmtpFromName(e.target.value)}
+                        placeholder="CodeSpark 2026 Examination Board"
+                        style={{ width: '100%', padding: '7px 10px', background: t.bgInput, border: `1px solid ${t.borderStrong}`, borderRadius: '4px', color: t.textPrimary, fontSize: '12px' }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* SMTP Test Feedback */}
+                {smtpTestResult && (
+                  <div style={{
+                    marginTop: '12px',
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    background: smtpTestResult.success ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                    border: smtpTestResult.success ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+                    color: smtpTestResult.success ? '#10b981' : '#fca5a5',
+                    fontSize: '11.5px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    {smtpTestResult.success ? <CheckCircle2 size={13} color="#10b981" /> : <AlertTriangle size={13} color="#ef4444" />}
+                    <span>{smtpTestResult.message}</span>
+                  </div>
+                )}
+
+                {/* SMTP Send Feedback */}
+                {smtpSendResult && (
+                  <div style={{
+                    marginTop: '12px',
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    background: smtpSendResult.success ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                    border: smtpSendResult.success ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(239, 68, 68, 0.4)',
+                    color: smtpSendResult.success ? '#6ee7b7' : '#fca5a5',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    {smtpSendResult.success ? <CheckCircle2 size={14} color="#10b981" /> : <AlertTriangle size={14} color="#ef4444" />}
+                    <span>{smtpSendResult.message}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* 2. Shortlist Action Controls */}
+              {shortlistedRolls.length === 0 ? (
+                <div style={{
+                  background: isDark ? 'rgba(234, 179, 8, 0.08)' : '#fefce8',
+                  border: isDark ? '1px solid rgba(234, 179, 8, 0.25)' : '1px solid #fef08a',
+                  borderRadius: '6px',
+                  padding: '16px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: isDark ? '#facc15' : '#854d0e', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <AlertCircle size={15} /> 0 Candidates Shortlisted for Round 2
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: t.textMuted, marginTop: '3px' }}>
+                        Choose a quick-action below to instantly issue secure Round 2 keys (AXENT-R2-XXXX) and enable dispatch:
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const allRolls = (registeredCandidates.length > 0 ? registeredCandidates : aptitudeCandidates).map(
+                            (c: any) => (c.rollNumber || c.studentRoll || c.accessKey).toUpperCase()
+                          );
+                          allRolls.forEach((r: string) => shortlistCandidateForRound2(r, true));
+                          setShortlistedRolls(getShortlistedRolls());
+                          setRegisteredCandidates(getAllCodeSparkCandidates());
+                          playSound('success');
+                        }}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '4px',
+                          background: isDark ? '#27272a' : '#ffffff',
+                          border: `1px solid ${t.borderStrong}`,
+                          color: t.textPrimary,
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        + Shortlist All Candidates ({registeredCandidates.length || aptitudeCandidates.length})
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleShortlistTopN(30);
+                        }}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '4px',
+                          background: isDark ? '#27272a' : '#ffffff',
+                          border: `1px solid ${t.borderStrong}`,
+                          color: t.textPrimary,
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        + Shortlist Top 30
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleShortlistByCutoff(60);
+                        }}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '4px',
+                          background: isDark ? '#27272a' : '#ffffff',
+                          border: `1px solid ${t.borderStrong}`,
+                          color: t.textPrimary,
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        + Shortlist &ge; 60%
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={handleSendEmailsViaSmtp}
+                    disabled={smtpSending}
+                    style={{
+                      padding: '10px 20px',
+                      borderRadius: '6px',
+                      background: '#10b981',
+                      border: 'none',
+                      color: '#09090b',
+                      fontSize: '13px',
+                      fontWeight: 800,
+                      cursor: smtpSending ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    <Send size={14} color="#09090b" className={smtpSending ? 'animate-pulse' : ''} />
+                    <span>{smtpSending ? 'Dispatching invitations in parallel...' : `⚡ Dispatch Round 2 Keys to ${shortlistedRolls.length} Shortlisted Candidates (<2s)`}</span>
+                  </button>
+
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={handleClearShortlist}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '4px',
+                        background: 'transparent',
+                        border: `1px solid ${t.border}`,
+                        color: '#ef4444',
+                        fontSize: '11.5px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Clear Shortlist
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 3. Candidates List Preview */}
+              <div>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 700, color: t.textPrimary }}>
+                  {shortlistedRolls.length > 0 ? `Recipients &amp; Invitation Dispatch Preview (${shortlistedRolls.length})` : `Registered Candidate Roster (${registeredCandidates.length})`}
+                </h4>
+
+                {shortlistedRolls.length === 0 ? (
+                  <div style={{ border: `1px solid ${t.border}`, borderRadius: '6px', overflow: 'hidden' }}>
+                    {registeredCandidates.length === 0 ? (
+                      <div style={{ padding: '24px', textAlign: 'center', color: t.textMuted, fontSize: '12px' }}>
+                        No candidates are registered in the roster yet. Add candidates from the Candidate Roster tab or import via Google Form.
+                      </div>
+                    ) : (
+                      registeredCandidates.slice(0, 50).map((cand) => (
+                        <div
+                          key={cand.accessKey}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 14px',
+                            borderBottom: `1px solid ${t.border}`,
+                            background: t.bgCardElevated
+                          }}
+                        >
+                          <div>
+                            <strong style={{ color: t.textPrimary, fontSize: '12.5px' }}>{cand.name}</strong>
+                            <span style={{ color: t.textMuted, fontSize: '11px', marginLeft: '6px' }}>&lt;{cand.email}&gt;</span>
+                            <span style={{ marginLeft: '8px', fontSize: '10.5px', fontFamily: 'monospace', color: t.textMuted }}>
+                              Roll: {cand.rollNumber || cand.accessKey}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const roll = (cand.rollNumber || cand.accessKey).toUpperCase();
+                              shortlistCandidateForRound2(roll, true);
+                              setShortlistedRolls(getShortlistedRolls());
+                              setRegisteredCandidates(getAllCodeSparkCandidates());
+                              playSound('click');
+                            }}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '4px',
+                              background: '#27272a',
+                              border: '1px solid #3f3f46',
+                              color: '#10b981',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            + Shortlist &amp; Issue R2 Key
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                ) : (
+                  shortlistedRolls.map((roll) => {
+                    const matchAttempt = aptitudeCandidates.find((c) => (c.studentRoll || '').toUpperCase() === roll);
+                    const matchCand = registeredCandidates.find(
+                      (c) =>
+                        (c.rollNumber && c.rollNumber.toUpperCase() === roll) ||
+                        c.accessKey.toUpperCase() === roll ||
+                        c.email.toUpperCase() === roll
+                    );
+                    const name = matchAttempt?.studentName || matchCand?.name || 'Candidate';
+                    const email = matchAttempt?.studentEmail || matchCand?.email || 'student@domain.com';
+                    const r2Key = matchCand?.round2Key || 'AXENT-R2-PENDING';
+                    const score = matchAttempt?.score ?? matchCand?.round1Score ?? 0;
+                    const maxScore = matchAttempt?.totalMarks || matchAttempt?.maxScore || examTotalMarks || 0;
+
+                    const emailBody = `Subject: Code Spark 2026: You are Shortlisted for Round 2 (Coding Contest)!\n\nDear ${name},\n\nCongratulations! Based on your performance in the Round 1 General Aptitude Assessment (Score: ${score}/${maxScore}), you have successfully cleared the institutional cutoff and have been shortlisted for Round 2: Algorithmic Code Sprint Arena.\n\nYour Exclusive Round 2 Access Code: ${r2Key}\n\nHow to Start Round 2:\n1. Visit the portal at: ${window.location.origin}/code-spark\n2. Scroll down to candidate check-in.\n3. Enter your Round 2 code: ${r2Key}\n4. Enter the Secure Fullscreen Coding Arena.\n\nBest regards,\n${smtpFromName || 'Code Spark 2026 Examination Board'}`;
+
+                    return (
+                      <div key={roll} style={{ background: t.bgCardElevated, border: `1px solid ${t.border}`, borderRadius: '6px', padding: '12px', marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <strong style={{ color: t.textPrimary, fontSize: '13px' }}>{name}</strong>
+                            <span style={{ color: t.textMuted, fontSize: '11px', marginLeft: '6px' }}>&lt;{email}&gt;</span>
+                            <span style={{ marginLeft: '10px', fontSize: '11px', color: '#10b981', fontFamily: 'monospace', fontWeight: 700 }}>
+                              Score: {score}/{maxScore}
+                            </span>
+                            <span style={{ marginLeft: '8px', fontSize: '11px', padding: '2px 8px', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', fontFamily: 'monospace', fontWeight: 800, borderRadius: '4px' }}>
+                              {r2Key}
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(emailBody);
+                                setCopiedEmailKey(roll);
+                                playSound('click');
+                                setTimeout(() => setCopiedEmailKey(null), 2000);
+                              }}
+                              style={{
+                                padding: '4px 10px',
+                                borderRadius: '4px',
+                                background: t.btnSecondaryBg,
+                                border: `1px solid ${t.btnSecondaryBorder}`,
+                                color: t.btnSecondaryColor,
+                                fontSize: '11px',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                            >
+                              {copiedEmailKey === roll ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
+                              <span>{copiedEmailKey === roll ? 'Copied' : 'Copy Invitation'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                shortlistCandidateForRound2(roll, false);
+                                setShortlistedRolls(getShortlistedRolls());
+                                setRegisteredCandidates(getAllCodeSparkCandidates());
+                                playSound('click');
+                              }}
+                              style={{
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                background: 'transparent',
+                                border: `1px solid ${t.border}`,
+                                color: '#71717a',
+                                fontSize: '11px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+<div style={{ padding: '14px 20px', borderTop: `1px solid ${t.border}`, display: 'flex', justifyContent: 'flex-end' }}>
 
               <button
 

@@ -192,6 +192,8 @@ interface AdminRound2HubProps {
 
   isDark?: boolean;
 
+  onEndExamAndResetAll?: () => Promise<void>;
+
 
 
 }
@@ -214,7 +216,9 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-  isDark = true
+  isDark = true,
+
+  onEndExamAndResetAll
 
 
 
@@ -1622,6 +1626,31 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+
+          {onEndExamAndResetAll && (
+            <button
+              type="button"
+              onClick={onEndExamAndResetAll}
+              title="Conclude Round 2, wipe all student attempts & submissions from database, and reopen Round 1"
+              style={{
+                padding: '6px 14px',
+                borderRadius: '6px',
+                background: 'rgba(239, 68, 68, 0.16)',
+                border: '1px solid rgba(239, 68, 68, 0.5)',
+                color: '#ef4444',
+                fontSize: '12px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <RotateCcw size={13} />
+              <span>End Exam &amp; Reset All (1-Click)</span>
+            </button>
+          )}
 
 
 

@@ -31,6 +31,8 @@ import {
   getCodeSparkActiveExam,
   asyncGetCodeSparkActiveExam,
   isRound1ConcludedGlobally,
+  setRound1ConcludedGlobally,
+  ROUND1_CONCLUDED_STORAGE_KEY,
   isLabOverflowRetakeEnabledGlobally,
   isCandidateAuthorizedForRound1Retake,
   authorizeCandidateForRound1Retake,
@@ -182,7 +184,10 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
         const response = await fetch('/api/codespark/public-config', { cache: 'no-store' });
         if (response.ok) {
           const config = await response.json();
-          if (typeof config?.isConcluded === 'boolean') setIsRound1Concluded(config.isConcluded);
+          if (typeof config?.isConcluded === 'boolean') {
+            setIsRound1Concluded(config.isConcluded);
+            setRound1ConcludedGlobally(config.isConcluded);
+          }
         }
       } catch {} finally { configBusy = false; }
     };
