@@ -357,12 +357,38 @@ export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
       window.dispatchEvent(new CustomEvent("codedna_codespark_concluded_updated", { detail: config.isConcluded }));
     }
 
-    const deduped = deduplicateCandidates(config.candidates);
-    const { roster } = sanitizeCandidatesRoster(deduped);
+    // Intelligently merge cloud roster with local roster so candidates are NEVER lost or overwritten
+    const localCandidates = getAllCodeSparkCandidates();
+    const candidateMap = new Map<string, CodeSparkCandidate>();
+
+    // 1. Add all cloud candidates
+    (config.candidates || []).forEach((c) => {
+      const key = (c.accessKey || '').toUpperCase().trim();
+      const email = (c.email || '').toLowerCase().trim();
+      if (key) candidateMap.set(key, c);
+      if (email) candidateMap.set(email, c);
+    });
+
+    // 2. Merge local candidates that might not have reached cloud yet
+    localCandidates.forEach((loc) => {
+      const locKey = (loc.accessKey || '').toUpperCase().trim();
+      const locEmail = (loc.email || '').toLowerCase().trim();
+      if (!candidateMap.has(locKey) && !candidateMap.has(locEmail)) {
+        if (locKey) candidateMap.set(locKey, loc);
+        else if (locEmail) candidateMap.set(locEmail, loc);
+      }
+    });
+
+    const combined = Array.from(new Set(candidateMap.values()));
+    const deduped = deduplicateCandidates(combined);
+    const { roster, modified } = sanitizeCandidatesRoster(deduped);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(roster));
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: roster }));
       window.dispatchEvent(new Event("storage"));
+      if (modified || roster.length > (config.candidates || []).length) {
+        void pushCandidatesToCloud(roster);
+      }
     }
     return roster;
   } catch (err) {
