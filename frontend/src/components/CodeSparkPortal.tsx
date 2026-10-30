@@ -159,21 +159,27 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     window.addEventListener('codedna_codespark_concluded_updated', syncConcluded);
     window.addEventListener('storage', syncConcluded);
 
-    // Fast 2.5-second cloud sync so portal instantly reacts when admin concludes or clears Round 2!
-    const pollInterval = setInterval(async () => {
+    // Keep the landing page light: roster sync is deliberately infrequent and pauses in background tabs.
+    // The conclusion flag is still refreshed from local events immediately.
+    let pollBusy = false;
+    const syncWhenVisible = async () => {
+      if (pollBusy || document.visibilityState !== 'visible') return;
+      pollBusy = true;
       try {
         const latestCandidates = await syncCandidatesFromCloud();
-        if (latestCandidates) {
-          setRegisteredCandidates(latestCandidates);
-        }
+        if (latestCandidates) setRegisteredCandidates(latestCandidates);
         setIsRound1Concluded(isRound1ConcludedGlobally());
-      } catch {}
-    }, 2500);
+      } catch {} finally { pollBusy = false; }
+    };
+    const pollInterval = window.setInterval(() => { void syncWhenVisible(); }, 15000);
+    const onVisible = () => { if (document.visibilityState === 'visible') void syncWhenVisible(); };
+    document.addEventListener('visibilitychange', onVisible);
 
     return () => {
       window.removeEventListener('codedna_codespark_concluded_updated', syncConcluded);
       window.removeEventListener('storage', syncConcluded);
       clearInterval(pollInterval);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
 
