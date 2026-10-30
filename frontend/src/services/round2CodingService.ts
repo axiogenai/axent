@@ -1432,7 +1432,7 @@ export async function evaluateRound2Code(
   const language = explicitLanguage || detectLanguageFromCode(code);
   const tests = [
     ...(Array.isArray(problem.sampleTestCases) ? problem.sampleTestCases : []),
-    ...(Array.isArray(problem.hiddenTestCases) ? problem.hiddenTestCases : [])
+    ...(Array.isArray(problem.hiddenTestCases) ? problem.hiddenTestCases.map((test) => ({ ...test, isHidden: true })) : [])
   ];
   const complexity = analyzeCodeComplexity(code, language, '');
   const sampleResults: Round2QuestionReport['sampleResults'] = [];
