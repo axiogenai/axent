@@ -469,7 +469,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       try {
         localStorage.setItem('codedna_student_profile', JSON.stringify(codingProfile));
         localStorage.setItem('codedna_active_exam_mode', 'CODING');
-        setActiveCodeSparkCandidate(cand);
+        setActiveCodeSparkCandidate({ ...cand, accessKey: cand.round2Key || cand.accessKey });
       } catch {}
 
       playSound('success');
