@@ -156,11 +156,11 @@ export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): P
     const assignedId = typeof window !== "undefined" ? localStorage.getItem("codedna_codespark_round1_exam_id") : null;
     const isConcluded = typeof window !== "undefined" ? localStorage.getItem(ROUND1_CONCLUDED_STORAGE_KEY) === "true" : false;
     const payload: CodeSparkSystemConfig = {
-      activeExamId: currentConfig?.activeExamId || assignedId || null,
-      shortlistMode: currentConfig?.shortlistMode || "cutoff",
-      shortlistValue: currentConfig?.shortlistValue || 12,
-      manualShortlistRolls: currentConfig?.manualShortlistRolls || getShortlistedRolls(),
-      isConcluded: currentConfig?.isConcluded ?? isConcluded,
+      activeExamId: assignedId || currentConfig?.activeExamId || null,
+      shortlistMode: (typeof window !== 'undefined' ? localStorage.getItem('codedna_codespark_shortlist_mode') : null) as 'cutoff' | 'top_n' | 'manual' || currentConfig?.shortlistMode || 'cutoff',
+      shortlistValue: Number(typeof window !== 'undefined' ? localStorage.getItem('codedna_codespark_shortlist_value') : null) || currentConfig?.shortlistValue || 12,
+      manualShortlistRolls: getShortlistedRolls(),
+      isConcluded,
       candidates: deduplicateCandidates(candidates),
       updatedAt: Date.now()
     };
