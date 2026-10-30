@@ -87,7 +87,7 @@ export default async function handler(req, res) {
     try { publicHost = new URL(configuredPublicUrl).hostname; parsedUrl = new URL(examUrl); } catch {}
     const allowedHosts = new Set([publicHost, "axent.axiogen.in", "axent-tau.vercel.app"].filter(Boolean));
     const secureKeySuffix = key.toUpperCase().replace(/^AXENT-R2-/, "");
-    if (!validEmail(email) || secureKeySuffix.length < 8 || !parsedUrl || parsedUrl.protocol !== "https:" || !allowedHosts.has(parsedUrl.hostname)) {
+    if (!validEmail(email) || secureKeySuffix.length < 4 || !parsedUrl || parsedUrl.protocol !== "https:" || !allowedHosts.has(parsedUrl.hostname)) {
       failed.push({ email, name, reason: "Invalid recipient details or access URL." });
       return;
     }

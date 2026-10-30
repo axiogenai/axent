@@ -12,7 +12,8 @@ import {
   ShieldCheck,
   FileSpreadsheet,
   AlertCircle,
-  FileText
+  FileText,
+  Hash
 } from 'lucide-react';
 import {
   CodeSparkCandidate,
@@ -21,7 +22,8 @@ import {
   parseCandidateImportText,
   saveCodeSparkCandidates,
   onCodeSparkCandidatesChanged,
-  syncCandidatesFromCloud
+  syncCandidatesFromCloud,
+  standardizeAllCandidatesTo4Digits
 } from '../../services/codeSparkService';
 import { getAllExams } from '../../services/mcqService';
 import { playSound } from '../../utils/sounds';
@@ -117,6 +119,17 @@ export const CodeSparkCandidateImportModal: React.FC<CodeSparkCandidateImportMod
     const remaining = candidates.filter((c) => c.accessKey !== key);
     saveCodeSparkCandidates(remaining);
     playSound('click');
+  };
+
+  const handleStandardizeKeys = () => {
+    const updated = standardizeAllCandidatesTo4Digits();
+    setCandidates(updated);
+    playSound('success');
+    setNotification({
+      message: 'All candidate keys standardized to 4-digit AXENT-XXXX format.',
+      type: 'success'
+    });
+    setTimeout(() => setNotification(null), 4000);
   };
 
   const handleExportCSV = () => {
@@ -218,14 +231,25 @@ export const CodeSparkCandidateImportModal: React.FC<CodeSparkCandidateImportMod
               <span>Upload CSV</span>
             </button>
             {candidates.length > 0 && (
-              <button
-                type="button"
-                onClick={handleExportCSV}
-                className="px-2.5 py-1.5 rounded text-xs text-zinc-300 hover:text-zinc-100 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 flex items-center gap-1.5 transition-colors"
-              >
-                <Download size={12} />
-                <span>Export CSV</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handleStandardizeKeys}
+                  className="px-2.5 py-1.5 rounded text-xs text-amber-300 hover:text-amber-100 bg-amber-950/30 hover:bg-amber-950/60 border border-amber-800/60 flex items-center gap-1.5 transition-colors"
+                  title="Format all candidate keys strictly to 4-digit AXENT-XXXX format"
+                >
+                  <Hash size={12} />
+                  <span>Standardize 4-Digit Keys</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  className="px-2.5 py-1.5 rounded text-xs text-zinc-300 hover:text-zinc-100 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 flex items-center gap-1.5 transition-colors"
+                >
+                  <Download size={12} />
+                  <span>Export CSV</span>
+                </button>
+              </>
             )}
           </div>
         </div>

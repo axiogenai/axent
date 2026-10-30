@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   const code = String(body.code || "");
   const language = String(body.language || "Python");
   const questionNumber = Number(body.questionNumber);
-  if (key.length < 8 || code.length > 100000 || !["Python", "C", "C++", "Java"].includes(language) || !Number.isInteger(questionNumber) || questionNumber < 1 || questionNumber > 5) {
+  if (key.length < 4 || code.length > 100000 || !["Python", "C", "C++", "Java"].includes(language) || !Number.isInteger(questionNumber) || questionNumber < 1 || questionNumber > 5) {
     return res.status(400).json({ success: false, error: "Invalid live-code update." });
   }
   try {

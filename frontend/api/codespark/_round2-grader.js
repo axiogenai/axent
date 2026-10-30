@@ -53,7 +53,7 @@ async function execute(code, language, stdin) {
 
 export async function getRound2AssignedProblems(keyInput) {
   const key = normalizeRound2Key(keyInput);
-  if (key.length < 8 || key.length > 64) { const error = new Error("This Round 2 key is outdated or invalid. Ask the administrator to issue a new secure key."); error.statusCode = 403; throw error; }
+  if (key.length < 4 || key.length > 64) { const error = new Error("This Round 2 key is outdated or invalid. Ask the administrator to issue a new secure key."); error.statusCode = 403; throw error; }
   const roster = await getCodeSparkRosterConfig();
   const candidate = roster?.candidates?.find((item) => item.round2Key && normalizeRound2Key(item.round2Key) === key);
   if (!candidate || !(candidate.isShortlisted || candidate.status === "SHORTLISTED")) {
@@ -78,7 +78,7 @@ export async function gradeRound2Code(keyInput, problemIdInput, codeInput, langu
   const code = String(codeInput || "");
   const language = String(languageInput || "");
   const problemId = String(problemIdInput || "");
-  if (key.length < 8 || key.length > 64 || code.length > 100000 || !LANGUAGE[language] || !problemId) {
+  if (key.length < 4 || key.length > 64 || code.length > 100000 || !LANGUAGE[language] || !problemId) {
     const error = new Error("Invalid code evaluation request."); error.statusCode = 400; throw error;
   }
   const roster = await getCodeSparkRosterConfig();

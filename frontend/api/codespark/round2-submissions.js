@@ -43,7 +43,7 @@ export default async function handler(req, res) {
   try { body = readBody(req); } catch { return res.status(400).json({ success: false, error: "Invalid request." }); }
   if (body.action === "get") {
     const key = normalizeRound2Key(body.key);
-    if (key.length < 8 || key.length > 64) return res.status(400).json({ success: false, error: "Invalid Round 2 key." });
+    if (key.length < 4 || key.length > 64) return res.status(400).json({ success: false, error: "Invalid Round 2 key." });
     try {
       const candidateHash = createHash("sha256").update(key).digest("hex");
       const rows = await supabaseRest(`codespark_round2_finalizations?candidate_hash=eq.${candidateHash}&select=result`);
@@ -60,7 +60,7 @@ export default async function handler(req, res) {
 
   const submission = body.submission;
   const key = normalizeRound2Key(submission?.round2Key || submission?.candidateKey);
-  if (!submission || typeof submission !== "object" || key.length < 8) {
+  if (!submission || typeof submission !== "object" || key.length < 4) {
     return res.status(400).json({ success: false, error: "Valid Round 2 candidate credentials are required." });
   }
 

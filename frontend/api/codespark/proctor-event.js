@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   try { body = readBody(req); } catch { return res.status(400).json({ success: false, error: "Invalid request." }); }
   const key = normalizeRound2Key(body.key);
   const reason = String(body.reason || "").slice(0, 180);
-  if (key.length < 8) return res.status(400).json({ success: false, error: "Invalid Round 2 key." });
+  if (key.length < 4) return res.status(400).json({ success: false, error: "Invalid Round 2 key." });
 
   try {
     if (body.action === "status") {

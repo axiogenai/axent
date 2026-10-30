@@ -108,17 +108,88 @@ export function deduplicateCandidates(candidates: CodeSparkCandidate[]): CodeSpa
   return Array.from(keyMap.values());
 }
 
+export function sanitizeCandidatesRoster(candidates: CodeSparkCandidate[]): { roster: CodeSparkCandidate[]; modified: boolean } {
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    return { roster: [], modified: false };
+  }
+
+  const usedPins = new Set<string>();
+  // 1st pass: identify existing valid 4-digit pins
+  for (const c of candidates) {
+    const rawKey = String(c?.accessKey || '').trim().toUpperCase();
+    const match = rawKey.match(/^AXENT-(\d{4})$/);
+    if (match) {
+      usedPins.add(match[1]);
+    }
+  }
+
+  let modified = false;
+  const generateUniquePin = (): string => {
+    let pin = '';
+    do {
+      pin = String(Math.floor(1000 + Math.random() * 9000));
+    } while (usedPins.has(pin));
+    usedPins.add(pin);
+    return pin;
+  };
+
+  const roster = candidates.map((cand) => {
+    if (!cand) return cand;
+    const copy = { ...cand };
+    const rawKey = String(copy.accessKey || '').trim().toUpperCase();
+    const match = rawKey.match(/^AXENT-(\d{4})$/);
+    if (!match) {
+      // Key is not a clean 4-digit PIN (e.g. 32-hex chars or empty)
+      const pin = generateUniquePin();
+      copy.accessKey = `AXENT-${pin}`;
+      modified = true;
+    }
+
+    if (copy.round2Key) {
+      const rawR2 = String(copy.round2Key).trim().toUpperCase();
+      const matchR2 = rawR2.match(/^AXENT-R2-(\d{4})$/);
+      if (!matchR2) {
+        // Round 2 key is not a 4-digit PIN
+        const r2Pin = generateUniquePin();
+        copy.round2Key = `AXENT-R2-${r2Pin}`;
+        modified = true;
+      }
+    }
+    return copy;
+  });
+
+  return { roster, modified };
+}
+
 export function getAllCodeSparkCandidates(): CodeSparkCandidate[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return deduplicateCandidates(parsed);
+    const deduped = deduplicateCandidates(parsed);
+    const { roster, modified } = sanitizeCandidatesRoster(deduped);
+    if (modified) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(roster));
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: roster }));
+        }
+        void pushCandidatesToCloud(roster);
+      } catch {}
+    }
+    return roster;
   } catch (e) {
     console.error('[CodeSpark] Failed to load candidates from storage:', e);
     return [];
   }
+}
+
+export function standardizeAllCandidatesTo4Digits(): CodeSparkCandidate[] {
+  const current = getAllCodeSparkCandidates();
+  const { roster } = sanitizeCandidatesRoster(current);
+  saveCodeSparkCandidates(roster);
+  return roster;
 }
 
 export function saveCodeSparkCandidates(candidates: CodeSparkCandidate[]): void {
@@ -193,13 +264,17 @@ export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
       localStorage.setItem(ROUND1_CONCLUDED_STORAGE_KEY, config.isConcluded ? "true" : "false");
       window.dispatchEvent(new CustomEvent("codedna_codespark_concluded_updated", { detail: config.isConcluded }));
     }
-    const combined = deduplicateCandidates(config.candidates);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(combined));
+    const deduped = deduplicateCandidates(config.candidates);
+    const { roster, modified } = sanitizeCandidatesRoster(deduped);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(roster));
     if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: combined }));
+      window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: roster }));
       window.dispatchEvent(new Event("storage"));
+      if (modified) {
+        void pushCandidatesToCloud(roster);
+      }
     }
-    return combined;
+    return roster;
   } catch (err) {
     // Candidate browsers may not have an authority session. Sync only safe public exam state.
     try {
@@ -367,13 +442,8 @@ export function isCandidateInShortlistStorage(identifier: string): boolean {
 }
 
 export function generateRound2KeyForCandidate(_cand: CodeSparkCandidate): string {
-  if (!globalThis.crypto?.getRandomValues) {
-    throw new Error('A secure browser context is required to generate Round 2 access keys.');
-  }
-  const bytes = new Uint8Array(16);
-  globalThis.crypto.getRandomValues(bytes);
-  const token = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('').toUpperCase();
-  return `AXENT-R2-${token}`;
+  const pin = Math.floor(1000 + Math.random() * 9000);
+  return `AXENT-R2-${pin}`;
 }
 
 export function isRound1ConcludedGlobally(): boolean {
@@ -594,7 +664,7 @@ export function concludeRound1AndShortlistUnified(options: { mode: 'cutoff' | 't
     if (isQual) {
       cand.status = 'SHORTLISTED';
       const existingRound2Suffix = String(cand.round2Key || '').toUpperCase().replace(/^AXENT-R2-/, '');
-      if (existingRound2Suffix.length < 8) {
+      if (!/^\d{4}$/.test(existingRound2Suffix)) {
         cand.round2Key = generateRound2KeyForCandidate(cand);
       }
       cand.round2InvitedAt = Date.now();
@@ -884,7 +954,7 @@ export function shortlistCandidateForRound2(identifier: string, isShortlisted = 
       c.isShortlisted = isShortlisted;
       c.status = isShortlisted ? 'SHORTLISTED' : 'ROUND1_COMPLETED';
       const existingRound2Suffix = String(c.round2Key || '').toUpperCase().replace(/^AXENT-R2-/, '');
-      if (isShortlisted && existingRound2Suffix.length < 8) {
+      if (isShortlisted && !/^\d{4}$/.test(existingRound2Suffix)) {
         c.round2Key = generateRound2KeyForCandidate(c);
       } else if (!isShortlisted) {
         c.round2Key = undefined;
@@ -939,12 +1009,10 @@ export function generateCodeSparkKey(existingCandidates: CodeSparkCandidate[] = 
   existingCandidates.forEach((c) => {
     if (c.accessKey) usedKeys.add(c.accessKey.trim().toUpperCase());
   });
-  if (!globalThis.crypto?.getRandomValues) throw new Error('A secure browser context is required to generate candidate access keys.');
   let key = '';
   do {
-    const bytes = new Uint8Array(16);
-    globalThis.crypto.getRandomValues(bytes);
-    key = `AXENT-${Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+    const pin = Math.floor(1000 + Math.random() * 9000);
+    key = `AXENT-${pin}`;
   } while (usedKeys.has(key));
   return key;
 }
@@ -1065,12 +1133,10 @@ export function importCodeSparkCandidates(
     if (c.accessKey) usedKeys.add(c.accessKey.trim().toUpperCase());
   });
   const getNextKey = (): string => {
-    if (!globalThis.crypto?.getRandomValues) throw new Error('A secure browser context is required to generate candidate access keys.');
     let key = '';
     do {
-      const bytes = new Uint8Array(16);
-      globalThis.crypto.getRandomValues(bytes);
-      key = `AXENT-${Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+      const pin = Math.floor(1000 + Math.random() * 9000);
+      key = `AXENT-${pin}`;
     } while (usedKeys.has(key));
     usedKeys.add(key);
     return key;

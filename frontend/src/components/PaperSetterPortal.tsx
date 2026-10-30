@@ -13,7 +13,8 @@ import {
   ExternalLink,
   Award,
   Code2,
-  Key
+  Key,
+  ArrowLeft
 } from 'lucide-react';
 import { CodeSparkCandidateImportModal } from './codespark/CodeSparkCandidateImportModal';
 import { MCQQuestionBank } from './MCQQuestionBank';
@@ -227,6 +228,31 @@ export const PaperSetterPortal: React.FC = () => {
         <div style={{ maxWidth: '100%', minWidth: 0, width: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', width: '100%', marginBottom: '4px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  navigate('/admin');
+                  playSound('click');
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  color: 'var(--text-muted)',
+                  fontSize: '11.5px',
+                  fontWeight: 600
+                }}
+                className="hover:text-zinc-200 transition-colors"
+                title="Return to Chief Proctor Admin Portal"
+              >
+                <ArrowLeft size={12} />
+                <span>Admin Portal</span>
+              </button>
+              <span style={{ fontSize: '11px', color: 'var(--border-strong)' }}>/</span>
               <span
                 style={{
                   display: 'inline-flex',
@@ -267,6 +293,29 @@ export const PaperSetterPortal: React.FC = () => {
 
         {/* Action Controls Cluster */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {/* 1-Click Return to Chief Proctor Admin Portal */}
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              navigate('/admin');
+              playSound('click');
+            }}
+            style={{
+              gap: '6px',
+              fontSize: '11.5px',
+              fontWeight: 700,
+              padding: '6px 14px',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              background: 'rgba(239, 68, 68, 0.1)',
+              color: '#ef4444'
+            }}
+            title="Return to Chief Proctor CCTV Live Surveillance & Administration"
+          >
+            <ShieldAlert size={14} color="#ef4444" />
+            <span>Chief Proctor Admin</span>
+          </button>
+
           {/* AI Paper Generator Trigger */}
           <button
             type="button"
