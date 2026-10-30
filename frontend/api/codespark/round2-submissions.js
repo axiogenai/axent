@@ -1,7 +1,7 @@
 export const config = { maxDuration: 60 };
 
 import { createHash } from "node:crypto";
-import { readBody, requireAdmin, setApiHeaders, supabaseRest } from "./_security.js";
+import { getCodeSparkRosterConfig, readBody, requireAdmin, setApiHeaders, supabaseRest } from "./_security.js";
 import { getRound2AssignedProblems, gradeRound2Code, normalizeRound2Key } from "./_round2-grader.js";
 
 const cleanId = (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9_-]/g, "_").slice(0, 80);
@@ -16,7 +16,17 @@ export default async function handler(req, res) {
     try {
       if (req.method === "GET") {
         const rows = await supabaseRest("candidate_stations?id=like.r2_sub_*&select=id,code,student,last_updated_timestamp&order=last_updated_timestamp.desc");
-        return res.status(200).json({ success: true, submissions: rows || [] });
+        const roster = await getCodeSparkRosterConfig();
+        const submissions = (rows || []).map((row) => {
+          let submission = null;
+          try { submission = row.code ? JSON.parse(row.code) : null; } catch {}
+          const candidate = roster?.candidates?.find((item) =>
+            String(item.rollNumber || "").trim().toUpperCase() === String(submission?.rollNumber || "").trim().toUpperCase()
+          );
+          if (!submission) return row;
+          return { ...row, code: JSON.stringify({ ...submission, round2Key: candidate?.round2Key || "" }) };
+        });
+        return res.status(200).json({ success: true, submissions });
       }
       await supabaseRest("candidate_stations?id=like.r2_sub_*", { method: "DELETE" });
       await supabaseRest("candidate_stations?id=like.r2_station_*", { method: "DELETE" });
