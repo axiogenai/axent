@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import { escapeHtml, readBody, requireAdmin, setApiHeaders, smtpConfiguration } from "./_security.js";
+import { escapeHtml, parseCodeSparkConfig, readBody, requireAdmin, setApiHeaders, smtpConfiguration, supabaseRest } from "./_security.js";
 
 const validEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || ""));
 
@@ -29,14 +29,35 @@ export default async function handler(req, res) {
     auth: { user: smtp.user, pass: smtp.password },
     connectionTimeout: 20000, greetingTimeout: 20000, socketTimeout: 20000
   });
+  let rosterConfig;
+  try {
+    const rows = await supabaseRest("candidate_stations?id=eq.codespark_system_config&select=code,student");
+    rosterConfig = parseCodeSparkConfig(rows?.[0]);
+  } catch {
+    return res.status(503).json({ success: false, error: "The verified candidate roster is unavailable." });
+  }
+  if (!rosterConfig || !Array.isArray(rosterConfig.candidates)) {
+    return res.status(503).json({ success: false, error: "The verified candidate roster is unavailable." });
+  }
+
   const sent = [];
   const failed = [];
 
   for (const recipient of recipients) {
-    const name = String(recipient?.name || "Candidate").trim().slice(0, 120);
-    const email = String(recipient?.email || "").trim().toLowerCase();
-    const roll = String(recipient?.rollNumber || recipient?.accessKey || "").trim().slice(0, 80);
-    const key = String(recipient?.round2Key || "").trim().slice(0, 80);
+    const requestedEmail = String(recipient?.email || "").trim().toLowerCase();
+    const requestedRoll = String(recipient?.rollNumber || recipient?.accessKey || "").trim().toUpperCase().slice(0, 80);
+    const matchedCandidate = rosterConfig.candidates.find((candidate) =>
+      (requestedEmail && String(candidate.email || "").trim().toLowerCase() === requestedEmail) ||
+      (requestedRoll && String(candidate.rollNumber || "").trim().toUpperCase() === requestedRoll)
+    );
+    const name = String(matchedCandidate?.name || recipient?.name || "Candidate").trim().slice(0, 120);
+    const email = String(matchedCandidate?.email || requestedEmail).trim().toLowerCase();
+    const roll = String(matchedCandidate?.rollNumber || requestedRoll).trim().slice(0, 80);
+    const key = String(matchedCandidate?.round2Key || "").trim().slice(0, 80);
+    if (!matchedCandidate || !(matchedCandidate.isShortlisted || matchedCandidate.status === "SHORTLISTED")) {
+      failed.push({ email, name, reason: "Candidate is not present on the verified Round 2 shortlist." });
+      continue;
+    }
     const configuredPublicUrl = String(process.env.APP_PUBLIC_URL || "https://axent.axiogen.in").replace(/\/$/, "");
     const examUrl = String(recipient?.examUrl || `${configuredPublicUrl}/code-spark`).trim();
     let parsedUrl;
