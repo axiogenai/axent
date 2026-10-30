@@ -45,3 +45,15 @@ CREATE POLICY "Code submissions admin access"
 
 -- Service-role API routes are the only candidate-facing access path to protected
 -- CodeSpark configuration, Round 2 problem sets, live code and submissions.
+
+-- Persistent failed-key-attempt tracking. Only the server service-role API can access it.
+CREATE TABLE IF NOT EXISTS public.codespark_key_lookup_attempts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  ip_hash text NOT NULL,
+  attempted_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_codespark_key_lookup_attempts_ip_time
+  ON public.codespark_key_lookup_attempts(ip_hash, attempted_at DESC);
+ALTER TABLE public.codespark_key_lookup_attempts ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.codespark_key_lookup_attempts FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, DELETE ON public.codespark_key_lookup_attempts TO service_role;
