@@ -65,7 +65,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { candidate, problems } = await getRound2AssignedProblems(key);
+    const isSubmitted = submission.isSubmitted === true;
+    const { candidate, problems } = await getRound2AssignedProblems(key, isSubmitted || true);
     const reports = submission.questionReports && typeof submission.questionReports === "object" ? submission.questionReports : {};
     const reportEntries = Object.values(reports).slice(0, 5);
     const isSubmitted = submission.isSubmitted === true;

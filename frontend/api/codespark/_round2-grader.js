@@ -51,7 +51,7 @@ async function execute(code, language, stdin) {
   }
 }
 
-export async function getRound2AssignedProblems(keyInput) {
+export async function getRound2AssignedProblems(keyInput, allowLocked = false) {
   const key = normalizeRound2Key(keyInput);
   if (key.length < 4 || key.length > 64) { const error = new Error("This Round 2 key is outdated or invalid. Ask the administrator to issue a new secure key."); error.statusCode = 403; throw error; }
   const roster = await getCodeSparkRosterConfig();
@@ -61,7 +61,7 @@ export async function getRound2AssignedProblems(keyInput) {
   }
   const roll = String(candidate.rollNumber || candidate.email || candidate.name || "candidate").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "_").slice(0, 80);
   const proctorRows = await supabaseRest(`candidate_stations?id=eq.r2_station_${roll}&select=student`);
-  if (proctorRows?.[0]?.student?.proctorLocked === true) {
+  if (!allowLocked && proctorRows?.[0]?.student?.proctorLocked === true) {
     const error = new Error("This Round 2 workstation is locked after three proctoring violations. Contact the invigilator.");
     error.statusCode = 423;
     throw error;
@@ -73,7 +73,7 @@ export async function getRound2AssignedProblems(keyInput) {
   return { candidate, problems: assignedProblems(Array.isArray(problemConfig.problems) ? problemConfig.problems : [], candidate.round2Key) };
 }
 
-export async function gradeRound2Code(keyInput, problemIdInput, codeInput, languageInput) {
+export async function gradeRound2Code(keyInput, problemIdInput, codeInput, languageInput, allowLocked = true) {
   const key = normalizeRound2Key(keyInput);
   const code = String(codeInput || "");
   const language = String(languageInput || "");
@@ -88,7 +88,7 @@ export async function gradeRound2Code(keyInput, problemIdInput, codeInput, langu
   }
   const roll = String(candidate.rollNumber || candidate.email || candidate.name || "candidate").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "_").slice(0, 80);
   const proctorRows = await supabaseRest(`candidate_stations?id=eq.r2_station_${roll}&select=student`);
-  if (proctorRows?.[0]?.student?.proctorLocked === true) {
+  if (!allowLocked && proctorRows?.[0]?.student?.proctorLocked === true) {
     const error = new Error("This Round 2 workstation is locked after three proctoring violations. Contact the invigilator.");
     error.statusCode = 423;
     throw error;
