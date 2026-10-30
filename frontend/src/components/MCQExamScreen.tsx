@@ -10,8 +10,10 @@ import { MCQAttempt, MCQExamConfig, MCQGradeResult, MCQ_STORAGE_KEYS } from '../
 import {
   getAllExams, getActiveAttempt, getAllAttempts, getAttemptsForExam, startAttempt, saveAnswer,
   submitAttempt, gradeAttempt, getRecentSessionAttempt, recordInfraction, updateUnfocusedTime,
-  pardonInfractions, onMcqDataChanged, onExamsChanged, syncFromSupabase, persistAttemptToCloud, publishExam
+  pardonInfractions, onMcqDataChanged, onExamsChanged, syncFromSupabase, persistAttemptToCloud, publishExam,
+  getAllQuestions, getQuestionById, saveQuestion
 } from '../services/mcqService';
+import { recordAccessKeyUsed } from '../services/codeSparkService';
 import { playSound } from '../utils/sounds';
 import { parseExamToken } from '../utils/tokenParser';
 import { syncMcqLiveStation, subscribeToCctvBroadcast, isStationLocked } from '../services/adminService';
@@ -1401,7 +1403,7 @@ const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attem
   );
 
   // STRICT INSTITUTIONAL GUARD: Never show results, marks, or answers to CodeSpark candidates!
-  if (isTechFest) {
+  if (true) {
     return (
       <CodeSparkSubmissionHoldView
         attempt={attempt}
@@ -2012,7 +2014,7 @@ const CodeSparkSubmissionHoldView: React.FC<CodeSparkSubmissionHoldViewProps> = 
               cursor: 'pointer'
             }}
           >
-            <LogOut size={14} /> Exit to CodeSpark Terminal
+            <LogOut size={14} /> Exit to CodeSpark
           </button>
         </div>
       </div>
@@ -2033,7 +2035,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
   );
 
   // STRICT INSTITUTIONAL GUARD: Never show results, marks, or answers to CodeSpark candidates!
-  if (isTechFest) {
+  if (true) {
     return (
       <CodeSparkSubmissionHoldView
         attempt={attempt}
@@ -2196,9 +2198,9 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
                   <span>Sem: <strong>{attempt.studentSem || '4th Sem'} ({attempt.studentDiv || 'A'})</strong></span>
                 </>
               )}
-              {attempt?.submitTime && (() => {
+              {typeof attempt?.submitTime === 'number' && (() => {
                 try {
-                  const d = new Date(attempt.submitTime);
+                  const d = new Date(attempt.submitTime as number);
                   if (!isNaN(d.getTime())) {
                     return (
                       <span style={{ color: 'var(--text-muted)' }}>
@@ -2772,6 +2774,24 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     };
   }, [activeExamId]);
 
+  useEffect(() => {
+    if (!exam || !Array.isArray(exam.questionIds) || exam.questionIds.length === 0) return;
+    const allQ = getAllQuestions();
+    const missing = exam.questionIds.filter((qid) => !allQ.some((q) => q.id === qid));
+    if (missing.length > 0) {
+      fetch(`/api/codespark/public-exam?examId=${encodeURIComponent(exam.id)}`, { cache: 'no-store' })
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data?.questions) && data.questions.length > 0) {
+            data.questions.forEach((q: any) => {
+              if (q && q.id) saveQuestion(q);
+            });
+          }
+        })
+        .catch(() => null);
+    }
+  }, [exam]);
+
   const [attempt, setAttempt] = useState<MCQAttempt | null>(() => {
     if (activeAttempt && activeAttempt.status === 'IN_PROGRESS' && activeAttempt.examId === initialExamId) {
       return activeAttempt;
@@ -3127,6 +3147,11 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       wrongCount: result.wrongCount
     };
     setAttempt(finished);
+
+    // Single-use key invalidation: record key & roll as consumed
+    if (student.rollNumber) void recordAccessKeyUsed(student.rollNumber);
+    if ((student as any).accessKey) void recordAccessKeyUsed((student as any).accessKey);
+    if (attempt?.studentRoll) void recordAccessKeyUsed(attempt.studentRoll);
 
     try {
       localStorage.removeItem(`codedna_mcq_current_idx_${currentAttemptId}`);
@@ -3960,6 +3985,11 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
             wrongCount: result.wrongCount
           };
           setAttempt(finished);
+
+    // Single-use key invalidation: record key & roll as consumed
+    if (student.rollNumber) void recordAccessKeyUsed(student.rollNumber);
+    if ((student as any).accessKey) void recordAccessKeyUsed((student as any).accessKey);
+    if (attempt?.studentRoll) void recordAccessKeyUsed(attempt.studentRoll);
           syncMcqLiveStation(finished, exam, student, currentIdx, true, {
             screenImageData: lastScreenFrameRef.current,
             hasLiveScreenStream: false
@@ -3991,6 +4021,11 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       wrongCount: result.wrongCount
     };
     setAttempt(finished);
+
+    // Single-use key invalidation: record key & roll as consumed
+    if (student.rollNumber) void recordAccessKeyUsed(student.rollNumber);
+    if ((student as any).accessKey) void recordAccessKeyUsed((student as any).accessKey);
+    if (attempt?.studentRoll) void recordAccessKeyUsed(attempt.studentRoll);
 
     try {
       localStorage.removeItem(`codedna_mcq_current_idx_${attempt.id}`);
@@ -4026,6 +4061,11 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       playSound('success');
       const finished = { ...attempt, status: 'SUBMITTED' as const, score: result.score, correctCount: result.correctCount, wrongCount: result.wrongCount };
       setAttempt(finished);
+
+    // Single-use key invalidation: record key & roll as consumed
+    if (student.rollNumber) void recordAccessKeyUsed(student.rollNumber);
+    if ((student as any).accessKey) void recordAccessKeyUsed((student as any).accessKey);
+    if (attempt?.studentRoll) void recordAccessKeyUsed(attempt.studentRoll);
       try {
         localStorage.removeItem(`codedna_mcq_current_idx_${attempt.id}`);
       } catch {}

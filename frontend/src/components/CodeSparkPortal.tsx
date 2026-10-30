@@ -37,7 +37,9 @@ import {
   isCandidateAuthorizedForRound1Retake,
   authorizeCandidateForRound1Retake,
   prepareCandidateForRound1Retake,
-  lookupCandidateAny
+  lookupCandidateAny,
+  isAccessKeyUsed,
+  recordAccessKeyUsed
 } from '../services/codeSparkService';
 import { getAllAttempts, getAllExams } from '../services/mcqService';
 import { MCQExamConfig } from '../types/mcq';
@@ -506,6 +508,26 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       cand.status === 'SHORTLISTED'
     );
 
+    // Single-use key enforcement: if candidate already submitted, block entry!
+    if (anyLookup.targetRound !== 'round2' && !rawInput.includes('R2')) {
+      const isUsed = isAccessKeyUsed(rawInput) ||
+        (cand.accessKey && isAccessKeyUsed(cand.accessKey)) ||
+        (cand.rollNumber && isAccessKeyUsed(cand.rollNumber)) ||
+        cand.status === 'ROUND1_COMPLETED' ||
+        (cand.status as string) === 'SUBMITTED';
+
+      const isRetakeAllowed =
+        isCandidateAuthorizedForRound1Retake(cand.rollNumber || cand.accessKey) ||
+        isCandidateAuthorizedForRound1Retake(cand.email) ||
+        isLabOverflowRetakeEnabledGlobally();
+
+      if (isUsed && !isRetakeAllowed) {
+        playSound('warning');
+        setKeyError('This access key has already been used and cannot be re-entered. Examination attempt is concluded.');
+        return;
+      }
+    }
+
     // 1. If target round is Round 2 or Round 1 has concluded:
     if (anyLookup.targetRound === 'round2' || rawInput.includes('R2') || isRound1Concluded) {
       const normInput = rawInput.trim().toUpperCase().replace(/^(AXENT-R2-|AXENT-|R2-)/, '');
@@ -569,10 +591,10 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       return;
     }
 
-    // For Round 1, check active exam paper
-    let targetExam = getCodeSparkActiveExam();
+    // For Round 1, check active exam paper (always get fresh questions from cloud)
+    let targetExam = await asyncGetCodeSparkActiveExam();
     if (!targetExam) {
-      targetExam = await asyncGetCodeSparkActiveExam();
+      targetExam = getCodeSparkActiveExam();
     }
 
     if (!targetExam) {

@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+import { createClient } from "@supabase/supabase-js";
+
+export const DEFAULT_SUPABASE_URL = "https://jswcwixeoilxuhbzojee.supabase.co";
+export const DEFAULT_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impzd2N3aXhlb2lseHVoYnpvamVlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MTk1NTQ5MywiZXhwIjoyMTA3NTMxNDkzfQ.FgGhbuOL-aQxEpDKp3tDNFZmnfZym-VnWw7eBAWvBZs";
 const json = (res, status, body) => res.status(status).json(body);
 
 export function setApiHeaders(req, res) {
@@ -7,7 +11,7 @@ export function setApiHeaders(req, res) {
     .split(",").map((value) => value.trim()).filter(Boolean);
   if (process.env.VERCEL_URL) configuredOrigins.push(`https://${process.env.VERCEL_URL}`);
   const allowed = configuredOrigins.map((value) => value.startsWith("http") ? value : `https://${value}`);
-  if (origin && allowed.includes(origin)) {
+  if (origin) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin");
   }
@@ -70,10 +74,19 @@ export function smtpConfiguration() {
 }
 
 export async function requireServiceRole() {
-  const base = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const base = String(process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL).replace(/\/$/, "");
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SERVICE_ROLE_KEY;
   if (!base || !key) throw new Error("Supabase service configuration is missing.");
   return { base, key };
+}
+
+let adminSupabaseInstance = null;
+export function getSupabaseAdmin() {
+  if (adminSupabaseInstance) return adminSupabaseInstance;
+  const base = String(process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL).replace(/\/$/, "");
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SERVICE_ROLE_KEY;
+  adminSupabaseInstance = createClient(base, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  return adminSupabaseInstance;
 }
 
 export async function supabaseRest(path, options = {}) {

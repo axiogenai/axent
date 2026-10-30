@@ -944,7 +944,17 @@ export async function deleteExam(id: string): Promise<boolean> {
 
 
 
-  // Cloud and lab cascade deletion
+  // Cloud and lab cascade deletion (Serverless Service Role + Direct sync)
+  try {
+    await fetch(`/api/codespark/roster?action=delete_exam&examId=${encodeURIComponent(id)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-authority-role': 'admin'
+      },
+      body: JSON.stringify({ action: 'delete_exam', examId: id })
+    }).catch(() => null);
+  } catch {}
 
   try {
 

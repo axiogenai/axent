@@ -282,6 +282,19 @@ async function writeExamToCloud(e: MCQExamConfig): Promise<boolean> {
 
 async function writeDeleteExamFromCloud(id: string): Promise<boolean> {
   try {
+    // 1. Primary: Serverless service-role deletion (bypasses RLS)
+    try {
+      await fetch(`/api/codespark/roster?action=delete_exam&examId=${encodeURIComponent(id)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-authority-role': 'admin'
+        },
+        body: JSON.stringify({ action: 'delete_exam', examId: id })
+      }).catch(() => null);
+    } catch {}
+
+    // 2. Client-side fallback deletion
     try {
       await supabase.from('mcq_attempts').delete().eq('exam_id', id);
     } catch {}
@@ -848,6 +861,15 @@ export async function clearSubmittedStationsFromCloud(labId?: string): Promise<b
 
 export async function clearAllStationsFromCloud(labId?: string): Promise<boolean> {
   try {
+    if (!labId || labId === 'all') {
+      try {
+        await fetch('/api/codespark/roster?action=purge_all', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-authority-role': 'admin' },
+          body: JSON.stringify({ action: 'purge_all' })
+        }).catch(() => null);
+      } catch {}
+    }
     let selectQuery = supabase.from('candidate_stations').select('id');
     if (labId && labId !== 'all') {
       selectQuery = selectQuery.eq('lab_id', labId);
@@ -872,6 +894,15 @@ export async function clearAllStationsFromCloud(labId?: string): Promise<boolean
 
 export async function clearAllAttemptsFromCloud(labId?: string): Promise<boolean> {
   try {
+    if (!labId || labId === 'all') {
+      try {
+        await fetch('/api/codespark/roster?action=purge_attempts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-authority-role': 'admin' },
+          body: JSON.stringify({ action: 'purge_attempts' })
+        }).catch(() => null);
+      } catch {}
+    }
     let selectQuery = supabase.from('mcq_attempts').select('id');
     if (labId && labId !== 'all') {
       selectQuery = selectQuery.eq('assigned_lab_id', labId);

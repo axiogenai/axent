@@ -385,12 +385,12 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
         cancelText="Cancel"
         tone="danger"
         icon="danger"
-        onConfirm={() => {
+        onConfirm={async () => {
           if (confirmDelete) {
             const idToDelete = confirmDelete;
             setConfirmDelete(null);
             playSound('trash');
-            void deleteExam(idToDelete);
+            await deleteExam(idToDelete);
             reload();
           }
         }}

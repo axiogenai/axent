@@ -8,6 +8,7 @@ import {
   getAllExams,
   saveExam,
   getAllAttempts,
+  saveQuestion
 } from './mcqService';
 import { saveExamToCloud, deleteAttemptByRollOrKeyFromCloud } from './supabaseService';
 
@@ -47,6 +48,7 @@ export interface CodeSparkSystemConfig {
   isConcluded: boolean;
   concludedAt?: number;
   candidates: CodeSparkCandidate[];
+  usedAccessKeys?: string[];
   updatedAt: number;
 }
 
@@ -358,6 +360,9 @@ export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
     if (Array.isArray(config.manualShortlistRolls) && typeof window !== "undefined") {
       localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(config.manualShortlistRolls));
     }
+    if (Array.isArray(config.usedAccessKeys) && typeof window !== "undefined") {
+      localStorage.setItem("codedna_codespark_used_keys", JSON.stringify(config.usedAccessKeys));
+    }
     if (config.isConcluded !== undefined && typeof window !== "undefined") {
       localStorage.setItem(ROUND1_CONCLUDED_STORAGE_KEY, config.isConcluded ? "true" : "false");
       window.dispatchEvent(new CustomEvent("codedna_codespark_concluded_updated", { detail: config.isConcluded }));
@@ -380,6 +385,51 @@ export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
     console.warn("[CodeSpark Cloud] roster sync error:", err);
     return getAllCodeSparkCandidates();
   }
+}
+
+export function getUsedAccessKeys(): Set<string> {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('codedna_codespark_used_keys') : null;
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed.map((k: string) => String(k).trim().toUpperCase()) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function isAccessKeyUsed(keyOrRoll: string): boolean {
+  if (!keyOrRoll) return false;
+  const clean = String(keyOrRoll).trim().toUpperCase();
+  const set = getUsedAccessKeys();
+  if (set.has(clean)) return true;
+  const bare = clean.replace(/^(AXENT-R2-|AXENT-|R2-)/, '');
+  if (bare && (set.has(bare) || set.has(`AXENT-${bare}`))) return true;
+  return false;
+}
+
+export async function recordAccessKeyUsed(keyOrRoll: string): Promise<void> {
+  if (!keyOrRoll) return;
+  const clean = String(keyOrRoll).trim().toUpperCase();
+  const set = getUsedAccessKeys();
+  set.add(clean);
+  const bare = clean.replace(/^(AXENT-R2-|AXENT-|R2-)/, '');
+  if (bare) {
+    set.add(bare);
+    set.add(`AXENT-${bare}`);
+  }
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('codedna_codespark_used_keys', JSON.stringify(Array.from(set)));
+    }
+  } catch {}
+
+  try {
+    await fetch('/api/codespark/roster?action=consume_key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'consume_key', key: clean, rollNumber: clean })
+    }).catch(() => null);
+  } catch {}
 }
 
 export async function saveActiveCodeSparkPaper(
@@ -488,13 +538,11 @@ export function getCodeSparkActiveExam(): MCQExamConfig | null {
 }
 
 export async function asyncGetCodeSparkActiveExam(): Promise<MCQExamConfig | null> {
-  const local = getCodeSparkActiveExam();
-  if (local) return local;
   try {
-    const response = await fetch('/api/codespark/public-exam');
+    const response = await fetch('/api/codespark/public-exam', { cache: 'no-store' });
     const result = await response.json();
     const row = result.exam;
-    if (!response.ok || !row) return null;
+    if (!response.ok || !row) return getCodeSparkActiveExam();
     const mapped: MCQExamConfig = {
       id: row.id,
       title: row.title,
@@ -513,7 +561,7 @@ export async function asyncGetCodeSparkActiveExam(): Promise<MCQExamConfig | nul
       shuffleOptions: Boolean(row.shuffle_options),
       negativeMarkingEnabled: Boolean(row.negative_marking_enabled),
       allowReview: Boolean(row.allow_review),
-      showExplanationsAfterSubmit: Boolean(row.show_explanations_after_submit),
+      showExplanationsAfterSubmit: false,
       maxAttempts: Number(row.max_attempts) || 1,
       isCodeSpark: true,
       isPrivate: true,
@@ -522,12 +570,17 @@ export async function asyncGetCodeSparkActiveExam(): Promise<MCQExamConfig | nul
       updatedAt: Number(row.updated_at) || Date.now(),
       createdBy: row.created_by || 'admin'
     };
+    if (Array.isArray(result.questions) && result.questions.length > 0) {
+      result.questions.forEach((q: any) => {
+        if (q && q.id) saveQuestion(q);
+      });
+    }
     localStorage.setItem('codedna_codespark_round1_exam_id', mapped.id);
     saveExam(mapped);
     return mapped;
   } catch (error) {
-    console.warn('[CodeSpark] Active exam metadata unavailable:', error);
-    return null;
+    console.warn('[CodeSpark] Active exam metadata fetch warning, using local fallback:', error);
+    return getCodeSparkActiveExam();
   }
 }
 

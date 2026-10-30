@@ -654,7 +654,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
             }}
           >
             <LogOut size={15} />
-            <span>Exit Coding Arena</span>
+            <span>Exit to CodeSpark</span>
           </button>
         </div>
       </div>
@@ -1399,30 +1399,8 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                 </button>
               </div>
 
-              {/* Action Buttons: Stdin Toggle + Run Code */}
+              {/* Action Buttons: Run Code */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowCustomInput(!showCustomInput)}
-                  style={{
-                    background: showCustomInput ? '#27272a' : '#18181b',
-                    color: showCustomInput ? '#10b981' : '#a1a1aa',
-                    border: '1px solid #27272a',
-                    borderRadius: '6px',
-                    padding: '5px 10px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                  title="Provide custom input (stdin) for programs using scanf, cin, input(), etc."
-                >
-                  <Terminal size={12} />
-                  <span>{showCustomInput ? 'Stdin: On' : 'Custom Stdin'}</span>
-                </button>
-
                 <button
                   type="button"
                   disabled={isCompiling}
@@ -1531,7 +1509,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                   }}
                 >
                   <Terminal size={12} color="#10b981" />
-                  <span>View Console {activeReport ? `(${activeReport.score}/20 pts)` : ''} &rarr;</span>
+                  <span>View Console {activeReport ? `(${activeReport.status})` : ''} &rarr;</span>
                 </button>
               </div>
             )}
@@ -1540,7 +1518,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
             {!isMobileScreen && (
               <div
                 style={{
-                  height: activeReport || compileError || showCustomInput ? '240px' : '90px',
+                  height: activeReport || compileError ? '270px' : '110px',
                   borderTop: '1px solid #27272a',
                   background: '#121214',
                   display: 'flex',
@@ -1587,7 +1565,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                               : '#ef4444'
                         }}
                       >
-                        {activeReport.status} ({activeReport.score} / {activeReport.maxScore} pts)
+                        {activeReport.status}
                       </span>
                     )}
                   </div>
@@ -1729,6 +1707,54 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                     </div>
                   )}
                 </div>
+
+                {/* Terminal Stdin Bar (Interactive Console Input) */}
+                <div
+                  style={{
+                    background: '#09090b',
+                    borderTop: '1px solid #27272a',
+                    padding: '6px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  <span style={{ fontSize: '11px', color: '#10b981', fontFamily: 'monospace', fontWeight: 700, userSelect: 'none' }}>
+                    stdin &gt;
+                  </span>
+                  <input
+                    type="text"
+                    value={customInputText}
+                    onChange={(e) => setCustomInputText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleCompileAndRun();
+                      }
+                    }}
+                    placeholder="Terminal input (type arguments or values for scanf / cin / input() and press Enter or Run)..."
+                    style={{
+                      flex: 1,
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      color: '#f4f4f5',
+                      fontSize: '11.5px',
+                      fontFamily: "'JetBrains Mono', Consolas, monospace"
+                    }}
+                  />
+                  {customInputText && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomInputText('')}
+                      style={{ background: 'transparent', border: 'none', color: '#71717a', cursor: 'pointer', fontSize: '12px' }}
+                      title="Clear terminal input"
+                    >
+                      &times;
+                    </button>
+                  )}
+                </div>
+
                 {/* Terminal Footer Navigation */}
                 <div
                   style={{
@@ -1944,8 +1970,8 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                         Passed {activeReport.passedTests} of {activeReport.totalTests} test cases
                       </div>
                     </div>
-                    <div style={{ fontSize: '18px', fontWeight: 800, color: '#f4f4f5' }}>
-                      {activeReport.score} <span style={{ fontSize: '11px', color: '#71717a' }}>/ {activeReport.maxScore} pts</span>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#10b981' }}>
+                      {activeReport.status === 'ACCEPTED' ? 'Verified Solution' : 'Evaluated'}
                     </div>
                   </div>
 
@@ -2091,7 +2117,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
               </div>
             </div>
             <p style={{ fontSize: '12.5px', color: '#a1a1aa', lineHeight: 1.6, margin: '0 0 18px 0' }}>
-              Are you sure you want to seal and submit your assessment? Once submitted, your final score and code dossier will be finalized on the admin leaderboard.
+              Are you sure you want to seal and submit your assessment? Once submitted, your code implementations will be finalized on the institutional ledger.
             </p>
             {/* Summary Box */}
             <div
@@ -2113,8 +2139,8 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                 <strong style={{ color: '#10b981' }}>{solvedCount} / 5</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#71717a' }}>Current Total Score:</span>
-                <strong style={{ color: '#f4f4f5' }}>{submission.totalScore} / 100 Marks</strong>
+                <span style={{ color: '#71717a' }}>Assessment Status:</span>
+                <strong style={{ color: '#10b981' }}>Ready to Seal &amp; Submit</strong>
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>

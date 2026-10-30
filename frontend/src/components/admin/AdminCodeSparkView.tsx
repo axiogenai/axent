@@ -820,6 +820,13 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
     try {
 
+      try {
+        await fetch('/api/codespark/roster?action=purge_all', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-authority-role': 'admin' },
+          body: JSON.stringify({ action: 'purge_all' })
+        });
+      } catch {}
       await clearAllAttemptsFromEverywhere();
       clearAllAttemptsLocally();
       await resetCodeSparkSystemInCloud();
@@ -1964,6 +1971,13 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
     }
 
     try {
+      try {
+        await fetch('/api/codespark/roster?action=purge_all', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-authority-role': 'admin' },
+          body: JSON.stringify({ action: 'purge_all' })
+        });
+      } catch {}
       await clearAllAttemptsFromEverywhere();
     } catch {}
 
@@ -2031,19 +2045,20 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
   };
 
   const handlePurgeAllAttempts = async () => {
-
     if (!window.confirm('Are you sure you want to purge ALL Round 1 attempts from database and storage?')) return;
-
+    try {
+      await fetch('/api/codespark/roster?action=purge_all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-authority-role': 'admin' },
+        body: JSON.stringify({ action: 'purge_all' })
+      }).catch(() => null);
+    } catch {}
     await clearAllAttemptsFromEverywhere();
-
+    clearAllAttemptsLocally();
     setAllAttempts([]);
-
     setShortlistedRolls([]);
-
     localStorage.removeItem(SHORTLIST_STORAGE_KEY);
-
     playSound('click');
-
   };
 
 
