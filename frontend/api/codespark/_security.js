@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 const json = (res, status, body) => res.status(status).json(body);
 
 export function setApiHeaders(req, res) {
@@ -100,4 +101,28 @@ export function parseCodeSparkConfig(row) {
     try { const parsed = JSON.parse(row.code); if (Array.isArray(parsed.candidates)) return parsed; } catch {}
   }
   return null;
+}
+
+function lookupIpHash(req, serviceKey) {
+  const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  const ip = forwarded || String(req.socket?.remoteAddress || "unknown");
+  return createHash("sha256").update(`${ip}:${serviceKey}`).digest("hex");
+}
+
+export async function isCandidateLookupRateLimited(req) {
+  const { key } = await requireServiceRole();
+  const ipHash = lookupIpHash(req, key);
+  const since = encodeURIComponent(new Date(Date.now() - 15 * 60 * 1000).toISOString());
+  const rows = await supabaseRest(`codespark_key_lookup_attempts?ip_hash=eq.${ipHash}&attempted_at=gte.${since}&select=id`);
+  return Array.isArray(rows) && rows.length >= 25;
+}
+
+export async function recordFailedCandidateLookup(req) {
+  const { key } = await requireServiceRole();
+  const ipHash = lookupIpHash(req, key);
+  await supabaseRest("codespark_key_lookup_attempts", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify([{ ip_hash: ipHash }])
+  });
 }
