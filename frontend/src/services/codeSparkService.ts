@@ -895,7 +895,8 @@ export function shortlistCandidateForRound2(identifier: string, isShortlisted = 
     if (cRoll === clean || cKey === clean || cEmail === clean) {
       c.isShortlisted = isShortlisted;
       c.status = isShortlisted ? 'SHORTLISTED' : 'ROUND1_COMPLETED';
-      if (isShortlisted && !c.round2Key) {
+      const existingRound2Suffix = String(c.round2Key || '').toUpperCase().replace(/^AXENT-R2-/, '');
+      if (isShortlisted && existingRound2Suffix.length < 8) {
         c.round2Key = generateRound2KeyForCandidate(c);
       } else if (!isShortlisted) {
         c.round2Key = undefined;
