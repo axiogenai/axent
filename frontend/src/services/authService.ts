@@ -19,8 +19,7 @@ const LOCAL_ROLE_KEY = 'axent_authority_role';
 export async function getAuthSession(): Promise<Session | null> {
   if (!isSupabaseConnected()) {
     try {
-      const local = localStorage.getItem(LOCAL_AUTH_KEY);
-      return local ? JSON.parse(local) : null;
+      return null;
     } catch {
       return null;
     }
@@ -68,7 +67,7 @@ export function getCurrentAuthorityRole(): AuthorityRole | null {
     const raw = sessionStorage.getItem(LOCAL_AUTH_KEY) || localStorage.getItem(LOCAL_AUTH_KEY);
     if (raw) {
       const session = JSON.parse(raw);
-      const metaRole = session?.user?.app_metadata?.role || session?.user?.user_metadata?.role;
+      const metaRole = session?.user?.app_metadata?.role;
       if (metaRole === 'admin' || metaRole === 'paper_setter') {
         return metaRole as AuthorityRole;
       }
@@ -140,6 +139,7 @@ export async function signInWithPassword(
       const normalizedEmail = trimmedEmail.includes('@') ? trimmedEmail : `${trimmedEmail}@axent.edu`;
       const { data, error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password: pass });
       if (error || !data.session || !data.user) {
+        return { user: null, session: null, error: error?.message || 'Invalid email or password.' };
         const offlineSession = {
           access_token: 'local-axent-token',
           user: {
@@ -159,14 +159,14 @@ export async function signInWithPassword(
       }
 
       // Check both app_metadata and user_metadata
-      const userRole = data.user.app_metadata?.role || data.user.user_metadata?.role;
+      const userRole = data.user.app_metadata?.role;
       // If user signed in via Paper Setter Portal, assign paper_setter session role; if via Admin Portal, assign admin
       const effectiveRole: AuthorityRole = role === 'paper_setter'
         ? 'paper_setter'
         : (userRole === 'admin' ? 'admin' : (role === 'admin' ? 'admin' : (userRole === 'paper_setter' ? 'paper_setter' : role)));
       const roleAllowed = role === 'admin'
-        ? userRole === 'admin' || userRole === 'paper_setter' || !userRole
-        : userRole === 'paper_setter' || userRole === 'admin' || !userRole;
+        ? userRole === 'admin'
+        : userRole === 'paper_setter' || userRole === 'admin';
 
       if (!roleAllowed) {
         await supabase.auth.signOut();
@@ -178,11 +178,7 @@ export async function signInWithPassword(
       }
 
       // If user was created directly in Supabase dashboard with no metadata, tag their user_metadata
-      if (!userRole) {
-        try {
-          await supabase.auth.updateUser({ data: { role: effectiveRole } });
-        } catch {}
-      }
+
 
       try {
         sessionStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(data.session));
@@ -229,7 +225,6 @@ export async function signUpWithPassword(
         options: {
           emailRedirectTo: redirectUrl,
           data: {
-            role,
             portal: role === 'admin' ? 'admin' : 'paper_setter'
           }
         }
