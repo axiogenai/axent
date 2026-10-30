@@ -859,10 +859,26 @@ export interface KeyLookupResult {
 }
 
 export async function asyncLookupCandidateAny(rawKey: string): Promise<KeyLookupResult | null> {
-  const local = lookupCandidateAny(rawKey);
-  if (local) return local;
-  await syncCandidatesFromCloud();
-  return lookupCandidateAny(rawKey);
+  const key = String(rawKey || '').trim();
+  if (!key) return null;
+  try {
+    const response = await fetch('/api/codespark/candidate-lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success || !result.candidate) return null;
+    return {
+      candidate: result.candidate as CodeSparkCandidate,
+      targetRound: result.targetRound === 'round2' ? 'round2' : 'round1',
+      isShortlisted: Boolean(result.isShortlisted),
+      round2Key: result.targetRound === 'round2' ? result.candidate.round2Key : undefined
+    };
+  } catch (error) {
+    console.warn('[CodeSpark] Server candidate verification unavailable:', error);
+    return null;
+  }
 }
 
 function extractPureKeySuffix(k: string): string {
