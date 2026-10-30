@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { readBody, requireServiceRole, setApiHeaders, supabaseRest } from "../codespark/_security.js";
 
+export const config = { maxDuration: 60 };
+
 const MODELS = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"];
 const FALLBACKS = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"];
 
