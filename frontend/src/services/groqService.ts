@@ -45,6 +45,7 @@ export function setStoredApiKey(_key: string): void {
 }
 
 export function getStoredModel(): string {
+  purgeLegacyBrowserApiKeys();
   if (typeof window !== 'undefined') {
     const customModel = localStorage.getItem('codedna_groq_model');
     if (customModel && customModel.trim()) {
