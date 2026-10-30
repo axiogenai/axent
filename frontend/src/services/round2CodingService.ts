@@ -1396,36 +1396,31 @@ export function analyzeCodeComplexity(
 
 
 function computeDynamicScore(
-  maxMarks: number, aiAligned: boolean, compileOk: boolean,
+  maxMarks: number, passRatio: number, allTestsPassed: boolean,
   timeComplexity: string, spaceComplexity: string, timeTakenMs: number
 ): number {
-  // HackerRank standard: If code does not compile or does not solve the problem, score is strictly 0!
-  if (!compileOk || !aiAligned) return 0;
+  if (passRatio <= 0) return 0;
+  let score = maxMarks * 0.8 * Math.min(1, passRatio);
+  if (!allTestsPassed) return Math.max(0, Math.round(score));
 
-  // Problem correctly solved: Start with 80% base score
-  let score = maxMarks * 0.80;
-
-  // Efficiency bonus (up to 15%)
   const tc = (timeComplexity || '').toLowerCase();
   const sc = (spaceComplexity || '').toLowerCase();
-  let cBonus = 0;
-  if (tc.includes('o(1)') || tc.includes('o(log')) cBonus += 0.08;
-  else if (tc.includes('o(n log') || tc.includes('o(nlog')) cBonus += 0.06;
-  else if (tc.includes('o(n)')) cBonus += 0.04;
-  else cBonus += 0.01;
-
-  if (sc.includes('o(1)')) cBonus += 0.07;
-  else if (sc.includes('o(n)') || sc.includes('o(log')) cBonus += 0.04;
-  else cBonus += 0.01;
-
-  score += maxMarks * Math.min(cBonus, 0.15);
-
-  // Speed bonus (up to 5% if finished within 20 mins)
+  let complexityBonus = 0;
+  if (tc.includes('o(1)') || tc.includes('o(log')) complexityBonus += 0.08;
+  else if (tc.includes('o(n log') || tc.includes('o(nlog')) complexityBonus += 0.06;
+  else if (tc.includes('o(n)')) complexityBonus += 0.04;
+  else complexityBonus += 0.01;
+  if (sc.includes('o(1)')) complexityBonus += 0.07;
+  else if (sc.includes('o(n)') || sc.includes('o(log')) complexityBonus += 0.04;
+  else complexityBonus += 0.01;
+  score += maxMarks * Math.min(complexityBonus, 0.15);
   const maxTimeMs = 20 * 60 * 1000;
-  score += maxMarks * 0.05 * Math.max(0, 1 - ((timeTakenMs || 0) / maxTimeMs));
-
+  score += maxMarks * 0.05 * Math.max(0, 1 - (Math.max(0, timeTakenMs || 0) / maxTimeMs));
   return Math.min(maxMarks, Math.max(0, Math.round(score)));
 }
+
+const normalizeProgramOutput = (value: unknown): string =>
+  String(value ?? '').replace(/\r\n/g, '\n').trim();
 
 export async function evaluateRound2Code(
   problem: Round2Problem,
@@ -1435,53 +1430,76 @@ export async function evaluateRound2Code(
   customStdin?: string
 ): Promise<Round2QuestionReport> {
   const language = explicitLanguage || detectLanguageFromCode(code);
+  const tests = [
+    ...(Array.isArray(problem.sampleTestCases) ? problem.sampleTestCases : []),
+    ...(Array.isArray(problem.hiddenTestCases) ? problem.hiddenTestCases : [])
+  ];
+  const complexity = analyzeCodeComplexity(code, language, '');
+  const sampleResults: Round2QuestionReport['sampleResults'] = [];
+  const hiddenResults: Round2QuestionReport['hiddenResults'] = [];
   let primaryCompilerResult: CompilerExecutionResult | null = null;
+  let passedTests = 0;
+  let compileFailure = false;
+  let runtimeFailure = false;
 
-  // Smart STDIN resolver: Custom input > Problem sample test input > Smart default for input-expecting programs
-  let stdinToUse = (customStdin !== undefined && customStdin !== null && customStdin.trim() !== '') ? customStdin : '';
-  if (!stdinToUse && problem.sampleTestCases && problem.sampleTestCases.length > 0) {
-    stdinToUse = problem.sampleTestCases[0].input || '';
+  const runCase = async (input: string): Promise<CompilerExecutionResult | null> => {
+    try {
+      return await runRealCode(code, language, input || '');
+    } catch {
+      return null;
+    }
+  };
+
+  // Keep the existing custom-input Run experience, but never let custom input replace official tests.
+  if (customStdin !== undefined && customStdin !== null && customStdin.trim() !== '') {
+    primaryCompilerResult = await runCase(customStdin);
   }
-  if (!stdinToUse) {
-    const expectsInput = /\b(scanf|cin|input\s*\(|Scanner|nextInt|readLine|stdin\.read)\b/.test(code);
-    if (expectsInput) {
-      stdinToUse = '10 20\n5 15\n100\n';
+  for (let index = 0; index < tests.length; index++) {
+    const test = tests[index];
+    const result = await runCase(test.input || '');
+    if (!primaryCompilerResult) primaryCompilerResult = result;
+    const compileError = Boolean(result?.compileOutput);
+    const runtimeError = !result || Boolean(result.isError);
+    if (compileError) compileFailure = true;
+    else if (runtimeError) runtimeFailure = true;
+    const passed = Boolean(
+      result &&
+      !compileError &&
+      !runtimeError &&
+      normalizeProgramOutput(result.stdout) === normalizeProgramOutput(test.expectedOutput)
+    );
+    if (passed) passedTests++;
+    if (test.isHidden) {
+      hiddenResults.push({ testCaseId: test.id, passed });
+    } else {
+      sampleResults.push({
+        testCaseId: test.id,
+        input: test.input || '',
+        expected: test.expectedOutput || '',
+        actual: result?.stdout || '',
+        passed,
+        error: result?.compileOutput || result?.stderr || undefined
+      });
     }
   }
 
-  try {
-    primaryCompilerResult = await runRealCode(code, language, stdinToUse);
-  } catch {}
-
-  const compileOk = !!(primaryCompilerResult && !primaryCompilerResult.compileOutput && !primaryCompilerResult.isError);
-  const complexity = analyzeCodeComplexity(code, language, '');
-
-  let aiVerification: Round2QuestionReport['aiVerification'] | undefined;
-  let aiAligned = false;
-  if (compileOk && code.trim().length > 20) {
-    try {
-      const aiResult = await verifyRound2CodeWithAI(
-        problem, code, language, stdinToUse, problem.sampleTestCases?.[0]?.expectedOutput || '', primaryCompilerResult?.stdout || ''
-      );
-      aiAligned = aiResult.isAlignedWithProblem;
-      aiVerification = aiResult;
-    } catch {}
-  }
-
+  const totalTests = tests.length;
+  const allTestsPassed = totalTests > 0 && passedTests === totalTests;
+  const passRatio = totalTests > 0 ? passedTests / totalTests : 0;
   const maxMarks = problem.marks || 20;
   const score = computeDynamicScore(
-    maxMarks, aiAligned, compileOk,
+    maxMarks, passRatio, allTestsPassed,
     complexity.timeComplexity, complexity.spaceComplexity, timeTakenMs || 0
   );
 
   let status: Round2QuestionReport['status'] = 'PARTIAL';
-  if (primaryCompilerResult?.compileOutput) status = 'COMPILE_ERROR';
-  else if (!compileOk) status = 'RUNTIME_ERROR';
-  else if (aiAligned) status = 'ACCEPTED';
+  if (compileFailure) status = 'COMPILE_ERROR';
+  else if (runtimeFailure && passedTests === 0) status = 'RUNTIME_ERROR';
+  else if (allTestsPassed) status = 'ACCEPTED';
 
   const rawTimeStr = primaryCompilerResult?.time || '';
   const parsedTimeSec = parseFloat(rawTimeStr.replace(/[^\d.]/g, ''));
-  const runtimeMs = !isNaN(parsedTimeSec) && parsedTimeSec > 0 ? parsedTimeSec * 1000 : undefined;
+  const runtimeMs = !Number.isNaN(parsedTimeSec) && parsedTimeSec > 0 ? parsedTimeSec * 1000 : undefined;
 
   return {
     questionNumber: problem.number,
@@ -1490,10 +1508,10 @@ export async function evaluateRound2Code(
     code,
     language,
     compilerResult: primaryCompilerResult,
-    sampleResults: [],
-    hiddenResults: [],
-    passedTests: aiAligned ? 1 : 0,
-    totalTests: 1,
+    sampleResults,
+    hiddenResults,
+    passedTests,
+    totalTests,
     score,
     maxScore: maxMarks,
     status,
@@ -1503,10 +1521,10 @@ export async function evaluateRound2Code(
     timeComplexity: complexity.timeComplexity,
     spaceComplexity: complexity.spaceComplexity,
     complexityExplanation: complexity.explanation,
-    efficiencyRating: complexity.rating,
-    aiVerification
+    efficiencyRating: complexity.rating
   };
 }
+
 export function getStoredRound2Submission(candidateKey: string): Round2CandidateSubmission | null {
 
 
