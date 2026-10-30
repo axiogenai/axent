@@ -345,64 +345,40 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     };
   }, []);
 
-  // Synchronize candidate roster from cloud on mount
-  useEffect(() => {
-    void syncCandidatesFromCloud().then((synced) => {
-      if (synced && synced.length > 0) {
-        setRegisteredCandidates(synced);
-      }
-    });
-  }, []);
+  // Candidate access is verified by the server; the browser never downloads the full roster.
 
   // Direct Key Authentication & One-Click Exam Launch
+  const candidateLookupRequest = useRef(0);
   const handleDigitsInput = (val: string) => {
-    // Strip AXENT-R2-, AXENT-, R2- prefixes
     let clean = val.toUpperCase().replace(/\s+/g, '');
     clean = clean.replace(/^AXENT-?R2-?|^AXENT-?|^R2-?/i, '');
     setKeyDigits(clean);
     setKeyError(null);
+    setActiveCandidate(null);
+    const requestId = ++candidateLookupRequest.current;
 
-    // If fewer than 4 digits, NEVER show or verify any candidate
     if (clean.length < 4) {
-      setActiveCandidate(null);
+      setCandidateName('');
+      setCandidateEmail('');
+      setRollNumber('');
+      setDepartment('');
       return;
     }
 
-    let lookupRes = lookupCandidateAny(clean);
-    if (!lookupRes) {
-      lookupRes = lookupCandidateAny('AXENT-R2-' + clean);
-    }
-    if (!lookupRes) {
-      lookupRes = lookupCandidateAny('AXENT-' + clean);
-    }
-
-    if (lookupRes) {
-      setActiveCandidate(lookupRes.candidate);
-      setCandidateName(lookupRes.candidate.name || '');
-      setCandidateEmail(lookupRes.candidate.email || '');
-      setRollNumber(lookupRes.candidate.rollNumber || lookupRes.candidate.email.split('@')[0].toUpperCase());
-      setDepartment(lookupRes.candidate.department || 'Axent Candidate');
-      playSound('success');
-    } else {
-      // Async cloud lookup only for 4+ digits
-      void asyncLookupCandidateAny(clean).then((res) => {
-        if (!res) {
-          return asyncLookupCandidateAny('AXENT-R2-' + clean);
-        }
-        return res;
-      }).then((res) => {
-        if (res) {
-          setActiveCandidate(res.candidate);
-          setCandidateName(res.candidate.name || '');
-          setCandidateEmail(res.candidate.email || '');
-          setRollNumber(res.candidate.rollNumber || res.candidate.email.split('@')[0].toUpperCase());
-          setDepartment(res.candidate.department || 'Axent Candidate');
-          playSound('success');
-        } else {
-          setActiveCandidate(null);
-        }
+    void asyncLookupCandidateAny(clean)
+      .then((result) => result || asyncLookupCandidateAny('AXENT-R2-' + clean))
+      .then((result) => {
+        if (requestId !== candidateLookupRequest.current || !result) return;
+        setActiveCandidate(result.candidate);
+        setCandidateName(result.candidate.name || '');
+        setCandidateEmail(result.candidate.email || '');
+        setRollNumber(result.candidate.rollNumber || result.candidate.email.split('@')[0].toUpperCase());
+        setDepartment(result.candidate.department || 'Axent Candidate');
+        playSound('success');
+      })
+      .catch(() => {
+        if (requestId === candidateLookupRequest.current) setActiveCandidate(null);
       });
-    }
   };
 
   const handleDirectExamLaunch = async (e?: React.FormEvent) => {
@@ -414,12 +390,9 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       return;
     }
 
-    let anyLookup = lookupCandidateAny(rawInput);
+    let anyLookup = await asyncLookupCandidateAny(rawInput);
     if (!anyLookup && isRound1Concluded && !rawInput.includes('R2')) {
-      anyLookup = lookupCandidateAny('AXENT-R2-' + rawInput);
-    }
-    if (!anyLookup) {
-      anyLookup = await asyncLookupCandidateAny(rawInput);
+      anyLookup = await asyncLookupCandidateAny('AXENT-R2-' + rawInput);
     }
     if (!anyLookup && isRound1Concluded && !rawInput.includes('R2')) {
       anyLookup = await asyncLookupCandidateAny('AXENT-R2-' + rawInput);
