@@ -15,6 +15,22 @@ export default async function handler(req, res) {
   const smtp = smtpConfiguration();
   if (!smtp) return res.status(503).json({ success: false, error: "SMTP is not configured on the server. Configure SMTP_USER and SMTP_PASSWORD." });
 
+  // Handle SMTP connection verification / test without extra serverless function
+  if (req.query?.action === "test" || req.query?.mode === "test" || req.body?.action === "test") {
+    try {
+      const testTransporter = nodemailer.createTransport({
+        host: smtp.host, port: smtp.port, secure: smtp.port === 465,
+        auth: { user: smtp.user, pass: smtp.password },
+        connectionTimeout: 12000, greetingTimeout: 12000, socketTimeout: 12000
+      });
+      await testTransporter.verify();
+      return res.status(200).json({ success: true, message: "Server SMTP connection verified successfully." });
+    } catch (error) {
+      console.error("[CodeSpark SMTP] verification failed:", error?.code || "SMTP_ERROR");
+      return res.status(502).json({ success: false, error: "SMTP verification failed. Check the server-side SMTP configuration." });
+    }
+  }
+
   let body;
   try {
     body = readBody(req);

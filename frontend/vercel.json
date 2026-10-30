@@ -5,6 +5,14 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/codespark/test-smtp",
+      "destination": "/api/codespark/send-emails?action=test"
+    },
+    {
+      "source": "/api/codespark/test-smtp/",
+      "destination": "/api/codespark/send-emails?action=test"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
