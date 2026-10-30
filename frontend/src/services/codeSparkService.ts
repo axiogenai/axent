@@ -1124,17 +1124,16 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
       const isShortlisted = Boolean(
         c.isShortlisted ||
         c.status === 'SHORTLISTED' ||
-        Boolean(c.round2Key) ||
-        isCandidateInShortlistStorage(c.rollNumber || c.accessKey)
+        Boolean(c.round2Key)
       );
 
       // If candidate is shortlisted and (has round2Key or round 1 is over), targetRound is round2!
-      if (isShortlisted && (c.round2Key || isRound1Over)) {
+      if (isShortlisted && c.round2Key) {
         return {
           candidate: c,
           targetRound: 'round2',
           isShortlisted: true,
-          round2Key: c.round2Key || generateRound2KeyForCandidate(c)
+          round2Key: c.round2Key
         };
       }
 
