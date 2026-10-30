@@ -658,7 +658,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       return;
     }
     const safeExam: MCQExamConfig = targetExam;
-    const cand = activeCandidate || (keyDigits.trim() ? (lookupCandidateByKey(`AXENT-${keyDigits.trim()}`) || lookupCandidateAny(keyDigits.trim())?.candidate) : null);
+    const cand = activeCandidate || (keyDigits.trim() ? (await asyncLookupCandidateAny(keyDigits.trim()))?.candidate || null : null);
     if (!cand) {
       playSound('warning');
       setKeyError('Please enter your 4-digit key before starting Batch 2.');
