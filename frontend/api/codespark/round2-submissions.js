@@ -122,24 +122,19 @@ export default async function handler(req, res) {
       });
     }
 
-    const existingFinalization = await supabaseRest(`codespark_round2_finalizations?candidate_hash=eq.${candidateHash}&select=candidate_hash`);
-    const existingStation = await supabaseRest(`candidate_stations?id=eq.${rowId}&select=status`);
-    if ((existingFinalization?.length || 0) > 0 || existingStation?.[0]?.status === "SUBMITTED") {
+    const progressSaved = await supabaseRest("rpc/save_codespark_round2_progress", {
+      method: "POST",
+      body: JSON.stringify({
+        p_candidate_hash: candidateHash,
+        p_station_id: rowId,
+        p_submission: safeSubmission,
+        p_student: student,
+        p_station_number: stationNumber
+      })
+    });
+    if (progressSaved !== true) {
       return res.status(409).json({ success: false, error: "This Round 2 submission has already been finalized and cannot be changed." });
     }
-
-    await supabaseRest("candidate_stations?on_conflict=id", {
-      method: "POST",
-      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
-      body: JSON.stringify([{
-        id: rowId, lab_id: "ROUND_2_ARENA",
-        station_number: stationNumber,
-        status: "IN_PROGRESS",
-        code: JSON.stringify(safeSubmission),
-        student,
-        last_updated_timestamp: Date.now()
-      }])
-    });
     return res.status(200).json({
       success: true,
       submission: { ...safeSubmission, candidateKey: String(submission.candidateKey || submission.round2Key || "") }
