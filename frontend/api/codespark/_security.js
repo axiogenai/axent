@@ -2,9 +2,10 @@ const json = (res, status, body) => res.status(status).json(body);
 
 export function setApiHeaders(req, res) {
   const origin = req.headers.origin;
-  const allowed = (process.env.APP_ALLOWED_ORIGINS || process.env.VERCEL_URL || "")
-    .split(",").map((value) => value.trim()).filter(Boolean)
-    .map((value) => value.startsWith("http") ? value : `https://${value}`);
+  const configuredOrigins = (process.env.APP_ALLOWED_ORIGINS || "https://axent.axiogen.in")
+    .split(",").map((value) => value.trim()).filter(Boolean);
+  if (process.env.VERCEL_URL) configuredOrigins.push(`https://${process.env.VERCEL_URL}`);
+  const allowed = configuredOrigins.map((value) => value.startsWith("http") ? value : `https://${value}`);
   if (origin && allowed.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin");
