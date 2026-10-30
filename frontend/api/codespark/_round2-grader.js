@@ -57,7 +57,7 @@ export async function getRound2AssignedProblems(keyInput) {
   const rosterRows = await supabaseRest("candidate_stations?id=eq.codespark_system_config&select=code,student");
   const roster = parseCodeSparkConfig(rosterRows?.[0]);
   const candidate = roster?.candidates?.find((item) => item.round2Key && normalizeRound2Key(item.round2Key) === key);
-  if (!candidate || !(candidate.isShortlisted || candidate.status === "SHORTLISTED" || candidate.round2Key)) {
+  if (!candidate || !(candidate.isShortlisted || candidate.status === "SHORTLISTED")) {
     const error = new Error("A valid shortlisted Round 2 key is required."); error.statusCode = 403; throw error;
   }
   const problemRows = await supabaseRest("candidate_stations?id=eq.codespark_round2_questions&select=code,student");
