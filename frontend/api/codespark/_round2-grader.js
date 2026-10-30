@@ -56,7 +56,7 @@ export async function gradeRound2Code(keyInput, problemIdInput, codeInput, langu
   const code = String(codeInput || "");
   const language = String(languageInput || "");
   const problemId = String(problemIdInput || "");
-  if (key.length < 8 || key.length > 64 || !code.trim() || code.length > 100000 || !LANGUAGE[language] || !problemId) {
+  if (key.length < 8 || key.length > 64 || code.length > 100000 || !LANGUAGE[language] || !problemId) {
     const error = new Error("Invalid code evaluation request."); error.statusCode = 400; throw error;
   }
   const rosterRows = await supabaseRest("candidate_stations?id=eq.codespark_system_config&select=code,student");
@@ -82,6 +82,17 @@ export async function gradeRound2Code(keyInput, problemIdInput, codeInput, langu
   let passed = 0;
   let compileFailed = false;
   let runtimeFailed = false;
+  if (!code.trim()) {
+    for (const test of tests) {
+      if (test.hidden) hiddenResults.push({ testCaseId: String(test.id || ""), passed: false });
+      else sampleResults.push({ testCaseId: String(test.id || ""), input: String(test.input || ""), expected: String(test.expectedOutput || ""), actual: "", passed: false });
+    }
+    return {
+      questionId: problem.id, sampleResults, hiddenResults, passedTests: 0,
+      totalTests: tests.length, score: 0, maxScore: Number(problem.marks) || 20,
+      status: "PENDING"
+    };
+  }
   for (const test of tests) {
     const result = await execute(code, language, String(test.input || ""));
     const success = !result.isError && normalizeOutput(result.stdout) === normalizeOutput(test.expectedOutput);
