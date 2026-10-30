@@ -401,6 +401,7 @@ export function setRound1ConcludedGlobally(concluded: boolean): void {
       window.dispatchEvent(new Event('storage'));
     }
     notifyCandidatesUpdated();
+    void pushCandidatesToCloud(getAllCodeSparkCandidates());
   } catch (error) {
     console.warn('[CodeSpark] local conclusion state update failed:', error);
   }

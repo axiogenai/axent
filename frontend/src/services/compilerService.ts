@@ -393,6 +393,22 @@ function executeInBrowserSandbox(
  *  Tier 3: Wandbox High-Throughput Cluster (unthrottled fallback)
  *  Tier 4: In-Browser Client Sandbox / Offline Pre-flight Engine
  */
+function promiseAny<T>(promises: Promise<T>[]): Promise<T> {
+  return new Promise((resolve, reject) => {
+    let rejectedCount = 0;
+    const errors: any[] = [];
+    promises.forEach((p) => {
+      p.then(resolve).catch((err) => {
+        rejectedCount++;
+        errors.push(err);
+        if (rejectedCount === promises.length) {
+          reject(new Error('All execution promises rejected: ' + errors.join('; ')));
+        }
+      });
+    });
+  });
+}
+
 export async function runRealCode(
   sourceCode: string,
   language: string,
@@ -408,21 +424,20 @@ export async function runRealCode(
     }
   }
 
-  // Fast-Path: Wandbox High-Throughput Cluster (Flagship speed ~400ms for C, C++, Java, Python, Go, Rust)
+  // Tier 2 & Tier 3: Parallel Execution Race (Judge0 Cloud CE + Wandbox Cluster)
+  // Race both high-throughput engines simultaneously: whichever responds first wins with 0 lag!
   const hasWandbox = Boolean(WANDBOX_COMPILERS[language]);
+  const attempts: Promise<CompilerExecutionResult>[] = [
+    executeWithJudge0(sourceCode, language, stdin, undefined, 5000)
+  ];
   if (hasWandbox) {
-    try {
-      return await executeWithWandbox(sourceCode, language, stdin, 5000);
-    } catch (wandboxErr) {
-      console.warn('[Compiler Fast-Path: Wandbox] Failed or timed out, trying Judge0 Cloud:', wandboxErr);
-    }
+    attempts.push(executeWithWandbox(sourceCode, language, stdin, 5000));
   }
 
-  // Tier 2: Public Judge0 Cloud CE
   try {
-    return await executeWithJudge0(sourceCode, language, stdin, undefined, 5000);
-  } catch (tier2Err) {
-    console.warn('[Compiler Tier 2: Judge0 Cloud CE] Failed or timed out, cascading to sandbox:', tier2Err);
+    return await promiseAny(attempts);
+  } catch {
+    console.warn('[Compiler] Cloud execution engines failed or timed out, cascading to sandbox.');
   }
 
   // Tier 4: Client-side In-Browser Sandbox or Offline Pre-Flight

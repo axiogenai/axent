@@ -1710,13 +1710,10 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
     const byStudent = new Map<string, CandidateStation>();
     for (const st of rawFiltered) {
       const anySt = st as any;
-      const key = (
-        st.student?.rollNumber ||
-        anySt.student?.email ||
-        anySt.cleanRoll ||
-        anySt.student?.accessKey ||
-        st.id
-      ).trim().toUpperCase();
+      const roll = (st.student?.rollNumber || anySt.cleanRoll || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const email = ((st.student as any)?.email || anySt.student?.email || anySt.email || '').trim().toLowerCase();
+      const name = (st.student?.name || anySt.student?.name || anySt.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const key = roll || email || name || st.id.trim().toUpperCase();
 
       if (!byStudent.has(key)) {
         byStudent.set(key, st);
@@ -1746,7 +1743,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
     shortlistCandidateForRound2(roll, isNowShortlisted);
     const updatedRolls = getShortlistedRolls();
     setShortlistedRolls(updatedRolls);
-    setRegisteredCandidates(getAllCodeSparkCandidates());
+    const currentCandidates = getAllCodeSparkCandidates();
+    setRegisteredCandidates(currentCandidates);
+    void pushCandidatesToCloud(currentCandidates);
     playSound('success');
 
   };

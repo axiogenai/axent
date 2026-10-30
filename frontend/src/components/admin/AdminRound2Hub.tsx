@@ -260,18 +260,15 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Deduplicate round2Stations strictly by candidate roll / email so each student has exactly ONE card
+  // Deduplicate round2Stations strictly by candidate roll / email / name so each student has exactly ONE card
   const uniqueRound2Stations = useMemo(() => {
     const byStudent = new Map<string, CandidateStation>();
     for (const st of round2Stations) {
       const anySt = st as any;
-      const key = (
-        st.student?.rollNumber ||
-        anySt.student?.email ||
-        anySt.cleanRoll ||
-        anySt.student?.accessKey ||
-        st.id
-      ).trim().toUpperCase();
+      const roll = (st.student?.rollNumber || anySt.cleanRoll || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const email = ((st.student as any)?.email || anySt.student?.email || anySt.email || '').trim().toLowerCase();
+      const name = (st.student?.name || anySt.student?.name || anySt.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const key = roll || email || name || st.id.trim().toUpperCase();
 
       if (!byStudent.has(key)) {
         byStudent.set(key, st);

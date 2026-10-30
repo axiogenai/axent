@@ -184,7 +184,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
         }
       } catch {} finally { configBusy = false; }
     };
-    const conclusionInterval = window.setInterval(() => { void refreshConclusion(); }, 5000);
+    const conclusionInterval = window.setInterval(() => { void refreshConclusion(); }, 2500);
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         void syncWhenVisible();
@@ -388,9 +388,8 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     }
 
     // Avoid sending partial keystrokes to the rate-limited server lookup.
-    const isLegacyRound1Pin = /^\d{4}$/.test(clean);
-    const isSecureAccessToken = /^[A-F0-9]{32}$/.test(clean);
-    if (!isLegacyRound1Pin && !isSecureAccessToken) return;
+    const isValidKeyFormat = /^[A-Za-z0-9]{4,32}$/.test(clean);
+    if (!isValidKeyFormat) return;
 
     void asyncLookupCandidateAny(clean)
       .then((result) => result || asyncLookupCandidateAny('AXENT-R2-' + clean))

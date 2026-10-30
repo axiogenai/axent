@@ -1305,13 +1305,20 @@ export async function evaluateRound2Code(
     }
   };
 
-  // Keep the existing custom-input Run experience, but never let custom input replace official tests.
+  // Run custom input if provided
   if (customStdin !== undefined && customStdin !== null && customStdin.trim() !== '') {
     primaryCompilerResult = await runCase(customStdin);
   }
-  for (let index = 0; index < tests.length; index++) {
-    const test = tests[index];
-    const result = await runCase(test.input || '');
+
+  // Concurrent evaluation of test cases for flagship sub-second speed
+  const executedCases = await Promise.all(
+    tests.map(async (test) => {
+      const result = await runCase(test.input || '');
+      return { test, result };
+    })
+  );
+
+  for (const { test, result } of executedCases) {
     if (!primaryCompilerResult) primaryCompilerResult = result;
     const compileError = Boolean(result?.compileOutput);
     const runtimeError = !result || Boolean(result.isError);
