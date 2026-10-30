@@ -126,3 +126,18 @@ export async function recordFailedCandidateLookup(req) {
     body: JSON.stringify([{ ip_hash: ipHash }])
   });
 }
+
+export async function getCodeSparkRosterConfig() {
+  const rows = await supabaseRest("candidate_stations?id=eq.codespark_system_config&select=code,student");
+  let config = parseCodeSparkConfig(rows?.[0]);
+  if (!config) {
+    const legacy = await supabaseRest("mcq_exams?id=eq.codespark_system_config&select=instructions");
+    if (legacy?.[0]?.instructions) {
+      try {
+        const parsed = JSON.parse(legacy[0].instructions);
+        if (Array.isArray(parsed.candidates)) config = parsed;
+      } catch {}
+    }
+  }
+  return config;
+}
