@@ -83,10 +83,36 @@ export default async function handler(req, res) {
       if (code.length > 100000) return res.status(400).json({ success: false, error: "A code submission exceeds the allowed size." });
 
       let report;
-      if (isSubmitted) {
-        report = await gradeRound2Code(key, problem.id, code, language);
-        totalScore += report.score;
+      if (!code || !code.trim()) {
+        // Fast-path: Unattempted question, do NOT call AI grader, score 0 immediately
+        report = {
+          questionId: problem.id,
+          sampleResults: [],
+          hiddenResults: [],
+          passedTests: 0,
+          totalTests: 0,
+          score: 0,
+          maxScore: Number(problem.marks) || 20,
+          status: "UNATTEMPTED"
+        };
         maxScore += report.maxScore;
+      } else if (isSubmitted) {
+        try {
+          report = await gradeRound2Code(key, problem.id, code, language);
+        } catch {
+          report = {
+            questionId: problem.id,
+            sampleResults: [],
+            hiddenResults: [],
+            passedTests: 0,
+            totalTests: 0,
+            score: 0,
+            maxScore: Number(problem.marks) || 20,
+            status: "SUBMITTED"
+          };
+        }
+        totalScore += report.score || 0;
+        maxScore += report.maxScore || 20;
       } else {
         report = {
           questionId: problem.id, sampleResults: [], hiddenResults: [], passedTests: 0,

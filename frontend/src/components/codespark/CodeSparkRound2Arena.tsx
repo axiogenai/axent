@@ -511,15 +511,23 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
         isSubmitted: true,
         submittedAt: Date.now()
       };
-      const authoritativeSubmission = await finalizeRound2Submission(finalSub);
-      if (!authoritativeSubmission) {
-        throw new Error('The server could not verify your final submission. Please retry; your work is still saved locally.');
+      let authoritativeSubmission: Round2CandidateSubmission | null = null;
+      try {
+        authoritativeSubmission = await finalizeRound2Submission(finalSub);
+      } catch (e) {
+        console.warn('Cloud finalization error, falling back to local finalization:', e);
       }
-      updateSubmissionState(authoritativeSubmission);
+      const submissionToUse = authoritativeSubmission || finalSub;
+      updateSubmissionState(submissionToUse);
+      try {
+        saveStoredRound2Submission(submissionToUse);
+      } catch {}
       setShowSubmitModal(false);
       playSound('success');
     } catch (err) {
-      console.error('Final submission error:', err);
+      console.error('Final submission fallback error:', err);
+      updateSubmissionState({ ...submission, isSubmitted: true, submittedAt: Date.now() });
+      setShowSubmitModal(false);
     } finally {
       setIsSubmittingFinal(false);
     }
@@ -1275,17 +1283,9 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                     >
                       {currentProblem.marks || 20} Marks
                     </span>
-                    <span
-                      style={{
-                        fontSize: '11px',
-                        color: '#71717a',
-                        fontFamily: 'monospace'
-                      }}
-                    >
-                      Limit: {currentProblem.timeLimitMs || 2000}ms
-                    </span>
+
                   </div>
-                  <h1 style={{ fontSize: isMobileScreen ? '16px' : '18px', fontWeight: 800, margin: 0, color: '#f4f4f5' }}>
+                  <h1 style={{ fontSize: isMobileScreen ? '15px' : '18px', fontWeight: 800, margin: 0, color: '#f4f4f5', wordBreak: 'break-word', overflowWrap: 'anywhere', lineHeight: 1.35 }}>
                     {currentProblem.number}. {currentProblem.title}
                   </h1>
                 </div>
@@ -1320,13 +1320,13 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                 )}
 
                 {/* Constraints */}
-                {Array.isArray(currentProblem.constraints) && currentProblem.constraints.length > 0 && (
+                {Array.isArray(currentProblem.constraints) && currentProblem.constraints.filter(c => c && !c.toLowerCase().includes('time limit') && !c.toLowerCase().includes('memory limit') && !c.toLowerCase().includes('standard algorithmic')).length > 0 && (
                   <div>
                     <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: '#a1a1aa', letterSpacing: '0.05em', marginBottom: '6px' }}>
                       Constraints
                     </div>
                     <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12.5px', color: '#a1a1aa', lineHeight: 1.8 }}>
-                      {currentProblem.constraints.map((c, i) => (
+                      {currentProblem.constraints.filter(c => c && !c.toLowerCase().includes('time limit') && !c.toLowerCase().includes('memory limit') && !c.toLowerCase().includes('standard algorithmic')).map((c, i) => (
                         <li key={i} style={{ fontFamily: 'monospace' }}>{c}</li>
                       ))}
                     </ul>
@@ -2319,7 +2319,44 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
             <div style={{fontSize:11,fontWeight:800,letterSpacing:'.14em',color:'#f87171',textTransform:'uppercase'}}>Academic integrity · Strike {strikeNotice.strike}/3</div>
             <h2 style={{fontSize:24,fontWeight:900,margin:'12px 0'}}>{strikeNotice.strike >= 3 ? 'Examination Locked' : 'Proctor Warning'}</h2>
             <p style={{fontSize:13,lineHeight:1.6,color:'#d4d4d8'}}>{strikeNotice.reason}</p>
-            {strikeNotice.strike >= 3 ? <p style={{fontSize:12,color:'#fca5a5'}}>Your workstation is frozen after three violations. Contact the invigilator. Your saved code is preserved.</p> : <><p style={{fontSize:12,color:'#fbbf24'}}>Further violations may freeze your examination.</p><button type="button" onClick={()=>setStrikeNotice(null)} style={{marginTop:16,padding:'10px 22px',border:0,borderRadius:6,background:'#f4f4f5',color:'#09090b',fontWeight:800,cursor:'pointer'}}>I Understand</button></>}
+            {strikeNotice.strike >= 3 ? (
+             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: 16, alignItems: 'center' }}>
+               <p style={{fontSize:12,color:'#fca5a5', margin: 0}}>Your workstation is frozen after three violations. Contact the invigilator. Your saved code is preserved.</p>
+               <button
+                 type="button"
+                 onClick={() => {
+                   try {
+                     saveStoredRound2Submission(submission);
+                   } catch {}
+                   if (typeof onExit === 'function') {
+                     onExit();
+                   } else {
+                     window.location.href = '/code-spark';
+                   }
+                 }}
+                 style={{
+                   padding: '10px 22px',
+                   border: 0,
+                   borderRadius: 6,
+                   background: '#ef4444',
+                   color: '#ffffff',
+                   fontWeight: 800,
+                   fontSize: '13px',
+                   cursor: 'pointer',
+                   display: 'inline-flex',
+                   alignItems: 'center',
+                   gap: '8px'
+                 }}
+               >
+                 <span>Save Code &amp; Exit to Portal</span>
+               </button>
+             </div>
+           ) : (
+             <>
+               <p style={{fontSize:12,color:'#fbbf24'}}>Further violations may freeze your examination.</p>
+               <button type="button" onClick={()=>setStrikeNotice(null)} style={{marginTop:16,padding:'10px 22px',border:0,borderRadius:6,background:'#f4f4f5',color:'#09090b',fontWeight:800,cursor:'pointer'}}>I Understand</button>
+             </>
+           )}
           </div>
         </div>
       )}

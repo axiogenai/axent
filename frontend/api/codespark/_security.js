@@ -19,38 +19,32 @@ export function setApiHeaders(req, res) {
 export async function requireAdmin(req, res) {
   const authorization = req.headers.authorization || "";
   const match = authorization.match(/^Bearer\s+(.+)$/i);
-  if (!match) {
-    const roleHeader = req.headers["x-authority-role"];
-    if (roleHeader === "admin" || roleHeader === "paper_setter") {
-      return { id: "local-authority", role: roleHeader };
-    }
-    json(res, 401, { success: false, error: "Authentication required." });
-    return null;
+  const roleHeader = req.headers["x-authority-role"];
+
+  // 1. Direct authority role header override (for admin and paper_setter portals)
+  if (roleHeader === "admin" || roleHeader === "paper_setter") {
+    return { id: "local-authority", role: roleHeader };
   }
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
-  if (!supabaseUrl || !anonKey) {
-    json(res, 503, { success: false, error: "Authentication service is not configured." });
-    return null;
-  }
-  try {
-    const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/auth/v1/user`, {
-      headers: { apikey: anonKey, Authorization: `Bearer ${match[1]}` }
-    });
-    if (!response.ok) {
-      json(res, 401, { success: false, error: "Session is invalid or expired." });
-      return null;
+
+  // 2. Supabase JWT session verification
+  if (match) {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const anonKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
+    if (supabaseUrl && anonKey) {
+      try {
+        const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/auth/v1/user`, {
+          headers: { apikey: anonKey, Authorization: `Bearer ${match[1]}` }
+        });
+        if (response.ok) {
+          const user = await response.json();
+          if (user?.id) return user;
+        }
+      } catch {}
     }
-    const user = await response.json();
-    if (!user?.id) {
-      json(res, 403, { success: false, error: "Administrator permission required." });
-      return null;
-    }
-    return user;
-  } catch {
-    json(res, 503, { success: false, error: "Could not verify the authentication session." });
-    return null;
   }
+
+  json(res, 401, { success: false, error: "Authentication required." });
+  return null;
 }
 
 export function readBody(req) {

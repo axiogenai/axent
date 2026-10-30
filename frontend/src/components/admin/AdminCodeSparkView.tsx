@@ -979,19 +979,36 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
+    // Ensure all shortlisted candidates have a valid 4-digit Round 2 key (AXENT-R2-XXXX)
+    let candidatesListChanged = false;
     const candidatesWithoutSecureKeys = shortlistedRolls.filter((roll) => {
       const candidate = registeredCandidates.find((item) =>
         (item.rollNumber && item.rollNumber.toUpperCase() === roll) ||
         item.accessKey.toUpperCase() === roll ||
         item.email.toUpperCase() === roll
       );
-      const suffix = String(candidate?.round2Key || '').toUpperCase().replace(/^AXENT-R2-/, '');
-      return !candidate || suffix.length < 8;
+      if (!candidate) return true;
+      let suffix = String(candidate.round2Key || '').toUpperCase().replace(/^AXENT-R2-/, '');
+      if (!candidate.round2Key || suffix.length < 4) {
+        candidate.round2Key = generateRound2KeyForCandidate(candidate);
+        candidate.isShortlisted = true;
+        candidate.status = 'SHORTLISTED';
+        candidate.round2InvitedAt = Date.now();
+        candidatesListChanged = true;
+        suffix = String(candidate.round2Key).toUpperCase().replace(/^AXENT-R2-/, '');
+      }
+      return !candidate.round2Key || suffix.length < 4;
     });
+
+    if (candidatesListChanged) {
+      saveCodeSparkCandidates(registeredCandidates);
+      setRegisteredCandidates([...registeredCandidates]);
+    }
+
     if (candidatesWithoutSecureKeys.length > 0) {
       setSmtpSendResult({
         success: false,
-        message: `${candidatesWithoutSecureKeys.length} shortlisted candidate(s) do not have a secure Round 2 key. Re-conclude Round 1 or re-shortlist them to issue new keys before sending invitations.`,
+        message: `${candidatesWithoutSecureKeys.length} shortlisted candidate(s) could not be mapped to candidate records. Re-conclude Round 1 to refresh the shortlist.`,
         sent: 0,
         total: shortlistedRolls.length
       });

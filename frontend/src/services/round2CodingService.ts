@@ -1948,9 +1948,9 @@ export function parseQuestionsFromPlainText(text: string): Round2Problem[] {
         inputFormat: p.inputFormat || 'Standard input stream (stdin)',
         outputFormat: p.outputFormat || 'Standard output stream (stdout)',
         constraints: Array.isArray(p.constraints) ? p.constraints : [
-          'Time limit: 2.0s',
-          'Memory limit: 256MB',
-          'Standard algorithmic constraints apply'
+          
+          
+          
         ],
         sampleTestCases: Array.isArray(p.sampleTestCases) ? p.sampleTestCases : [],
         hiddenTestCases: Array.isArray(p.hiddenTestCases) ? p.hiddenTestCases : [],
@@ -1993,9 +1993,8 @@ export function parseQuestionsFromPlainText(text: string): Round2Problem[] {
       title = firstLine.split(':')[0].trim();
     } else if (firstLine.includes(' - ') && firstLine.indexOf(' - ') < 50) {
       title = firstLine.split(' - ')[0].trim();
-    } else if (firstLine.length > 50) {
-      const words = firstLine.split(/\s+/);
-      title = words.slice(0, 7).join(' ') + (words.length > 7 ? '...' : '');
+    } else {
+      title = firstLine.trim();
     }
 
     const total = questionBlocks.length;
@@ -2017,9 +2016,9 @@ export function parseQuestionsFromPlainText(text: string): Round2Problem[] {
       inputFormat: 'Standard input stream (stdin)',
       outputFormat: 'Standard output stream (stdout)',
       constraints: [
-        'Time limit: 2.0s',
-        'Memory limit: 256MB',
-        'Standard algorithmic constraints apply'
+        
+        
+        
       ],
       sampleTestCases: [],
       hiddenTestCases: [],

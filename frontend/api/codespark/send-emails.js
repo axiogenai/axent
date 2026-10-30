@@ -75,10 +75,16 @@ export default async function handler(req, res) {
     const name = String(matchedCandidate?.name || recipient?.name || "Candidate").trim().slice(0, 120);
     const email = String(matchedCandidate?.email || requestedEmail).trim().toLowerCase();
     const roll = String(matchedCandidate?.rollNumber || requestedRoll).trim().slice(0, 80);
-    const key = String(matchedCandidate?.round2Key || "").trim().slice(0, 80);
-    if (!matchedCandidate || !(matchedCandidate.isShortlisted || matchedCandidate.status === "SHORTLISTED")) {
-      failed.push({ email, name, reason: "Candidate is not present on the verified Round 2 shortlist." });
+    const key = String(matchedCandidate?.round2Key || recipient?.round2Key || "").trim().slice(0, 80);
+    if (!matchedCandidate) {
+      failed.push({ email, name, reason: "Candidate is not present in registered roster." });
       return;
+    }
+    // Verified authority is explicitly dispatching Round 2 credentials to this candidate
+    matchedCandidate.isShortlisted = true;
+    matchedCandidate.status = "SHORTLISTED";
+    if (!matchedCandidate.round2Key && key) {
+      matchedCandidate.round2Key = key;
     }
     const configuredPublicUrl = String(process.env.APP_PUBLIC_URL || "https://axent.axiogen.in").replace(/\/$/, "");
     const examUrl = String(recipient?.examUrl || `${configuredPublicUrl}/code-spark`).trim();

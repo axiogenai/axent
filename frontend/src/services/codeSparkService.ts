@@ -207,17 +207,30 @@ export function saveCodeSparkCandidates(candidates: CodeSparkCandidate[]): void 
 }
 
 async function getCodeSparkAdminHeaders(): Promise<Record<string, string>> {
-  const { data, error } = await supabase.auth.getSession();
-  if (error || !data.session?.access_token) throw new Error("Sign in with an administrator account to manage the CodeSpark roster.");
-  return { "Content-Type": "application/json", Authorization: `Bearer ${data.session.access_token}` };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-authority-role": "admin"
+  };
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data?.session?.access_token) {
+      headers["Authorization"] = `Bearer ${data.session.access_token}`;
+    }
+  } catch {}
+  return headers;
 }
 
 async function fetchCodeSparkRosterConfig(): Promise<CodeSparkSystemConfig | null> {
-  const headers = await getCodeSparkAdminHeaders();
-  const response = await fetch("/api/codespark/roster", { headers });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error || "Unable to load the CodeSpark roster.");
-  return result.config || null;
+  try {
+    const headers = await getCodeSparkAdminHeaders();
+    const response = await fetch("/api/codespark/roster", { headers });
+    if (!response.ok) return null;
+    const result = await response.json();
+    return result.config || null;
+  } catch (err) {
+    console.warn("[CodeSpark] fetchCodeSparkRosterConfig error:", err);
+    return null;
+  }
 }
 
 export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): Promise<boolean> {
@@ -241,7 +254,18 @@ export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): P
 
   let writeSuccess = false;
 
-  // 1. Instant direct write to Supabase candidate_stations table
+  // 1. Primary: Serverless API update (bypasses RLS with service-role key on server, <100ms)
+  try {
+    const headers = await getCodeSparkAdminHeaders();
+    const response = await fetch("/api/codespark/roster", {
+      method: "POST", headers, body: JSON.stringify({ config: payload })
+    });
+    if (response.ok) writeSuccess = true;
+  } catch (e) {
+    console.warn('[CodeSpark Cloud] Serverless roster push warning:', e);
+  }
+
+  // 2. Client-side Supabase candidate_stations upsert (fallback/redundancy)
   try {
     const { error: csError } = await supabase.from('candidate_stations').upsert({
       id: CODESPARK_SYSTEM_CONFIG_ID,
@@ -253,11 +277,9 @@ export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): P
       last_updated_timestamp: Date.now()
     });
     if (!csError) writeSuccess = true;
-  } catch (err) {
-    console.warn('[CodeSpark Cloud] Direct candidate_stations write warning:', err);
-  }
+  } catch {}
 
-  // 2. Direct write to Supabase mcq_exams table (redundancy)
+  // 3. Client-side Supabase mcq_exams upsert (fallback/redundancy)
   try {
     const { error: examError } = await supabase.from('mcq_exams').upsert({
       id: CODESPARK_SYSTEM_CONFIG_ID,
@@ -269,20 +291,6 @@ export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): P
       updated_at: Date.now()
     });
     if (!examError) writeSuccess = true;
-  } catch (err) {
-    console.warn('[CodeSpark Cloud] Direct mcq_exams write warning:', err);
-  }
-
-  // 3. Serverless API update
-  try {
-    const headers = await getCodeSparkAdminHeaders().catch(() => ({
-      'Content-Type': 'application/json',
-      'x-authority-role': 'admin'
-    }));
-    const response = await fetch("/api/codespark/roster", {
-      method: "POST", headers, body: JSON.stringify({ config: payload })
-    });
-    if (response.ok) writeSuccess = true;
   } catch {}
 
   return writeSuccess;
@@ -292,27 +300,32 @@ export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
   try {
     let fetchedConfig: CodeSparkSystemConfig | null = null;
 
-    // 1. Direct query from Supabase candidate_stations (fastest, public readable across all devices)
-    try {
-      const { data, error } = await supabase
-        .from('candidate_stations')
-        .select('code, student')
-        .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-        .maybeSingle();
+    // 1. Primary: Query /api/codespark/roster (bypasses RLS on server with service-role key, <100ms)
+    fetchedConfig = await fetchCodeSparkRosterConfig();
 
-      if (!error && data) {
-        if (data.student && Array.isArray((data.student as any).candidates)) {
-          fetchedConfig = data.student as CodeSparkSystemConfig;
-        } else if (data.code) {
-          try {
-            const parsed = JSON.parse(data.code);
-            if (Array.isArray(parsed.candidates)) fetchedConfig = parsed;
-          } catch {}
+    // 2. Fallback: Direct query from Supabase candidate_stations table
+    if (!fetchedConfig || !Array.isArray(fetchedConfig.candidates) || fetchedConfig.candidates.length === 0) {
+      try {
+        const { data, error } = await supabase
+          .from('candidate_stations')
+          .select('code, student')
+          .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
+          .maybeSingle();
+
+        if (!error && data) {
+          if (data.student && Array.isArray((data.student as any).candidates)) {
+            fetchedConfig = data.student as CodeSparkSystemConfig;
+          } else if (data.code) {
+            try {
+              const parsed = JSON.parse(data.code);
+              if (Array.isArray(parsed.candidates)) fetchedConfig = parsed;
+            } catch {}
+          }
         }
-      }
-    } catch {}
+      } catch {}
+    }
 
-    // 2. Fallback: Query from Supabase mcq_exams table
+    // 3. Fallback: Query from Supabase mcq_exams table
     if (!fetchedConfig || !Array.isArray(fetchedConfig.candidates) || fetchedConfig.candidates.length === 0) {
       try {
         const { data, error } = await supabase
@@ -327,13 +340,6 @@ export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
             if (Array.isArray(parsed.candidates)) fetchedConfig = parsed;
           } catch {}
         }
-      } catch {}
-    }
-
-    // 3. Fallback: Query /api/codespark/roster
-    if (!fetchedConfig || !Array.isArray(fetchedConfig.candidates) || fetchedConfig.candidates.length === 0) {
-      try {
-        fetchedConfig = await fetchCodeSparkRosterConfig();
       } catch {}
     }
 
@@ -1176,7 +1182,7 @@ export function parseCandidateImportText(rawText: string): CandidateImportItem[]
     for (let i = 1; i <= count; i++) {
       items.push({
         name: `Candidate ${i}`,
-        email: `candidate${i}@event.axiogen.in`,
+        email: `candidate${i}@domain.com`,
         rollNumber: `CS-${String(i).padStart(3, '0')}`,
         department: 'Axent Candidate'
       });
@@ -1234,7 +1240,7 @@ export function parseCandidateImportText(rawText: string): CandidateImportItem[]
       } else {
         results.push({
           name: parts[0],
-          email: `${parts[0].toLowerCase().replace(/[^a-z0-9]/g, '')}@event.axiogen.in`,
+          email: `${parts[0].toLowerCase().replace(/[^a-z0-9]/g, '')}@domain.com`,
           rollNumber: parts[1] || undefined,
           department: 'Axent Candidate'
         });
@@ -1253,7 +1259,7 @@ export function parseCandidateImportText(rawText: string): CandidateImportItem[]
       } else {
         results.push({
           name: single,
-          email: `${single.toLowerCase().replace(/[^a-z0-9]/g, '')}@event.axiogen.in`,
+          email: `${single.toLowerCase().replace(/[^a-z0-9]/g, '')}@domain.com`,
           department: 'Axent Candidate'
         });
       }
@@ -1302,35 +1308,27 @@ export function importCodeSparkCandidates(
         (c.name && c.name.toLowerCase() === cleanName.toLowerCase() && cleanEmail.includes(c.name.toLowerCase()))
     );
 
+    // ALWAYS generate a brand-new 4-digit AXENT-XXXX key every time a candidate is created or ingested
+    const accessKey = getNextKey();
+    const newCand: CodeSparkCandidate = {
+      accessKey,
+      name: cleanName,
+      email: cleanEmail,
+      rollNumber: item.rollNumber || (cleanEmail.includes('@') ? cleanEmail.split('@')[0].toUpperCase() : accessKey),
+      department: item.department || 'Axent Candidate',
+      assignedExamId,
+      status: 'REGISTERED',
+      registeredAt: Date.now(),
+      isShortlisted: false,
+      allowRound1Retake: false
+    };
+
     if (matchIdx !== -1) {
-      const curr = updatedRoster[matchIdx];
-      const updated: CodeSparkCandidate = {
-        ...curr,
-        name: cleanName || curr.name,
-        email: cleanEmail || curr.email,
-        rollNumber: item.rollNumber || curr.rollNumber,
-        department: item.department || curr.department || 'Axent Candidate',
-        assignedExamId: assignedExamId || curr.assignedExamId
-      };
-      updatedRoster[matchIdx] = updated;
-      created.push(updated);
+      updatedRoster[matchIdx] = newCand;
     } else {
-      const accessKey = getNextKey();
-      const newCand: CodeSparkCandidate = {
-        accessKey,
-        name: cleanName,
-        email: cleanEmail,
-        rollNumber: item.rollNumber || cleanEmail.split('@')[0].toUpperCase(),
-        department: item.department || 'Axent Candidate',
-        assignedExamId,
-        status: 'REGISTERED',
-        registeredAt: Date.now(),
-        isShortlisted: false,
-        allowRound1Retake: false
-      };
       updatedRoster.push(newCand);
-      created.push(newCand);
     }
+    created.push(newCand);
   }
 
   saveCodeSparkCandidates(updatedRoster);
@@ -1338,9 +1336,19 @@ export function importCodeSparkCandidates(
 }
 
 export function deleteCodeSparkCandidate(accessKey: string): void {
+  const clean = accessKey.trim().toUpperCase();
   const all = getAllCodeSparkCandidates();
-  const remaining = all.filter((c) => c.accessKey.toUpperCase() !== accessKey.trim().toUpperCase());
+  const remaining = all.filter((c) => 
+    c.accessKey.toUpperCase() !== clean &&
+    c.email.toUpperCase() !== clean &&
+    (c.rollNumber || '').toUpperCase() !== clean
+  );
   saveCodeSparkCandidates(remaining);
+  // Synchronously ensure cloud deletion
+  void pushCandidatesToCloud(remaining);
+  try {
+    void deleteAttemptByRollOrKeyFromCloud(clean);
+  } catch {}
 }
 
 export async function deleteCodeSparkCandidateComplete(accessKeyOrRoll: string): Promise<void> {

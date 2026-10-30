@@ -500,9 +500,10 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
 
     // 1. If target round is Round 2 or Round 1 has concluded:
     if (anyLookup.targetRound === 'round2' || rawInput.includes('R2') || isRound1Concluded) {
+      const normInput = rawInput.trim().toUpperCase().replace(/^(AXENT-R2-|AXENT-|R2-)/, '');
+      const normCandR2 = (cand.round2Key || '').trim().toUpperCase().replace(/^(AXENT-R2-|AXENT-|R2-)/, '');
       const enteredRound2Key = Boolean(
-        cand.round2Key &&
-        rawInput.trim().toUpperCase() === cand.round2Key.trim().toUpperCase().replace(/^AXENT-R2-/, '')
+        cand.round2Key && (normInput === normCandR2 || rawInput.trim().toUpperCase() === cand.round2Key.trim().toUpperCase())
       );
       if (!isCandidateShortlisted || !enteredRound2Key) {
         playSound('warning');
