@@ -2761,11 +2761,25 @@ export async function syncFromSupabase(): Promise<void> {
 
       // Intelligently reconcile local and cloud exams.
       // Cloud sync MUST NEVER destroy local papers or exams due to network delays or RLS restrictions!
+      // CRITICAL FIX: When an exam exists in BOTH local and cloud, take the one with the newer
+      // updatedAt timestamp. This prevents a stale cloud DRAFT from overwriting a freshly published
+      // local exam (race condition: publish → saveExamToCloud enqueued → sync reads cloud before upload).
       localExams.forEach((e) => {
-        if (!deletedIds.has(e.id) && !mergedExamMap.has(e.id)) {
+        if (deletedIds.has(e.id)) return;
+        const cloudVersion = mergedExamMap.get(e.id);
+        if (!cloudVersion) {
+          // Exam only exists locally — push it to cloud and keep it
           mergedExamMap.set(e.id, e);
-          // Re-attempt uploading to cloud in case previous attempt had network issue or RLS error
           void saveExamToCloud(e);
+        } else {
+          // Exam exists in both — pick the fresher version by updatedAt
+          const localNewer = (e.updatedAt || 0) > (cloudVersion.updatedAt || 0);
+          if (localNewer) {
+            mergedExamMap.set(e.id, e);
+            // Push the newer local state to cloud so they converge
+            void saveExamToCloud(e);
+          }
+          // else: cloud version is newer or same age — cloud already wins (set above)
         }
       });
 

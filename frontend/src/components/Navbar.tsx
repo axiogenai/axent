@@ -145,11 +145,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     // Authority Gateway / Login — No student tabs!
     activeNavItems = [];
   } else if (isAdminRoute || isPaperSetterRoute) {
-    // Authority Gateway / Administration — Always expose both CCTV Live Proctoring & Paper Setter Portal
-    activeNavItems = [
-      { path: '/admin', label: 'CCTV Live Proctoring', icon: ShieldAlert, badge: 'PROCTOR', badgeColor: 'danger' },
-      { path: '/paper-setter', label: 'Paper Setter Portal', icon: Layers }
-    ];
+    // Authority routes — no center tabs; navigation is via right-side buttons only
+    activeNavItems = [];
   } else if (isMcqRoute || examMode === 'MCQ') {
     activeNavItems = [];
   } else {

@@ -34,7 +34,8 @@ import {
   isLabOverflowRetakeEnabledGlobally,
   isCandidateAuthorizedForRound1Retake,
   authorizeCandidateForRound1Retake,
-  prepareCandidateForRound1Retake
+  prepareCandidateForRound1Retake,
+  lookupCandidateAny
 } from '../services/codeSparkService';
 import { getAllAttempts, getAllExams } from '../services/mcqService';
 import { MCQExamConfig } from '../types/mcq';
@@ -438,6 +439,13 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     }
     if (!anyLookup && isRound1Concluded && !rawInput.includes('R2')) {
       anyLookup = await asyncLookupCandidateAny('AXENT-R2-' + rawInput);
+    }
+
+    // Fallback: try local roster in case cloud sync hasn't happened yet
+    if (!anyLookup) {
+      anyLookup = lookupCandidateAny(rawInput)
+        || lookupCandidateAny('AXENT-' + rawInput)
+        || lookupCandidateAny('AXENT-R2-' + rawInput);
     }
 
     if (!anyLookup) {
