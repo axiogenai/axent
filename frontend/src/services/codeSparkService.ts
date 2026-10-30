@@ -639,9 +639,14 @@ export function isCandidateInShortlistStorage(identifier: string): boolean {
   return rolls.includes(clean);
 }
 
-export function generateRound2KeyForCandidate(cand: CodeSparkCandidate): string {
-  const num = Math.floor(1000 + Math.random() * 9000);
-  return `AXENT-R2-${num}`;
+export function generateRound2KeyForCandidate(_cand: CodeSparkCandidate): string {
+  if (!globalThis.crypto?.getRandomValues) {
+    throw new Error('A secure browser context is required to generate Round 2 access keys.');
+  }
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  const token = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('').toUpperCase();
+  return `AXENT-R2-${token}`;
 }
 
 export function isRound1ConcludedGlobally(): boolean {
