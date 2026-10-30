@@ -35,7 +35,6 @@ import {
   getAllRound2Problems,
   getStoredRound2Submission,
   saveStoredRound2Submission,
-  pushRound2SubmissionToCloud,
   finalizeRound2Submission,
   selectStudentRound2Problems,
   pushRound2LiveCodeToCloud
