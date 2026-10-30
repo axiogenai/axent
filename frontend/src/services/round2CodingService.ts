@@ -1718,6 +1718,25 @@ export async function finalizeRound2Submission(sub: Round2CandidateSubmission): 
 }
 
 
+export async function fetchRound2SubmissionFromCloud(candidateKey: string): Promise<Round2CandidateSubmission | null> {
+  try {
+    const response = await fetch('/api/codespark/round2-submissions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'get', key: candidateKey })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success || !result.submission) return null;
+    const submission = result.submission as Round2CandidateSubmission;
+    localStorage.setItem(`codedna_r2_sub_${candidateKey.toUpperCase()}`, JSON.stringify(submission));
+    return submission;
+  } catch (error) {
+    console.warn('[Round 2] finalized submission recovery unavailable:', error);
+    return null;
+  }
+}
+
+
 export function getAllRound2Submissions(): Round2CandidateSubmission[] {
 
 
