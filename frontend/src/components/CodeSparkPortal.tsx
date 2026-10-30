@@ -19,9 +19,6 @@ import {
 } from 'lucide-react';
 import {
   CodeSparkCandidate,
-  lookupCandidateByKey,
-  lookupCandidateAny,
-  asyncLookupCandidateByKey,
   asyncLookupCandidateAny,
   syncCandidatesFromCloud,
   isCandidateInShortlistStorage,
