@@ -1,8 +1,8 @@
-export const config = { maxDuration: 60 };
-
 import { createHash } from "node:crypto";
 import { getCodeSparkRosterConfig, readBody, requireAdmin, setApiHeaders, supabaseRest } from "./_security.js";
 import { getRound2AssignedProblems, gradeRound2Code, normalizeRound2Key } from "./_round2-grader.js";
+
+export const config = { maxDuration: 60 };
 
 const cleanId = (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9_-]/g, "_").slice(0, 80);
 
