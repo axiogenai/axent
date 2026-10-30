@@ -340,8 +340,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <button
             className="btn btn-secondary btn-sm"
             onClick={handleTestConnection}
-            disabled={testStatus === 'testing' || !apiKey.trim()}
-            style={{ gap: '6px', opacity: !apiKey.trim() ? 0.5 : 1 }}
+            disabled={testStatus === 'testing'}
+            style={{ gap: '6px' }}
           >
             {testStatus === 'testing' ? (
               <>
@@ -364,8 +364,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <button
               className="btn btn-primary btn-sm"
               onClick={handleSave}
-              disabled={!apiKey.trim()}
-              style={{ opacity: !apiKey.trim() ? 0.5 : 1 }}
+              disabled={false}
             >
               Save Changes
             </button>
