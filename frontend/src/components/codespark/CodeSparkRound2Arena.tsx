@@ -224,7 +224,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       const qTimestamps = submission.questionTimestamps || {};
       const qStart = qTimestamps[currentQIndex]?.startedAt || Date.now();
       const timeTakenMs = Date.now() - qStart;
-      const report = await evaluateRound2Code(currentProblem, activeCode, effectiveLang, timeTakenMs, showCustomInput ? customInputText : undefined);
+      const report = await evaluateRound2Code(currentProblem, activeCode, effectiveLang, timeTakenMs, showCustomInput ? customInputText : undefined, candidateProfile.round2Key || candidateProfile.accessKey);
       // Track question start and compiled timestamps
       report.startedAt = qStart;
       report.startedAtFormatted = new Date(qStart).toLocaleTimeString();
