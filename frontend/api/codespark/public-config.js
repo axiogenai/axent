@@ -7,7 +7,11 @@ export default async function handler(req, res) {
   try {
     const rows = await supabaseRest("candidate_stations?id=eq.codespark_system_config&select=code,student");
     const config = parseCodeSparkConfig(rows?.[0]);
-    return res.status(200).json({ success: true, activeExamId: config?.activeExamId || null });
+    return res.status(200).json({
+      success: true,
+      activeExamId: config?.activeExamId || null,
+      isConcluded: Boolean(config?.isConcluded)
+    });
   } catch (error) {
     console.error("[CodeSpark public config]", error?.message || "read failed");
     return res.status(503).json({ success: false, error: "CodeSpark configuration is temporarily unavailable." });
