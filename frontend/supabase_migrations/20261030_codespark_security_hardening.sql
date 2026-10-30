@@ -57,3 +57,72 @@ CREATE INDEX IF NOT EXISTS idx_codespark_key_lookup_attempts_ip_time
 ALTER TABLE public.codespark_key_lookup_attempts ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.codespark_key_lookup_attempts FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, DELETE ON public.codespark_key_lookup_attempts TO service_role;
+
+-- One-time, atomic final submission seal for each candidate.
+CREATE TABLE IF NOT EXISTS public.codespark_round2_finalizations (
+  candidate_hash text PRIMARY KEY,
+  station_id text NOT NULL UNIQUE,
+  submitted_at timestamptz NOT NULL DEFAULT now(),
+  result jsonb NOT NULL
+);
+ALTER TABLE public.codespark_round2_finalizations ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.codespark_round2_finalizations FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.codespark_round2_finalizations TO service_role;
+
+CREATE OR REPLACE FUNCTION public.finalize_codespark_round2_submission(
+  p_candidate_hash text,
+  p_station_id text,
+  p_submission jsonb,
+  p_student jsonb,
+  p_station_number text
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_existing jsonb;
+  v_now bigint;
+BEGIN
+  IF p_candidate_hash IS NULL OR length(p_candidate_hash) <> 64
+     OR p_station_id IS NULL OR p_station_id !~ '^r2_sub_[A-Z0-9_-]{1,80}$'
+     OR p_submission IS NULL OR jsonb_typeof(p_submission) <> 'object'
+     OR COALESCE((p_submission->>'isSubmitted')::boolean, false) IS NOT TRUE THEN
+    RAISE EXCEPTION 'invalid Round 2 finalization payload' USING ERRCODE='22023';
+  END IF;
+
+  SELECT result INTO v_existing
+    FROM public.codespark_round2_finalizations
+    WHERE candidate_hash = p_candidate_hash
+    FOR UPDATE;
+
+  IF FOUND THEN
+    RETURN jsonb_build_object('created', false, 'submission', v_existing);
+  END IF;
+
+  v_now := floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint;
+
+  INSERT INTO public.codespark_round2_finalizations(candidate_hash, station_id, submitted_at, result)
+  VALUES (p_candidate_hash, p_station_id, now(), p_submission);
+
+  INSERT INTO public.candidate_stations(
+    id, lab_id, station_number, status, code, student, last_updated_timestamp
+  ) VALUES (
+    p_station_id, 'ROUND_2_ARENA', COALESCE(NULLIF(p_station_number,''),'Station #01'),
+    'SUBMITTED', p_submission::text, COALESCE(p_student,'{}'::jsonb), v_now
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    lab_id = EXCLUDED.lab_id,
+    station_number = EXCLUDED.station_number,
+    status = 'SUBMITTED',
+    code = EXCLUDED.code,
+    student = EXCLUDED.student,
+    last_updated_timestamp = EXCLUDED.last_updated_timestamp
+  WHERE public.candidate_stations.status <> 'SUBMITTED';
+
+  RETURN jsonb_build_object('created', true, 'submission', p_submission);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.finalize_codespark_round2_submission(text,text,jsonb,jsonb,text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.finalize_codespark_round2_submission(text,text,jsonb,jsonb,text) TO service_role;
