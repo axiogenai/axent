@@ -6,7 +6,7 @@ export const config = { maxDuration: 60 };
 
 const cleanId = (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9_-]/g, "_").slice(0, 80);
 
-function candidateSafeSubmission(submission) {
+export function candidateSafeSubmission(submission) {
   if (!submission || typeof submission !== "object") return submission;
   const questionReports = {};
   for (const [question, report] of Object.entries(submission.questionReports || {})) {
