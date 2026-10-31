@@ -18,6 +18,7 @@ function candidateSafeSubmission(submission) {
       totalTests: _totalTests,
       hiddenPassedTests: _hiddenPassedTests,
       hiddenTotalTests: _hiddenTotalTests,
+      testResults: _testResults,
       ...safeReport
     } = report;
     questionReports[question] = safeReport;
