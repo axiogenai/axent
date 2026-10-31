@@ -104,6 +104,7 @@ async function execute(code, language, stdin) {
   const processedCode = language === "Java" ? code.replace(/\bpublic\s+class\b/g, "class ") : code;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
+  const compilerRequestStartedAt = Date.now();
   try {
     const response = await fetch("https://wandbox.org/api/compile.json", {
       method: "POST",
@@ -153,6 +154,8 @@ async function execute(code, language, stdin) {
         ? null
         : Number(result.memory),
       statusDescription,
+      // This is the HTTP round-trip time, not the program's CPU/runtime.
+      compilerElapsedMs: Date.now() - compilerRequestStartedAt,
       engineUsed: "Wandbox " + String(compiler.version || compiler.name)
     };
   } finally {
@@ -270,11 +273,8 @@ export async function gradeRound2Code(
     const error = new Error("This question has incomplete hidden test configuration. Ask the exam administrator to fix it before submitting.");
     error.statusCode = 422; throw error;
   }
-  if (performanceTests.some((test) => !Number.isFinite(Number(test.maxTimeMs)) || Number(test.maxTimeMs) <= 0 ||
-      (test.maxMemoryValue != null && (!Number.isFinite(Number(test.maxMemoryValue)) || Number(test.maxMemoryValue) <= 0)))) {
-    const error = new Error("Performance tests require a positive maxTimeMs and an optional positive maxMemoryValue threshold.");
-    error.statusCode = 422; throw error;
-  }
+  // Wandbox does not expose per-program runtime or memory in its compile JSON schema.
+  // Performance cases therefore act as large-input scalability checks, not millisecond/memory gates.
 
   let runResult = null;
   if (customStdin !== undefined && customStdin !== null && String(customStdin).length > 0) {
@@ -296,23 +296,11 @@ export async function gradeRound2Code(
       const result = await execute(code, language, String(test.input ?? ""));
       const runtimeMs = parseRuntimeMs(result.time);
       const memoryValue = result.memory == null ? null : Number(result.memory);
-      if (test.category === "performance" && runtimeMs === null) {
-        const error = new Error("The existing compiler did not return runtime telemetry for a performance test.");
-        error.statusCode = 503; throw error;
-      }
-      if (test.category === "performance" && test.maxMemoryValue != null && memoryValue === null) {
-        const error = new Error("The existing compiler did not return memory telemetry required by this performance test.");
-        error.statusCode = 503; throw error;
-      }
       const outputPassed = !result.isError &&
         normalizeOutput(result.stdout) === normalizeOutput(test.expectedOutput);
-      const memoryThreshold = test.maxMemoryValue == null ? null : Number(test.maxMemoryValue);
-      const efficiencyPassed = test.category !== "performance" ? undefined : Boolean(
-        outputPassed &&
-        runtimeMs !== null &&
-        runtimeMs <= Number(test.maxTimeMs) &&
-        (memoryThreshold === null || (memoryValue !== null && memoryValue <= memoryThreshold))
-      );
+      // Large-input benchmark success is the available efficiency signal with Wandbox.
+      // compilerElapsedMs is retained for diagnostics only; it includes network/queue time.
+      const efficiencyPassed = test.category !== "performance" ? undefined : outputPassed;
       return {
         testCaseId: String(test.id || ""),
         category: test.category,
@@ -321,11 +309,11 @@ export async function gradeRound2Code(
           efficiencyPassed,
           runtimeMs,
           memoryValue,
-          maxTimeMs: Number(test.maxTimeMs),
-          maxMemoryValue: memoryThreshold
+          compilerElapsedMs: result.compilerElapsedMs ?? null
         } : {
           runtimeMs,
-          memoryValue
+          memoryValue,
+          compilerElapsedMs: result.compilerElapsedMs ?? null
         }),
         inputSizeBytes: Buffer.byteLength(String(test.input ?? ""), "utf8"),
         error: result.compileOutput || result.stderr || undefined,
