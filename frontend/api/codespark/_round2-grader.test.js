@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { evaluateRound2TestCases, withWandboxSlot } from "./_round2-grader.js";
+import { buildRound2TestPlan, evaluateRound2TestCases, withWandboxSlot } from "./_round2-grader.js";
 
 const success = (stdout, extra = {}) => ({
   stdout,
@@ -113,4 +113,20 @@ test("two simultaneous candidate submissions share the four-request per-instance
   await Promise.all([candidateSubmission(), candidateSubmission()]);
   assert.ok(maxActive <= 4);
   assert.equal(active, 0);
+});
+
+
+test("sample cases never enter the grading plan; only hidden suites are graded", () => {
+  const plan = buildRound2TestPlan({
+    sampleTestCases: [{ id: "sample", input: "1", expectedOutput: "1" }],
+    hiddenTestCases: [{ id: "hidden", input: "2", expectedOutput: "2" }],
+    performanceTestCases: [{ id: "large", input: "large", expectedOutput: "large" }],
+    robustnessTestCases: [{ id: "edge", input: "", expectedOutput: "empty" }]
+  });
+
+  assert.deepEqual(plan.allTests.map((item) => item.id), ["hidden", "edge", "large"]);
+  assert.equal(plan.allTests.some((item) => item.id === "sample"), false);
+  assert.equal(plan.correctnessTests.length, 1);
+  assert.equal(plan.robustnessTests.length, 1);
+  assert.equal(plan.performanceTests.length, 1);
 });
