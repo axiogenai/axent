@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildRound2TestPlan, evaluateRound2TestCases, withWandboxSlot } from "./_round2-grader.js";
+import { candidateSafeSubmission } from "./round2-submissions.js";
 
 const success = (stdout, extra = {}) => ({
   stdout,
@@ -129,4 +130,39 @@ test("sample cases never enter the grading plan; only hidden suites are graded",
   assert.equal(plan.correctnessTests.length, 1);
   assert.equal(plan.robustnessTests.length, 1);
   assert.equal(plan.performanceTests.length, 1);
+});
+
+
+test("candidate submission responses never expose hidden test details or rubric internals", () => {
+  const safe = candidateSafeSubmission({
+    candidateName: "Test Candidate",
+    isSubmitted: true,
+    questionReports: {
+      1: {
+        code: "print('safe')",
+        score: 8,
+        maxScore: 10,
+        status: "PARTIAL",
+        sampleResults: [{ input: "sample" }],
+        hiddenResults: [{ testCaseId: "secret-case", passed: false }],
+        passedTests: 2,
+        totalTests: 5,
+        hiddenPassedTests: 1,
+        hiddenTotalTests: 4,
+        testResults: [{ testCaseId: "secret-case", input: "secret input" }],
+        rubric: { correctness: { earned: 8 } }
+      }
+    }
+  });
+
+  const report = safe.questionReports["1"];
+  assert.equal(report.code, "print('safe')");
+  assert.equal(report.score, 8);
+  assert.equal(report.status, "PARTIAL");
+  assert.equal("sampleResults" in report, false);
+  assert.equal("hiddenResults" in report, false);
+  assert.equal("passedTests" in report, false);
+  assert.equal("totalTests" in report, false);
+  assert.equal("testResults" in report, false);
+  assert.equal("rubric" in report, false);
 });
