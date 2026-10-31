@@ -141,6 +141,24 @@ export interface Round2QuestionReport {
 
   }[];
 
+  testResults?: {
+    testCaseId: string;
+    category: 'correctness' | 'performance' | 'robustness';
+    passed: boolean;
+    runtimeMs: number | null;
+    memoryKb: number | null;
+    inputSize: number;
+    maxTimeMs?: number;
+    maxMemoryKb?: number | null;
+    error?: string;
+  }[];
+
+  rubric?: {
+    correctness: { weight: number; earned: number; passed: number; total: number };
+    efficiency: { weight: number; earned: number; passed: number; total: number };
+    robustness: { weight: number; earned: number; passed: number; total: number };
+  } | null;
+
   passedTests: number;
 
   totalTests: number;
