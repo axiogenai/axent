@@ -1,4 +1,5 @@
 import { getCodeSparkRosterConfig, supabaseRest } from "./_security.js";
+import { parseRuntimeMs, scoreRound2Rubric } from "./_round2-rubric.js";
 
 const LANGUAGE_ALIASES = {
   Python: ["python"],
@@ -198,22 +199,49 @@ export async function gradeRound2Code(keyInput, problemIdInput, codeInput, langu
   const problem = problems.find((item) => String(item.id) === problemId);
   if (!problem) { const error = new Error("This problem is not assigned to this candidate."); error.statusCode = 403; throw error; }
 
-  const tests = [
-    ...(Array.isArray(problem.sampleTestCases) ? problem.sampleTestCases.map((test) => ({ ...test, hidden: false })) : []),
-    ...(Array.isArray(problem.hiddenTestCases) ? problem.hiddenTestCases.map((test) => ({ ...test, hidden: true })) : [])
+  const hidden = Array.isArray(problem.hiddenTestCases) ? problem.hiddenTestCases : [];
+  const performance = Array.isArray(problem.performanceTestCases) ? problem.performanceTestCases : [];
+  const robustness = Array.isArray(problem.robustnessTestCases) ? problem.robustnessTestCases : [];
+  const categorized = hidden.map((test) => ({
+    ...test,
+    category: String(test.category || (test.isPerformance ? "performance" : test.isRobustness ? "robustness" : "correctness")).toLowerCase()
+  }));
+  const correctnessTests = categorized.filter((test) => !["performance", "robustness"].includes(test.category));
+  const robustnessTests = [
+    ...robustness,
+    ...categorized.filter((test) => test.category === "robustness")
   ];
-  if (tests.length > 230) { const error = new Error("Too many test cases for evaluation."); error.statusCode = 422; throw error; }
+  const performanceTests = [
+    ...performance,
+    ...categorized.filter((test) => test.category === "performance")
+  ];
+  const allTests = [...correctnessTests, ...robustnessTests, ...performanceTests];
   const maxScore = Number(problem.marks) || 20;
 
   if (!code.trim()) {
-    const sampleResults = tests.filter((test) => !test.hidden).map((test) => ({
-      testCaseId: String(test.id || ""), input: String(test.input || ""),
-      expected: String(test.expectedOutput || ""), actual: "", passed: false
-    }));
-    const hiddenResults = tests.filter((test) => test.hidden).map((test) => ({
-      testCaseId: String(test.id || ""), passed: false
-    }));
-    return { questionId: problem.id, sampleResults, hiddenResults, passedTests: 0, totalTests: tests.length || 1, score: 0, maxScore, status: "PENDING", runResult: null };
+    return {
+      questionId: problem.id, sampleResults: [], hiddenResults: [],
+      passedTests: 0, totalTests: allTests.length, score: 0, maxScore,
+      status: "PENDING", runResult: null, testResults: [], rubric: null
+    };
+  }
+  if (!allTests.length) {
+    const error = new Error("This question has no hidden grading tests configured. Ask the exam administrator to complete its test data.");
+    error.statusCode = 422; throw error;
+  }
+  if (allTests.length > 230) {
+    const error = new Error("Too many test cases for evaluation."); error.statusCode = 422; throw error;
+  }
+  if (allTests.some((test) => !test || typeof test !== "object" ||
+      !Object.prototype.hasOwnProperty.call(test, "expectedOutput"))) {
+    const error = new Error("This question has incomplete hidden test configuration. Ask the exam administrator to fix it before submitting.");
+    error.statusCode = 422; throw error;
+  }
+  if (performanceTests.some((test) => !Number.isFinite(Number(test.maxTimeMs)) ||
+      Number(test.maxTimeMs) <= 0 ||
+      (test.maxMemoryKb != null && (!Number.isFinite(Number(test.maxMemoryKb)) || Number(test.maxMemoryKb) <= 0)))) {
+    const error = new Error("Performance tests require a positive maxTimeMs and, optionally, a positive maxMemoryKb threshold.");
+    error.statusCode = 422; throw error;
   }
 
   let runResult = null;
@@ -221,63 +249,67 @@ export async function gradeRound2Code(keyInput, problemIdInput, codeInput, langu
     runResult = await execute(code, language, String(customStdin));
   }
 
-  if (!tests.length) {
-    const error = new Error("This problem is not configured for automatic grading: no sample or hidden test cases are available.");
-    error.statusCode = 422;
-    throw error;
-  }
-
-  const hiddenTests = tests.filter((test) => test.hidden);
-  if (!hiddenTests.length) {
-    const error = new Error("This question needs at least one hidden test case before it can be graded. Ask the exam administrator to complete its test data.");
-    error.statusCode = 422;
-    throw error;
-  }
-  if (tests.some((test) => !test || typeof test !== "object" ||
-      !Object.prototype.hasOwnProperty.call(test, "expectedOutput"))) {
-    const error = new Error("This question has incomplete test-case configuration. Ask the exam administrator to fix it before submitting.");
-    error.statusCode = 422;
-    throw error;
-  }
-
-  const sampleResults = [];
-  const hiddenResults = [];
-  let passed = 0;
-  let hiddenPassed = 0;
-  let hiddenTotalWeight = 0;
-  let hiddenPassedWeight = 0;
+  const testResults = [];
   let compileFailed = false;
   let runtimeFailed = false;
-  for (const test of tests) {
-    const result = await execute(code, language, String(test.input || ""));
-    if (!runResult) runResult = result;
-    const success = !result.isError && normalizeOutput(result.stdout) === normalizeOutput(test.expectedOutput);
-    if (success) passed++;
-    if (result.compileOutput) compileFailed = true;
-    else if (result.isError) runtimeFailed = true;
-    if (test.hidden) {
-      const configuredWeight = Number(test.weight);
-      const weight = Number.isFinite(configuredWeight) && configuredWeight > 0 ? configuredWeight : 1;
-      hiddenTotalWeight += weight;
-      if (success) {
-        hiddenPassed++;
-        hiddenPassedWeight += weight;
-      }
-      hiddenResults.push({ testCaseId: String(test.id || ""), passed: success });
-    } else sampleResults.push({
-      testCaseId: String(test.id || ""), input: String(test.input || ""),
-      expected: String(test.expectedOutput ?? ""), actual: result.stdout,
-      passed: success, error: result.compileOutput || result.stderr || undefined
-    });
+  for (const [category, tests] of [
+    ["correctness", correctnessTests],
+    ["robustness", robustnessTests],
+    ["performance", performanceTests]
+  ]) {
+    for (const test of tests) {
+      // Infrastructure failures throw from execute and abort grading. They are
+      // deliberately not converted into failed tests or zero marks.
+      const result = await execute(code, language, String(test.input || ""));
+      if (!runResult) runResult = result;
+      const runtimeMs = parseRuntimeMs(result.time);
+      const memoryKb = Number.isFinite(Number(result.memory)) ? Number(result.memory) : null;
+      const passed = !result.isError &&
+        normalizeOutput(result.stdout) === normalizeOutput(test.expectedOutput);
+      if (result.compileOutput) compileFailed = true;
+      else if (result.isError) runtimeFailed = true;
+      testResults.push({
+        testCaseId: String(test.id || ""),
+        category,
+        passed,
+        runtimeMs,
+        memoryKb,
+        inputSize: Number(test.inputSize ?? test.size) || String(test.input || "").length,
+        ...(category === "performance" ? {
+          maxTimeMs: Number(test.maxTimeMs),
+          maxMemoryKb: test.maxMemoryKb == null ? null : Number(test.maxMemoryKb)
+        } : {}),
+        error: result.compileOutput || result.stderr || undefined
+      });
+    }
   }
-  const total = tests.length;
-  // Visible examples are feedback only; marks come from hidden tests.
-  const score = hiddenTotalWeight > 0 ? Math.round(maxScore * hiddenPassedWeight / hiddenTotalWeight) : 0;
-  const status = compileFailed ? "COMPILE_ERROR" : runtimeFailed && passed === 0 ? "RUNTIME_ERROR" : hiddenPassed === hiddenTests.length ? "ACCEPTED" : "PARTIAL";
+
+  const byCategory = (category) => testResults.filter((item) => item.category === category);
+  const correctnessResults = byCategory("correctness");
+  const robustnessResults = byCategory("robustness");
+  const performanceResults = byCategory("performance");
+  const rubric = scoreRound2Rubric({
+    maxScore,
+    correctnessTests: correctnessResults,
+    robustnessTests: robustnessResults,
+    performanceTests: performanceResults
+  });
+  const passedTests = testResults.filter((item) => item.passed).length;
+  const status = compileFailed ? "COMPILE_ERROR"
+    : runtimeFailed && passedTests === 0 ? "RUNTIME_ERROR"
+    : rubric.allPassed ? "ACCEPTED" : "PARTIAL";
+
   return {
-    questionId: problem.id, sampleResults, hiddenResults,
-    passedTests: passed, totalTests: total,
-    hiddenPassedTests: hiddenPassed, hiddenTotalTests: hiddenTests.length,
-    score, maxScore, status, runResult
+    questionId: problem.id,
+    sampleResults: [],
+    hiddenResults: testResults.map(({ testCaseId, passed }) => ({ testCaseId, passed })),
+    testResults,
+    passedTests,
+    totalTests: testResults.length,
+    score: rubric.score,
+    maxScore,
+    rubric: rubric.rubric,
+    status,
+    runResult
   };
 }
