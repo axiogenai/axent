@@ -72,16 +72,14 @@ def run_judge(code: str, language: str, stdin: str):
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 timeout=MAX_JUDGE_SECONDS, check=False,
             )
-        except subprocess.TimeoutExpired:
-            return {
-                "exitCode": 124, "stdout": "", "stderr": "Time limit exceeded.",
-                "compileError": False, "runtimeMs": None, "memoryKb": None,
-                "wallTimeMs": round((time.monotonic() - started) * 1000, 2),
-                "statusDescription": "Time Limit Exceeded",
-            }
+        except subprocess.TimeoutExpired as exc:
+            subprocess.run(["docker", "rm", "-f", container_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3, check=False)
+            raise TimeoutError("Judge worker exceeded its hard safety timeout; retry evaluation.") from exc
         except (FileNotFoundError, OSError) as exc:
             raise RuntimeError("The isolated judge runtime is unavailable.") from exc
 
+        if completed.returncode == 125:
+            raise RuntimeError("The isolated sandbox could not start. Retry evaluation; no marks were awarded.")
         stdout = completed.stdout[:MAX_OUTPUT].decode("utf-8", errors="replace")
         stderr = completed.stderr[:MAX_OUTPUT].decode("utf-8", errors="replace")
         if len(completed.stdout) > MAX_OUTPUT or len(completed.stderr) > MAX_OUTPUT:
@@ -140,6 +138,8 @@ async def judge(request: Request):
         return result
     except asyncio.TimeoutError as exc:
         raise HTTPException(status_code=503, detail="Judge capacity is busy. Retry the evaluation.") from exc
+    except TimeoutError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     finally:
