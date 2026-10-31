@@ -13,6 +13,18 @@
       "destination": "/api/codespark/send-emails?action=test"
     },
     {
+      "source": "/api/codespark/proctor-status",
+      "destination": "/api/codespark/proctor-event?action=status"
+    },
+    {
+      "source": "/api/codespark/public-config",
+      "destination": "/api/codespark/public-exam?action=config"
+    },
+    {
+      "source": "/api/codespark/round2-live-code",
+      "destination": "/api/codespark/round2-submissions?action=live-code"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },

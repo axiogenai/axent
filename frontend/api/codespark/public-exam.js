@@ -7,6 +7,26 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "GET") return res.status(405).json({ success: false, error: "GET method required." });
 
+  // 1. Check if public config is requested
+  if (req.query?.action === "config" || req.query?.type === "config") {
+    try {
+      const config = await getCodeSparkRosterConfig();
+      return res.status(200).json({
+        success: true,
+        activeExamId: config?.activeExamId || null,
+        isConcluded: Boolean(config?.isConcluded),
+        round1StartTime: config?.round1StartTime || null,
+        round1EndTime: config?.round1EndTime || null,
+        round2StartTime: config?.round2StartTime || null,
+        round2EndTime: config?.round2EndTime || null
+      });
+    } catch (error) {
+      console.error("[CodeSpark public config]", error?.message || "read failed");
+      return res.status(503).json({ success: false, error: "CodeSpark configuration is temporarily unavailable." });
+    }
+  }
+
+  // 2. Otherwise serve active public exam details
   try {
     let examRow = null;
     const requestedId = req.query?.examId;
@@ -23,13 +43,13 @@ export default async function handler(req, res) {
       }
     }
 
-    // 2. Fallback: Find the latest PUBLISHED exam
+    // Fallback: Find latest PUBLISHED exam
     if (!examRow) {
       const published = await supabaseRest(`mcq_exams?status=eq.PUBLISHED&id=neq.codespark_system_config&order=created_at.desc&limit=1&select=${EXAM_FIELDS}`);
       if (published?.[0]) examRow = published[0];
     }
 
-    // 3. Fallback: Find any active non-archived exam
+    // Fallback: Find any active non-archived exam
     if (!examRow) {
       const anyExam = await supabaseRest(`mcq_exams?status=neq.ARCHIVED&id=neq.codespark_system_config&order=created_at.desc&limit=1&select=${EXAM_FIELDS}`);
       if (anyExam?.[0]) examRow = anyExam[0];
