@@ -247,6 +247,67 @@ export async function runRound2Code(keyInput, problemIdInput, codeInput, languag
   return execute(code, language, stdin, Date.now() + 15000);
 }
 
+export async function evaluateRound2TestCases({
+  code,
+  language,
+  tests,
+  deadlineAt = Date.now() + 50000,
+  executeCode = execute
+}) {
+  const testResults = [];
+  let runResult = null;
+  let compileFailed = false;
+  let runtimeFailed = false;
+
+  // Three requests per batch bounds pressure on the existing shared compiler.
+  for (let offset = 0; offset < tests.length; offset += 3) {
+    if (Date.now() + 1000 >= deadlineAt) {
+      const error = new Error("Grading exceeded its safe execution window. Your code has been saved; retry grading.");
+      error.statusCode = 503;
+      throw error;
+    }
+    const batch = tests.slice(offset, offset + 3);
+    const batchResults = await Promise.all(batch.map(async (test) => {
+      const result = await executeCode(code, language, String(test.input ?? ""), deadlineAt);
+      const runtimeMs = parseRuntimeMs(result.time);
+      const memoryValue = result.memory == null ? null : Number(result.memory);
+      const outputPassed = !result.isError &&
+        normalizeOutput(result.stdout) === normalizeOutput(test.expectedOutput);
+      // Large-input benchmark success is the available efficiency signal with Wandbox.
+      // compilerElapsedMs is diagnostic only; it includes network/queue time.
+      const efficiencyPassed = test.category !== "performance" ? undefined : outputPassed;
+      return {
+        testCaseId: String(test.id || ""),
+        category: test.category,
+        passed: outputPassed,
+        ...(test.category === "performance" ? {
+          efficiencyPassed,
+          runtimeMs,
+          memoryValue,
+          compilerElapsedMs: result.compilerElapsedMs ?? null
+        } : {
+          runtimeMs,
+          memoryValue,
+          compilerElapsedMs: result.compilerElapsedMs ?? null
+        }),
+        inputSizeBytes: Buffer.byteLength(String(test.input ?? ""), "utf8"),
+        error: result.compileOutput || result.stderr || undefined,
+        _runResult: result
+      };
+    }));
+
+    for (const item of batchResults) {
+      if (!runResult) runResult = item._runResult;
+      if (item._runResult.compileOutput) compileFailed = true;
+      else if (item._runResult.isError) runtimeFailed = true;
+      const { _runResult, ...safeResult } = item;
+      testResults.push(safeResult);
+    }
+  }
+
+  return { testResults, runResult, compileFailed, runtimeFailed };
+}
+
 export async function gradeRound2Code(
   keyInput,
   problemIdInput,
@@ -322,53 +383,14 @@ export async function gradeRound2Code(
     runResult = await execute(code, language, String(customStdin), deadlineAt);
   }
 
-  const testResults = [];
-  let compileFailed = false;
-  let runtimeFailed = false;
-  // Three requests per batch keeps pressure on the existing shared compiler bounded.
-  // A single overall deadline leaves time for persistence/finalization in the API route.
-  for (let offset = 0; offset < allTests.length; offset += 3) {
-    if (Date.now() + 1000 >= deadlineAt) {
-      const error = new Error("Grading exceeded its safe execution window. Your code has been saved; retry grading.");
-      error.statusCode = 503; throw error;
-    }
-    const batch = allTests.slice(offset, offset + 3);
-    const batchResults = await Promise.all(batch.map(async (test) => {
-      const result = await execute(code, language, String(test.input ?? ""), deadlineAt);
-      const runtimeMs = parseRuntimeMs(result.time);
-      const memoryValue = result.memory == null ? null : Number(result.memory);
-      const outputPassed = !result.isError &&
-        normalizeOutput(result.stdout) === normalizeOutput(test.expectedOutput);
-      // Large-input benchmark success is the available efficiency signal with Wandbox.
-      // compilerElapsedMs is retained for diagnostics only; it includes network/queue time.
-      const efficiencyPassed = test.category !== "performance" ? undefined : outputPassed;
-      return {
-        testCaseId: String(test.id || ""),
-        category: test.category,
-        passed: outputPassed,
-        ...(test.category === "performance" ? {
-          efficiencyPassed,
-          runtimeMs,
-          memoryValue,
-          compilerElapsedMs: result.compilerElapsedMs ?? null
-        } : {
-          runtimeMs,
-          memoryValue,
-          compilerElapsedMs: result.compilerElapsedMs ?? null
-        }),
-        inputSizeBytes: Buffer.byteLength(String(test.input ?? ""), "utf8"),
-        error: result.compileOutput || result.stderr || undefined,
-        _runResult: result
-      };
-    }));
-    for (const item of batchResults) {
-      if (!runResult) runResult = item._runResult;
-      if (item._runResult.compileOutput) compileFailed = true;
-      else if (item._runResult.isError) runtimeFailed = true;
-      const { _runResult, ...safeResult } = item;
-      testResults.push(safeResult);
-    }
-  }
+  const evaluated = await evaluateRound2TestCases({
+    code,
+    language,
+    tests: allTests,
+    deadlineAt
+  });
+  if (!runResult) runResult = evaluated.runResult;
+  const { testResults, compileFailed, runtimeFailed } = evaluated;
 
   const byCategory = (category) => testResults.filter((item) => item.category === category);
   const rubric = scoreRound2Rubric({
