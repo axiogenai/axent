@@ -227,32 +227,57 @@ export async function gradeRound2Code(keyInput, problemIdInput, codeInput, langu
     throw error;
   }
 
+  const hiddenTests = tests.filter((test) => test.hidden);
+  if (!hiddenTests.length) {
+    const error = new Error("This question needs at least one hidden test case before it can be graded. Ask the exam administrator to complete its test data.");
+    error.statusCode = 422;
+    throw error;
+  }
+  if (tests.some((test) => !test || typeof test !== "object" ||
+      !Object.prototype.hasOwnProperty.call(test, "expectedOutput"))) {
+    const error = new Error("This question has incomplete test-case configuration. Ask the exam administrator to fix it before submitting.");
+    error.statusCode = 422;
+    throw error;
+  }
+
   const sampleResults = [];
   const hiddenResults = [];
   let passed = 0;
-  let totalWeight = 0;
-  let passedWeight = 0;
+  let hiddenPassed = 0;
+  let hiddenTotalWeight = 0;
+  let hiddenPassedWeight = 0;
   let compileFailed = false;
   let runtimeFailed = false;
   for (const test of tests) {
     const result = await execute(code, language, String(test.input || ""));
     if (!runResult) runResult = result;
     const success = !result.isError && normalizeOutput(result.stdout) === normalizeOutput(test.expectedOutput);
-    const configuredWeight = Number(test.weight);
-    const weight = Number.isFinite(configuredWeight) && configuredWeight > 0 ? configuredWeight : 1;
-    totalWeight += weight;
-    if (success) { passed++; passedWeight += weight; }
+    if (success) passed++;
     if (result.compileOutput) compileFailed = true;
     else if (result.isError) runtimeFailed = true;
-    if (test.hidden) hiddenResults.push({ testCaseId: String(test.id || ""), passed: success });
-    else sampleResults.push({
+    if (test.hidden) {
+      const configuredWeight = Number(test.weight);
+      const weight = Number.isFinite(configuredWeight) && configuredWeight > 0 ? configuredWeight : 1;
+      hiddenTotalWeight += weight;
+      if (success) {
+        hiddenPassed++;
+        hiddenPassedWeight += weight;
+      }
+      hiddenResults.push({ testCaseId: String(test.id || ""), passed: success });
+    } else sampleResults.push({
       testCaseId: String(test.id || ""), input: String(test.input || ""),
-      expected: String(test.expectedOutput || ""), actual: result.stdout,
+      expected: String(test.expectedOutput ?? ""), actual: result.stdout,
       passed: success, error: result.compileOutput || result.stderr || undefined
     });
   }
   const total = tests.length;
-  const score = totalWeight > 0 ? Math.round(maxScore * passedWeight / totalWeight) : 0;
-  const status = compileFailed ? "COMPILE_ERROR" : runtimeFailed && passed === 0 ? "RUNTIME_ERROR" : passed === total ? "ACCEPTED" : "PARTIAL";
-  return { questionId: problem.id, sampleResults, hiddenResults, passedTests: passed, totalTests: total, score, maxScore, status, runResult };
+  // Visible examples are feedback only; marks come from hidden tests.
+  const score = hiddenTotalWeight > 0 ? Math.round(maxScore * hiddenPassedWeight / hiddenTotalWeight) : 0;
+  const status = compileFailed ? "COMPILE_ERROR" : runtimeFailed && passed === 0 ? "RUNTIME_ERROR" : hiddenPassed === hiddenTests.length ? "ACCEPTED" : "PARTIAL";
+  return {
+    questionId: problem.id, sampleResults, hiddenResults,
+    passedTests: passed, totalTests: total,
+    hiddenPassedTests: hiddenPassed, hiddenTotalTests: hiddenTests.length,
+    score, maxScore, status, runResult
+  };
 }
