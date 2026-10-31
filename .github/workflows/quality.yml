@@ -2,7 +2,7 @@ name: Quality checks
 
 on:
   push:
-    branches: ["main", "fix/axent-core-stability", "security/**"]
+    branches: ["main", "fix/axent-core-stability", "fix/round2-grading-existing-compiler", "security/**"]
   pull_request:
     branches: ["main"]
 
