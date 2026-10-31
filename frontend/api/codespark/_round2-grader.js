@@ -317,26 +317,6 @@ export async function evaluateRound2TestCases({
   return { testResults, runResult, compileFailed, runtimeFailed };
 }
 
-export async function gradeRound2Code(
-  keyInput,
-  problemIdInput,
-  codeInput,
-  languageInput,
-  allowLocked = false,
-  customStdin = "",
-  deadlineAt = Date.now() + 50000
-) {
-  const key = String(keyInput || "").trim().toUpperCase();
-  const code = String(codeInput || "");
-  const language = String(languageInput || "");
-  const problemId = String(problemIdInput || "");
-  if (key.length < 3 || code.length > 100000 || !LANGUAGE_ALIASES[language] || !problemId) {
-    const error = new Error("Invalid code evaluation request."); error.statusCode = 400; throw error;
-  }
-  const { problems } = await getRound2AssignedProblems(key, allowLocked);
-  const problem = problems.find((item) => String(item.id) === problemId);
-  if (!problem) { const error = new Error("This problem is not assigned to this candidate."); error.statusCode = 403; throw error; }
-
 export function buildRound2TestPlan(problem = {}) {
   // Samples are intentionally excluded from the server-side grading plan.
   const hidden = Array.isArray(problem.hiddenTestCases) ? problem.hiddenTestCases : [];
@@ -362,6 +342,28 @@ export function buildRound2TestPlan(problem = {}) {
   ];
   return { correctnessTests, robustnessTests, performanceTests, allTests };
 }
+
+
+export async function gradeRound2Code(
+  keyInput,
+  problemIdInput,
+  codeInput,
+  languageInput,
+  allowLocked = false,
+  customStdin = "",
+  deadlineAt = Date.now() + 50000
+) {
+  const key = String(keyInput || "").trim().toUpperCase();
+  const code = String(codeInput || "");
+  const language = String(languageInput || "");
+  const problemId = String(problemIdInput || "");
+  if (key.length < 3 || code.length > 100000 || !LANGUAGE_ALIASES[language] || !problemId) {
+    const error = new Error("Invalid code evaluation request."); error.statusCode = 400; throw error;
+  }
+  const { problems } = await getRound2AssignedProblems(key, allowLocked);
+  const problem = problems.find((item) => String(item.id) === problemId);
+  if (!problem) { const error = new Error("This problem is not assigned to this candidate."); error.statusCode = 403; throw error; }
+
 
   // Only server-side hidden suites contribute to grading. Samples are never executed here.
   const { correctnessTests, robustnessTests, performanceTests, allTests } = buildRound2TestPlan(problem);
