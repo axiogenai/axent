@@ -500,9 +500,6 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     if (!anyLookup && isRound1Concluded && !rawInput.includes('R2')) {
       anyLookup = await asyncLookupCandidateAny('AXENT-R2-' + rawInput);
     }
-    if (!anyLookup && isRound1Concluded && !rawInput.includes('R2')) {
-      anyLookup = await asyncLookupCandidateAny('AXENT-R2-' + rawInput);
-    }
 
     // Fallback: try local roster in case cloud sync hasn't happened yet
     if (!anyLookup) {

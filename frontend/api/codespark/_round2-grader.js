@@ -222,34 +222,26 @@ export async function gradeRound2Code(keyInput, problemIdInput, codeInput, langu
   }
 
   if (!tests.length) {
-    const result = runResult || await execute(code, language, "");
-    if (!runResult) runResult = result;
-    const passed = !result.isError;
-    return {
-      questionId: problem.id,
-      sampleResults: [{
-        testCaseId: "exec_1", input: String(customStdin || "(Standard input)"),
-        expected: "(Clean compilation & execution)",
-        actual: result.stdout || result.compileOutput || result.stderr || "",
-        passed, error: result.compileOutput || result.stderr || undefined
-      }],
-      hiddenResults: [], passedTests: passed ? 1 : 0, totalTests: 1,
-      score: passed ? maxScore : 0, maxScore,
-      status: result.compileOutput ? "COMPILE_ERROR" : result.isError ? "RUNTIME_ERROR" : "ACCEPTED",
-      runResult
-    };
+    const error = new Error("This problem is not configured for automatic grading: no sample or hidden test cases are available.");
+    error.statusCode = 422;
+    throw error;
   }
 
   const sampleResults = [];
   const hiddenResults = [];
   let passed = 0;
+  let totalWeight = 0;
+  let passedWeight = 0;
   let compileFailed = false;
   let runtimeFailed = false;
   for (const test of tests) {
     const result = await execute(code, language, String(test.input || ""));
     if (!runResult) runResult = result;
     const success = !result.isError && normalizeOutput(result.stdout) === normalizeOutput(test.expectedOutput);
-    if (success) passed++;
+    const configuredWeight = Number(test.weight);
+    const weight = Number.isFinite(configuredWeight) && configuredWeight > 0 ? configuredWeight : 1;
+    totalWeight += weight;
+    if (success) { passed++; passedWeight += weight; }
     if (result.compileOutput) compileFailed = true;
     else if (result.isError) runtimeFailed = true;
     if (test.hidden) hiddenResults.push({ testCaseId: String(test.id || ""), passed: success });
@@ -260,7 +252,7 @@ export async function gradeRound2Code(keyInput, problemIdInput, codeInput, langu
     });
   }
   const total = tests.length;
-  const score = Math.round(maxScore * passed / total);
+  const score = totalWeight > 0 ? Math.round(maxScore * passedWeight / totalWeight) : 0;
   const status = compileFailed ? "COMPILE_ERROR" : runtimeFailed && passed === 0 ? "RUNTIME_ERROR" : passed === total ? "ACCEPTED" : "PARTIAL";
   return { questionId: problem.id, sampleResults, hiddenResults, passedTests: passed, totalTests: total, score, maxScore, status, runResult };
 }

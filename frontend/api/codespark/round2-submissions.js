@@ -187,17 +187,15 @@ export default async function handler(req, res) {
       } else if (isSubmitted) {
         try {
           report = await gradeRound2Code(key, problem.id, code, language);
-        } catch {
-          report = {
-            questionId: problem.id,
-            sampleResults: [],
-            hiddenResults: [],
-            passedTests: 0,
-            totalTests: 0,
-            score: 0,
-            maxScore: Number(problem.marks) || 20,
-            status: "SUBMITTED"
-          };
+        } catch (gradingError) {
+          console.error("[CodeSpark grading]", gradingError?.message || "evaluation failed");
+          return res.status(gradingError?.statusCode || 503).json({
+            success: false,
+            retryable: !gradingError?.statusCode || gradingError.statusCode >= 500,
+            error: gradingError?.statusCode === 422
+              ? gradingError.message
+              : "Automatic grading is temporarily unavailable. Your submission has not been finalized. Please retry."
+          });
         }
         totalScore += report.score || 0;
         maxScore += report.maxScore || 20;
