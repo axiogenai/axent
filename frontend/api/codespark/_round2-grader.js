@@ -337,7 +337,8 @@ export async function gradeRound2Code(
   const problem = problems.find((item) => String(item.id) === problemId);
   if (!problem) { const error = new Error("This problem is not assigned to this candidate."); error.statusCode = 403; throw error; }
 
-  // Only server-side hidden suites contribute to grading. Samples are never executed here.
+export function buildRound2TestPlan(problem = {}) {
+  // Samples are intentionally excluded from the server-side grading plan.
   const hidden = Array.isArray(problem.hiddenTestCases) ? problem.hiddenTestCases : [];
   const performance = Array.isArray(problem.performanceTestCases) ? problem.performanceTestCases : [];
   const robustness = Array.isArray(problem.robustnessTestCases) ? problem.robustnessTestCases : [];
@@ -359,6 +360,11 @@ export async function gradeRound2Code(
     ...robustnessTests.map((test) => ({ ...test, category: "robustness" })),
     ...performanceTests.map((test) => ({ ...test, category: "performance" }))
   ];
+  return { correctnessTests, robustnessTests, performanceTests, allTests };
+}
+
+  // Only server-side hidden suites contribute to grading. Samples are never executed here.
+  const { correctnessTests, robustnessTests, performanceTests, allTests } = buildRound2TestPlan(problem);
   const maxScore = Number(problem.marks) > 0 ? Number(problem.marks) : 20;
 
   if (!code.trim()) {
