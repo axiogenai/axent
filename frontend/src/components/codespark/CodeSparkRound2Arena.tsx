@@ -1712,13 +1712,13 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                   ) : activeReport ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       {/* Real Program Standard Output */}
-                      {activeReport.compilerResult?.stdout && (
+                      {(activeReport.compilerResult?.stdout || activeReport.sampleResults?.[0]?.actual) && (
                         <div style={{ background: '#09090b', border: '1px solid #27272a', borderRadius: '6px', padding: '8px 12px' }}>
                           <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', marginBottom: '4px', fontFamily: 'monospace' }}>
                             Program Standard Output:
                           </div>
                           <pre style={{ margin: 0, fontFamily: "'Consolas', monospace", fontSize: '12px', color: '#f4f4f5', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                            {activeReport.compilerResult.stdout}
+                            {activeReport.compilerResult?.stdout || activeReport.sampleResults?.[0]?.actual}
                           </pre>
                         </div>
                       )}

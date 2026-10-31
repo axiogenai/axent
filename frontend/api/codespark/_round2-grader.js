@@ -40,11 +40,15 @@ async function execute(code, language, stdin) {
     if (!response.ok) throw new Error("Compiler service unavailable.");
     const result = await response.json();
     const status = Number.parseInt(result.status || "0", 10);
+    const compileErr = result.compiler_error || (status !== 0 ? result.compiler_output : "") || "";
+    const programErr = result.program_error || "";
+    const compileError = Boolean(result.compiler_error) || (status !== 0 && Boolean(result.compiler_output));
+    const isError = status !== 0 || Boolean(result.compiler_error) || Boolean(programErr);
     return {
       stdout: result.program_output || "",
-      stderr: result.program_error || result.compiler_error || result.compiler_output || "",
-      compileError: Boolean(result.compiler_error || result.compiler_output),
-      isError: status !== 0 || Boolean(result.compiler_error || result.program_error)
+      stderr: programErr || compileErr || "",
+      compileError,
+      isError
     };
   } finally {
     clearTimeout(timer);
