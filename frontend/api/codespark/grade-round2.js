@@ -30,7 +30,10 @@ export default async function handler(req, res) {
       body.key, body.problemId, body.code, body.language, false, body.stdin ?? body.customStdin ?? ""
     );
     await recordRound2Evaluation(key);
-    return res.status(200).json({ success: true, ...result });
+    // Never serialize per-test details to the candidate. The full report is
+    // generated and retained only by the protected server-side submission flow.
+    const { questionId, score, maxScore, status, runResult } = result;
+    return res.status(200).json({ success: true, questionId, score, maxScore, status, runResult });
   } catch (error) {
     console.error("[CodeSpark grading]", error?.message || "grading failure");
     return res.status(error.statusCode || 503).json({
