@@ -75,7 +75,13 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
   const cleanRoll = candidateProfile.rollNumber || candidateProfile.email.split('@')[0] || 'CANDIDATE';
   // --- 1. Problems State: Individualized 5 randomized questions from 10+ pool |
   const [problems, setProblems] = useState<Round2Problem[]>(() => {
-    const all = getAllRound2Problems().map((problem) => ({ ...problem, hiddenTestCases: [] }));
+    const all = getAllRound2Problems().map((problem) => ({
+      ...problem,
+      sampleTestCases: [],
+      hiddenTestCases: [],
+      performanceTestCases: [],
+      robustnessTestCases: []
+    }));
     // Purge any legacy hidden-test cache that may have been downloaded by older builds.
     try { localStorage.setItem('codedna_codespark_r2_problems', JSON.stringify(all)); } catch {}
     return selectStudentRound2Problems(all, candidateKey);
