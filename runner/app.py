@@ -139,16 +139,6 @@ def run_judge(code: str, language: str, stdin: str):
         completed_returncode = int(process.returncode or 0)
         if completed_returncode == 125:
             raise RuntimeError("The isolated sandbox could not start. Retry evaluation; no marks were awarded.")
-        stdout = completed.stdout[:MAX_OUTPUT].decode("utf-8", errors="replace")
-        stderr = completed.stderr[:MAX_OUTPUT].decode("utf-8", errors="replace")
-        if len(completed.stdout) > MAX_OUTPUT or len(completed.stderr) > MAX_OUTPUT:
-            return {
-                "exitCode": 125, "stdout": stdout, "stderr": "Output limit exceeded (64 KB).",
-                "compileError": False, "runtimeMs": None, "memoryKb": None,
-                "wallTimeMs": round((time.monotonic() - started) * 1000, 2),
-                "statusDescription": "Output Limit Exceeded",
-            }
-
         runtime_ms = None
         memory_kb = None
         match = re.search(r"__AXENT_METRICS__(\d+(?:\.\d+)?)\|(\d+)", stderr)
@@ -158,7 +148,7 @@ def run_judge(code: str, language: str, stdin: str):
             stderr = stderr[:match.start()].rstrip()
 
         compile_error = completed_returncode == 86
-        status = "Compilation Error" if compile_error else "Accepted" if completed.returncode == 0 else "Runtime Error"
+        status = "Compilation Error" if compile_error else "Accepted" if completed_returncode == 0 else "Runtime Error"
         return {
             "exitCode": completed_returncode,
             "stdout": stdout,
