@@ -1,70 +1,37 @@
-# Axent — Autonomous Academic & Technical Examination Platform
+# Axent interactive code runner
 
-Axent is an institutional examination management, authoring, proctoring, and automated evaluation platform designed for colleges, universities, and technical academies.
+A dedicated Linux host service for genuine interactive Round 2 terminals. Vercel functions cannot keep a PTY process alive, so the browser connects to this WebSocket service.
 
----
+## Host requirements
 
-## Key Capabilities
+- A dedicated Linux VM (Ubuntu 22.04/24.04 recommended), not Vercel or a shared app host.
+- Docker Engine installed and available at `/var/run/docker.sock`.
+- A public HTTPS/WSS hostname such as `terminal.axent.axiogen.in`, with Caddy/Nginx terminating TLS and proxying WebSockets to `127.0.0.1:8080`.
+- Firewall: expose only the HTTPS reverse-proxy port. Keep Docker and port 8080 private.
 
-- **Paper Setter Portal**: Author question banks, generate full examination papers autonomously with AI, configure strict time windows, and schedule proctored sessions.
-- **Dual Examination Formats**:
-  - **MCQ Examination**: Real-time timer countdown, anti-tamper kiosk mode, deterministic candidate audit tokens, and WhatsApp results dispatch.
-  - **Monaco Coding Practical**: Full in-browser IDE with live compiler execution, automated unit test grading, and anti-plagiarism forensics.
-- **Proctoring & Invigilation**:
-  - Live candidate telemetry grid with tab-switch infraction tracking.
-  - Automatic workstation lockdown on academic policy violation.
-  - Instant candidate pardon and emergency time extension controls.
-- **Cloud Infrastructure & Sync**:
-  - Integrated PostgreSQL database for central sync.
-  - Real-time station heartbeat telemetry.
-  - CSV/JSON ledger exports for department recordkeeping.
+## Deploy
 
----
+1. Copy `.env.example` to `.env` and set a unique random `AXENT_RUNNER_SECRET`.
+2. Build the compiler sandbox image: `docker build -t axent-code-sandbox:latest ./sandbox`.
+3. Start the service: `docker compose up -d --build`.
+4. Configure Vercel server-only variables:
+   - `CODE_RUNNER_SECRET`: exactly the same secret.
+   - `CODE_RUNNER_URL`: runner HTTPS base URL, e.g. `https://terminal.axent.axiogen.in`.
+5. Configure the Vercel frontend build variable:
+   - `VITE_CODE_RUNNER_WS_URL`: `wss://terminal.axent.axiogen.in/ws/terminal`.
+6. Rebuild/redeploy Axent and verify `GET https://terminal.axigen.in/health` returns `{"status":"ok"}`.
 
-## Tech Stack
+## Security
 
-- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS v4, Monaco Editor, Lucide Icons, Framer Motion
-- **Backend**: Python 3.11+, Django REST framework
-- **Cloud / Telemetry**: Supabase Realtime & PostgreSQL
+Each session requires a short-lived HMAC token issued by Axent's Round 2 API. It binds the candidate, assigned problem, language, and exact source-code SHA-256. The runner rejects expired or altered code. Each execution runs in a fresh, network-disabled Docker container with memory/CPU/PID/file-size limits, a read-only source mount, a non-root UID, dropped Linux capabilities, and no-new-privileges. The PTY is destroyed when the process exits, the browser disconnects, or the 90-second session limit is reached.
 
----
+The runner needs access to the Docker socket, which is effectively host-root access. Use a dedicated VM, keep it patched, and never publish port 8080 directly.
 
-## Getting Started
+## Languages
 
-### 1. Frontend Setup
+C (GCC), C++ (G++), Python 3, and Java 17. Java source is compiled as `Main.java`, so a public top-level class must be named `Main`.
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
 
-The frontend will run at `http://localhost:4000`.
+## Round 2 interactive compiler runner
 
-### 2. Backend Setup (Optional for cloud mode)
-
-```bash
-cd backend
-python -m venv venv
-# On Windows:
-.\venv\Scripts\activate
-# On Linux/macOS:
-source venv/bin/activate
-
-pip install -r requirements.txt
-python manage.py runserver
-```
-
----
-
-## Deployment & Hosting
-
-<a href="https://vercel.com?utm_source=team-axiogen&utm_campaign=oss">
-  <img src="https://assets.vercel.com/image/upload/v1588805858/repositories/vercel/powered-by-vercel.svg" alt="Powered by Vercel" />
-</a>
-
----
-
-## License
-
-Institutional Proprietary — Developed for Enterprise & University Examination Administrations.
+The real terminal requires the dedicated Docker-isolated WebSocket/PTy service in [runner/README.md](runner/README.md). Deploy that service on a dedicated Linux VM, then configure the runner's matching server-only Vercel secrets and frontend WebSocket URL before enabling interactive execution. The Vercel function alone cannot host a persistent interactive process.

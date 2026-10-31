@@ -31,7 +31,7 @@ import {
   Round2CandidateSubmission,
   detectLanguageFromCode,
   evaluateRound2Code,
-  runRound2Code,
+  createRound2TerminalSession,
   fetchRound2ProblemsFromCloud,
   fetchRound2SubmissionFromCloud,
   getAllRound2Problems,
@@ -352,6 +352,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
 
   // Current Active Question (1-indexed: 1 to 5)
   const [currentQIndex, setCurrentQIndex] = useState<number>(submission.currentQuestion || 1);
+  useEffect(() => () => { terminalSocketRef.current?.close(); }, [currentQIndex]);
   const currentProblem: Round2Problem = useMemo(() => {
     const found = problems.find((p) => p.number === currentQIndex);
     return found || problems[0] || ({} as Round2Problem);
@@ -409,18 +410,23 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
   const [isCompiling, setIsCompiling] = useState(false);
   const [compileError, setCompileError] = useState<string | null>(null);
   const [customInputText, setCustomInputText] = useState('');
-  const [lastEnteredStdin, setLastEnteredStdin] = useState('');
-  const [terminalInputLines, setTerminalInputLines] = useState<string[]>([]);
   const [terminalRunResult, setTerminalRunResult] = useState<CompilerExecutionResult | null>(null);
   const [isTerminalRunning, setIsTerminalRunning] = useState(false);
-  const terminalInputRef = useRef<HTMLInputElement>(null);
+  const [terminalOutput, setTerminalOutput] = useState('');
+  const [terminalStatus, setTerminalStatus] = useState('Ready. Click Run Code to start an interactive session.');
+  const terminalSocketRef = useRef<WebSocket | null>(null);
+  const terminalOutputRef = useRef('');
+  const terminalInputRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const terminal = terminalInputRef.current;
+    if (!terminal) return;
+    terminal.scrollTop = terminal.scrollHeight;
+    const cursor = (terminalOutput + customInputText).length;
+    terminal.setSelectionRange(cursor, cursor);
+  }, [terminalOutput, customInputText]);
   const [activeReport, setActiveReport] = useState<Round2QuestionReport | null>(() => {
     return submission.questionReports[currentQIndex] || null;
   });
-
-  const formatConsoleOutput = (rawStdout: string, _enteredInput: string) => {
-    return String(rawStdout || '').replace(/\r\n/g, '\n');
-  };
 
   // Mobile Responsiveness & Viewport Navigation Tabs
   const [isMobileScreen, setIsMobileScreen] = useState(() =>
@@ -487,9 +493,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     setActiveReport(submission.questionReports[currentQIndex] || null);
     setCompileError(null);
     setCustomInputText('');
-    setTerminalInputLines([]);
     setTerminalRunResult(null);
-    setLastEnteredStdin('');
   }, [currentQIndex, submission.questionReports]);
   // Sync submission to backend when changes occur
   const updateSubmissionState = useCallback(
@@ -557,192 +561,87 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       void pushRound2LiveCodeToCloud(candidateProfile, code, effectiveLang, currentQIndex);
     }, 1000);
   };
-  // Terminal input is accumulated and replayed as standard input on each execution.
-  // The Vercel runner is request-based, so this provides multi-line stdin without
-  // pretending that a serverless request is a persistent PTY process.
-  const handleTerminalInput = async () => {
-    if (!currentProblem?.id || isTerminalRunning || isCompiling || proctorLocked || submission.isSubmitted) return;
-    const nextLines = [...terminalInputLines, customInputText];
-    const stdin = nextLines.join('\n') + '\n';
-    setTerminalInputLines(nextLines);
-    setLastEnteredStdin(stdin);
+  // A single long-lived PTY process handles compile, stdout, stderr and stdin.
+  const handleTerminalInput = () => {
+    const socket = terminalSocketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN || !isTerminalRunning) return;
+    socket.send(JSON.stringify({ type: 'input', data: customInputText + '\n' }));
     setCustomInputText('');
-    setIsTerminalRunning(true);
+  };
+
+  const handleCompileAndRun = async () => {
+    if (!currentProblem?.id || !activeCode.trim() || isCompiling || isTerminalRunning || proctorLocked || submission.isSubmitted) return;
+    terminalSocketRef.current?.close();
+    setTerminalOutput('');
+    terminalOutputRef.current = '';
+    setTerminalRunResult(null);
+    setCustomInputText('');
+    setIsCompiling(true);
+    setTerminalStatus('Authorizing secure terminal session...');
     setCompileError(null);
+    playSound('click');
+
     try {
-      const result = await runRound2Code(
+      const session = await createRound2TerminalSession(
         candidateProfile.round2Key || candidateProfile.accessKey || candidateKey,
         currentProblem.id,
         activeCode,
-        effectiveLang,
-        stdin
+        effectiveLang
       );
-      setTerminalRunResult(result);
-      setActiveReport((previous) => previous ? {
-        ...previous,
-        compilerResult: result
-      } : {
-        questionNumber: currentProblem.number,
-        questionId: currentProblem.id,
-        questionTitle: currentProblem.title,
-        code: activeCode,
-        language: effectiveLang,
-        compilerResult: result,
-        sampleResults: [],
-        hiddenResults: [],
-        passedTests: 0,
-        totalTests: 0,
-        score: 0,
-        maxScore: currentProblem.marks || 20,
-        status: result.compileOutput ? 'COMPILE_ERROR' : result.isError ? 'RUNTIME_ERROR' : 'PENDING',
-        compiledAt: Date.now()
-      });
-      setCompileError(null);
-      if (isMobileScreen) setMobileTab('console');
-    } catch (error: any) {
-      const failure: CompilerExecutionResult = {
-        stdout: '',
-        stderr: error?.message || 'Terminal execution failed. Please retry.',
-        compileOutput: null,
-        exitCode: 1,
-        time: '0.00s',
-        memory: 0,
-        statusDescription: 'Runner Error',
-        isError: true,
-        engineUsed: 'Axent Round 2 Runner'
-      };
-      setTerminalRunResult(failure);
-      setActiveReport((previous) => previous ? { ...previous, compilerResult: failure } : {
-        questionNumber: currentProblem.number,
-        questionId: currentProblem.id,
-        questionTitle: currentProblem.title,
-        code: activeCode,
-        language: effectiveLang,
-        compilerResult: failure,
-        sampleResults: [],
-        hiddenResults: [],
-        passedTests: 0,
-        totalTests: 0,
-        score: 0,
-        maxScore: currentProblem.marks || 20,
-        status: 'RUNTIME_ERROR',
-        compiledAt: Date.now()
-      });
-      setCompileError(null);
-      if (isMobileScreen) setMobileTab('console');
-    } finally {
-      setIsTerminalRunning(false);
-    }
-  };
-
-  // --- 3. Compile & Test Execution |
-  const handleCompileAndRun = async () => {
-    if (!currentProblem || !currentProblem.id || isCompiling || proctorLocked) return;
-    setTerminalInputLines([]);
-    setTerminalRunResult(null);
-    setLastEnteredStdin('');
-    setCustomInputText('');
-    setIsCompiling(true);
-    setCompileError(null);
-    playSound('click');
-    try {
-      const qTimestamps = submission.questionTimestamps || {};
-      const qStart = qTimestamps[currentQIndex]?.startedAt || Date.now();
-      const timeTakenMs = Date.now() - qStart;
-      const report = await evaluateRound2Code(
-        currentProblem,
-        activeCode,
-        effectiveLang,
-        timeTakenMs,
-        undefined,
-        candidateProfile.round2Key || candidateProfile.accessKey
-      );
-      report.startedAt = qStart;
-      report.startedAtFormatted = new Date(qStart).toLocaleTimeString();
-      report.timeTakenSeconds = Math.max(1, Math.round((report.compiledAt - qStart) / 1000));
-      setActiveReport(report);
-      if (isMobileScreen) setMobileTab('console');
-
-      const updatedTimestamps = {
-        ...qTimestamps,
-        [currentQIndex]: {
-          startedAt: qStart,
-          startedAtFormatted: new Date(qStart).toLocaleTimeString(),
-          compiledAt: report.compiledAt,
-          compiledAtFormatted: new Date(report.compiledAt).toLocaleTimeString()
+      const socket = new WebSocket(session.socketUrl);
+      terminalSocketRef.current = socket;
+      socket.onopen = () => socket.send(JSON.stringify({
+        type: 'start', token: session.token, code: activeCode, language: effectiveLang
+      }));
+      socket.onmessage = (event) => {
+        let message: any;
+        try { message = JSON.parse(event.data); } catch { return; }
+        if (message.type === 'status') {
+          setTerminalStatus(String(message.message || 'Starting...'));
+        } else if (message.type === 'ready') {
+          setTerminalStatus('Running · type directly below the program output');
+          setIsCompiling(false);
+          setIsTerminalRunning(true);
+          if (isMobileScreen) setMobileTab('console');
+          setTimeout(() => terminalInputRef.current?.focus(), 0);
+        } else if (message.type === 'output') {
+          terminalOutputRef.current += String(message.data || '');
+          setTerminalOutput(terminalOutputRef.current);
+        } else if (message.type === 'error') {
+          setTerminalOutput((previous) => previous + '\n' + String(message.message || 'Terminal error') + '\n');
+          setTerminalStatus('Execution stopped');
+        } else if (message.type === 'exit') {
+          setIsCompiling(false);
+          setIsTerminalRunning(false);
+          setTerminalStatus('Process exited · code ' + String(message.exitCode ?? 0));
+          setTerminalRunResult({
+            stdout: terminalOutputRef.current, stderr: null, compileOutput: null,
+            exitCode: Number(message.exitCode) || 0, time: '—', memory: 0,
+            statusDescription: 'Process exited', isError: Number(message.exitCode) !== 0,
+            engineUsed: 'Axent isolated PTY runner'
+          });
+          terminalSocketRef.current = null;
         }
       };
-      const updatedReports = {
-        ...submission.questionReports,
-        [currentQIndex]: report
+      socket.onerror = () => {
+        setIsCompiling(false);
+        setIsTerminalRunning(false);
+        setTerminalStatus('Terminal connection failed');
+        setTerminalOutput((previous) => previous + '\n[Runner connection failed. Check terminal service configuration.]\n');
       };
-      let totalScore = 0;
-      let totalMax = 0;
-      const langCounts: Record<string, number> = { Python: 0, 'C++': 0, C: 0, Java: 0 };
-      Object.values(updatedReports).forEach((rep) => {
-        totalScore += rep.score || 0;
-        totalMax += rep.maxScore || 20;
-        if (rep.language) langCounts[rep.language] = (langCounts[rep.language] || 0) + 1;
-      });
-      let dominant = 'Python';
-      let maxCnt = -1;
-      Object.entries(langCounts).forEach(([language, count]) => {
-        if (count > maxCnt) {
-          maxCnt = count;
-          dominant = language;
-        }
-      });
-      const updatedSub: Round2CandidateSubmission = {
-        ...submission,
-        questionReports: updatedReports,
-        questionTimestamps: updatedTimestamps,
-        currentQuestion: currentQIndex,
-        totalScore,
-        maxScore: totalMax > 0 ? totalMax : (problems.reduce((sum, problem) => sum + (problem.marks || 20), 0) || 100),
-        dominantLanguage: dominant
+      socket.onclose = () => {
+        setIsCompiling(false);
+        setIsTerminalRunning(false);
+        if (terminalSocketRef.current === socket) terminalSocketRef.current = null;
       };
-      updateSubmissionState(updatedSub);
-      void saveRound2ProgressToCloud(updatedSub);
-      void pushRound2LiveCodeToCloud(candidateProfile, activeCode, effectiveLang, currentQIndex);
-      if (report.status === 'ACCEPTED') playSound('success');
-      else playSound('warning');
     } catch (error: any) {
-      console.error('Compilation error:', error);
-      const failure: CompilerExecutionResult = {
-        stdout: '',
-        stderr: error?.message || 'Compiler execution failed. Please retry.',
-        compileOutput: null,
-        exitCode: 1,
-        time: '0.00s',
-        memory: 0,
-        statusDescription: 'Compiler Error',
-        isError: true,
-        engineUsed: 'Axent Round 2 Runner'
-      };
-      setTerminalRunResult(failure);
-      setActiveReport({
-        questionNumber: currentProblem.number,
-        questionId: currentProblem.id,
-        questionTitle: currentProblem.title,
-        code: activeCode,
-        language: effectiveLang,
-        compilerResult: failure,
-        sampleResults: [],
-        hiddenResults: [],
-        passedTests: 0,
-        totalTests: 0,
-        score: 0,
-        maxScore: currentProblem.marks || 20,
-        status: 'RUNTIME_ERROR',
-        compiledAt: Date.now()
-      });
-      setCompileError(null);
-      if (isMobileScreen) setMobileTab('console');
-      playSound('error');
-    } finally {
       setIsCompiling(false);
+      setIsTerminalRunning(false);
+      setTerminalStatus('Unable to start terminal');
+      setTerminalOutput((previous) => previous + String(error?.message || 'Unable to start terminal') + '\n');
     }
   };
+
   // --- 4. Question Navigation |
   const handleSelectQuestion = (qNum: number) => {
     if (qNum < 1 || qNum > 5) return;
@@ -1625,7 +1524,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <button
                   type="button"
-                  disabled={isCompiling}
+                  disabled={isCompiling || isTerminalRunning}
                   onClick={handleCompileAndRun}
                   style={{
                     background: isCompiling ? '#27272a' : '#10b981',
@@ -1831,16 +1730,14 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                         <span>Running...</span>
                       </span>
                     )}
-                    {(activeReport || compileError || lastEnteredStdin) && (
+                    {(activeReport || compileError || terminalOutput) && (
                       <button
                         type="button"
                         onClick={() => {
                           setActiveReport(null);
                           setCompileError(null);
                           setCustomInputText('');
-                          setLastEnteredStdin('');
-                          setTerminalInputLines([]);
-                          setTerminalRunResult(null);
+                                                                      setTerminalRunResult(null);
                         }}
                         style={{
                           background: 'transparent',
@@ -1874,159 +1771,41 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                     cursor: 'text'
                   }}
                 >
-                  {compileError ? (
-                    <pre style={{ margin: 0, color: '#ef4444', fontFamily: 'inherit', fontSize: '12.5px', whiteSpace: 'pre-wrap' }}>
-                      {compileError}
-                    </pre>
-                  ) : (terminalRunResult || activeReport) ? (
-                    <div>
-                      {/* Submitted stdin lines appear in the terminal transcript. */}
-                      {terminalInputLines.length > 0 && (
-                        <pre style={{ margin: '0 0 8px', color: '#a1a1aa', fontFamily: 'inherit', fontSize: '12px', whiteSpace: 'pre-wrap' }}>
-                          {terminalInputLines.map((line) => '❯ ' + line).join('\n')}
-                        </pre>
-                      )}
-                      {/* Program Output stream */}
-                      {(terminalRunResult?.stdout || activeReport?.compilerResult?.stdout || activeReport?.sampleResults?.[0]?.actual) && (
-                        <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: '13px', color: '#f4f4f5', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                          {formatConsoleOutput(
-                            terminalRunResult?.stdout || activeReport?.compilerResult?.stdout || activeReport?.sampleResults?.[0]?.actual || '',
-                            lastEnteredStdin
-                          )}
-                        </pre>
-                      )}
-
-                      {/* Compilation / Runtime Errors */}
-                      {(terminalRunResult?.compileOutput || terminalRunResult?.stderr || activeReport?.compilerResult?.compileOutput || activeReport?.compilerResult?.stderr) && (
-                        <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: '12.5px', color: '#f87171', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                          {terminalRunResult?.compileOutput || terminalRunResult?.stderr || activeReport?.compilerResult?.compileOutput || activeReport?.compilerResult?.stderr}
-                        </pre>
-                      )}
-
-                      {/* Interactive input bar */}
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          marginTop: '10px',
-                          padding: '6px 10px',
-                          background: '#18181b',
-                          borderRadius: '6px',
-                          border: '1px solid #27272a'
-                        }}
-                      >
-                        <span style={{ color: '#10b981', fontFamily: 'monospace', fontWeight: 700, fontSize: '13px' }}>❯</span>
-                        <input
-                          ref={terminalInputRef}
-                          type="text"
-                          placeholder="Enter input for scanf / cin / input() · press Enter for next line..."
-                          value={customInputText}
-                          onChange={(e) => setCustomInputText(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleTerminalInput();
-                            }
-                          }}
-                          style={{
-                            flex: 1,
-                            background: 'transparent',
-                            border: 'none',
-                            outline: 'none',
-                            color: '#f4f4f5',
-                            fontSize: '13px',
-                            fontFamily: 'inherit',
-                            caretColor: '#10b981',
-                            padding: 0,
-                            margin: 0
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={handleTerminalInput}
-                          disabled={isTerminalRunning || isCompiling}
-                          style={{
-                            padding: '3px 10px',
-                            borderRadius: '4px',
-                            background: '#27272a',
-                            border: '1px solid #3f3f46',
-                            color: '#e4e4e7',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          Enter ↵
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    /* Initial empty terminal with blinking cursor */
-                    <div>
-                      <div style={{ color: '#71717a', fontSize: '12px', marginBottom: '8px' }}>
-                        Ready to execute. Write code and click &quot;Run Code&quot; above, or provide standard input below:
-                      </div>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          padding: '6px 10px',
-                          background: '#18181b',
-                          borderRadius: '6px',
-                          border: '1px solid #27272a'
-                        }}
-                      >
-                        <span style={{ color: '#10b981', fontFamily: 'monospace', fontWeight: 700, fontSize: '13px' }}>❯</span>
-                        <input
-                          ref={terminalInputRef}
-                          type="text"
-                          placeholder="Type stdin input (for scanf / cin / input()) and press Enter..."
-                          value={customInputText}
-                          onChange={(e) => setCustomInputText(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleTerminalInput();
-                            }
-                          }}
-                          style={{
-                            flex: 1,
-                            background: 'transparent',
-                            border: 'none',
-                            outline: 'none',
-                            color: '#f4f4f5',
-                            fontSize: '13px',
-                            fontFamily: 'inherit',
-                            caretColor: '#10b981',
-                            padding: 0,
-                            margin: 0
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={handleTerminalInput}
-                          disabled={isCompiling}
-                          style={{
-                            padding: '3px 10px',
-                            borderRadius: '4px',
-                            background: '#27272a',
-                            border: '1px solid #3f3f46',
-                            color: '#e4e4e7',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Send Input ↵
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ color: '#71717a', fontSize: '11px' }}>{terminalStatus}</div>
+                    {compileError && <pre style={{ margin: 0, color: '#ef4444', whiteSpace: 'pre-wrap' }}>{compileError}</pre>}
+                    <textarea
+                      ref={terminalInputRef}
+                      aria-label="Interactive terminal"
+                      autoComplete="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      disabled={!isTerminalRunning || proctorLocked || submission.isSubmitted}
+                      placeholder={isTerminalRunning ? '' : 'Run Code to start the program. Program prompts and your input will appear here.'}
+                      value={terminalOutput + customInputText}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        if (event.target.selectionStart < terminalOutput.length) {
+                          event.target.value = terminalOutput + customInputText;
+                          return;
+                        }
+                        setCustomInputText(value.slice(terminalOutput.length));
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          handleTerminalInput();
+                        }
+                      }}
+                      style={{
+                        display: 'block', width: '100%', minHeight: '150px', flex: 1,
+                        resize: 'none', overflowY: 'auto', background: 'transparent',
+                        border: 0, outline: 0, color: '#f4f4f5', fontSize: '13px',
+                        lineHeight: 1.6, fontFamily: 'inherit', caretColor: '#10b981',
+                        padding: 0, whiteSpace: 'pre-wrap'
+                      }}
+                    />
+                  </div>
                 </div>
 
                 {/* Terminal Footer Navigation */}
@@ -2220,46 +1999,40 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                     </div>
                   </div>
 
-                  {/* Standard Output with Interactive Terminal Input */}
+                  {/* Same PTY-backed terminal on compact layouts */}
                   <div style={{ background: '#09090b', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 12px', fontFamily: "'JetBrains Mono', Consolas, monospace" }}>
                     <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', marginBottom: '6px' }}>
-                      Program Console
+                      Program Terminal · {terminalStatus}
                     </div>
-                    {terminalInputLines.length > 0 && (
-                      <pre style={{ margin: '0 0 6px', color: '#a1a1aa', fontFamily: 'inherit', fontSize: '11px', whiteSpace: 'pre-wrap' }}>
-                        {terminalInputLines.map((line) => '❯ ' + line).join('\n')}
-                      </pre>
-                    )}
-                    {(terminalRunResult?.stdout || activeReport?.compilerResult?.stdout) && (
-                      <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: '11.5px', color: '#f4f4f5', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                        {terminalRunResult?.stdout || activeReport?.compilerResult?.stdout}
-                      </pre>
-                    )}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
-                      <span style={{ color: '#10b981', fontWeight: 700 }}>❯</span>
-                      <input
-                        type="text"
-                        value={customInputText}
-                        onChange={(e) => setCustomInputText(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleTerminalInput();
-                          }
-                        }}
-                        placeholder="Enter input line and press Enter..."
-                        style={{
-                          flex: 1,
-                          background: 'transparent',
-                          border: 'none',
-                          outline: 'none',
-                          color: '#f4f4f5',
-                          fontSize: '11.5px',
-                          fontFamily: 'inherit',
-                          caretColor: '#10b981'
-                        }}
-                      />
-                    </div>
+                    <textarea
+                      ref={terminalInputRef}
+                      aria-label="Interactive program terminal"
+                      autoComplete="off"
+                      spellCheck={false}
+                      disabled={!isTerminalRunning || proctorLocked || submission.isSubmitted}
+                      value={terminalOutput + customInputText}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        if (event.target.selectionStart < terminalOutput.length) {
+                          event.target.value = terminalOutput + customInputText;
+                          return;
+                        }
+                        setCustomInputText(value.slice(terminalOutput.length));
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          handleTerminalInput();
+                        }
+                      }}
+                      placeholder={isTerminalRunning ? '' : 'Run Code to start · program prompts and input appear here'}
+                      style={{
+                        display: 'block', width: '100%', minHeight: '120px', resize: 'vertical',
+                        background: 'transparent', border: 0, outline: 0, color: '#f4f4f5',
+                        fontSize: '11.5px', lineHeight: 1.6, fontFamily: 'inherit',
+                        caretColor: '#10b981', padding: 0, whiteSpace: 'pre-wrap'
+                      }}
+                    />
                   </div>
 
                   {/* Stderr Diagnostics */}

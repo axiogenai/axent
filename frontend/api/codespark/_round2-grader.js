@@ -165,7 +165,8 @@ export async function getRound2AssignedProblems(keyInput, allowLocked = false) {
     ? problemRows[0].student
     : (() => { try { return JSON.parse(problemRows?.[0]?.code || "{}"); } catch { return {}; } })();
   const pool = Array.isArray(problemConfig.problems) ? problemConfig.problems : [];
-  return { candidate, problems: assignedProblems(pool, candidate.round2Key) };
+  // Match the browser assignment seed exactly: use the full presented key, not a potentially stale roster field.
+  return { candidate, problems: assignedProblems(pool, rawKey) };
 }
 
 export async function runRound2Code(keyInput, problemIdInput, codeInput, languageInput, stdinInput = "", allowLocked = false) {

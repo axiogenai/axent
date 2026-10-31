@@ -1,0 +1,13 @@
+services:
+  axent-terminal:
+    build: .
+    container_name: axent-terminal
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      AXENT_RUNNER_SECRET: ${AXENT_RUNNER_SECRET:?Set a long random AXENT_RUNNER_SECRET}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://axent.axiogen.in}
+      EXECUTION_IMAGE: axent-code-sandbox:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

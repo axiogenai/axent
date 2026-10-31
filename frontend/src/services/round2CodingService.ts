@@ -1290,6 +1290,27 @@ function toCompilerExecutionResult(value: any): CompilerExecutionResult {
   };
 }
 
+
+export async function createRound2TerminalSession(
+  candidateKey: string,
+  problemId: string,
+  code: string,
+  language: 'C' | 'C++' | 'Python' | 'Java'
+): Promise<{ token: string; socketUrl: string }> {
+  const response = await fetch('/api/codespark/terminal-session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: candidateKey, problemId, code, language })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.success || !payload?.token || !payload?.runnerUrl) {
+    throw new Error(payload?.error || 'Could not start the interactive terminal.');
+  }
+  const configuredSocket = (import.meta as any).env?.VITE_CODE_RUNNER_WS_URL as string | undefined;
+  const socketUrl = configuredSocket || payload.runnerUrl.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:') + '/ws/terminal';
+  return { token: payload.token, socketUrl };
+}
+
 export async function runRound2Code(
   candidateKey: string,
   problemId: string,
@@ -1578,18 +1599,9 @@ export function selectStudentRound2Problems(
   if (allPool.length <= 5) {
     return (allPool || []).map((p, idx) => ({ ...p, number: idx + 1 }));
   }
-  // Check if candidate already has assignedProblemIds saved
-  const stored = getStoredRound2Submission(candidateKey);
-  if (stored?.assignedProblemIds && stored.assignedProblemIds.length > 0) {
-    const idMap = new Map(allPool.map((p) => [p.id, p]));
-    const matched = stored.assignedProblemIds
-      .map((id) => idMap.get(id))
-      .filter(Boolean) as Round2Problem[];
-    if (matched.length === stored.assignedProblemIds.length) {
-      return matched.map((p, idx) => ({ ...p, number: idx + 1 }));
-    }
-  }
+  // Always mirror the server's deterministic key-based assignment. Cached IDs can belong to an older pool.
   // Deterministic seeded pseudo-random shuffle based on candidateKey
+  const stored = getStoredRound2Submission(candidateKey);
   const keyStr = (candidateKey || 'CANDIDATE').toUpperCase();
   let seed = 0;
   for (let i = 0; i < keyStr.length; i++) {
