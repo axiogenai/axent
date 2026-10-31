@@ -320,7 +320,9 @@ export async function gradeRound2Code(keyInput, problemIdInput, codeInput, langu
       const result = await execute(code, language, String(test.input || ""), key, problemId);
       if (!runResult) runResult = result;
       const runtimeMs = parseRuntimeMs(result.time);
-      const memoryKb = Number.isFinite(Number(result.memory)) ? Number(result.memory) : null;
+      const memoryKb = result.memory == null || result.memory === "" || !Number.isFinite(Number(result.memory))
+        ? null
+        : Number(result.memory);
       const passed = !result.isError &&
         normalizeOutput(result.stdout) === normalizeOutput(test.expectedOutput);
       if (result.compileOutput) compileFailed = true;
