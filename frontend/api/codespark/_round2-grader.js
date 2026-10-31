@@ -125,7 +125,8 @@ async function execute(code, language, stdin, candidateKey = "", problemId = "")
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         const error = new Error(payload.detail || payload.error || "The isolated judge is temporarily unavailable.");
-        error.statusCode = response.status >= 500 ? 503 : 422;
+        // A runner-side authentication, capacity, or host failure is never a candidate failure.
+        error.statusCode = 503;
         throw error;
       }
       const runtimeMs = payload.runtimeMs == null ? null : Number(payload.runtimeMs);
