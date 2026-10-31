@@ -50,6 +50,10 @@ export default async function handler(req, res) {
       if (!problem || typeof problem !== "object" || !Array.isArray(problem.sampleTestCases) || !Array.isArray(problem.hiddenTestCases)) {
         return res.status(400).json({ success: false, error: "Each problem must include sample and hidden test case arrays." });
       }
+      if ((problem.performanceTestCases !== undefined && !Array.isArray(problem.performanceTestCases)) ||
+          (problem.robustnessTestCases !== undefined && !Array.isArray(problem.robustnessTestCases))) {
+        return res.status(400).json({ success: false, error: "Performance and robustness suites must be arrays." });
+      }
       const performanceTests = Array.isArray(problem.performanceTestCases) ? problem.performanceTestCases : [];
       const robustnessTests = Array.isArray(problem.robustnessTestCases) ? problem.robustnessTestCases : [];
       if (problem.sampleTestCases.length > 30 || problem.hiddenTestCases.length > 200 ||
