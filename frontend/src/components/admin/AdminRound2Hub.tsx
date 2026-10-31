@@ -773,6 +773,10 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
         hiddenTestCases: Array.isArray(p.hiddenTestCases) ? p.hiddenTestCases : [],
 
+        performanceTestCases: Array.isArray(p.performanceTestCases) ? p.performanceTestCases : [],
+
+        robustnessTestCases: Array.isArray(p.robustnessTestCases) ? p.robustnessTestCases : [],
+
 
 
         starterCode: p.starterCode || {
@@ -4716,7 +4720,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                            <strong style={{ color: '#10b981' }}>{rep.timeComplexity || 'O(N)'}</strong>
+                            <strong style={{ color: '#10b981' }}>{rep.timeComplexity || 'Not inferred'}</strong>
 
 
 
@@ -4796,7 +4800,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                              {rep.efficiencyRating || 'Optimal'}
+                              {rep.efficiencyRating || 'Not measured'}
 
 
 
