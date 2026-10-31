@@ -2071,6 +2071,8 @@ export function parseQuestionsFromPlainText(text: string): Round2Problem[] {
         ],
         sampleTestCases: Array.isArray(p.sampleTestCases) ? p.sampleTestCases : [],
         hiddenTestCases: Array.isArray(p.hiddenTestCases) ? p.hiddenTestCases : [],
+        performanceTestCases: Array.isArray(p.performanceTestCases) ? p.performanceTestCases : [],
+        robustnessTestCases: Array.isArray(p.robustnessTestCases) ? p.robustnessTestCases : [],
         starterCode: p.starterCode || {
           Python: '# Write your solution below\n\ndef solution():\n    pass\n\nif __name__ == "__main__":\n    solution()\n',
           'C++': '// Write your solution below\n#include <iostream>\nusing namespace std;\n\nint main() {\n    // Code here\n    return 0;\n}\n',
@@ -2139,6 +2141,8 @@ export function parseQuestionsFromPlainText(text: string): Round2Problem[] {
       ],
       sampleTestCases: [],
       hiddenTestCases: [],
+      performanceTestCases: [],
+      robustnessTestCases: [],
       starterCode: {
         Python: '# Write your solution below\n\ndef solution():\n    pass\n\nif __name__ == "__main__":\n    solution()\n',
         'C++': '// Write your solution below\n#include <iostream>\nusing namespace std;\n\nint main() {\n    // Code here\n    return 0;\n}\n',
