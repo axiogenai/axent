@@ -393,6 +393,8 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
   const [compileError, setCompileError] = useState<string | null>(null);
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customInputText, setCustomInputText] = useState('');
+  const [terminalTab, setTerminalTab] = useState<'console' | 'tests'>('console');
+  const terminalInputRef = useRef<HTMLInputElement>(null);
   const [activeReport, setActiveReport] = useState<Round2QuestionReport | null>(() => {
     return submission.questionReports[currentQIndex] || null;
   });
@@ -472,7 +474,14 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       const qTimestamps = submission.questionTimestamps || {};
       const qStart = qTimestamps[currentQIndex]?.startedAt || Date.now();
       const timeTakenMs = Date.now() - qStart;
-      const report = await evaluateRound2Code(currentProblem, activeCode, effectiveLang, timeTakenMs, showCustomInput ? customInputText : undefined, candidateProfile.round2Key || candidateProfile.accessKey);
+      const report = await evaluateRound2Code(
+        currentProblem,
+        activeCode,
+        effectiveLang,
+        timeTakenMs,
+        customInputText.trim() ? customInputText : undefined,
+        candidateProfile.round2Key || candidateProfile.accessKey
+      );
       // Track question start and compiled timestamps
       report.startedAt = qStart;
       report.startedAtFormatted = new Date(qStart).toLocaleTimeString();
@@ -1316,27 +1325,29 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                   <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{currentProblem.description}</p>
                 </div>
 
-                {/* Input Format */}
-                {currentProblem.inputFormat && (
-                  <div>
-                    <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: '#a1a1aa', letterSpacing: '0.05em', marginBottom: '6px' }}>
-                      Input Format
-                    </div>
-                    <div style={{ fontSize: '12.5px', color: '#d4d4d8', background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 12px', whiteSpace: 'pre-wrap' }}>
-                      {currentProblem.inputFormat}
-                    </div>
-                  </div>
-                )}
-
-                {/* Output Format */}
-                {currentProblem.outputFormat && (
-                  <div>
-                    <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: '#a1a1aa', letterSpacing: '0.05em', marginBottom: '6px' }}>
-                      Output Format
-                    </div>
-                    <div style={{ fontSize: '12.5px', color: '#d4d4d8', background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 12px', whiteSpace: 'pre-wrap' }}>
-                      {currentProblem.outputFormat}
-                    </div>
+                {/* Input & Output Specifications */}
+                {(currentProblem.inputFormat || currentProblem.outputFormat) && (
+                  <div style={{ display: 'grid', gridTemplateColumns: currentProblem.inputFormat && currentProblem.outputFormat ? '1fr 1fr' : '1fr', gap: '8px' }}>
+                    {currentProblem.inputFormat && (
+                      <div style={{ background: '#121214', border: '1px solid #1f1f23', borderRadius: '4px', padding: '8px 10px' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: '#71717a', letterSpacing: '0.05em', marginBottom: '2px' }}>
+                          Input Spec
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: '#a1a1aa', fontFamily: 'monospace' }}>
+                          {currentProblem.inputFormat}
+                        </div>
+                      </div>
+                    )}
+                    {currentProblem.outputFormat && (
+                      <div style={{ background: '#121214', border: '1px solid #1f1f23', borderRadius: '4px', padding: '8px 10px' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: '#71717a', letterSpacing: '0.05em', marginBottom: '2px' }}>
+                          Output Spec
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: '#a1a1aa', fontFamily: 'monospace' }}>
+                          {currentProblem.outputFormat}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1633,20 +1644,20 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
             {!isMobileScreen && (
               <div
                 style={{
-                  height: activeReport || compileError ? '270px' : '110px',
+                  height: activeReport || compileError ? '300px' : '220px',
                   borderTop: '1px solid #27272a',
-                  background: '#121214',
+                  background: '#09090b',
                   display: 'flex',
                   flexDirection: 'column',
                   transition: 'height 0.2s ease',
                   overflow: 'hidden'
                 }}
               >
-                {/* Terminal Header */}
+                {/* Terminal Header with Tabs */}
                 <div
                   style={{
-                    height: '32px',
-                    background: '#18181b',
+                    height: '34px',
+                    background: '#121214',
                     borderBottom: '1px solid #27272a',
                     display: 'flex',
                     alignItems: 'center',
@@ -1654,18 +1665,56 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                     padding: '0 12px'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Terminal size={12} color="#a1a1aa" />
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#f4f4f5' }}>
-                      Execution Terminal &amp; Short Report
-                    </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setTerminalTab('console')}
+                      style={{
+                        background: terminalTab === 'console' ? '#18181b' : 'transparent',
+                        border: terminalTab === 'console' ? '1px solid #27272a' : '1px solid transparent',
+                        borderRadius: '4px',
+                        padding: '3px 8px',
+                        color: terminalTab === 'console' ? '#ffffff' : '#71717a',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                    >
+                      <Terminal size={12} color={terminalTab === 'console' ? '#10b981' : '#71717a'} />
+                      <span>Console &amp; Terminal</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTerminalTab('tests')}
+                      style={{
+                        background: terminalTab === 'tests' ? '#18181b' : 'transparent',
+                        border: terminalTab === 'tests' ? '1px solid #27272a' : '1px solid transparent',
+                        borderRadius: '4px',
+                        padding: '3px 8px',
+                        color: terminalTab === 'tests' ? '#ffffff' : '#71717a',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                    >
+                      <CheckCircle2 size={12} color={terminalTab === 'tests' ? '#10b981' : '#71717a'} />
+                      <span>Test Cases {activeReport ? `(${activeReport.passedTests}/${activeReport.totalTests})` : ''}</span>
+                    </button>
+
                     {activeReport && (
                       <span
                         style={{
-                          fontSize: '10.5px',
+                          fontSize: '10px',
                           fontWeight: 700,
                           padding: '1px 6px',
                           borderRadius: '3px',
+                          marginLeft: '6px',
                           background:
                             activeReport.status === 'ACCEPTED'
                               ? 'rgba(16, 185, 129, 0.15)'
@@ -1684,189 +1733,243 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                       </span>
                     )}
                   </div>
+
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10.5px', color: '#71717a' }}>
                     {activeReport && (
                       <>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#e4e4e7' }}>
                           <Clock size={11} color="#a1a1aa" />
-                          <strong>{activeReport.executionTime || '35 ms'}</strong>
+                          <strong>{activeReport.executionTime || '24 ms'}</strong>
                         </span>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#10b981' }}>
                           <Cpu size={11} />
                           <strong>{activeReport.timeComplexity || 'O(N)'}</strong>
                         </span>
-                        <span>
-                          Passed: <strong>{activeReport.passedTests}</strong> / {activeReport.totalTests} tests
-                        </span>
                       </>
                     )}
-                    <span>Backend: Synchronized</span>
+                    {(activeReport || customInputText) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveReport(null);
+                          setCompileError(null);
+                          setCustomInputText('');
+                        }}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#71717a',
+                          cursor: 'pointer',
+                          fontSize: '10.5px',
+                          textDecoration: 'underline'
+                        }}
+                      >
+                        Clear Console
+                      </button>
+                    )}
                   </div>
                 </div>
+
                 {/* Terminal Body */}
-                <div style={{ flex: 1, padding: '12px', overflowY: 'auto', fontSize: '12px' }}>
+                <div
+                  onClick={() => terminalInputRef.current?.focus()}
+                  style={{
+                    flex: 1,
+                    padding: '12px 14px',
+                    overflowY: 'auto',
+                    fontSize: '12px',
+                    fontFamily: "'JetBrains Mono', Consolas, monospace",
+                    cursor: 'text',
+                    background: '#09090b'
+                  }}
+                >
                   {compileError ? (
-                    <div style={{ color: '#ef4444', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+                    <div style={{ color: '#ef4444', whiteSpace: 'pre-wrap' }}>
                       <strong>Execution Error:</strong> {compileError}
                     </div>
-                  ) : activeReport ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {/* Real Program Standard Output */}
-                      {(activeReport.compilerResult?.stdout || activeReport.sampleResults?.[0]?.actual) && (
-                        <div style={{ background: '#09090b', border: '1px solid #27272a', borderRadius: '6px', padding: '8px 12px' }}>
-                          <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', marginBottom: '4px', fontFamily: 'monospace' }}>
-                            Program Standard Output:
-                          </div>
-                          <pre style={{ margin: 0, fontFamily: "'Consolas', monospace", fontSize: '12px', color: '#f4f4f5', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                            {activeReport.compilerResult?.stdout || activeReport.sampleResults?.[0]?.actual}
-                          </pre>
+                  ) : terminalTab === 'console' ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {/* Terminal welcome prompt if empty */}
+                      {!activeReport && (
+                        <div style={{ color: '#52525b', fontSize: '11px', marginBottom: '4px' }}>
+                          Terminal ready. Enter input below and press Enter, or click &quot;Run Code&quot; (▶).
                         </div>
+                      )}
+
+                      {/* Real Program Standard Output stream */}
+                      {activeReport && (activeReport.compilerResult?.stdout || activeReport.sampleResults?.[0]?.actual) && (
+                        <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: '12px', color: '#f4f4f5', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                          {activeReport.compilerResult?.stdout || activeReport.sampleResults?.[0]?.actual}
+                        </pre>
                       )}
 
                       {/* Real Program Compile/Runtime Error Output */}
-                      {(activeReport.compilerResult?.compileOutput || activeReport.compilerResult?.stderr) && (
-                        <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', padding: '8px 12px' }}>
-                          <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#ef4444', textTransform: 'uppercase', marginBottom: '4px', fontFamily: 'monospace' }}>
-                            Compilation / Runtime Diagnostics:
-                          </div>
-                          <pre style={{ margin: 0, fontFamily: "'Consolas', monospace", fontSize: '11.5px', color: '#fca5a5', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                            {activeReport.compilerResult.compileOutput || activeReport.compilerResult.stderr}
-                          </pre>
-                        </div>
+                      {activeReport && (activeReport.compilerResult?.compileOutput || activeReport.compilerResult?.stderr) && (
+                        <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: '11.5px', color: '#f87171', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                          {activeReport.compilerResult.compileOutput || activeReport.compilerResult.stderr}
+                        </pre>
                       )}
 
-                      {/* Time Complexity & Execution Telemetry Card */}
-                      <div
-                        style={{
-                          background: '#18181b',
-                          border: '1px solid #27272a',
-                          borderRadius: '6px',
-                          padding: '8px 12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          flexWrap: 'wrap',
-                          gap: '8px'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11.5px' }}>
-                          <div>
-                            <span style={{ color: '#71717a' }}>Compiled Runtime: </span>
-                            <strong style={{ color: '#f4f4f5' }}>{activeReport.executionTime || '35 ms'}</strong>
-                          </div>
-                          <div style={{ width: '1px', height: '14px', background: '#27272a' }} />
-                          <div>
-                            <span style={{ color: '#71717a' }}>Time Complexity: </span>
-                            <strong style={{ color: '#10b981' }}>{activeReport.timeComplexity || 'O(N)'}</strong>
-                          </div>
-                          <div style={{ width: '1px', height: '14px', background: '#27272a' }} />
-                          <div>
-                            <span style={{ color: '#71717a' }}>Space Complexity: </span>
-                            <strong style={{ color: '#60a5fa' }}>{activeReport.spaceComplexity || 'O(1)'}</strong>
-                          </div>
-                        </div>
-                        {activeReport.complexityExplanation && (
-                          <div style={{ fontSize: '11px', color: '#a1a1aa', fontStyle: 'italic' }}>
-                            {activeReport.complexityExplanation}
-                          </div>
+                      {/* Interactive Stdin Line right inside the terminal output */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                        <span style={{ color: '#10b981', fontWeight: 700, userSelect: 'none' }}>❯</span>
+                        <input
+                          ref={terminalInputRef}
+                          type="text"
+                          value={customInputText}
+                          onChange={(e) => setCustomInputText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleCompileAndRun();
+                            }
+                          }}
+                          placeholder="Type input here and press Enter to execute..."
+                          style={{
+                            flex: 1,
+                            background: 'transparent',
+                            border: 'none',
+                            outline: 'none',
+                            color: '#f4f4f5',
+                            fontSize: '12px',
+                            fontFamily: 'inherit',
+                            caretColor: '#10b981'
+                          }}
+                          autoFocus
+                        />
+                        {customInputText && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCustomInputText('');
+                            }}
+                            style={{ background: 'transparent', border: 'none', color: '#71717a', cursor: 'pointer', fontSize: '11px' }}
+                            title="Clear input"
+                          >
+                            &times;
+                          </button>
                         )}
                       </div>
 
-                      {/* Timestamps strip */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: '#a1a1aa', fontFamily: 'monospace', padding: '6px 10px', background: '#121214', borderRadius: '4px', border: '1px solid #27272a' }}>
-                        <span>Started: {activeReport.startedAtFormatted || (activeReport.startedAt ? new Date(activeReport.startedAt).toLocaleTimeString() : 'Just now')}</span>
-                        <span> | Compiled: {activeReport.compiledAtFormatted || new Date(activeReport.compiledAt).toLocaleTimeString()}</span>
-                        {activeReport.timeTakenSeconds ? <span> | Time Spent: {Math.floor(activeReport.timeTakenSeconds / 60)}m {activeReport.timeTakenSeconds % 60}s</span> : null}
-                      </div>
-
-                      {/* Sample Test Results List */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))', gap: '8px' }}>
-                        {activeReport.sampleResults?.map((res, i) => (
-                          <div
-                            key={res.testCaseId || i}
-                            style={{
-                              background: '#18181b',
-                              border: res.passed ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
-                              borderRadius: '6px',
-                              padding: '10px 12px',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '6px'
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontSize: '11px', fontWeight: 700, color: '#f4f4f5' }}>Case #{i + 1}</span>
-                              <span
-                                style={{
-                                  fontSize: '10px',
-                                  fontWeight: 700,
-                                  padding: '1px 6px',
-                                  borderRadius: '3px',
-                                  background: res.passed ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                                  color: res.passed ? '#10b981' : '#ef4444'
-                                }}
-                              >
-                                {res.passed ? 'PASSED' : 'FAILED'}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: '10.5px', color: '#71717a' }}>Input: <code style={{ color: '#d4d4d8' }}>{res.input}</code></div>
-                            <div style={{ fontSize: '10.5px', color: '#71717a' }}>Expected: <code style={{ color: '#10b981' }}>{res.expected}</code></div>
-                            <div style={{ fontSize: '10.5px', color: '#71717a' }}>Actual: <code style={{ color: res.passed ? '#10b981' : '#ef4444' }}>{res.actual}</code></div>
-                          </div>
-                        ))}
-                      </div>
+                      {/* Quick Sample Inputs pills inside terminal */}
+                      {Array.isArray(currentProblem.sampleTestCases) && currentProblem.sampleTestCases.length > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #18181b', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '10px', color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            Quick Input:
+                          </span>
+                          {currentProblem.sampleTestCases.map((tc, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCustomInputText(tc.input || '');
+                                terminalInputRef.current?.focus();
+                              }}
+                              style={{
+                                background: '#121214',
+                                border: '1px solid #27272a',
+                                borderRadius: '3px',
+                                padding: '1px 6px',
+                                fontSize: '10.5px',
+                                color: '#a1a1aa',
+                                cursor: 'pointer',
+                                fontFamily: 'monospace'
+                              }}
+                              title={`Set input to: ${tc.input}`}
+                            >
+                              Case #{idx + 1}: &quot;{tc.input}&quot;
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <div style={{ color: '#71717a', fontStyle: 'italic', padding: '8px 0' }}>
-                      Click &quot;Run Code&quot; to compile your {effectiveLang} solution and generate a short evaluation report.
-                    </div>
-                  )}
-                </div>
+                    /* Test Cases & Telemetry Tab */
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {/* Telemetry Card */}
+                      {activeReport && (
+                        <div
+                          style={{
+                            background: '#121214',
+                            border: '1px solid #27272a',
+                            borderRadius: '6px',
+                            padding: '8px 12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: '8px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11.5px' }}>
+                            <div>
+                              <span style={{ color: '#71717a' }}>Runtime: </span>
+                              <strong style={{ color: '#f4f4f5' }}>{activeReport.executionTime || '24 ms'}</strong>
+                            </div>
+                            <div style={{ width: '1px', height: '14px', background: '#27272a' }} />
+                            <div>
+                              <span style={{ color: '#71717a' }}>Time: </span>
+                              <strong style={{ color: '#10b981' }}>{activeReport.timeComplexity || 'O(N)'}</strong>
+                            </div>
+                            <div style={{ width: '1px', height: '14px', background: '#27272a' }} />
+                            <div>
+                              <span style={{ color: '#71717a' }}>Space: </span>
+                              <strong style={{ color: '#60a5fa' }}>{activeReport.spaceComplexity || 'O(1)'}</strong>
+                            </div>
+                          </div>
+                          {activeReport.complexityExplanation && (
+                            <div style={{ fontSize: '11px', color: '#a1a1aa', fontStyle: 'italic' }}>
+                              {activeReport.complexityExplanation}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
-                {/* Terminal Stdin Bar (Interactive Console Input) */}
-                <div
-                  style={{
-                    background: '#09090b',
-                    borderTop: '1px solid #27272a',
-                    padding: '6px 12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  <span style={{ fontSize: '11px', color: '#10b981', fontFamily: 'monospace', fontWeight: 700, userSelect: 'none' }}>
-                    stdin &gt;
-                  </span>
-                  <input
-                    type="text"
-                    value={customInputText}
-                    onChange={(e) => setCustomInputText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleCompileAndRun();
-                      }
-                    }}
-                    placeholder="Terminal input (type arguments or values for scanf / cin / input() and press Enter or Run)..."
-                    style={{
-                      flex: 1,
-                      background: 'transparent',
-                      border: 'none',
-                      outline: 'none',
-                      color: '#f4f4f5',
-                      fontSize: '11.5px',
-                      fontFamily: "'JetBrains Mono', Consolas, monospace"
-                    }}
-                  />
-                  {customInputText && (
-                    <button
-                      type="button"
-                      onClick={() => setCustomInputText('')}
-                      style={{ background: 'transparent', border: 'none', color: '#71717a', cursor: 'pointer', fontSize: '12px' }}
-                      title="Clear terminal input"
-                    >
-                      &times;
-                    </button>
+                      {/* Sample Test Results List */}
+                      {activeReport?.sampleResults && activeReport.sampleResults.length > 0 ? (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))', gap: '8px' }}>
+                          {activeReport.sampleResults.map((res, i) => (
+                            <div
+                              key={res.testCaseId || i}
+                              style={{
+                                background: '#121214',
+                                border: res.passed ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+                                borderRadius: '6px',
+                                padding: '8px 10px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '4px'
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '11px', fontWeight: 700, color: '#f4f4f5' }}>Case #{i + 1}</span>
+                                <span
+                                  style={{
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    padding: '1px 6px',
+                                    borderRadius: '3px',
+                                    background: res.passed ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                    color: res.passed ? '#10b981' : '#ef4444'
+                                  }}
+                                >
+                                  {res.passed ? 'PASSED' : 'FAILED'}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '10.5px', color: '#71717a' }}>Input: <code style={{ color: '#d4d4d8' }}>{res.input}</code></div>
+                              <div style={{ fontSize: '10.5px', color: '#71717a' }}>Expected: <code style={{ color: '#10b981' }}>{res.expected}</code></div>
+                              <div style={{ fontSize: '10.5px', color: '#71717a' }}>Actual: <code style={{ color: res.passed ? '#10b981' : '#ef4444' }}>{res.actual}</code></div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ color: '#71717a', fontStyle: 'italic', padding: '8px 0' }}>
+                          Click &quot;Run Code&quot; to execute and evaluate automated test suites.
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -2061,17 +2164,42 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                     </div>
                   </div>
 
-                  {/* Standard Output */}
-                  {activeReport.compilerResult?.stdout && (
-                    <div style={{ background: '#121214', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 12px' }}>
-                      <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', marginBottom: '4px' }}>
-                        Program Standard Output
-                      </div>
-                      <pre style={{ margin: 0, fontFamily: 'monospace', fontSize: '11.5px', color: '#f4f4f5', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                  {/* Standard Output with Interactive Terminal Input */}
+                  <div style={{ background: '#09090b', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 12px', fontFamily: "'JetBrains Mono', Consolas, monospace" }}>
+                    <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', marginBottom: '6px' }}>
+                      Program Console
+                    </div>
+                    {activeReport.compilerResult?.stdout && (
+                      <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: '11.5px', color: '#f4f4f5', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
                         {activeReport.compilerResult.stdout}
                       </pre>
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                      <span style={{ color: '#10b981', fontWeight: 700 }}>❯</span>
+                      <input
+                        type="text"
+                        value={customInputText}
+                        onChange={(e) => setCustomInputText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleCompileAndRun();
+                          }
+                        }}
+                        placeholder="Type input & press Enter or Run..."
+                        style={{
+                          flex: 1,
+                          background: 'transparent',
+                          border: 'none',
+                          outline: 'none',
+                          color: '#f4f4f5',
+                          fontSize: '11.5px',
+                          fontFamily: 'inherit',
+                          caretColor: '#10b981'
+                        }}
+                      />
                     </div>
-                  )}
+                  </div>
 
                   {/* Stderr Diagnostics */}
                   {(activeReport.compilerResult?.compileOutput || activeReport.compilerResult?.stderr) && (
