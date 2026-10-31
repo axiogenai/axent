@@ -18,8 +18,9 @@ import {
 import { isSupabaseConnected } from '../services/supabaseService';
 import { playSound } from '../utils/sounds';
 import { ConfirmationModal } from './ConfirmationModal';
+import { SimpleSelect } from './watermelon/Select';
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const DIFFICULTY_COLORS: Record<MCQDifficulty, string> = {
   EASY: 'var(--success)',
   MEDIUM: 'var(--warning)',
@@ -49,7 +50,7 @@ function emptyQuestion(): Omit<MCQQuestion, 'id' | 'createdAt' | 'updatedAt'> {
   };
 }
 
-// ── Question Editor Modal ─────────────────────────────────────────────────────
+// â”€â”€ Question Editor Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface QuestionEditorProps {
   initial?: MCQQuestion;
   onSave: (q: MCQQuestion) => void;
@@ -145,7 +146,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({ initial, onSave, onClos
             borderRadius: 'var(--radius-sm)', padding: '10px 14px', marginBottom: '16px',
           }}>
             {errors.map((e, i) => (
-              <p key={i} style={{ color: 'var(--danger)', fontSize: '13px', margin: '2px 0' }}>• {e}</p>
+              <p key={i} style={{ color: 'var(--danger)', fontSize: '13px', margin: '2px 0' }}>â€¢ {e}</p>
             ))}
           </div>
         )}
@@ -243,12 +244,16 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({ initial, onSave, onClos
           </div>
           <div>
             <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' }}>Difficulty</label>
-            <select value={form.difficulty} onChange={(e) => set('difficulty', e.target.value as MCQDifficulty)}
-              style={{ width: '100%', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', padding: '8px 10px', fontSize: '13px', outline: 'none' }}>
-              <option value="EASY">Easy</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="HARD">Hard</option>
-            </select>
+            <SimpleSelect<MCQDifficulty>
+              value={form.difficulty}
+              onChange={(val) => set('difficulty', val)}
+              size="md"
+              options={[
+                { value: 'EASY', label: 'Easy' },
+                { value: 'MEDIUM', label: 'Medium' },
+                { value: 'HARD', label: 'Hard' }
+              ]}
+            />
           </div>
           <div>
             <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' }}>Marks *</label>
@@ -322,7 +327,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({ initial, onSave, onClos
   );
 };
 
-// ── AI Question Generator Modal ───────────────────────────────────────────────
+// â”€â”€ AI Question Generator Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface AiGeneratorModalProps {
   onAddQuestions: (questions: MCQQuestion[]) => void;
   onClose: () => void;
@@ -430,22 +435,30 @@ const AiGeneratorModal: React.FC<AiGeneratorModalProps> = ({ onAddQuestions, onC
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '12px' }}>
               <div>
                 <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '5px' }}>Difficulty</label>
-                <select value={difficulty} onChange={(e) => setDifficulty(e.target.value as MCQDifficulty)}
-                  style={{ width: '100%', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', padding: '8px 10px', fontSize: '13px', outline: 'none' }}>
-                  <option value="EASY">Easy</option>
-                  <option value="MEDIUM">Medium</option>
-                  <option value="HARD">Hard</option>
-                </select>
+                <SimpleSelect<MCQDifficulty>
+                  value={difficulty}
+                  onChange={(val) => setDifficulty(val)}
+                  size="md"
+                  options={[
+                    { value: 'EASY', label: 'Easy' },
+                    { value: 'MEDIUM', label: 'Medium' },
+                    { value: 'HARD', label: 'Hard' }
+                  ]}
+                />
               </div>
               <div>
                 <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '5px' }}>Number of Questions</label>
-                <select value={count} onChange={(e) => setCount(Number(e.target.value))}
-                  style={{ width: '100%', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', padding: '8px 10px', fontSize: '13px', outline: 'none' }}>
-                  <option value={3}>3 Questions</option>
-                  <option value={5}>5 Questions</option>
-                  <option value={8}>8 Questions</option>
-                  <option value={10}>10 Questions</option>
-                </select>
+                <SimpleSelect<number>
+                  value={count}
+                  onChange={(val) => setCount(Number(val))}
+                  size="md"
+                  options={[
+                    { value: 3, label: '3 Questions' },
+                    { value: 5, label: '5 Questions' },
+                    { value: 8, label: '8 Questions' },
+                    { value: 10, label: '10 Questions' }
+                  ]}
+                />
               </div>
             </div>
 
@@ -490,7 +503,7 @@ const AiGeneratorModal: React.FC<AiGeneratorModalProps> = ({ onAddQuestions, onC
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '4px', marginBottom: '6px' }}>
                           {q.options.map((opt, oIdx) => (
                             <div key={oIdx} style={{ fontSize: '11.5px', color: opt.isCorrect ? 'var(--success)' : 'var(--text-secondary)', fontWeight: opt.isCorrect ? 700 : 400 }}>
-                              {String.fromCharCode(65 + oIdx)}. {opt.text} {opt.isCorrect && '✓'}
+                              {String.fromCharCode(65 + oIdx)}. {opt.text} {opt.isCorrect && 'âœ“'}
                             </div>
                           ))}
                         </div>
@@ -526,7 +539,7 @@ const AiGeneratorModal: React.FC<AiGeneratorModalProps> = ({ onAddQuestions, onC
   );
 };
 
-// ── Batch Import Modal (JSON / CSV) ───────────────────────────────────────────
+// â”€â”€ Batch Import Modal (JSON / CSV) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface ImportModalProps {
   onImportComplete: () => void;
   onClose: () => void;
@@ -678,12 +691,12 @@ const ImportModal: React.FC<ImportModalProps> = ({ onImportComplete, onClose }) 
         {parseResult && (
           <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <div style={{ padding: '8px 12px', background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 'var(--radius-sm)', color: 'var(--success)', fontSize: '12px', fontWeight: 700 }}>
-              ✓ Found {parseResult.valid.length} valid question(s) ready to import.
+              âœ“ Found {parseResult.valid.length} valid question(s) ready to import.
             </div>
             {parseResult.errors.length > 0 && (
               <div style={{ padding: '8px 12px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 'var(--radius-sm)', color: 'var(--danger)', fontSize: '12px' }}>
                 <p style={{ margin: '0 0 4px', fontWeight: 700 }}>Errors ({parseResult.errors.length}):</p>
-                {parseResult.errors.slice(0, 3).map((e, i) => <p key={i} style={{ margin: '2px 0' }}>• {e}</p>)}
+                {parseResult.errors.slice(0, 3).map((e, i) => <p key={i} style={{ margin: '2px 0' }}>â€¢ {e}</p>)}
               </div>
             )}
           </div>
@@ -701,7 +714,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ onImportComplete, onClose }) 
   );
 };
 
-// ── Main Question Bank Component ──────────────────────────────────────────────
+// â”€â”€ Main Question Bank Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const MCQQuestionBank: React.FC = () => {
   const [questions, setQuestions] = useState<MCQQuestion[]>(() => getAllQuestions());
   const [search, setSearch] = useState('');
@@ -780,7 +793,7 @@ export const MCQQuestionBank: React.FC = () => {
   const handlePublish = (id: string) => {
     const errors = publishQuestion(id);
     if (errors.length > 0) {
-      setPublishErrorText(errors.map((error) => `• ${error}`).join('\n'));
+      setPublishErrorText(errors.map((error) => `â€¢ ${error}`).join('\n'));
       return;
     }
     reload();
@@ -874,27 +887,45 @@ export const MCQQuestionBank: React.FC = () => {
           />
         </div>
 
-        <select value={filterSubject} onChange={(e) => setFilterSubject(e.target.value)}
-          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', padding: '8px 10px', fontSize: '13px', outline: 'none' }}>
-          <option value="ALL">All Subjects</option>
-          {subjects.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
+        <div style={{ minWidth: '150px' }}>
+          <SimpleSelect<string>
+            value={filterSubject}
+            onChange={(val) => setFilterSubject(val)}
+            size="md"
+            options={[
+              { value: 'ALL', label: 'All Subjects' },
+              ...subjects.map((s) => ({ value: s, label: s }))
+            ]}
+          />
+        </div>
 
-        <select value={filterDifficulty} onChange={(e) => setFilterDifficulty(e.target.value as MCQDifficulty | 'ALL')}
-          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', padding: '8px 10px', fontSize: '13px', outline: 'none' }}>
-          <option value="ALL">All Difficulty</option>
-          <option value="EASY">Easy</option>
-          <option value="MEDIUM">Medium</option>
-          <option value="HARD">Hard</option>
-        </select>
+        <div style={{ minWidth: '140px' }}>
+          <SimpleSelect<MCQDifficulty | 'ALL'>
+            value={filterDifficulty}
+            onChange={(val) => setFilterDifficulty(val)}
+            size="md"
+            options={[
+              { value: 'ALL', label: 'All Difficulty' },
+              { value: 'EASY', label: 'Easy' },
+              { value: 'MEDIUM', label: 'Medium' },
+              { value: 'HARD', label: 'Hard' }
+            ]}
+          />
+        </div>
 
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as MCQQuestionStatus | 'ALL')}
-          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', padding: '8px 10px', fontSize: '13px', outline: 'none' }}>
-          <option value="ALL">All Status</option>
-          <option value="DRAFT">Draft</option>
-          <option value="PUBLISHED">Published</option>
-          <option value="ARCHIVED">Archived</option>
-        </select>
+        <div style={{ minWidth: '135px' }}>
+          <SimpleSelect<MCQQuestionStatus | 'ALL'>
+            value={filterStatus}
+            onChange={(val) => setFilterStatus(val)}
+            size="md"
+            options={[
+              { value: 'ALL', label: 'All Status' },
+              { value: 'DRAFT', label: 'Draft' },
+              { value: 'PUBLISHED', label: 'Published' },
+              { value: 'ARCHIVED', label: 'Archived' }
+            ]}
+          />
+        </div>
 
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           <button type="button" onClick={() => setIsAiModalOpen(true)} title="Generate questions using Autonomous Engine"
@@ -987,8 +1018,8 @@ export const MCQQuestionBank: React.FC = () => {
                     </p>
                     <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{q.subject}</span>
-                      {q.topic && <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>• {q.topic}</span>}
-                      <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>• {q.marks}pt{q.negativeMarks > 0 ? ` / -${q.negativeMarks}` : ''}</span>
+                      {q.topic && <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>â€¢ {q.topic}</span>}
+                      <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>â€¢ {q.marks}pt{q.negativeMarks > 0 ? ` / -${q.negativeMarks}` : ''}</span>
                       <span style={{ fontSize: '11px', color: STATUS_COLORS[q.status], fontWeight: 600 }}>{q.status}</span>
                       {q.tags.slice(0, 3).map((t) => (
                         <span key={t} style={{ fontSize: '10px', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-pill)', padding: '1px 7px', color: 'var(--text-dim)' }}>

@@ -10,7 +10,8 @@ import {
   Lock,
   ArrowRight,
   LogOut,
-  Shield
+  Shield,
+  Clock
 } from 'lucide-react';
 import {
   CodeSparkCandidate,
@@ -18,7 +19,10 @@ import {
   getAllCodeSparkCandidates,
   ensureCodeSparkAptitudeExam,
   prepareCandidateForRound1Retake,
-  authorizeCandidateForRound1Retake
+  authorizeCandidateForRound1Retake,
+  getCodeSparkSchedule,
+  asyncGetCodeSparkSchedule,
+  CodeSparkSchedule
 } from '../services/codeSparkService';
 import {
   getAllExams,
@@ -274,6 +278,26 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
     navigate(`/codespark-exams?examId=${effectiveRound1Exam.id}&round=1&batch=2&retake=true&autoStart=true`);
   };
 
+  const [schedule, setSchedule] = useState<CodeSparkSchedule>(() => getCodeSparkSchedule());
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    void asyncGetCodeSparkSchedule().then((s) => setSchedule(s));
+    const onSync = () => setSchedule(getCodeSparkSchedule());
+    window.addEventListener('codedna_codespark_schedule_updated', onSync);
+    window.addEventListener('storage', onSync);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('codedna_codespark_schedule_updated', onSync);
+      window.removeEventListener('storage', onSync);
+    };
+  }, []);
+
+  const effectiveRound1Start = schedule.round1StartTime || (effectiveRound1Exam?.startTime ? Number(effectiveRound1Exam.startTime) : null);
+  const isRound1FutureScheduled = Boolean(activeStage === 'round1' && effectiveRound1Start && now < effectiveRound1Start);
+  const isRound2FutureScheduled = Boolean(activeStage === 'round2' && schedule.round2StartTime && now < schedule.round2StartTime);
+
   return (
     <div
       style={{
@@ -287,7 +311,7 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
     >
       {/* Fullscreen overlay disabled to prevent student lockout */ null}
 
-      {/* ── Active Stage Area ── */}
+      {/* â”€â”€ Active Stage Area â”€â”€ */}
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
         {activeStage === 'round1' ? (
           /* Round 1: General Aptitude MCQ Conduction */
@@ -344,7 +368,7 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
                       marginBottom: '6px'
                     }}
                   >
-                    CODE SPARK 2026 • ROUND 01 CONCLUDED
+                    CODE SPARK 2026 â€¢ ROUND 01 CONCLUDED
                   </div>
 
                   <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#f4f4f5', margin: '0 0 10px 0' }}>
@@ -435,6 +459,116 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
                   </button>
                 </div>
               </div>
+            ) : isRound1FutureScheduled ? (
+              /* Waiting Room for Scheduled Round 1 */
+              <div
+                style={{
+                  minHeight: '100vh',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: '#09090b',
+                  padding: '24px'
+                }}
+              >
+                <div
+                  style={{
+                    maxWidth: '560px',
+                    width: '100%',
+                    background: '#121214',
+                    border: '1px solid #27272a',
+                    borderRadius: '8px',
+                    padding: '36px 32px',
+                    textAlign: 'center'
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '52px',
+                      height: '52px',
+                      borderRadius: '8px',
+                      background: 'rgba(245, 158, 11, 0.1)',
+                      border: '1px solid rgba(245, 158, 11, 0.25)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#f59e0b',
+                      marginBottom: '18px'
+                    }}
+                  >
+                    <Clock size={28} />
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'inline-block',
+                      fontFamily: 'monospace',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: '#a1a1aa',
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      marginBottom: '6px'
+                    }}
+                  >
+                    CODE SPARK 2026 • ROUND 01 SCHEDULED
+                  </div>
+
+                  <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#f4f4f5', margin: '0 0 10px 0' }}>
+                    Exam Not Started Yet
+                  </h2>
+
+                  <p style={{ fontSize: '13.5px', color: '#a1a1aa', lineHeight: 1.6, margin: '0 0 20px 0' }}>
+                    This examination is scheduled on <strong style={{ color: '#f59e0b' }}>{new Date(effectiveRound1Start!).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}</strong>. Candidate credentials are authenticated. The exam will unlock automatically when the timer reaches zero.
+                  </p>
+
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(4, 1fr)',
+                      gap: '8px',
+                      background: '#18181b',
+                      border: '1px solid #27272a',
+                      borderRadius: '6px',
+                      padding: '16px',
+                      marginBottom: '24px'
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: '22px', fontWeight: 900, color: '#f4f4f5' }}>{Math.max(0, Math.floor((effectiveRound1Start! - now) / (1000 * 60 * 60 * 24)))}</div>
+                      <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase' }}>Days</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '22px', fontWeight: 900, color: '#f4f4f5' }}>{Math.max(0, Math.floor(((effectiveRound1Start! - now) % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)))}</div>
+                      <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase' }}>Hours</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '22px', fontWeight: 900, color: '#f4f4f5' }}>{Math.max(0, Math.floor(((effectiveRound1Start! - now) % (1000 * 60 * 60)) / (1000 * 60)))}</div>
+                      <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase' }}>Mins</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '22px', fontWeight: 900, color: '#f4f4f5' }}>{Math.max(0, Math.floor(((effectiveRound1Start! - now) % (1000 * 60)) / 1000))}</div>
+                      <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase' }}>Secs</div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleExitToPortal}
+                    style={{
+                      padding: '9px 18px',
+                      borderRadius: '6px',
+                      background: '#27272a',
+                      color: '#f4f4f5',
+                      fontSize: '12.5px',
+                      fontWeight: 600,
+                      border: '1px solid #3f3f46',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Return to CodeSpark Portal
+                  </button>
+                </div>
+              </div>
             ) : (
               <ErrorBoundary fallbackTitle="CodeSpark Examination Engine Error">
                 <MCQExamScreen
@@ -448,20 +582,132 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
           /* Round 2: Algorithmic Code Sprint Arena */
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
             {isCandidateShortlisted ? (
-              <ErrorBoundary fallbackTitle="CodeSpark Coding Arena Error">
-                <CodeSparkRound2Arena
-                  candidateProfile={
-                    candidateProfile || {
-                      name: candidateName,
-                      rollNumber: cleanRoll,
-                      accessKey: candidateKey,
-                      email: candidateProfile?.email || ''
+              isRound2FutureScheduled ? (
+                /* Waiting Room for Scheduled Round 2 */
+                <div
+                  style={{
+                    minHeight: '100vh',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: '#09090b',
+                    padding: '24px'
+                  }}
+                >
+                  <div
+                    style={{
+                      maxWidth: '560px',
+                      width: '100%',
+                      background: '#121214',
+                      border: '1px solid #27272a',
+                      borderRadius: '8px',
+                      padding: '36px 32px',
+                      textAlign: 'center'
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '52px',
+                        height: '52px',
+                        borderRadius: '8px',
+                        background: 'rgba(245, 158, 11, 0.1)',
+                        border: '1px solid rgba(245, 158, 11, 0.25)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#f59e0b',
+                        marginBottom: '18px'
+                      }}
+                    >
+                      <Clock size={28} />
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'inline-block',
+                        fontFamily: 'monospace',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        color: '#a1a1aa',
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        marginBottom: '6px'
+                      }}
+                    >
+                      CODE SPARK 2026 • ROUND 02 SCHEDULED
+                    </div>
+
+                    <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#f4f4f5', margin: '0 0 10px 0' }}>
+                      Coding Arena Not Started Yet
+                    </h2>
+
+                    <p style={{ fontSize: '13.5px', color: '#a1a1aa', lineHeight: 1.6, margin: '0 0 20px 0' }}>
+                      Round 2 is scheduled on <strong style={{ color: '#f59e0b' }}>{new Date(schedule.round2StartTime!).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}</strong>. Candidate credentials and shortlist status are verified. The coding arena will unlock automatically when the session starts.
+                    </p>
+
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(4, 1fr)',
+                        gap: '8px',
+                        background: '#18181b',
+                        border: '1px solid #27272a',
+                        borderRadius: '6px',
+                        padding: '16px',
+                        marginBottom: '24px'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '22px', fontWeight: 900, color: '#f4f4f5' }}>{Math.max(0, Math.floor((schedule.round2StartTime! - now) / (1000 * 60 * 60 * 24)))}</div>
+                        <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase' }}>Days</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '22px', fontWeight: 900, color: '#f4f4f5' }}>{Math.max(0, Math.floor(((schedule.round2StartTime! - now) % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)))}</div>
+                        <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase' }}>Hours</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '22px', fontWeight: 900, color: '#f4f4f5' }}>{Math.max(0, Math.floor(((schedule.round2StartTime! - now) % (1000 * 60 * 60)) / (1000 * 60)))}</div>
+                        <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase' }}>Mins</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '22px', fontWeight: 900, color: '#f4f4f5' }}>{Math.max(0, Math.floor(((schedule.round2StartTime! - now) % (1000 * 60)) / 1000))}</div>
+                        <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase' }}>Secs</div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleExitToPortal}
+                      style={{
+                        padding: '9px 18px',
+                        borderRadius: '6px',
+                        background: '#27272a',
+                        color: '#f4f4f5',
+                        fontSize: '12.5px',
+                        fontWeight: 600,
+                        border: '1px solid #3f3f46',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Return to CodeSpark Portal
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <ErrorBoundary fallbackTitle="CodeSpark Coding Arena Error">
+                  <CodeSparkRound2Arena
+                    candidateProfile={
+                      candidateProfile || {
+                        name: candidateName,
+                        rollNumber: cleanRoll,
+                        accessKey: candidateKey,
+                        email: candidateProfile?.email || ''
+                      }
                     }
-                  }
-                  onExit={handleExitToPortal}
-                  theme={theme}
-                />
-              </ErrorBoundary>
+                    onExit={handleExitToPortal}
+                    theme={theme}
+                  />
+                </ErrorBoundary>
+              )
             ) : (
               /* Gatekeeper Access Denied for Non-Shortlisted */
               <div

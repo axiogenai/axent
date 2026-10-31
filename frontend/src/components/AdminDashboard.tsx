@@ -194,10 +194,11 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
-  theme = 'dark',
+  theme: propTheme,
   onSelectReportForStudent,
   initialTab
 }) => {
+  const theme: ThemeMode = propTheme || (typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
   const navigate = useNavigate();
 
   // Selected Lab: 'all' or specific lab ID

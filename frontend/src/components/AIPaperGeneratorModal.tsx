@@ -58,6 +58,7 @@ import { MCQExamConfig, MCQQuestion, MCQResultDeclarationMode } from '../types/m
 import { playSound } from '../utils/sounds';
 import { ConfirmationModal } from './ConfirmationModal';
 import { WatermelonSchedulePicker } from './watermelon/WatermelonSchedulePicker';
+import { SimpleSelect } from './watermelon/Select';
 
 function toLocalDatetimeString(timestamp?: number): string {
   if (!timestamp) return '';
@@ -349,7 +350,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
 
   if (!isOpen) return null;
 
-  // ── ADVANCE FROM PAGE 1 (BLUEPRINT) TO PAGE 2 (RULES & TIMING) ──────────────
+  // â”€â”€ ADVANCE FROM PAGE 1 (BLUEPRINT) TO PAGE 2 (RULES & TIMING) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleNextPage = () => {
     setError(null);
     if (examCategory === 'ISE') {
@@ -399,7 +400,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
     playSound('click');
   };
 
-  // ── 1. GENERATE DRAFT WITH AI ────────────────────────────────────────────────
+  // â”€â”€ 1. GENERATE DRAFT WITH AI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleGenerate = async (e?: React.FormEvent | React.MouseEvent) => {
     if (e && 'preventDefault' in e) e.preventDefault();
     if (configPage !== 2) {
@@ -603,7 +604,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
     }
   };
 
-  // ── 2. REVIEW STAGE HELPERS ──────────────────────────────────────────────────
+  // â”€â”€ 2. REVIEW STAGE HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const liveTotalMarks = useMemo(() => {
     return reviewedQuestions.reduce((acc, q) => acc + (Number(q.marks) || 0), 0);
   }, [reviewedQuestions]);
@@ -968,7 +969,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                       letterSpacing: '0.04em'
                     }}
                   >
-                    Draft · Pending Confirmation
+                    Draft Â· Pending Confirmation
                   </span>
                 )}
                 {step === 'published' && (
@@ -1039,7 +1040,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
             </div>
           )}
 
-          {/* ── STEP 1: CONFIG FORM (2-PAGE SYSTEM) ── */}
+          {/* â”€â”€ STEP 1: CONFIG FORM (2-PAGE SYSTEM) â”€â”€ */}
           {step === 'config' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {/* 2-Page Step Selector Tabs */}
@@ -1195,29 +1196,19 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                   <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
                     Examination Category
                   </label>
-                  <select
+                  <SimpleSelect<'Aptitude' | 'ISE'>
                     value={examCategory}
-                    onChange={(e) => handleCategoryChange(e.target.value as 'Aptitude' | 'ISE')}
-                    style={{
-                      width: '100%',
-                      boxSizing: 'border-box',
-                      padding: '8px 10px',
-                      background: 'var(--bg-surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-sm)',
-                      color: 'var(--text-primary)',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <option value="Aptitude">Aptitude</option>
-                    <option value="ISE">ISE</option>
-                  </select>
+                    onChange={(val) => handleCategoryChange(val)}
+                    size="sm"
+                    options={[
+                      { value: 'Aptitude', label: 'Aptitude' },
+                      { value: 'ISE', label: 'ISE' }
+                    ]}
+                  />
                 </div>
               </div>
 
-              {/* ── CONDITIONAL MODE: APTITUDE VS ISE ── */}
+              {/* â”€â”€ CONDITIONAL MODE: APTITUDE VS ISE â”€â”€ */}
               {examCategory === 'Aptitude' ? (
                 <div
                   style={{
@@ -1371,26 +1362,16 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
 
                           {/* Difficulty */}
                           <div>
-                            <select
+                            <SimpleSelect<'EASY' | 'MEDIUM' | 'HARD'>
                               value={sec.difficulty}
-                              onChange={(e) => handleUpdateSection(sec.id, { difficulty: e.target.value as 'EASY' | 'MEDIUM' | 'HARD' })}
-                              style={{
-                                width: '100%',
-                                boxSizing: 'border-box',
-                                padding: '6px 6px',
-                                background: 'var(--bg-surface)',
-                                border: '1px solid var(--border)',
-                                borderRadius: 'var(--radius-sm)',
-                                color: sec.difficulty === 'EASY' ? 'var(--success)' : sec.difficulty === 'HARD' ? 'var(--danger)' : 'var(--warning)',
-                                fontSize: '11px',
-                                fontWeight: 700,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              <option value="EASY">Easy</option>
-                              <option value="MEDIUM">Medium</option>
-                              <option value="HARD">Hard</option>
-                            </select>
+                              onChange={(val) => handleUpdateSection(sec.id, { difficulty: val })}
+                              size="sm"
+                              options={[
+                                { value: 'EASY', label: 'Easy' },
+                                { value: 'MEDIUM', label: 'Medium' },
+                                { value: 'HARD', label: 'Hard' }
+                              ]}
+                            />
                           </div>
 
                           {/* Marks per Question */}
@@ -1558,7 +1539,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                         </span>
                       </div>
                       <div style={{ color: 'var(--text-muted)' }}>
-                        Quotas: {sections.map(s => `${s.count || 0} ${s.topic || 'Topic'}`).join(' • ')}
+                        Quotas: {sections.map(s => `${s.count || 0} ${s.topic || 'Topic'}`).join(' â€¢ ')}
                       </div>
                     </div>
                   </div>
@@ -1771,7 +1752,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                 )}
               </div>
             ) : (
-                /* ── ISE MODE: SYLLABUS & UNIT CURRICULUM DRIVEN ── */
+                /* â”€â”€ ISE MODE: SYLLABUS & UNIT CURRICULUM DRIVEN â”€â”€ */
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   {/* Subject Quick Chips */}
                   <div>
@@ -2115,7 +2096,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                         </span>
                       </div>
                       <div style={{ color: 'var(--text-muted)' }}>
-                        Exact Quota: <span style={{ color: 'var(--success)', fontWeight: 700 }}>{easyCount} Easy</span> • <span style={{ color: 'var(--warning)', fontWeight: 700 }}>{mediumCount} Medium</span> • <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{hardCount} Hard</span>
+                        Exact Quota: <span style={{ color: 'var(--success)', fontWeight: 700 }}>{easyCount} Easy</span> â€¢ <span style={{ color: 'var(--warning)', fontWeight: 700 }}>{mediumCount} Medium</span> â€¢ <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{hardCount} Hard</span>
                       </div>
                     </div>
                   </div>
@@ -2129,7 +2110,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
             </div>
           )}
 
-          {/* ── PAGE 2: RULES, TIMING & DELIVERY ── */}
+          {/* â”€â”€ PAGE 2: RULES, TIMING & DELIVERY â”€â”€ */}
           {configPage === 2 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {/* Duration & Negative Penalty */}
@@ -2179,35 +2160,25 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                       Negative Marking Scheme
                     </label>
                   </div>
-                  <select
+                  <SimpleSelect<string>
                     value={negativeMarkingEnabled ? String(negativeMarkPenalty) : '0'}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value);
-                      if (val === 0) {
+                    onChange={(val) => {
+                      const num = parseFloat(val);
+                      if (num === 0) {
                         setNegativeMarkingEnabled(false);
                       } else {
                         setNegativeMarkingEnabled(true);
-                        setNegativeMarkPenalty(val);
+                        setNegativeMarkPenalty(num);
                       }
                     }}
-                    style={{
-                      width: '100%',
-                      boxSizing: 'border-box',
-                      padding: '8px 10px',
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-sm)',
-                      color: 'var(--text-primary)',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <option value="0">Disabled (0 Penalty · Standard Attempt)</option>
-                    <option value="0.25">-0.25 Mark per wrong answer</option>
-                    <option value="0.5">-0.50 Mark per wrong answer</option>
-                    <option value="1.0">-1.00 Mark per wrong answer</option>
-                  </select>
+                    size="sm"
+                    options={[
+                      { value: '0', label: 'Disabled (0 Penalty · Standard Attempt)' },
+                      { value: '0.25', label: '-0.25 Mark per wrong answer' },
+                      { value: '0.5', label: '-0.50 Mark per wrong answer' },
+                      { value: '1.0', label: '-1.00 Mark per wrong answer' }
+                    ]}
+                  />
                   <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
                     Deducts marks only for incorrect responses
                   </span>
@@ -2486,7 +2457,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
       </div>
     )}
 
-          {/* ── STEP 2: AUTONOMOUS GENERATION & PSYCHOMETRIC SYNTHESIS (HIGH-TECH ANIMATION) ── */}
+          {/* â”€â”€ STEP 2: AUTONOMOUS GENERATION & PSYCHOMETRIC SYNTHESIS (HIGH-TECH ANIMATION) â”€â”€ */}
           {step === 'loading' && (
             <div
               style={{
@@ -2751,7 +2722,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '110px', overflowY: 'auto' }}>
                     <div style={{ color: '#71717a' }}>[00:00] Initializing cognitive test synthesis pipeline...</div>
-                    <div style={{ color: '#71717a' }}>[00:01] Target: {effectiveTotalQuestions} questions · {durationMinutes} mins · {isPrivate ? 'PRIVATE (TICKET-ONLY)' : 'PUBLIC CATALOG'}</div>
+                    <div style={{ color: '#71717a' }}>[00:01] Target: {effectiveTotalQuestions} questions Â· {durationMinutes} mins Â· {isPrivate ? 'PRIVATE (TICKET-ONLY)' : 'PUBLIC CATALOG'}</div>
                     {telemetryLogs.map((log, idx) => (
                       <div key={idx} style={{ color: '#d4d4d8' }}>
                         {log}
@@ -2783,11 +2754,11 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     <span style={{ color: 'var(--text-muted)' }}>
                       Subject: <strong style={{ color: 'var(--text-primary)' }}>{subject || 'General Aptitude'}</strong>
                     </span>
-                    <span style={{ color: 'var(--border)' }}>•</span>
+                    <span style={{ color: 'var(--border)' }}>â€¢</span>
                     <span style={{ color: 'var(--text-muted)' }}>
                       Items: <strong style={{ color: 'var(--text-primary)' }}>{effectiveTotalQuestions} Qs</strong>
                     </span>
-                    <span style={{ color: 'var(--border)' }}>•</span>
+                    <span style={{ color: 'var(--border)' }}>â€¢</span>
                     <span style={{ color: 'var(--text-muted)' }}>
                       Duration: <strong style={{ color: 'var(--text-primary)' }}>{durationMinutes}m</strong>
                     </span>
@@ -2811,7 +2782,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
             </div>
           )}
 
-          {/* ── STEP 3: INTERACTIVE REVIEW WORKSPACE ── */}
+          {/* â”€â”€ STEP 3: INTERACTIVE REVIEW WORKSPACE â”€â”€ */}
           {step === 'review' && reviewedExam && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               
@@ -2944,7 +2915,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                         {reviewedExam.topic}
                       </span>
                       <span style={{ color: 'var(--text-muted)', marginLeft: '4px', flexShrink: 0, fontSize: '10.5px' }}>
-                        · {reviewedExam.subject}
+                        Â· {reviewedExam.subject}
                       </span>
                     </div>
                   </div>
@@ -3560,44 +3531,22 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                             </span>
 
                             {/* Difficulty Selector */}
-                            <select
-                              value={q.difficulty}
-                              onChange={(e) =>
-                                handleUpdateQuestion(q.id, {
-                                  difficulty: e.target.value as any
-                                })
-                              }
-                              style={{
-                                padding: '2px 6px',
-                                fontSize: '10px',
-                                fontWeight: 700,
-                                borderRadius: 'var(--radius-pill)',
-                                background:
-                                  q.difficulty === 'EASY'
-                                    ? 'var(--success-bg)'
-                                    : q.difficulty === 'MEDIUM'
-                                    ? 'var(--warning-bg)'
-                                    : 'var(--danger-bg)',
-                                color:
-                                  q.difficulty === 'EASY'
-                                    ? 'var(--success)'
-                                    : q.difficulty === 'MEDIUM'
-                                    ? 'var(--warning)'
-                                    : 'var(--danger)',
-                                border: `1px solid ${
-                                  q.difficulty === 'EASY'
-                                    ? 'var(--success-border)'
-                                    : q.difficulty === 'MEDIUM'
-                                    ? 'var(--warning-border)'
-                                    : 'var(--danger-border)'
-                                }`,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              <option value="EASY">EASY</option>
-                              <option value="MEDIUM">MEDIUM</option>
-                              <option value="HARD">HARD</option>
-                            </select>
+                            <div style={{ width: '90px' }}>
+                              <SimpleSelect<'EASY' | 'MEDIUM' | 'HARD'>
+                                value={q.difficulty}
+                                onChange={(val) =>
+                                  handleUpdateQuestion(q.id, {
+                                    difficulty: val
+                                  })
+                                }
+                                size="sm"
+                                options={[
+                                  { value: 'EASY', label: 'EASY' },
+                                  { value: 'MEDIUM', label: 'MEDIUM' },
+                                  { value: 'HARD', label: 'HARD' }
+                                ]}
+                              />
+                            </div>
 
                             {/* Marks Input */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
@@ -3934,7 +3883,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
             </div>
           )}
 
-          {/* ── STEP 4: SUCCESS PUBLISHED VIEW ── */}
+          {/* â”€â”€ STEP 4: SUCCESS PUBLISHED VIEW â”€â”€ */}
           {step === 'published' && reviewedExam && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div
@@ -3953,7 +3902,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                   {reviewedExam.title}
                 </h3>
                 <p style={{ margin: '0 0 14px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  {reviewedExam.subject} · {reviewedExam.topic} · {reviewedQuestions.length} Questions · {liveTotalMarks} Total Marks
+                  {reviewedExam.subject} Â· {reviewedExam.topic} Â· {reviewedQuestions.length} Questions Â· {liveTotalMarks} Total Marks
                 </p>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '16px' }}>
@@ -4112,19 +4061,19 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                 <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '11.5px' }}>
                   Total: {effectiveTotalQuestions} Questions
                 </span>
-                <span style={{ color: 'var(--border)' }}>•</span>
+                <span style={{ color: 'var(--border)' }}>â€¢</span>
                 <span style={{ fontWeight: 600, color: 'var(--accent)', fontSize: '11.5px' }}>
                   {effectiveTotalMarks} Marks
                 </span>
                 {configPage === 2 && (
                   <>
-                    <span style={{ color: 'var(--border)' }}>•</span>
+                    <span style={{ color: 'var(--border)' }}>â€¢</span>
                     <span style={{ color: 'var(--text-secondary)', fontSize: '11.5px' }}>
                       {durationMinutes} Mins Duration
                     </span>
                   </>
                 )}
-                <span style={{ color: 'var(--border)' }}>•</span>
+                <span style={{ color: 'var(--border)' }}>â€¢</span>
                 <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
                   Page {configPage} of 2
                 </span>
@@ -4229,7 +4178,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
               <span>Powered by Axent Autonomous Reasoning Engine</span>
               <span>
                 {step === 'review'
-                  ? 'Draft state · All edits autosaved locally and sync to Question Bank'
+                  ? 'Draft state Â· All edits autosaved locally and sync to Question Bank'
                   : 'University Academic Integrity & Proctored Examination Standards'}
               </span>
             </>

@@ -20,6 +20,7 @@ import {
   FileText
 } from 'lucide-react';
 import { playSound } from '../../utils/sounds';
+import { SimpleSelect } from '../watermelon/Select';
 
 interface AdminSettingsViewProps {
   onTriggerResetRoom: () => void;
@@ -57,7 +58,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', maxWidth: '100%' }}>
-      {/* ── HEADER ── */}
+      {/* â”€â”€ HEADER â”€â”€ */}
       <div
         style={{
           display: 'flex',
@@ -107,7 +108,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
         </button>
       </div>
 
-      {/* ── SECTION 1: AI PROCTORING & INTEGRITY THRESHOLDS ── */}
+      {/* â”€â”€ SECTION 1: AI PROCTORING & INTEGRITY THRESHOLDS â”€â”€ */}
       <div
         style={{
           background: 'var(--bg-elevated)',
@@ -132,24 +133,16 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
               Face & Visual Attention Tracking
             </label>
-            <select
+            <SimpleSelect<'standard' | 'strict' | 'relaxed'>
               value={faceRigor}
-              onChange={(e) => setFaceRigor(e.target.value as any)}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                color: 'var(--text-primary)',
-                fontSize: '12px',
-                outline: 'none'
-              }}
-            >
-              <option value="standard">Standard (Flag after 5s continuous face absence)</option>
-              <option value="strict">Strict (Flag after 2s absence or multiple faces)</option>
-              <option value="relaxed">Relaxed (Flag only on prolonged absence)</option>
-            </select>
+              onChange={(val) => setFaceRigor(val)}
+              size="md"
+              options={[
+                { value: 'standard', label: 'Standard (Flag after 5s continuous face absence)' },
+                { value: 'strict', label: 'Strict (Flag after 2s absence or multiple faces)' },
+                { value: 'relaxed', label: 'Relaxed (Flag only on prolonged absence)' }
+              ]}
+            />
           </div>
 
           {/* Tab Switch Limit */}
@@ -157,25 +150,17 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
               Max Tab / Window Blur Limit
             </label>
-            <select
+            <SimpleSelect<number>
               value={tabLimit}
-              onChange={(e) => setTabLimit(Number(e.target.value))}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                color: 'var(--text-primary)',
-                fontSize: '12px',
-                outline: 'none'
-              }}
-            >
-              <option value={1}>1 Violation (Strict Zero-Tolerance)</option>
-              <option value={2}>2 Violations (Warning then Auto-Flag)</option>
-              <option value={3}>3 Violations (Standard University Policy)</option>
-              <option value={5}>5 Violations (High Tolerance)</option>
-            </select>
+              onChange={(val) => setTabLimit(val)}
+              size="md"
+              options={[
+                { value: 1, label: '1 Violation (Strict Zero-Tolerance)' },
+                { value: 2, label: '2 Violations (Warning then Auto-Flag)' },
+                { value: 3, label: '3 Violations (Standard University Policy)' },
+                { value: 5, label: '5 Violations (High Tolerance)' }
+              ]}
+            />
           </div>
 
           {/* Paste Ratio Alert Threshold */}
@@ -183,24 +168,16 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
               External Clipboard Paste Threshold
             </label>
-            <select
+            <SimpleSelect<number>
               value={pasteLimit}
-              onChange={(e) => setPasteLimit(Number(e.target.value))}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                color: 'var(--text-primary)',
-                fontSize: '12px',
-                outline: 'none'
-              }}
-            >
-              <option value={30}>Flag if {'>'} 30% external pasted characters</option>
-              <option value={50}>Flag if {'>'} 50% external pasted characters (Standard)</option>
-              <option value={75}>Flag if {'>'} 75% external pasted characters</option>
-            </select>
+              onChange={(val) => setPasteLimit(val)}
+              size="md"
+              options={[
+                { value: 30, label: 'Flag if > 30% external pasted characters' },
+                { value: 50, label: 'Flag if > 50% external pasted characters (Standard)' },
+                { value: 75, label: 'Flag if > 75% external pasted characters' }
+              ]}
+            />
           </div>
 
           {/* Master Emergency Proctor PIN */}
@@ -234,7 +211,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
         </div>
       </div>
 
-      {/* ── SECTION 2: EXAM ENVIRONMENT & HARDWARE SECURITY ── */}
+      {/* â”€â”€ SECTION 2: EXAM ENVIRONMENT & HARDWARE SECURITY â”€â”€ */}
       <div
         style={{
           background: 'var(--bg-elevated)',
@@ -307,7 +284,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
         </div>
       </div>
 
-      {/* ── SECTION 3: CLOUD DATABASE & REALTIME ── */}
+      {/* â”€â”€ SECTION 3: CLOUD DATABASE & REALTIME â”€â”€ */}
       <div
         style={{
           background: 'var(--bg-elevated)',
@@ -357,7 +334,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
         </button>
       </div>
 
-      {/* ── SECTION 4: DANGER ZONE ── */}
+      {/* â”€â”€ SECTION 4: DANGER ZONE â”€â”€ */}
       <div
         style={{
           background: 'var(--bg-elevated)',

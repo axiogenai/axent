@@ -3,6 +3,7 @@ import { Plus, X, Check, AlertTriangle } from 'lucide-react';
 import { playSound } from '../../utils/sounds';
 import { createQuestion } from '../../services/mcqService';
 import { MCQQuestion, MCQDifficulty } from '../../types/mcq';
+import { SimpleSelect } from '../watermelon/Select';
 
 interface QuickAddQuestionModalProps {
   isOpen: boolean;
@@ -280,26 +281,16 @@ export const QuickAddQuestionModal: React.FC<QuickAddQuestionModalProps> = ({
               <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
                 Difficulty
               </label>
-              <select
+              <SimpleSelect<MCQDifficulty>
                 value={difficulty}
-                onChange={(e) => setDifficulty(e.target.value as MCQDifficulty)}
-                style={{
-                  width: '100%',
-                  boxSizing: 'border-box',
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '8px 10px',
-                  color: 'var(--text-primary)',
-                  fontSize: '12px',
-                  outline: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="EASY">EASY</option>
-                <option value="MEDIUM">MEDIUM</option>
-                <option value="HARD">HARD</option>
-              </select>
+                onChange={(val) => setDifficulty(val)}
+                size="sm"
+                options={[
+                  { value: 'EASY', label: 'EASY' },
+                  { value: 'MEDIUM', label: 'MEDIUM' },
+                  { value: 'HARD', label: 'HARD' }
+                ]}
+              />
             </div>
           </div>
 

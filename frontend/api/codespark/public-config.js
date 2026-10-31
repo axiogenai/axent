@@ -9,7 +9,11 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success: true,
       activeExamId: config?.activeExamId || null,
-      isConcluded: Boolean(config?.isConcluded)
+      isConcluded: Boolean(config?.isConcluded),
+      round1StartTime: config?.round1StartTime || null,
+      round1EndTime: config?.round1EndTime || null,
+      round2StartTime: config?.round2StartTime || null,
+      round2EndTime: config?.round2EndTime || null
     });
   } catch (error) {
     console.error("[CodeSpark public config]", error?.message || "read failed");

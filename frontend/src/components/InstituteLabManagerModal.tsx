@@ -28,6 +28,7 @@ import {
 } from '../services/adminService';
 import { playSound } from '../utils/sounds';
 import { ConfirmationModal } from './ConfirmationModal';
+import { SimpleSelect } from './watermelon/Select';
 
 interface InstituteLabManagerModalProps {
   isOpen: boolean;
@@ -626,45 +627,45 @@ exit
                     <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
                       Target Laboratory
                     </label>
-                    <select
+                    <SimpleSelect<string>
                       value={selectedKioskLab}
-                      onChange={(e) => setSelectedKioskLab(e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '12px' }}
-                    >
-                      {labs.map((l) => (
-                        <option key={l.labId} value={l.labId}>
-                          {l.labId}: {l.labName}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(val) => setSelectedKioskLab(val)}
+                      size="sm"
+                      options={labs.map((l) => ({
+                        value: l.labId,
+                        label: `${l.labId}: ${l.labName}`
+                      }))}
+                    />
                   </div>
 
                   <div>
                     <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
                       Examination Mode
                     </label>
-                    <select
+                    <SimpleSelect<'coding' | 'mcq'>
                       value={kioskExamMode}
-                      onChange={(e) => setKioskExamMode(e.target.value as any)}
-                      style={{ width: '100%', padding: '8px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '12px' }}
-                    >
-                      <option value="coding">Coding Practical (/workspace)</option>
-                      <option value="mcq">MCQ Examination (/mcq)</option>
-                    </select>
+                      onChange={(val) => setKioskExamMode(val)}
+                      size="sm"
+                      options={[
+                        { value: 'coding', label: 'Coding Practical (/workspace)' },
+                        { value: 'mcq', label: 'MCQ Examination (/mcq)' }
+                      ]}
+                    />
                   </div>
 
                   <div>
                     <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
                       Target Browser
                     </label>
-                    <select
+                    <SimpleSelect<'chrome' | 'edge'>
                       value={kioskBrowser}
-                      onChange={(e) => setKioskBrowser(e.target.value as any)}
-                      style={{ width: '100%', padding: '8px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '12px' }}
-                    >
-                      <option value="chrome">Google Chrome (Recommended)</option>
-                      <option value="edge">Microsoft Edge</option>
-                    </select>
+                      onChange={(val) => setKioskBrowser(val)}
+                      size="sm"
+                      options={[
+                        { value: 'chrome', label: 'Google Chrome (Recommended)' },
+                        { value: 'edge', label: 'Microsoft Edge' }
+                      ]}
+                    />
                   </div>
                 </div>
               </div>

@@ -16,9 +16,10 @@ import { ConfirmationModal } from './ConfirmationModal';
 import { GoogleFormImportModal } from './mcq/GoogleFormImportModal';
 import { QuickAddQuestionModal } from './mcq/QuickAddQuestionModal';
 import { CodeSparkCandidateImportModal } from './codespark/CodeSparkCandidateImportModal';
+import { SimpleSelect } from './watermelon/Select';
 import { playSound } from '../utils/sounds';
 
-// ── Exam List View ────────────────────────────────────────────────────────────
+// â”€â”€ Exam List View â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface ExamListProps {
   onCreateNew: () => void;
   onEdit: (exam: MCQExamConfig) => void;
@@ -217,7 +218,7 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
                     <span style={{ fontSize: '11px', fontWeight: 700, color: STATUS_COLOR[exam.status], textTransform: 'uppercase', letterSpacing: '0.05em' }}>{exam.status}</span>
                     {exam.isPrivate ? (
                       <span style={{ fontSize: '11px', fontWeight: 700, color: '#f59e0b', background: 'rgba(245,158,11,0.1)', borderRadius: 'var(--radius-pill)', padding: '2px 8px', border: '1px solid rgba(245,158,11,0.25)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                        <Lock size={11} /> Private · Ticket Only
+                        <Lock size={11} /> Private Â· Ticket Only
                       </span>
                     ) : (
                       <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', background: 'var(--bg-surface)', borderRadius: 'var(--radius-pill)', padding: '2px 8px', border: '1px solid var(--border)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
@@ -257,7 +258,7 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
                   {publishErrors[exam.id] && (
                     <div style={{ marginTop: '8px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 'var(--radius-sm)', padding: '8px 10px' }}>
                       {publishErrors[exam.id].map((e, i) => (
-                        <p key={i} style={{ color: 'var(--danger)', fontSize: '12px', margin: '2px 0' }}>• {e}</p>
+                        <p key={i} style={{ color: 'var(--danger)', fontSize: '12px', margin: '2px 0' }}>â€¢ {e}</p>
                       ))}
                     </div>
                   )}
@@ -419,7 +420,7 @@ const ExamList: React.FC<ExamListProps> = ({ onCreateNew, onEdit }) => {
   );
 };
 
-// ── Question Selector ─────────────────────────────────────────────────────────
+// â”€â”€ Question Selector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface QuestionSelectorProps {
   selectedIds: string[];
   onChange: (ids: string[]) => void;
@@ -616,7 +617,7 @@ const QuestionSelector: React.FC<QuestionSelectorProps> = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
             <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
-              Showing only the <strong style={{ color: 'var(--text-primary)' }}>{selectedQuestions.length}</strong> questions included in this exam · <strong style={{ color: 'var(--text-primary)' }}>{totalMarks}</strong> total marks
+              Showing only the <strong style={{ color: 'var(--text-primary)' }}>{selectedQuestions.length}</strong> questions included in this exam Â· <strong style={{ color: 'var(--text-primary)' }}>{totalMarks}</strong> total marks
             </span>
             {selectedIds.length > 0 && (
               <button
@@ -723,17 +724,17 @@ const QuestionSelector: React.FC<QuestionSelectorProps> = ({
                         <div style={{ display: 'flex', gap: '10px', marginTop: '3px', alignItems: 'center', flexWrap: 'wrap' }}>
                           {correctOpt && (
                             <span style={{ fontSize: '11px', color: 'var(--success)', fontWeight: 600 }}>
-                              ✓ Answer: {correctOpt.text}
+                              âœ“ Answer: {correctOpt.text}
                             </span>
                           )}
                           <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                             {q.options.length} Options
                           </span>
                           <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                            · {q.marks} pt
+                            Â· {q.marks} pt
                           </span>
                           <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                            · {q.subject || 'General'}
+                            Â· {q.subject || 'General'}
                           </span>
                         </div>
                       </div>
@@ -851,8 +852,8 @@ const QuestionSelector: React.FC<QuestionSelectorProps> = ({
                       </p>
                       <div style={{ display: 'flex', gap: '8px', marginTop: '2px', alignItems: 'center' }}>
                         <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{q.subject}</span>
-                        <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>· {q.difficulty}</span>
-                        <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>· {q.marks}pt</span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Â· {q.difficulty}</span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Â· {q.marks}pt</span>
                         <span style={{ fontSize: '11px', fontWeight: 700, color: q.status === 'PUBLISHED' ? 'var(--success)' : 'var(--text-muted)' }}>{q.status}</span>
                       </div>
                     </div>
@@ -885,7 +886,7 @@ const QuestionSelector: React.FC<QuestionSelectorProps> = ({
   );
 };
 
-// ── Exam Editor/Creator ───────────────────────────────────────────────────────
+// â”€â”€ Exam Editor/Creator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface ExamEditorProps {
   initial?: MCQExamConfig;
   onSave: () => void;
@@ -1005,7 +1006,7 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ initial, onSave, onBack }) => {
 
       {errors.length > 0 && (
         <div style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', marginBottom: '16px' }}>
-          {errors.map((e, i) => <p key={i} style={{ color: 'var(--danger)', fontSize: '13px', margin: '2px 0' }}>• {e}</p>)}
+          {errors.map((e, i) => <p key={i} style={{ color: 'var(--danger)', fontSize: '13px', margin: '2px 0' }}>â€¢ {e}</p>)}
         </div>
       )}
 
@@ -1020,20 +1021,21 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ initial, onSave, onBack }) => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '12px' }}>
             <div>
               <label style={labelStyle}>Category *</label>
-              <select
+              <SimpleSelect<string>
                 value={form.examCategory || 'Internal Assessment (CIE)'}
-                onChange={(e) => set('examCategory', e.target.value as any)}
-                style={{ ...inputStyle, cursor: 'pointer' }}
-              >
-                <option value="Internal Assessment (CIE)">Internal Assessment (CIE)</option>
-                <option value="Semester End Exam (SEE)">Semester End Exam (SEE)</option>
-                <option value="Mid-Term Examination">Mid-Term Examination</option>
-                <option value="In-Semester Evaluation (ISE)">In-Semester Evaluation (ISE)</option>
-                <option value="Aptitude">Aptitude & Placement</option>
-                <option value="Weekly Lab Practical">Weekly Lab Practical</option>
-                <option value="College Coding Competition">College Coding Competition</option>
-                <option value="Multiple Choice Question (MCQ) Examination">General MCQ Exam</option>
-              </select>
+                onChange={(val) => set('examCategory', val as any)}
+                size="md"
+                options={[
+                  { value: 'Internal Assessment (CIE)', label: 'Internal Assessment (CIE)' },
+                  { value: 'Semester End Exam (SEE)', label: 'Semester End Exam (SEE)' },
+                  { value: 'Mid-Term Examination', label: 'Mid-Term Examination' },
+                  { value: 'In-Semester Evaluation (ISE)', label: 'In-Semester Evaluation (ISE)' },
+                  { value: 'Aptitude', label: 'Aptitude & Placement' },
+                  { value: 'Weekly Lab Practical', label: 'Weekly Lab Practical' },
+                  { value: 'College Coding Competition', label: 'College Coding Competition' },
+                  { value: 'Multiple Choice Question (MCQ) Examination', label: 'General MCQ Exam' }
+                ]}
+              />
             </div>
             <div>
               <label style={labelStyle}>Subject</label>
@@ -1080,7 +1082,7 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ initial, onSave, onBack }) => {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '12px' }}>
             <div>
-              <label style={labelStyle}>Scheduled Start Window (optional — auto-unlocks exam)</label>
+              <label style={labelStyle}>Scheduled Start Window (optional â€” auto-unlocks exam)</label>
               <input
                 type="datetime-local"
                 value={form.startTime ? new Date(form.startTime - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''}
@@ -1089,7 +1091,7 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ initial, onSave, onBack }) => {
               />
             </div>
             <div>
-              <label style={labelStyle}>Scheduled End Window (optional — auto-closes exam)</label>
+              <label style={labelStyle}>Scheduled End Window (optional â€” auto-closes exam)</label>
               <input
                 type="datetime-local"
                 value={form.endTime ? new Date(form.endTime - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''}
@@ -1350,7 +1352,7 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ initial, onSave, onBack }) => {
   );
 };
 
-// ── Shared styles ─────────────────────────────────────────────────────────────
+// â”€â”€ Shared styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const labelStyle: React.CSSProperties = {
   fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)',
   textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px',
@@ -1363,7 +1365,7 @@ const inputStyle: React.CSSProperties = {
   padding: '9px 12px', fontSize: '13px', outline: 'none',
 };
 
-// ── Main Export ───────────────────────────────────────────────────────────────
+// â”€â”€ Main Export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const MCQCreateExam: React.FC = () => {
   const [view, setView] = useState<'list' | 'create' | 'edit'>('list');
   const [editingExam, setEditingExam] = useState<MCQExamConfig | null>(null);

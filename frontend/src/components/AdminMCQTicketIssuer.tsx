@@ -30,6 +30,7 @@ import {
 import { supabase, fetchExamsFromCloud } from '../services/supabaseService';
 import { getAllExams } from '../services/mcqService';
 import { MCQExamConfig } from '../types/mcq';
+import { SimpleSelect } from './watermelon/Select';
 
 export type CandidateTicket = {
   ticket_id: string;
@@ -255,7 +256,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
   // Selected exam details
   const selectedExam = useMemo(() => exams.find((e) => e.id === examId), [exams, examId]);
 
-  // ── CSV / TSV Parsing Engine ───────────────────────────────────────────────
+  // â”€â”€ CSV / TSV Parsing Engine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const parseCSVContent = (rawText: string, dDept: string, dSem: string, dDiv: string): ParsedStudent[] => {
     if (!rawText.trim()) return [];
 
@@ -407,7 +408,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
     setParsedStudents((prev) => prev.filter((p) => p.id !== id));
   };
 
-  // ── CSV Export & Template Helpers ──────────────────────────────────────────
+  // â”€â”€ CSV Export & Template Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const downloadCSV = (filename: string, headers: string[], rows: (string | number)[][]) => {
     const escapeCell = (cell: string | number) => {
       const str = String(cell ?? '');
@@ -490,7 +491,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
     }
   };
 
-  // ── Single Ticket Issuing (Self-healing with local crypto token generation) ──
+  // â”€â”€ Single Ticket Issuing (Self-healing with local crypto token generation) â”€â”€
   const issueTicket = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
@@ -582,7 +583,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
     }
   };
 
-  // ── Batch Ticket Issuing (With Self-Healing Fallback) ─────────────────────────
+  // â”€â”€ Batch Ticket Issuing (With Self-Healing Fallback) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const issueBatchTickets = async () => {
     const validStudents = parsedStudents.filter(p => p.isValid && !p.isDuplicate);
     if (validStudents.length === 0) {
@@ -705,7 +706,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
     }
   };
 
-  // ── Ticket Revocation & Unlocking ──────────────────────────────────────────
+  // â”€â”€ Ticket Revocation & Unlocking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const revokeTicket = async (ticketId = activeTicketId) => {
     if (!ticketId || revoking) return;
     setRevoking(true);
@@ -845,7 +846,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
             <div>
               <div className="flex items-center gap-2 text-[11px] font-bold tracking-wider text-[var(--text-secondary)] uppercase">
                 <ShieldCheck size={14} className="text-[var(--success)]" />
-                <span>AXENT · Server-Authoritative Exam Authority</span>
+                <span>AXENT Â· Server-Authoritative Exam Authority</span>
               </div>
               <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--text-primary)] mt-1">
                 MCQ Candidate Ticket Authority
@@ -859,7 +860,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
               <div className="self-start sm:self-center px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-main)] text-right">
                 <div className="text-[10px] uppercase font-bold flex items-center justify-end gap-1">
                   {selectedExam.isPrivate ? (
-                    <span className="text-amber-500 flex items-center gap-1"><Lock size={10} /> Private · Ticket-Only</span>
+                    <span className="text-amber-500 flex items-center gap-1"><Lock size={10} /> Private Â· Ticket-Only</span>
                   ) : (
                     <span className="text-[var(--text-secondary)] flex items-center gap-1"><Globe size={10} /> Public Exam</span>
                   )}
@@ -877,7 +878,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
             {loading ? (
               <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)] p-3 border border-[var(--border)] rounded-lg">
                 <RefreshCw size={14} className="animate-spin" />
-                <span>Loading available exams…</span>
+                <span>Loading available examsâ€¦</span>
               </div>
             ) : exams.length === 0 ? (
               <div className="p-4 rounded-xl border border-[var(--warning-border)] bg-[var(--warning-bg)] text-xs text-[var(--warning)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -890,28 +891,27 @@ export const AdminMCQTicketIssuer: React.FC = () => {
                   onClick={() => navigate('/paper-setter')}
                   className="px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-xs font-semibold text-[var(--text-primary)] hover:border-[var(--text-primary)] transition-colors self-start"
                 >
-                  Manage in Paper Setter →
+                  Manage in Paper Setter â†’
                 </button>
               </div>
             ) : (
               <>
-                <select
+                <SimpleSelect
                   value={examId}
-                  onChange={(e) => {
-                    setExamId(e.target.value);
+                  onChange={(val) => {
+                    setExamId(val);
                     setTicketUrl('');
                     setTicketToken('');
                     setActiveTicketId('');
                     setBatchResults(null);
                   }}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-main)] text-sm text-[var(--text-primary)] font-medium focus:outline-none focus:border-[var(--text-primary)] transition-colors"
-                >
-                  {exams.map((exam) => (
-                    <option key={exam.id} value={exam.id}>
-                      {exam.isPrivate ? '[PRIVATE] ' : '[PUBLIC] '}{exam.title} ({exam.durationMinutes}m · {exam.questionCount} Questions)
-                    </option>
-                  ))}
-                </select>
+                  size="md"
+                  options={exams.map((exam) => ({
+                    value: exam.id,
+                    label: `${exam.isPrivate ? '[PRIVATE] ' : '[PUBLIC] '}${exam.title} (${exam.durationMinutes}m · ${exam.questionCount} Questions)`,
+                    badge: exam.isPrivate ? 'PRIVATE' : 'PUBLIC'
+                  }))}
+                />
 
                 {selectedExam?.isPrivate && (
                   <div className="mt-2.5 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2">
@@ -975,9 +975,9 @@ export const AdminMCQTicketIssuer: React.FC = () => {
             </div>
           )}
 
-          {/* ════════════════════════════════════════════════════════════════════
+          {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
               MODE A: BATCH STUDENT IMPORT
-             ════════════════════════════════════════════════════════════════════ */}
+             â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
           {exams.length > 0 && activeTab === 'import' && (
             <div className="mt-6 space-y-6 pt-5 border-t border-[var(--border)]">
 
@@ -1060,7 +1060,7 @@ export const AdminMCQTicketIssuer: React.FC = () => {
                   {importedFile && (
                     <div className="mt-3 inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-[11px] font-mono bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)]">
                       <span>{(importedFile.size / 1024).toFixed(1)} KB</span>
-                      <span>·</span>
+                      <span>Â·</span>
                       <span>{parsedStudents.length} candidates detected</span>
                     </div>
                   )}
@@ -1123,18 +1123,19 @@ Candidate Name, candidate@example.com"
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">Ticket Validity</label>
-                    <select
+                    <SimpleSelect<number>
                       value={batchTtlHours}
-                      onChange={(e) => setBatchTtlHours(Number(e.target.value))}
-                      className="w-full px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] text-xs text-[var(--text-primary)]"
-                    >
-                      <option value={1}>1 hour</option>
-                      <option value={4}>4 hours</option>
-                      <option value={12}>12 hours</option>
-                      <option value={24}>24 hours (Standard)</option>
-                      <option value={48}>48 hours</option>
-                      <option value={168}>7 days</option>
-                    </select>
+                      onChange={(val) => setBatchTtlHours(Number(val))}
+                      size="sm"
+                      options={[
+                        { value: 1, label: '1 hour' },
+                        { value: 4, label: '4 hours' },
+                        { value: 12, label: '12 hours' },
+                        { value: 24, label: '24 hours (Standard)' },
+                        { value: 48, label: '48 hours' },
+                        { value: 168, label: '7 days' }
+                      ]}
+                    />
                   </div>
                 </div>
               </div>
@@ -1181,7 +1182,7 @@ Candidate Name, candidate@example.com"
                           <th className="py-2.5 px-3 font-semibold text-[var(--text-secondary)] w-10">#</th>
                           <th className="py-2.5 px-3 font-semibold text-[var(--text-secondary)]">Candidate Name</th>
                           <th className="py-2.5 px-3 font-semibold text-[var(--text-secondary)]">Roll No / USN</th>
-                          <th className="py-2.5 px-3 font-semibold text-[var(--text-secondary)]">Dept · Sem · Div</th>
+                          <th className="py-2.5 px-3 font-semibold text-[var(--text-secondary)]">Dept Â· Sem Â· Div</th>
                           <th className="py-2.5 px-3 font-semibold text-[var(--text-secondary)]">Validation</th>
                           <th className="py-2.5 px-3 font-semibold text-[var(--text-secondary)] text-right w-12"></th>
                         </tr>
@@ -1193,7 +1194,7 @@ Candidate Name, candidate@example.com"
                             <td className="py-2 px-3 font-medium text-[var(--text-primary)]">{student.name || <em className="text-red-400">Empty Name</em>}</td>
                             <td className="py-2 px-3 font-mono text-[var(--text-primary)]">{student.roll || <em className="text-red-400">Empty Roll</em>}</td>
                             <td className="py-2 px-3 text-[var(--text-secondary)]">
-                              {student.department} · {student.semester} · {student.division}
+                              {student.department} Â· {student.semester} Â· {student.division}
                             </td>
                             <td className="py-2 px-3">
                               {student.isValid && !student.isDuplicate ? (
@@ -1233,7 +1234,7 @@ Candidate Name, candidate@example.com"
                       {isIssuingBatch ? (
                         <>
                           <RefreshCw size={16} className="animate-spin" />
-                          <span>Generating Tickets: {batchProgress.current} / {batchProgress.total} ({batchProgress.percent}%)…</span>
+                          <span>Generating Tickets: {batchProgress.current} / {batchProgress.total} ({batchProgress.percent}%)â€¦</span>
                         </>
                       ) : (
                         <>
@@ -1253,7 +1254,7 @@ Candidate Name, candidate@example.com"
                           />
                         </div>
                         <div className="flex justify-between text-[11px] text-[var(--text-secondary)] font-mono">
-                          <span>Processing cryptographic hashes…</span>
+                          <span>Processing cryptographic hashesâ€¦</span>
                           <span>{batchProgress.percent}% complete</span>
                         </div>
                       </div>
@@ -1307,9 +1308,9 @@ Candidate Name, candidate@example.com"
             </div>
           )}
 
-          {/* ════════════════════════════════════════════════════════════════════
+          {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
               MODE B: SINGLE CANDIDATE ISSUANCE
-             ════════════════════════════════════════════════════════════════════ */}
+             â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
           {exams.length > 0 && activeTab === 'single' && (
             <form onSubmit={(event) => void issueTicket(event)} className="mt-6 space-y-4 pt-5 border-t border-[var(--border)]">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1381,18 +1382,19 @@ Candidate Name, candidate@example.com"
                 <label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">
                   Ticket Validity Lifespan
                 </label>
-                <select
+                <SimpleSelect<number>
                   value={ttlHours}
-                  onChange={(e) => setTtlHours(Number(e.target.value))}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-main)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--text-primary)]"
-                >
-                  <option value={1}>1 hour</option>
-                  <option value={4}>4 hours</option>
-                  <option value={12}>12 hours</option>
-                  <option value={24}>24 hours</option>
-                  <option value={48}>48 hours</option>
-                  <option value={168}>7 days</option>
-                </select>
+                  onChange={(val) => setTtlHours(Number(val))}
+                  size="md"
+                  options={[
+                    { value: 1, label: '1 hour' },
+                    { value: 4, label: '4 hours' },
+                    { value: 12, label: '12 hours' },
+                    { value: 24, label: '24 hours' },
+                    { value: 48, label: '48 hours' },
+                    { value: 168, label: '7 days' }
+                  ]}
+                />
               </div>
 
               <button
@@ -1403,7 +1405,7 @@ Candidate Name, candidate@example.com"
                 {issuing ? (
                   <>
                     <RefreshCw size={15} className="animate-spin" />
-                    <span>Issuing securely…</span>
+                    <span>Issuing securelyâ€¦</span>
                   </>
                 ) : (
                   <>
@@ -1418,7 +1420,7 @@ Candidate Name, candidate@example.com"
                 <div className="mt-4 p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-main)] space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)]">
-                      Candidate Link — Shown Once
+                      Candidate Link â€” Shown Once
                     </span>
                     {expiresAt && (
                       <span className="text-[11px] font-mono text-[var(--text-secondary)]">
@@ -1448,7 +1450,7 @@ Candidate Name, candidate@example.com"
                       className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-red-500/20 text-xs font-semibold text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50"
                     >
                       <Ban size={13} />
-                      <span>{revoking ? 'Revoking…' : 'Revoke Ticket'}</span>
+                      <span>{revoking ? 'Revokingâ€¦' : 'Revoke Ticket'}</span>
                     </button>
                   </div>
 
@@ -1461,9 +1463,9 @@ Candidate Name, candidate@example.com"
           )}
         </section>
 
-        {/* ════════════════════════════════════════════════════════════════════
+        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
             BOTTOM SECTION: ISSUED CANDIDATE TICKETS AUDIT TABLE
-           ════════════════════════════════════════════════════════════════════ */}
+           â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
         <section className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl p-6 sm:p-7 shadow-sm space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -1498,7 +1500,7 @@ Candidate Name, candidate@example.com"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-main)] text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
               >
                 <RefreshCw size={13} className={loadingTickets ? 'animate-spin' : ''} />
-                <span>{loadingTickets ? 'Refreshing…' : 'Refresh'}</span>
+                <span>{loadingTickets ? 'Refreshingâ€¦' : 'Refresh'}</span>
               </button>
             </div>
           </div>
@@ -1512,7 +1514,7 @@ Candidate Name, candidate@example.com"
                   type="text"
                   value={ticketSearch}
                   onChange={(e) => setTicketSearch(e.target.value)}
-                  placeholder="Search student name or roll number…"
+                  placeholder="Search student name or roll numberâ€¦"
                   className="w-full pl-9 pr-8 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-main)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--text-primary)]"
                 />
                 {ticketSearch && (
@@ -1550,7 +1552,7 @@ Candidate Name, candidate@example.com"
           {loadingTickets ? (
             <div className="py-12 text-center text-xs text-[var(--text-secondary)] flex items-center justify-center gap-2">
               <RefreshCw size={14} className="animate-spin" />
-              <span>Loading candidate tickets…</span>
+              <span>Loading candidate ticketsâ€¦</span>
             </div>
           ) : tickets.length === 0 ? (
             <div className="py-12 text-center rounded-xl border border-[var(--border)] bg-[var(--bg-main)] text-xs text-[var(--text-secondary)]">
@@ -1630,7 +1632,7 @@ Candidate Name, candidate@example.com"
                                 className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-[var(--bg-elevated)] border border-[var(--border)] text-[11px] font-bold text-[var(--text-primary)] hover:border-[var(--text-primary)]"
                               >
                                 <Unlock size={11} />
-                                <span>{unlockingAttemptId === ticket.attempt_id ? 'Unlocking…' : 'Unlock'}</span>
+                                <span>{unlockingAttemptId === ticket.attempt_id ? 'Unlockingâ€¦' : 'Unlock'}</span>
                               </button>
                             )}
 
@@ -1640,7 +1642,7 @@ Candidate Name, candidate@example.com"
                               disabled={revoking || Boolean(ticket.revoked_at)}
                               className="px-2.5 py-1 rounded-md border border-red-500/20 text-[11px] font-semibold text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-40"
                             >
-                              {ticket.revoked_at ? 'Revoked' : revoking ? '…' : 'Revoke'}
+                              {ticket.revoked_at ? 'Revoked' : revoking ? 'â€¦' : 'Revoke'}
                             </button>
                           </div>
                         </td>

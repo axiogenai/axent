@@ -9,6 +9,7 @@ import {
   createCodingQuestion, updateCodingQuestion, makeTestCase,
   DEFAULT_ALLOWED_LANGUAGES, DIFFICULTY_MARKS
 } from '../../services/codingQuestionService';
+import { SimpleSelect } from '../watermelon/Select';
 
 interface CodingQuestionBuilderProps {
   existing?: CodingQuestion | null;
@@ -175,22 +176,24 @@ export const CodingQuestionBuilder: React.FC<CodingQuestionBuilderProps> = ({
           <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
             {existing ? 'Edit Coding Question' : 'New Coding Question'}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Code Spark — Paper Setter</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Code Spark â€” Paper Setter</div>
         </div>
         {/* Difficulty selector */}
-        <select
-          value={difficulty}
-          onChange={(e) => {
-            const d = e.target.value as CodingDifficulty;
-            setDifficulty(d);
-            setMarks(DIFFICULTY_MARKS[d]);
-          }}
-          style={{ ...inputStyle, width: 'auto', color: difficultyColors[difficulty], fontWeight: 700 }}
-        >
-          <option value="EASY">Easy</option>
-          <option value="MEDIUM">Medium</option>
-          <option value="HARD">Hard</option>
-        </select>
+        <div style={{ minWidth: '120px' }}>
+          <SimpleSelect<CodingDifficulty>
+            value={difficulty}
+            onChange={(d) => {
+              setDifficulty(d);
+              setMarks(DIFFICULTY_MARKS[d]);
+            }}
+            size="sm"
+            options={[
+              { value: 'EASY', label: 'Easy' },
+              { value: 'MEDIUM', label: 'Medium' },
+              { value: 'HARD', label: 'Hard' }
+            ]}
+          />
+        </div>
         <button onClick={onCancel} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
           <X size={18} />
         </button>
@@ -218,7 +221,7 @@ export const CodingQuestionBuilder: React.FC<CodingQuestionBuilderProps> = ({
       {/* Content */}
       <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
 
-        {/* ─── PROBLEM SECTION ─── */}
+        {/* â”€â”€â”€ PROBLEM SECTION â”€â”€â”€ */}
         {activeSection === 'problem' && (
           <>
             <div>
@@ -240,7 +243,7 @@ export const CodingQuestionBuilder: React.FC<CodingQuestionBuilderProps> = ({
               </div>
               <div>
                 {label('Output Format', true)}
-                <textarea style={textareaStyle} placeholder="Describe output format. E.g.:\nPrint two integers — the indices (0-based) of the two numbers, separated by a space." value={outputFormat} onChange={(e) => setOutputFormat(e.target.value)} />
+                <textarea style={textareaStyle} placeholder="Describe output format. E.g.:\nPrint two integers â€” the indices (0-based) of the two numbers, separated by a space." value={outputFormat} onChange={(e) => setOutputFormat(e.target.value)} />
               </div>
             </div>
 
@@ -252,7 +255,7 @@ export const CodingQuestionBuilder: React.FC<CodingQuestionBuilderProps> = ({
                   <div key={i} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     <input
                       style={{ ...inputStyle, fontFamily: FONT_MONO }}
-                      placeholder={`e.g. 1 ≤ N ≤ 10^5`}
+                      placeholder={`e.g. 1 â‰¤ N â‰¤ 10^5`}
                       value={c.label}
                       onChange={(e) => {
                         const next = [...constraints];
@@ -297,7 +300,7 @@ export const CodingQuestionBuilder: React.FC<CodingQuestionBuilderProps> = ({
           </>
         )}
 
-        {/* ─── TEST CASES SECTION ─── */}
+        {/* â”€â”€â”€ TEST CASES SECTION â”€â”€â”€ */}
         {activeSection === 'testcases' && (
           <>
             {/* Sample Test Cases */}
@@ -354,7 +357,7 @@ export const CodingQuestionBuilder: React.FC<CodingQuestionBuilderProps> = ({
           </>
         )}
 
-        {/* ─── CONFIG SECTION ─── */}
+        {/* â”€â”€â”€ CONFIG SECTION â”€â”€â”€ */}
         {activeSection === 'config' && (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
@@ -396,7 +399,7 @@ export const CodingQuestionBuilder: React.FC<CodingQuestionBuilderProps> = ({
                         else setAllowedLanguages((p) => p.filter((l) => l.language !== lang.language));
                       }} />
                       <span style={{ fontSize: '13px', color: 'var(--text-primary)', flex: 1 }}>{lang.language}</span>
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{lang.timeMultiplier}× time</span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{lang.timeMultiplier}Ã— time</span>
                     </div>
                   );
                 })}
@@ -405,7 +408,7 @@ export const CodingQuestionBuilder: React.FC<CodingQuestionBuilderProps> = ({
           </>
         )}
 
-        {/* ─── STARTER CODE SECTION ─── */}
+        {/* â”€â”€â”€ STARTER CODE SECTION â”€â”€â”€ */}
         {activeSection === 'starter' && (
           <>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
@@ -448,7 +451,7 @@ export const CodingQuestionBuilder: React.FC<CodingQuestionBuilderProps> = ({
   );
 };
 
-// ── TestCase Editor sub-component ─────────────────────────────────────────────
+// â”€â”€ TestCase Editor sub-component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface TestCaseEditorProps {
   tc: TestCase;
   index: number;

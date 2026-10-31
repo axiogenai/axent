@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { CandidateStation, CollegeLabInfo, ThemeMode } from '../../types/dna';
 import { playSound } from '../../utils/sounds';
+import { SimpleSelect } from '../watermelon/Select';
 
 interface AdminLiveProctoringViewProps {
   stations: CandidateStation[];
@@ -64,7 +65,7 @@ export const AdminLiveProctoringView: React.FC<AdminLiveProctoringViewProps> = (
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
-      {/* ── TOP CONTROL HEADER ── */}
+      {/* â”€â”€ TOP CONTROL HEADER â”€â”€ */}
       <div
         style={{
           display: 'flex',
@@ -192,34 +193,27 @@ export const AdminLiveProctoringView: React.FC<AdminLiveProctoringViewProps> = (
           </div>
 
           {/* Lab Selector */}
-          <select
-            value={selectedLabId}
-            onChange={(e) => {
-              playSound('click');
-              setSelectedLabId(e.target.value);
-            }}
-            style={{
-              padding: '7px 12px',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              color: 'var(--text-primary)',
-              fontSize: '12px',
-              outline: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            <option value="all">All Campus Laboratories</option>
-            {allLabs.map((lab) => (
-              <option key={lab.labId} value={lab.labId}>
-                {lab.labName}
-              </option>
-            ))}
-          </select>
+          <div style={{ minWidth: '190px' }}>
+            <SimpleSelect
+              value={selectedLabId}
+              onChange={(val) => {
+                playSound('click');
+                setSelectedLabId(val);
+              }}
+              size="sm"
+              options={[
+                { value: 'all', label: 'All Campus Laboratories' },
+                ...allLabs.map((lab) => ({
+                  value: lab.labId,
+                  label: lab.labName
+                }))
+              ]}
+            />
+          </div>
         </div>
       </div>
 
-      {/* ── SEARCH & TEST BUTTONS ROW ── */}
+      {/* â”€â”€ SEARCH & TEST BUTTONS ROW â”€â”€ */}
       <div
         style={{
           display: 'flex',
@@ -260,7 +254,7 @@ export const AdminLiveProctoringView: React.FC<AdminLiveProctoringViewProps> = (
         </div>
       </div>
 
-      {/* ── LIVE VIDEO/SCREEN SURVEILLANCE GRID ── */}
+      {/* â”€â”€ LIVE VIDEO/SCREEN SURVEILLANCE GRID â”€â”€ */}
       {displayedStations.length === 0 ? (
         <div
           style={{
@@ -420,7 +414,7 @@ export const AdminLiveProctoringView: React.FC<AdminLiveProctoringViewProps> = (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                       <Video size={28} color="#71717a" />
                       <span style={{ fontSize: '11px', color: '#a1a1aa', fontFamily: 'var(--font-mono)' }}>
-                        WEBRTC FEED LIVE · {station.ipAddress || '10.77.210.15'}
+                        WEBRTC FEED LIVE Â· {station.ipAddress || '10.77.210.15'}
                       </span>
                     </div>
                   )}

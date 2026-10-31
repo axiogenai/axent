@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   Building,
   PlusCircle,
@@ -40,7 +40,7 @@ export const AdminInstitutionsView: React.FC<AdminInstitutionsViewProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
-      {/* ── HEADER SUMMARY CARDS ── */}
+      {/* â”€â”€ HEADER SUMMARY CARDS â”€â”€ */}
       <div
         style={{
           display: 'grid',
@@ -149,7 +149,7 @@ export const AdminInstitutionsView: React.FC<AdminInstitutionsViewProps> = ({
         </div>
       </div>
 
-      {/* ── TOOLBAR WITH ADD LAB ACTION ── */}
+      {/* â”€â”€ TOOLBAR WITH ADD LAB ACTION â”€â”€ */}
       <div
         style={{
           display: 'flex',
@@ -183,7 +183,7 @@ export const AdminInstitutionsView: React.FC<AdminInstitutionsViewProps> = ({
         </button>
       </div>
 
-      {/* ── LABORATORIES GRID CARDS ── */}
+      {/* â”€â”€ LABORATORIES GRID CARDS â”€â”€ */}
       <div
         style={{
           display: 'grid',
@@ -230,7 +230,7 @@ export const AdminInstitutionsView: React.FC<AdminInstitutionsViewProps> = ({
                   </h3>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
                     <MapPin size={11} />
-                    <span>{lab.block || 'Academic Block'} · {lab.department || 'Computer Science'}</span>
+                    <span>{lab.block || 'Academic Block'} Â· {lab.department || 'Computer Science'}</span>
                   </div>
                 </div>
 

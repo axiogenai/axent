@@ -50,6 +50,10 @@ export interface CodeSparkSystemConfig {
   candidates: CodeSparkCandidate[];
   usedAccessKeys?: string[];
   updatedAt: number;
+  round1StartTime?: number | null;
+  round1EndTime?: number | null;
+  round2StartTime?: number | null;
+  round2EndTime?: number | null;
 }
 
 const STORAGE_KEY = 'codedna_codespark_candidates';
@@ -61,6 +65,10 @@ export const ROUND1_CONCLUDED_STORAGE_KEY = 'codedna_codespark_round1_concluded'
 export const LAB_OVERFLOW_STORAGE_KEY = 'codespark_lab_overflow_retake_enabled';
 export const RETAKE_AUTHORIZED_ROLLS_KEY = 'codespark_round1_retake_rolls';
 export const SMTP_CONFIG_STORAGE_KEY = 'codedna_codespark_smtp_config';
+export const ROUND1_SCHEDULE_START_KEY = 'codedna_codespark_r1_start';
+export const ROUND1_SCHEDULE_END_KEY = 'codedna_codespark_r1_end';
+export const ROUND2_SCHEDULE_START_KEY = 'codedna_codespark_r2_start';
+export const ROUND2_SCHEDULE_END_KEY = 'codedna_codespark_r2_end';
 
 export function normalizeCodeSparkKey(rawKey: string): string {
   if (!rawKey) return '';
@@ -367,6 +375,22 @@ export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
       localStorage.setItem(ROUND1_CONCLUDED_STORAGE_KEY, config.isConcluded ? "true" : "false");
       window.dispatchEvent(new CustomEvent("codedna_codespark_concluded_updated", { detail: config.isConcluded }));
     }
+    if (config.round1StartTime !== undefined && typeof window !== "undefined") {
+      if (config.round1StartTime) localStorage.setItem(ROUND1_SCHEDULE_START_KEY, String(config.round1StartTime));
+      else localStorage.removeItem(ROUND1_SCHEDULE_START_KEY);
+    }
+    if (config.round1EndTime !== undefined && typeof window !== "undefined") {
+      if (config.round1EndTime) localStorage.setItem(ROUND1_SCHEDULE_END_KEY, String(config.round1EndTime));
+      else localStorage.removeItem(ROUND1_SCHEDULE_END_KEY);
+    }
+    if (config.round2StartTime !== undefined && typeof window !== "undefined") {
+      if (config.round2StartTime) localStorage.setItem(ROUND2_SCHEDULE_START_KEY, String(config.round2StartTime));
+      else localStorage.removeItem(ROUND2_SCHEDULE_START_KEY);
+    }
+    if (config.round2EndTime !== undefined && typeof window !== "undefined") {
+      if (config.round2EndTime) localStorage.setItem(ROUND2_SCHEDULE_END_KEY, String(config.round2EndTime));
+      else localStorage.removeItem(ROUND2_SCHEDULE_END_KEY);
+    }
 
     // Cloud roster is authoritative
     const cloudCandidates = Array.isArray(config.candidates) ? config.candidates : [];
@@ -432,12 +456,185 @@ export async function recordAccessKeyUsed(keyOrRoll: string): Promise<void> {
   } catch {}
 }
 
+export interface CodeSparkSchedule {
+  round1StartTime: number | null;
+  round1EndTime: number | null;
+  round2StartTime: number | null;
+  round2EndTime: number | null;
+}
+
+export function getCodeSparkSchedule(): CodeSparkSchedule {
+  if (typeof window === 'undefined') {
+    return { round1StartTime: null, round1EndTime: null, round2StartTime: null, round2EndTime: null };
+  }
+  const r1StartRaw = localStorage.getItem(ROUND1_SCHEDULE_START_KEY);
+  const r1EndRaw = localStorage.getItem(ROUND1_SCHEDULE_END_KEY);
+  const r2StartRaw = localStorage.getItem(ROUND2_SCHEDULE_START_KEY);
+  const r2EndRaw = localStorage.getItem(ROUND2_SCHEDULE_END_KEY);
+
+  let r1Start = r1StartRaw ? Number(r1StartRaw) : null;
+  let r1End = r1EndRaw ? Number(r1EndRaw) : null;
+
+  // Fallback to active exam start/end time if not explicitly in schedule storage
+  if (!r1Start) {
+    const exam = getCodeSparkActiveExam();
+    if (exam && exam.startTime) {
+      r1Start = Number(exam.startTime);
+      if (exam.endTime) r1End = Number(exam.endTime);
+    }
+  }
+
+  return {
+    round1StartTime: r1Start && !isNaN(r1Start) ? r1Start : null,
+    round1EndTime: r1End && !isNaN(r1End) ? r1End : null,
+    round2StartTime: r2StartRaw && !isNaN(Number(r2StartRaw)) ? Number(r2StartRaw) : null,
+    round2EndTime: r2EndRaw && !isNaN(Number(r2EndRaw)) ? Number(r2EndRaw) : null
+  };
+}
+
+export async function saveCodeSparkSchedule(schedule: Partial<CodeSparkSchedule>): Promise<boolean> {
+  try {
+    const currentConfig = await fetchCodeSparkRosterConfig().catch(() => null);
+    const existing = getCodeSparkSchedule();
+
+    const r1Start = schedule.round1StartTime !== undefined ? schedule.round1StartTime : existing.round1StartTime;
+    const r1End = schedule.round1EndTime !== undefined ? schedule.round1EndTime : existing.round1EndTime;
+    const r2Start = schedule.round2StartTime !== undefined ? schedule.round2StartTime : existing.round2StartTime;
+    const r2End = schedule.round2EndTime !== undefined ? schedule.round2EndTime : existing.round2EndTime;
+
+    if (typeof window !== 'undefined') {
+      if (r1Start) localStorage.setItem(ROUND1_SCHEDULE_START_KEY, String(r1Start));
+      else localStorage.removeItem(ROUND1_SCHEDULE_START_KEY);
+
+      if (r1End) localStorage.setItem(ROUND1_SCHEDULE_END_KEY, String(r1End));
+      else localStorage.removeItem(ROUND1_SCHEDULE_END_KEY);
+
+      if (r2Start) localStorage.setItem(ROUND2_SCHEDULE_START_KEY, String(r2Start));
+      else localStorage.removeItem(ROUND2_SCHEDULE_START_KEY);
+
+      if (r2End) localStorage.setItem(ROUND2_SCHEDULE_END_KEY, String(r2End));
+      else localStorage.removeItem(ROUND2_SCHEDULE_END_KEY);
+    }
+
+    // Also update assigned exam paper's startTime/endTime if round1StartTime changed
+    const activeExam = getCodeSparkActiveExam();
+    if (activeExam) {
+      let updatedExam = { ...activeExam };
+      let changed = false;
+      if (r1Start !== undefined && r1Start !== activeExam.startTime) {
+        updatedExam.startTime = r1Start || undefined;
+        changed = true;
+      }
+      if (r1End !== undefined && r1End !== activeExam.endTime) {
+        updatedExam.endTime = r1End || undefined;
+        changed = true;
+      }
+      if (changed) {
+        saveExam(updatedExam);
+        void saveExamToCloud(updatedExam);
+      }
+    }
+
+    const updatedConfig: CodeSparkSystemConfig = {
+      activeExamId: currentConfig?.activeExamId || activeExam?.id || null,
+      shortlistMode: currentConfig?.shortlistMode || 'cutoff',
+      shortlistValue: currentConfig?.shortlistValue || 12,
+      manualShortlistRolls: currentConfig?.manualShortlistRolls || getShortlistedRolls(),
+      isConcluded: currentConfig?.isConcluded || false,
+      candidates: currentConfig?.candidates || getAllCodeSparkCandidates(),
+      round1StartTime: r1Start,
+      round1EndTime: r1End,
+      round2StartTime: r2Start,
+      round2EndTime: r2End,
+      updatedAt: Date.now()
+    };
+
+    // Direct write to Supabase candidate_stations table
+    try {
+      await supabase.from('candidate_stations').upsert({
+        id: CODESPARK_SYSTEM_CONFIG_ID,
+        lab_id: 'SYSTEM_CONFIG',
+        station_number: 'CONFIG',
+        status: 'CONFIG',
+        code: JSON.stringify(updatedConfig),
+        student: updatedConfig,
+        last_updated_timestamp: Date.now()
+      });
+    } catch {}
+
+    // Direct write to Supabase mcq_exams table
+    try {
+      await supabase.from('mcq_exams').upsert({
+        id: CODESPARK_SYSTEM_CONFIG_ID,
+        title: 'CodeSpark System Configuration',
+        description: 'CodeSpark System Configuration Roster',
+        instructions: JSON.stringify(updatedConfig),
+        status: 'PUBLISHED',
+        created_at: Date.now(),
+        updated_at: Date.now()
+      });
+    } catch {}
+
+    try {
+      const headers = await getCodeSparkAdminHeaders().catch(() => ({ 'Content-Type': 'application/json', 'x-authority-role': 'admin' }));
+      await fetch('/api/codespark/roster', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ config: updatedConfig })
+      });
+    } catch {}
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('storage'));
+      window.dispatchEvent(new CustomEvent('codedna_codespark_schedule_updated', { detail: { r1Start, r1End, r2Start, r2End } }));
+    }
+    return true;
+  } catch (err) {
+    console.error('[CodeSpark Schedule] Failed to save schedule:', err);
+    return false;
+  }
+}
+
+export async function asyncGetCodeSparkSchedule(): Promise<CodeSparkSchedule> {
+  try {
+    const res = await fetch('/api/codespark/public-config', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data) {
+        const schedule: CodeSparkSchedule = {
+          round1StartTime: data.round1StartTime ? Number(data.round1StartTime) : null,
+          round1EndTime: data.round1EndTime ? Number(data.round1EndTime) : null,
+          round2StartTime: data.round2StartTime ? Number(data.round2StartTime) : null,
+          round2EndTime: data.round2EndTime ? Number(data.round2EndTime) : null
+        };
+        if (typeof window !== 'undefined') {
+          if (schedule.round1StartTime) localStorage.setItem(ROUND1_SCHEDULE_START_KEY, String(schedule.round1StartTime));
+          else localStorage.removeItem(ROUND1_SCHEDULE_START_KEY);
+          if (schedule.round1EndTime) localStorage.setItem(ROUND1_SCHEDULE_END_KEY, String(schedule.round1EndTime));
+          else localStorage.removeItem(ROUND1_SCHEDULE_END_KEY);
+          if (schedule.round2StartTime) localStorage.setItem(ROUND2_SCHEDULE_START_KEY, String(schedule.round2StartTime));
+          else localStorage.removeItem(ROUND2_SCHEDULE_START_KEY);
+          if (schedule.round2EndTime) localStorage.setItem(ROUND2_SCHEDULE_END_KEY, String(schedule.round2EndTime));
+          else localStorage.removeItem(ROUND2_SCHEDULE_END_KEY);
+        }
+        return schedule;
+      }
+    }
+  } catch {}
+  return getCodeSparkSchedule();
+}
+
 export async function saveActiveCodeSparkPaper(
   examId: string,
-  criteria?: { mode?: 'cutoff' | 'top_n' | 'manual'; value?: number; manualRolls?: string[] }
+  criteria?: { mode?: 'cutoff' | 'top_n' | 'manual'; value?: number; manualRolls?: string[] },
+  schedule?: { round1StartTime?: number | null; round1EndTime?: number | null }
 ): Promise<boolean> {
   try {
     const current = await fetchCodeSparkRosterConfig().catch(() => null);
+    const existingSchedule = getCodeSparkSchedule();
+    const r1Start = schedule?.round1StartTime !== undefined ? schedule.round1StartTime : existingSchedule.round1StartTime;
+    const r1End = schedule?.round1EndTime !== undefined ? schedule.round1EndTime : existingSchedule.round1EndTime;
+
     const updatedConfig: CodeSparkSystemConfig = {
       activeExamId: examId,
       shortlistMode: criteria?.mode || current?.shortlistMode || 'cutoff',
@@ -445,6 +642,10 @@ export async function saveActiveCodeSparkPaper(
       manualShortlistRolls: criteria?.manualRolls || current?.manualShortlistRolls || getShortlistedRolls(),
       isConcluded: current?.isConcluded || false,
       candidates: current?.candidates || getAllCodeSparkCandidates(),
+      round1StartTime: r1Start,
+      round1EndTime: r1End,
+      round2StartTime: current?.round2StartTime ?? existingSchedule.round2StartTime,
+      round2EndTime: current?.round2EndTime ?? existingSchedule.round2EndTime,
       updatedAt: Date.now()
     };
 
@@ -453,6 +654,8 @@ export async function saveActiveCodeSparkPaper(
       localStorage.setItem('codedna_codespark_shortlist_mode', updatedConfig.shortlistMode);
       localStorage.setItem('codedna_codespark_shortlist_value', String(updatedConfig.shortlistValue));
       localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(updatedConfig.manualShortlistRolls));
+      if (r1Start) localStorage.setItem(ROUND1_SCHEDULE_START_KEY, String(r1Start));
+      if (r1End) localStorage.setItem(ROUND1_SCHEDULE_END_KEY, String(r1End));
     }
 
     // Direct write to Supabase candidate_stations table

@@ -19,6 +19,7 @@ import {
 import { CandidateStation, CollegeLabInfo } from '../../types/dna';
 import { playSound } from '../../utils/sounds';
 import { getStudentBoundKey, issueStudentEmergencyKey } from '../../services/emergencyKeyService';
+import { SimpleSelect } from '../watermelon/Select';
 
 interface AdminTestStationsViewProps {
   stations: CandidateStation[];
@@ -65,7 +66,7 @@ export const AdminTestStationsView: React.FC<AdminTestStationsViewProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
-      {/* ── HEADER SUMMARY CARDS ── */}
+      {/* â”€â”€ HEADER SUMMARY CARDS â”€â”€ */}
       <div
         style={{
           display: 'grid',
@@ -189,7 +190,7 @@ export const AdminTestStationsView: React.FC<AdminTestStationsViewProps> = ({
         </div>
       </div>
 
-      {/* ── TOOLBAR & SEARCH ── */}
+      {/* â”€â”€ TOOLBAR & SEARCH â”€â”€ */}
       <div
         style={{
           display: 'flex',
@@ -234,34 +235,27 @@ export const AdminTestStationsView: React.FC<AdminTestStationsViewProps> = ({
             />
           </div>
 
-          <select
-            value={selectedLabId}
-            onChange={(e) => {
-              playSound('click');
-              setSelectedLabId(e.target.value);
-            }}
-            style={{
-              padding: '7px 12px',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              color: 'var(--text-primary)',
-              fontSize: '12px',
-              outline: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            <option value="all">All Laboratories</option>
-            {allLabs.map((lab) => (
-              <option key={lab.labId} value={lab.labId}>
-                {lab.labName}
-              </option>
-            ))}
-          </select>
+          <div style={{ minWidth: '180px' }}>
+            <SimpleSelect
+              value={selectedLabId}
+              onChange={(val) => {
+                playSound('click');
+                setSelectedLabId(val);
+              }}
+              size="sm"
+              options={[
+                { value: 'all', label: 'All Laboratories' },
+                ...allLabs.map((lab) => ({
+                  value: lab.labId,
+                  label: lab.labName
+                }))
+              ]}
+            />
+          </div>
         </div>
       </div>
 
-      {/* ── WORKSTATIONS INVENTORY TABLE ── */}
+      {/* â”€â”€ WORKSTATIONS INVENTORY TABLE â”€â”€ */}
       <div
         style={{
           background: 'var(--bg-elevated)',
@@ -349,7 +343,7 @@ export const AdminTestStationsView: React.FC<AdminTestStationsViewProps> = ({
                           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11.5px', color: 'var(--text-primary)' }}>
                             {station.ipAddress || '10.77.210.12'}
                           </span>
-                          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>· 18ms</span>
+                          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Â· 18ms</span>
                         </div>
                       </td>
 

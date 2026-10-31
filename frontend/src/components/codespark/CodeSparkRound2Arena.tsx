@@ -43,6 +43,7 @@ import {
 import { playSound } from '../../utils/sounds';
 import { requestExamFullscreen, isCurrentlyFullscreen, exitExamFullscreen } from '../../services/timeSyncService';
 import { ThemeMode } from '../../types/dna';
+import { SimpleSelect } from '../watermelon/Select';
 interface CodeSparkRound2ArenaProps {
   candidateProfile: {
     name: string;
@@ -1349,30 +1350,22 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                   )}
                 </div>
                 {/* Language Override Selector */}
-                <select
-                  aria-label="Target Programming Language"
-                  value={currentExplicit}
-                  onChange={(e) => {
-                    const val = e.target.value as any;
-                    setExplicitLanguageMap((prev) => ({ ...prev, [currentQIndex]: val }));
-                  }}
-                  style={{
-                    background: '#18181b',
-                    border: '1px solid #27272a',
-                    color: '#a1a1aa',
-                    fontSize: '11px',
-                    padding: '3px 8px',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    outline: 'none'
-                  }}
-                >
-                  <option value="Auto">Auto-Detect</option>
-                  <option value="Python">Python</option>
-                  <option value="C++">C++</option>
-                  <option value="C">C</option>
-                  <option value="Java">Java</option>
-                </select>
+                <div style={{ width: '130px' }}>
+                  <SimpleSelect<'Auto' | 'Python' | 'C++' | 'C' | 'Java'>
+                    value={currentExplicit}
+                    onChange={(val) => {
+                      setExplicitLanguageMap((prev) => ({ ...prev, [currentQIndex]: val }));
+                    }}
+                    size="sm"
+                    options={[
+                      { value: 'Auto', label: 'Auto-Detect' },
+                      { value: 'Python', label: 'Python' },
+                      { value: 'C++', label: 'C++' },
+                      { value: 'C', label: 'C' },
+                      { value: 'Java', label: 'Java' }
+                    ]}
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={handleResetToTemplate}

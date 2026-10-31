@@ -116,6 +116,8 @@ import {
   Brain
 } from 'lucide-react';
 
+import { SimpleSelect } from '../watermelon/Select';
+
 
 
 import { CandidateStation } from '../../types/dna';
@@ -213,25 +215,19 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
   sendProctorLockCommand,
-
-
-
-  isDark = true,
-
+  isDark: propIsDark,
   onEndExamAndResetAll
-
-
-
 }) => {
-
-
-
   // 1. Sub-Tabs: Leaderboard | Question Definitions | Live Streams
-
-
+  const isDark = propIsDark !== undefined
+    ? propIsDark
+    : (typeof document !== 'undefined'
+        ? document.documentElement.getAttribute('data-theme') === 'dark'
+        : false);
 
   // Dynamic theme tokens responsive to light/dark mode
   const t = useMemo(() => ({
+    isDark,
     bgApp: isDark ? '#09090b' : '#f8fafc',
     bgCard: isDark ? '#121214' : '#ffffff',
     bgCardElevated: isDark ? '#18181b' : '#f8fafc',
@@ -578,7 +574,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
   const [problems, setProblems] = useState<Round2Problem[]>(() => getAllRound2Problems());
 
-  // Dynamic total max marks — computed from actual per-problem marks set by admin
+  // Dynamic total max marks â€” computed from actual per-problem marks set by admin
   const totalMaxMarks = useMemo(() => {
     return problems.reduce((sum, p) => sum + (Number(p.marks) || 0), 0);
   }, [problems]);
@@ -2087,164 +2083,48 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
           {/* KPI Summary Cards */}
-
-
-
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-
-
-
-            <div style={{ background: '#121214', border: '1px solid #27272a', borderRadius: '8px', padding: '14px' }}>
-
-
-
-              <div style={{ fontSize: '11px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>
-
-
-
+            <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: '8px', padding: '14px' }}>
+              <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase', fontWeight: 700 }}>
                 Participants in Round 2
-
-
-
               </div>
-
-
-
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#f4f4f5', marginTop: '4px' }}>
-
-
-
+              <div style={{ fontSize: '22px', fontWeight: 800, color: t.textPrimary, marginTop: '4px' }}>
                 {totalParticipants}
-
-
-
               </div>
-
-
-
             </div>
 
-
-
-            <div style={{ background: '#121214', border: '1px solid #27272a', borderRadius: '8px', padding: '14px' }}>
-
-
-
-              <div style={{ fontSize: '11px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>
-
-
-
+            <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: '8px', padding: '14px' }}>
+              <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase', fontWeight: 700 }}>
                 Completed &amp; Submitted
-
-
-
               </div>
-
-
-
               <div style={{ fontSize: '22px', fontWeight: 800, color: '#10b981', marginTop: '4px' }}>
-
-
-
                 {completedSubmissions}{' '}
-
-
-
-                <span style={{ fontSize: '12px', color: '#71717a', fontWeight: 500 }}>
-
-
-
+                <span style={{ fontSize: '12px', color: t.textMuted, fontWeight: 500 }}>
                   ({totalParticipants > 0 ? Math.round((completedSubmissions / totalParticipants) * 100) : 0}%)
-
-
-
                 </span>
-
-
-
               </div>
-
-
-
             </div>
 
-
-
-            <div style={{ background: '#121214', border: '1px solid #27272a', borderRadius: '8px', padding: '14px' }}>
-
-
-
-              <div style={{ fontSize: '11px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>
-
-
-
+            <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: '8px', padding: '14px' }}>
+              <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase', fontWeight: 700 }}>
                 Average Score
-
-
-
               </div>
-
-
-
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#f4f4f5', marginTop: '4px' }}>
-
-
-
+              <div style={{ fontSize: '22px', fontWeight: 800, color: t.textPrimary, marginTop: '4px' }}>
                 {averageScore}{' '}
-
-
-
-                <span style={{ fontSize: '12px', color: '#71717a', fontWeight: 500 }}>/ {totalMaxMarks}</span>
-
-
-
+                <span style={{ fontSize: '12px', color: t.textMuted, fontWeight: 500 }}>/ {totalMaxMarks}</span>
               </div>
-
-
-
             </div>
 
-
-
-            <div style={{ background: '#121214', border: '1px solid #27272a', borderRadius: '8px', padding: '14px' }}>
-
-
-
-              <div style={{ fontSize: '11px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>
-
-
-
+            <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: '8px', padding: '14px' }}>
+              <div style={{ fontSize: '11px', color: t.textMuted, textTransform: 'uppercase', fontWeight: 700 }}>
                 Top Score
-
-
-
               </div>
-
-
-
               <div style={{ fontSize: '22px', fontWeight: 800, color: '#f59e0b', marginTop: '4px' }}>
-
-
-
                 {highestScore}{' '}
-
-
-
-                <span style={{ fontSize: '12px', color: '#71717a', fontWeight: 500 }}>/ {totalMaxMarks}</span>
-
-
-
+                <span style={{ fontSize: '12px', color: t.textMuted, fontWeight: 500 }}>/ {totalMaxMarks}</span>
               </div>
-
-
-
             </div>
-
-
-
           </div>
-
-
 
           {/* Search & Filters */}
 
@@ -2964,7 +2844,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                              {entry.averageRuntimeMs ? `${entry.averageRuntimeMs} ms` : '—'}
+                              {entry.averageRuntimeMs ? `${entry.averageRuntimeMs} ms` : 'â€”'}
 
 
 
@@ -3236,7 +3116,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
                 <strong style={{ fontSize: '13.5px', color: t.textPrimary }}>Import Coding Questions (Paste Text)</strong>
                 <span style={{ fontSize: '11px', color: isDark ? '#60a5fa' : '#2563eb', background: isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(37, 99, 235, 0.08)', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Fast Mode</span>
               </div>
-              <span style={{ fontSize: '11.5px', color: t.textMuted }}>Paste your questions directly (one per line or numbered) — titles, boilerplates & test cases are auto-configured!</span>
+              <span style={{ fontSize: '11.5px', color: t.textMuted }}>Paste your questions directly (one per line or numbered) â€” titles, boilerplates & test cases are auto-configured!</span>
             </div>
             <textarea
               value={quickPasteText}
@@ -3415,10 +3295,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
           {/* Question Selector Tabs */}
-
-
-
-          <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #27272a', paddingBottom: '10px', overflowX: 'auto' }}>
+          <div style={{ display: 'flex', gap: '8px', borderBottom: `1px solid ${t.border}`, paddingBottom: '10px', overflowX: 'auto' }}>
 
 
 
@@ -3552,7 +3429,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                    {prob.difficulty} • {prob.marks}p
+                    {prob.difficulty} â€¢ {prob.marks}p
 
 
 
@@ -3623,7 +3500,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
             {/* Question Title */}
             <div>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: t.textSecondary, textTransform: 'uppercase', marginBottom: '4px' }}>
                 Question Title
               </label>
               <input
@@ -3650,10 +3527,9 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: t.textSecondary, textTransform: 'uppercase', marginBottom: '4px' }}>
                   Difficulty
                 </label>
-                <select
+                <SimpleSelect<'Easy' | 'Medium' | 'Hard'>
                   value={activeProblem.difficulty}
-                  onChange={(e) => {
-                    const diff = e.target.value as 'Easy' | 'Medium' | 'Hard';
+                  onChange={(diff) => {
                     updateActiveProblemField('difficulty', diff);
                     // Auto-update marks when difficulty changes if marks are still at a default
                     const defaultMarks = activeProblem.difficulty === 'Easy' ? 20 : activeProblem.difficulty === 'Medium' ? 40 : 60;
@@ -3661,12 +3537,13 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
                       updateActiveProblemField('marks', diff === 'Easy' ? 20 : diff === 'Medium' ? 40 : 60);
                     }
                   }}
-                  style={{ width: '100%', background: t.bgInput, border: `1px solid ${t.border}`, borderRadius: '6px', padding: '8px 10px', color: t.textPrimary, fontSize: '13px', outline: 'none' }}
-                >
-                  <option value="Easy">Easy</option>
-                  <option value="Medium">Medium</option>
-                  <option value="Hard">Hard</option>
-                </select>
+                  size="md"
+                  options={[
+                    { value: 'Easy', label: 'Easy (20 marks)' },
+                    { value: 'Medium', label: 'Medium (40 marks)' },
+                    { value: 'Hard', label: 'Hard (60 marks)' }
+                  ]}
+                />
               </div>
               {/* Marks */}
               <div>
@@ -3718,21 +3595,9 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
             </div>
 
             {/* Problem Description */}
-
-
-
             <div>
-
-
-
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
-
-
-
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: t.textSecondary, textTransform: 'uppercase', marginBottom: '4px' }}>
                 Problem Statement &amp; Explanation
-
-
-
               </label>
 
 
@@ -3828,87 +3693,28 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-            <div style={{ gridColumn: '1 / -1', padding: '48px 24px', textAlign: 'center', border: '1px dashed #27272a', borderRadius: '8px', background: '#121214' }}>
-
-
-
-              <Code2 size={28} color="#71717a" style={{ margin: '0 auto 8px auto' }} />
-
-
-
-              <div style={{ fontSize: '13px', fontWeight: 600, color: '#f4f4f5' }}>No active coding workstations</div>
-
-
-
-              <div style={{ fontSize: '12px', color: '#71717a', marginTop: '4px' }}>
-
-
-
+            <div style={{ gridColumn: '1 / -1', padding: '48px 24px', textAlign: 'center', border: `1px dashed ${t.border}`, borderRadius: '8px', background: t.bgCard }}>
+              <Code2 size={28} color={t.textMuted} style={{ margin: '0 auto 8px auto' }} />
+              <div style={{ fontSize: '13px', fontWeight: 600, color: t.textPrimary }}>No active coding workstations</div>
+              <div style={{ fontSize: '12px', color: t.textMuted, marginTop: '4px' }}>
                 When shortlisted candidates start Round 2 at /codespark-exams?round=2, their live telemetry and code stream will stream here.
-
-
-
               </div>
-
-
-
             </div>
-
-
-
           ) : (
-
-
-
             uniqueRound2Stations.map((station) => (
-
-
-
-              <div key={station.id} style={{ background: '#121214', border: '1px solid #27272a', borderRadius: '8px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-
-
-
+              <div key={station.id} style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: '8px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-
-
-
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-
-
-
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#f4f4f5' }}>{station.student?.name || 'Candidate'}</span>
-
-
-
-                    <span style={{ fontSize: '11px', color: '#71717a', fontFamily: 'monospace' }}>({station.student?.rollNumber || 'N/A'})</span>
-
-
-
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: t.textPrimary }}>{station.student?.name || 'Candidate'}</span>
+                    <span style={{ fontSize: '11px', color: t.textMuted, fontFamily: 'monospace' }}>({station.student?.rollNumber || 'N/A'})</span>
                   </div>
-
-
-
-                  <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa' }}>
-
-
-
+                  <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', background: t.bgCardElevated, border: `1px solid ${t.border}`, color: t.textSecondary }}>
                     {station.stationNumber} ({station.labId})
-
-
-
                   </span>
-
-
-
                 </div>
 
-
-
                 {/* Live Code Stream Panel */}
-
-
-
-                <div style={{ borderRadius: '6px', border: '1px solid #27272a', background: '#09090b', padding: '10px', height: '140px', overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ borderRadius: '6px', border: `1px solid ${t.border}`, background: t.bgApp, padding: '10px', height: '140px', overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '4px' }}>
 
 
 
@@ -3964,7 +3770,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                    WPM: {station.metrics?.typingSpeed || 0} • Keystrokes: {station.metrics?.keystrokes || 0}
+                    WPM: {station.metrics?.typingSpeed || 0} â€¢ Keystrokes: {station.metrics?.keystrokes || 0}
 
 
 
@@ -4349,7 +4155,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                  Total Score: <strong style={{ color: '#f4f4f5' }}>{selectedDossier.totalScore} / {selectedDossier.maxScore || totalMaxMarks}</strong> • Language: {selectedDossier.dominantLanguage} • Solved: {selectedDossier.solvedCount}/5
+                  Total Score: <strong style={{ color: '#f4f4f5' }}>{selectedDossier.totalScore} / {selectedDossier.maxScore || totalMaxMarks}</strong> â€¢ Language: {selectedDossier.dominantLanguage} â€¢ Solved: {selectedDossier.solvedCount}/5
 
 
 
@@ -4673,7 +4479,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                          Status: <strong style={{ color: rep.status === 'ACCEPTED' ? '#10b981' : '#f59e0b' }}>{rep.status}</strong> • Score: <strong>{rep.score} / {rep.maxScore}</strong> • Tests Passed: {rep.passedTests} / {rep.totalTests}
+                          Status: <strong style={{ color: rep.status === 'ACCEPTED' ? '#10b981' : '#f59e0b' }}>{rep.status}</strong> â€¢ Score: <strong>{rep.score} / {rep.maxScore}</strong> â€¢ Tests Passed: {rep.passedTests} / {rep.totalTests}
 
 
 
@@ -4981,11 +4787,11 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                          {rep.compiledAt && <span>• Compiled: {rep.compiledAtFormatted || new Date(rep.compiledAt).toLocaleTimeString()}</span>}
+                          {rep.compiledAt && <span>â€¢ Compiled: {rep.compiledAtFormatted || new Date(rep.compiledAt).toLocaleTimeString()}</span>}
 
 
 
-                          {rep.nextQuestionStartedAt && <span>• Next Q: {rep.nextQuestionStartedAtFormatted || new Date(rep.nextQuestionStartedAt).toLocaleTimeString()}</span>}
+                          {rep.nextQuestionStartedAt && <span>â€¢ Next Q: {rep.nextQuestionStartedAtFormatted || new Date(rep.nextQuestionStartedAt).toLocaleTimeString()}</span>}
 
 
 
@@ -5550,7 +5356,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                ✕
+                âœ•
 
 
 

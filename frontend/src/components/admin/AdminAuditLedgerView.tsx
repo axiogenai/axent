@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { CandidateStation, CollegeLabInfo } from '../../types/dna';
 import { playSound } from '../../utils/sounds';
+import { SimpleSelect } from '../watermelon/Select';
 
 interface AdminAuditLedgerViewProps {
   stations: CandidateStation[];
@@ -60,7 +61,7 @@ export const AdminAuditLedgerView: React.FC<AdminAuditLedgerViewProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
-      {/* ── AUDIT LEDGER TOP BRANDING & VERIFICATION HEADER ── */}
+      {/* â”€â”€ AUDIT LEDGER TOP BRANDING & VERIFICATION HEADER â”€â”€ */}
       <div
         style={{
           display: 'flex',
@@ -114,36 +115,29 @@ export const AdminAuditLedgerView: React.FC<AdminAuditLedgerViewProps> = ({
               </span>
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-              SHA-256 Tamper-Evident Examination Ledger · Axiogen Examination Network
+              SHA-256 Tamper-Evident Examination Ledger Â· Axiogen Examination Network
             </div>
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <select
-            value={selectedLabId}
-            onChange={(e) => {
-              playSound('click');
-              setSelectedLabId(e.target.value);
-            }}
-            style={{
-              padding: '7px 12px',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              color: 'var(--text-primary)',
-              fontSize: '12px',
-              outline: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            <option value="all">All Campus Laboratories</option>
-            {allLabs.map((lab) => (
-              <option key={lab.labId} value={lab.labId}>
-                {lab.labName}
-              </option>
-            ))}
-          </select>
+          <div style={{ minWidth: '190px' }}>
+            <SimpleSelect
+              value={selectedLabId}
+              onChange={(val) => {
+                playSound('click');
+                setSelectedLabId(val);
+              }}
+              size="sm"
+              options={[
+                { value: 'all', label: 'All Campus Laboratories' },
+                ...allLabs.map((lab) => ({
+                  value: lab.labId,
+                  label: lab.labName
+                }))
+              ]}
+            />
+          </div>
 
           <button
             type="button"
@@ -169,7 +163,7 @@ export const AdminAuditLedgerView: React.FC<AdminAuditLedgerViewProps> = ({
         </div>
       </div>
 
-      {/* ── SEARCH & COUNT ROW ── */}
+      {/* â”€â”€ SEARCH & COUNT ROW â”€â”€ */}
       <div
         style={{
           display: 'flex',
@@ -214,7 +208,7 @@ export const AdminAuditLedgerView: React.FC<AdminAuditLedgerViewProps> = ({
         </div>
       </div>
 
-      {/* ── THE AUDIT LEDGER TABLE ── */}
+      {/* â”€â”€ THE AUDIT LEDGER TABLE â”€â”€ */}
       <div
         style={{
           background: 'var(--bg-elevated)',

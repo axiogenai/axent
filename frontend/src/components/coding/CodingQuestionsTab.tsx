@@ -9,6 +9,7 @@ import {
   publishCodingQuestion, onCodingDataChanged, DIFFICULTY_MARKS
 } from '../../services/codingQuestionService';
 import { CodingQuestionBuilder } from './CodingQuestionBuilder';
+import { SimpleSelect } from '../watermelon/Select';
 
 interface CodingQuestionsTabProps {
   createdBy?: string;
@@ -44,7 +45,7 @@ export const CodingQuestionsTab: React.FC<CodingQuestionsTabProps> = ({ createdB
     return matchSearch && matchDiff;
   });
 
-  // ── Builder view ──
+  // â”€â”€ Builder view â”€â”€
   if (editingQuestion !== undefined) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -58,7 +59,7 @@ export const CodingQuestionsTab: React.FC<CodingQuestionsTabProps> = ({ createdB
     );
   }
 
-  // ── List view ──
+  // â”€â”€ List view â”€â”€
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '16px 0' }}>
       {/* Toolbar */}
@@ -72,16 +73,19 @@ export const CodingQuestionsTab: React.FC<CodingQuestionsTabProps> = ({ createdB
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <select
-          value={filterDifficulty}
-          onChange={(e) => setFilterDifficulty(e.target.value as CodingDifficulty | 'ALL')}
-          style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-primary)', fontSize: '12px', cursor: 'pointer' }}
-        >
-          <option value="ALL">All Difficulties</option>
-          <option value="EASY">Easy</option>
-          <option value="MEDIUM">Medium</option>
-          <option value="HARD">Hard</option>
-        </select>
+        <div style={{ minWidth: '150px' }}>
+          <SimpleSelect<CodingDifficulty | 'ALL'>
+            value={filterDifficulty}
+            onChange={(val) => setFilterDifficulty(val)}
+            size="sm"
+            options={[
+              { value: 'ALL', label: 'All Difficulties' },
+              { value: 'EASY', label: 'Easy' },
+              { value: 'MEDIUM', label: 'Medium' },
+              { value: 'HARD', label: 'Hard' }
+            ]}
+          />
+        </div>
         <button
           onClick={() => setEditingQuestion(null)}
           style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '6px', border: '1px solid var(--accent)', background: 'var(--accent)', color: '#000', fontSize: '12px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}

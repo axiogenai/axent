@@ -29,6 +29,7 @@ import { CandidateStation, CollegeLabInfo } from '../../types/dna';
 import { removeSingleStation, clearAllStations } from '../../services/adminService';
 import { clearAllAttemptsFromEverywhere } from '../../services/mcqService';
 import { playSound } from '../../utils/sounds';
+import { SimpleSelect } from '../watermelon/Select';
 
 interface AdminCheatingAlertsViewProps {
   stations: CandidateStation[];
@@ -144,7 +145,7 @@ export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = (
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
-      {/* ── SECURITY RESPONSE STATUS HEADER ── */}
+      {/* â”€â”€ SECURITY RESPONSE STATUS HEADER â”€â”€ */}
       <div
         style={{
           display: 'flex',
@@ -222,34 +223,27 @@ export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = (
               <span>Purge All Incidents</span>
             </button>
           )}
-          <select
-            value={selectedLabId}
-          onChange={(e) => {
-            playSound('click');
-            setSelectedLabId(e.target.value);
-          }}
-          style={{
-            padding: '7px 12px',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border)',
-            borderRadius: '8px',
-            color: 'var(--text-primary)',
-            fontSize: '12px',
-            outline: 'none',
-            cursor: 'pointer'
-          }}
-        >
-          <option value="all">All Laboratories</option>
-          {allLabs.map((lab) => (
-            <option key={lab.labId} value={lab.labId}>
-              {lab.labName}
-            </option>
-          ))}
-          </select>
+          <div style={{ minWidth: '180px' }}>
+            <SimpleSelect
+              value={selectedLabId}
+              onChange={(val) => {
+                playSound('click');
+                setSelectedLabId(val);
+              }}
+              size="sm"
+              options={[
+                { value: 'all', label: 'All Laboratories' },
+                ...allLabs.map((lab) => ({
+                  value: lab.labId,
+                  label: lab.labName
+                }))
+              ]}
+            />
+          </div>
         </div>
       </div>
 
-      {/* ── INCIDENTS LIST ── */}
+      {/* â”€â”€ INCIDENTS LIST â”€â”€ */}
       {displayedAlerts.length === 0 ? (
         <div
           style={{
@@ -357,7 +351,7 @@ export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = (
                   </div>
 
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                    LAB: {station.labName || station.labId} · IP: {station.ipAddress || '10.77.210.15'}
+                    LAB: {station.labName || station.labId} Â· IP: {station.ipAddress || '10.77.210.15'}
                   </div>
                 </div>
 
@@ -429,7 +423,7 @@ export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = (
                         {studentKey.code}
                       </span>
                       <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-                        (Bound strictly to {station.student?.name || 'this candidate'} · No other kid can use it)
+                        (Bound strictly to {station.student?.name || 'this candidate'} Â· No other kid can use it)
                       </span>
                     </div>
 

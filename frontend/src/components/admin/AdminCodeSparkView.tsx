@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 
 import {
 
@@ -168,8 +168,13 @@ import {
   authorizeAllRemainingCandidatesForRetake,
   deleteCodeSparkCandidateComplete,
   resetCodeSparkSystemInCloud,
-  ROUND1_CONCLUDED_STORAGE_KEY
+  ROUND1_CONCLUDED_STORAGE_KEY,
+  getCodeSparkSchedule,
+  saveCodeSparkSchedule,
+  asyncGetCodeSparkSchedule,
+  CodeSparkSchedule
 } from '../../services/codeSparkService';
+import { SimpleSelect } from '../watermelon/Select';
 
 import { CodeSparkCandidateImportModal } from '../codespark/CodeSparkCandidateImportModal';
 
@@ -280,6 +285,105 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
   const [selectedExamToAssign, setSelectedExamToAssign] = useState<string>('');
 
   const [paperSaveSuccess, setPaperSaveSuccess] = useState<string | null>(null);
+
+  // Schedule state for Round 1 and Round 2
+  const [schedule, setSchedule] = useState<CodeSparkSchedule>(() => getCodeSparkSchedule());
+  const [round1StartStr, setRound1StartStr] = useState<string>(() => {
+    const s = getCodeSparkSchedule();
+    if (s.round1StartTime) {
+      const d = new Date(s.round1StartTime);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    return '';
+  });
+  const [round1EndStr, setRound1EndStr] = useState<string>(() => {
+    const s = getCodeSparkSchedule();
+    if (s.round1EndTime) {
+      const d = new Date(s.round1EndTime);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    return '';
+  });
+  const [round2StartStr, setRound2StartStr] = useState<string>(() => {
+    const s = getCodeSparkSchedule();
+    if (s.round2StartTime) {
+      const d = new Date(s.round2StartTime);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    return '';
+  });
+  const [round2EndStr, setRound2EndStr] = useState<string>(() => {
+    const s = getCodeSparkSchedule();
+    if (s.round2EndTime) {
+      const d = new Date(s.round2EndTime);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    return '';
+  });
+
+  useEffect(() => {
+    const syncScheduleState = () => {
+      const s = getCodeSparkSchedule();
+      setSchedule(s);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      if (s.round1StartTime) {
+        const d = new Date(s.round1StartTime);
+        setRound1StartStr(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+      } else {
+        setRound1StartStr('');
+      }
+      if (s.round1EndTime) {
+        const d = new Date(s.round1EndTime);
+        setRound1EndStr(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+      } else {
+        setRound1EndStr('');
+      }
+      if (s.round2StartTime) {
+        const d = new Date(s.round2StartTime);
+        setRound2StartStr(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+      } else {
+        setRound2StartStr('');
+      }
+      if (s.round2EndTime) {
+        const d = new Date(s.round2EndTime);
+        setRound2EndStr(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+      } else {
+        setRound2EndStr('');
+      }
+    };
+    window.addEventListener('codedna_codespark_schedule_updated', syncScheduleState);
+    window.addEventListener('storage', syncScheduleState);
+    void asyncGetCodeSparkSchedule().then(syncScheduleState);
+    return () => {
+      window.removeEventListener('codedna_codespark_schedule_updated', syncScheduleState);
+      window.removeEventListener('storage', syncScheduleState);
+    };
+  }, []);
+
+  const handleSaveScheduleAndPaper = async (examId?: string) => {
+    playSound('click');
+    const targetExamId = examId || selectedExamToAssign || (currentAssignedExam?.id || '');
+    if (!targetExamId) return;
+
+    const r1Start = round1StartStr ? new Date(round1StartStr).getTime() : null;
+    const r1End = round1EndStr ? new Date(round1EndStr).getTime() : null;
+    const r2Start = round2StartStr ? new Date(round2StartStr).getTime() : null;
+    const r2End = round2EndStr ? new Date(round2EndStr).getTime() : null;
+
+    handleAssignPaper(targetExamId);
+    await saveCodeSparkSchedule({
+      round1StartTime: r1Start,
+      round1EndTime: r1End,
+      round2StartTime: r2Start,
+      round2EndTime: r2End
+    });
+    setPaperSaveSuccess('Saved paper and updated CodeSpark Round 1 & Round 2 schedules across cloud.');
+    setTimeout(() => setPaperSaveSuccess(null), 4000);
+  };
 
 
 
@@ -2034,7 +2138,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
   
   const handleWipeEntireDatabase = async () => {
-    if (!window.confirm('[CRITICAL DATABASE WIPE]\n\nAre you sure you want to completely WIPE THE ENTIRE DATABASE?\n\nThis will permanently delete from cloud:\n• All exams & question banks\n• All student attempts, scores & answer sheets\n• All workstations & live sessions\n• All Round 2 coding submissions & leaderboards\n\nThis action cannot be undone. Click OK to wipe everything.')) {
+    if (!window.confirm('[CRITICAL DATABASE WIPE]\n\nAre you sure you want to completely WIPE THE ENTIRE DATABASE?\n\nThis will permanently delete from cloud:\nâ€¢ All exams & question banks\nâ€¢ All student attempts, scores & answer sheets\nâ€¢ All workstations & live sessions\nâ€¢ All Round 2 coding submissions & leaderboards\n\nThis action cannot be undone. Click OK to wipe everything.')) {
       return;
     }
     playSound('click');
@@ -2128,7 +2232,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-  // ── Domain-Intelligent Theme Awareness (Dual-Mode Responsive) ──
+  // â”€â”€ Domain-Intelligent Theme Awareness (Dual-Mode Responsive) â”€â”€
 
   const isDark = theme === 'dark' || (theme === undefined && typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark');
 
@@ -2248,7 +2352,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
     >
 
-      {/* ── 1. MASTER CODESPARK CONTROL ROOM BANNER ── */}
+      {/* â”€â”€ 1. MASTER CODESPARK CONTROL ROOM BANNER â”€â”€ */}
 
       <div
 
@@ -2376,7 +2480,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
             <p style={{ fontSize: '12px', color: t.textMuted, margin: '4px 0 0 0' }}>
 
-              Round 1: Cognitive Aptitude MCQ • Automated Shortlist • Round 2: Algorithmic Code Sprint Arena
+              Round 1: Cognitive Aptitude MCQ â€¢ Automated Shortlist â€¢ Round 2: Algorithmic Code Sprint Arena
 
             </p>
 
@@ -2480,82 +2584,42 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-
-            <select
-
-              value={selectedExamToAssign || ''}
-
-              onChange={(e) => setSelectedExamToAssign(e.target.value)}
-
-              style={{
-
-                padding: '7px 10px',
-
-                borderRadius: '6px',
-
-                border: `1px solid ${t.borderStrong}`,
-
-                background: t.bgInput,
-
-                color: t.textPrimary,
-
-                fontSize: '12px',
-
-                colorScheme: isDark ? 'dark' : 'light'
-
-              }}
-
-            >
-
-              <option value="">-- Choose Exam Paper --</option>
-
-              {allExams.map((e) => (
-
-                <option key={e.id} value={e.id}>
-
-                  {e.title} ({e.questionCount} Qs • {e.durationMinutes}m)
-
-                </option>
-
-              ))}
-
-            </select>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '340px' }}>
+            <div style={{ width: '280px' }}>
+              <SimpleSelect
+                value={selectedExamToAssign || ''}
+                onChange={(val) => setSelectedExamToAssign(val)}
+                placeholder="-- Choose Exam Paper --"
+                size="sm"
+                options={[
+                  { value: '', label: '-- Choose Exam Paper --' },
+                  ...allExams.map((e) => ({
+                    value: e.id,
+                    label: `${e.title} (${e.questionCount} Qs â€¢ ${e.durationMinutes}m)`,
+                    badge: `${e.questionCount} Qs`
+                  }))
+                ]}
+              />
+            </div>
 
             <button
-
               type="button"
-
               onClick={() => handleAssignPaper(selectedExamToAssign)}
-
               disabled={!selectedExamToAssign}
-
               style={{
-
-                padding: '7px 14px',
-
+                padding: '6px 14px',
                 borderRadius: '6px',
-
                 background: t.btnPrimaryBg,
-
                 color: t.btnPrimaryColor,
-
                 fontWeight: 700,
-
                 fontSize: '12px',
-
                 border: 'none',
-
-                cursor: selectedExamToAssign ? 'pointer' : 'not-allowed'
-
+                cursor: selectedExamToAssign ? 'pointer' : 'not-allowed',
+                whiteSpace: 'nowrap'
               }}
-
             >
-
               Assign Paper Now
-
             </button>
-
           </div>
 
         </div>
@@ -2664,7 +2728,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* ── 2. SUB-NAVIGATION TABS (High-Density Dual-Mode Pills) ── */}
+      {/* â”€â”€ 2. SUB-NAVIGATION TABS (High-Density Dual-Mode Pills) â”€â”€ */}
 
       <div
 
@@ -2772,11 +2836,11 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* ── 3. TAB CONTENT ── */}
+      {/* â”€â”€ 3. TAB CONTENT â”€â”€ */}
 
 
 
-      {/* ── TAB: ROUND 1 MCQ CCTV SURVEILLANCE GRID ── */}
+      {/* â”€â”€ TAB: ROUND 1 MCQ CCTV SURVEILLANCE GRID â”€â”€ */}
 
       {activeTab === 'mcq_cctv' && (
 
@@ -3224,9 +3288,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                     {isRound1Concluded
 
-                      ? '✓ ROUND 1 CONCLUDED & SEALED'
+                      ? 'âœ“ ROUND 1 CONCLUDED & SEALED'
 
-                      : '● ROUND 1 LIVE ACROSS ALL LABS — SHORTLIST PENDING'}
+                      : 'â— ROUND 1 LIVE ACROSS ALL LABS â€” SHORTLIST PENDING'}
 
                   </span>
 
@@ -4248,7 +4312,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                                   {isAnswered && !isCurrent && (
 
-                                    <span style={{ fontSize: '9px' }}>✓</span>
+                                    <span style={{ fontSize: '9px' }}>âœ“</span>
 
                                   )}
 
@@ -4316,7 +4380,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                                   : station.isStandby
 
-                                  ? '—'
+                                  ? 'â€”'
 
                                   : 'In Progress'}
 
@@ -4722,9 +4786,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* ── TAB: MCQ PAPER & BLUEPRINT SOLUTIONS ── */}
+      {/* â”€â”€ TAB: MCQ PAPER & BLUEPRINT SOLUTIONS â”€â”€ */}
 
-            {/* ── TAB: ROUND 1 RESULTS & CANDIDATE MCQ ANSWER SHEETS ── */}
+            {/* â”€â”€ TAB: ROUND 1 RESULTS & CANDIDATE MCQ ANSWER SHEETS â”€â”€ */}
 
       {activeTab === 'round1' && (
 
@@ -4930,7 +4994,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                       <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: '12px', color: t.textPrimary }}>
 
-                        {c.studentRoll || c.studentEmail || '—'}
+                        {c.studentRoll || c.studentEmail || 'â€”'}
 
                       </td>
 
@@ -5120,7 +5184,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                         >
 
-                          {c.isShortlisted ? '✓ SHORTLISTED' : '+ Shortlist'}
+                          {c.isShortlisted ? 'âœ“ SHORTLISTED' : '+ Shortlist'}
 
                         </button>
 
@@ -5144,7 +5208,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* ── TAB: SHORTLIST GATEKEEPER & ROUND 2 KEY DISPATCH ── */}
+      {/* â”€â”€ TAB: SHORTLIST GATEKEEPER & ROUND 2 KEY DISPATCH â”€â”€ */}
 
       {activeTab === 'shortlist' && (
 
@@ -5266,7 +5330,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                     const name = matchAttempt?.studentName || matchCand?.name || 'Candidate';
 
-                    const email = matchAttempt?.studentEmail || matchCand?.email || '—';
+                    const email = matchAttempt?.studentEmail || matchCand?.email || 'â€”';
 
                     const score = matchAttempt?.score !== undefined ? `${matchAttempt.score}/${matchAttempt.totalMarks}` : 'N/A';
 
@@ -5392,7 +5456,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* ── TAB: ROUND 2 CODING ARENA LIVE STREAM & LEADERBOARD ── */}
+      {/* â”€â”€ TAB: ROUND 2 CODING ARENA LIVE STREAM & LEADERBOARD â”€â”€ */}
 
       {activeTab === 'round2' && (
 
@@ -5413,7 +5477,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* ── TAB: CANDIDATE ROSTER & AXENT KEYS ── */}
+      {/* â”€â”€ TAB: CANDIDATE ROSTER & AXENT KEYS â”€â”€ */}
 
       {activeTab === 'candidates' && (
 
@@ -5585,7 +5649,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                       <td style={{ padding: '10px 14px', fontWeight: 600 }}>{c.name}</td>
 
-                      <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: '#a1a1aa' }}>{c.email || '—'}</td>
+                      <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: '#a1a1aa' }}>{c.email || 'â€”'}</td>
 
                       <td style={{ padding: '10px 14px' }}>
 
@@ -5787,125 +5851,277 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* ── TAB: OVERVIEW & PAPER CONFIGURATION ── */}
-
+      {/* â”€â”€ TAB: OVERVIEW & PAPER CONFIGURATION â”€â”€ */}
       {activeTab === 'overview' && (
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Main Paper & Schedule Configuration Card */}
           <div style={darkCardStyle}>
-
-            <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 700, color: t.textPrimary }}>
-
-              Assign CodeSpark Round 1 Aptitude Paper
-
-            </h4>
-
-            <div style={{ display: 'flex', gap: '8px', maxWidth: '600px' }}>
-
-              <select
-
-                value={selectedExamToAssign || (currentAssignedExam?.id || '')}
-
-                onChange={(e) => setSelectedExamToAssign(e.target.value)}
-
-                style={{
-
-                  flex: 1,
-
-                  padding: '9px 12px',
-
-                  borderRadius: '6px',
-
-                  border: `1px solid ${t.borderStrong}`,
-
-                  background: t.bgInput,
-
-                  color: t.textPrimary,
-
-                  fontSize: '12.5px',
-
-                  outline: 'none',
-
-                  colorScheme: isDark ? 'dark' : 'light'
-
-                }}
-
-              >
-
-                <option value="">-- Choose Exam Paper from Question Bank --</option>
-
-                {allExams.map((exam) => (
-
-                  <option key={exam.id} value={exam.id}>
-
-                    {exam.title} ({exam.questionCount} Questions • {exam.durationMinutes}m)
-
-                  </option>
-
-                ))}
-
-              </select>
-
-              <button
-
-                type="button"
-
-                onClick={() => handleAssignPaper(selectedExamToAssign || (currentAssignedExam?.id || ''))}
-
-                disabled={!selectedExamToAssign && !currentAssignedExam?.id}
-
-                style={{
-
-                  padding: '9px 16px',
-
-                  borderRadius: '6px',
-
-                  background: t.btnPrimaryBg,
-
-                  color: t.btnPrimaryColor,
-
-                  fontSize: '12px',
-
-                  fontWeight: 700,
-
-                  border: 'none',
-
-                  cursor: 'pointer',
-
-                  whiteSpace: 'nowrap'
-
-                }}
-
-              >
-
-                Save Paper
-
-              </button>
-
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+              <div>
+                <h4 style={{ margin: '0 0 4px 0', fontSize: '15px', fontWeight: 700, color: t.textPrimary }}>
+                  CodeSpark Paper Assignment & Examination Scheduling
+                </h4>
+                <p style={{ margin: 0, fontSize: '12px', color: t.textMuted }}>
+                  Assign the active Aptitude paper and configure scheduled start/end windows for both Round 1 and Round 2.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nov3Start = '2026-11-03T09:00';
+                    const nov3End = '2026-11-03T11:00';
+                    const nov3R2Start = '2026-11-03T14:00';
+                    const nov3R2End = '2026-11-03T17:00';
+                    setRound1StartStr(nov3Start);
+                    setRound1EndStr(nov3End);
+                    setRound2StartStr(nov3R2Start);
+                    setRound2EndStr(nov3R2End);
+                    playSound('click');
+                  }}
+                  style={{
+                    padding: '6px 10px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    borderRadius: '6px',
+                    background: t.bgInput,
+                    border: `1px solid ${t.borderStrong}`,
+                    color: t.textSecondary,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Preset: 3 Nov Official (9AM & 2PM)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRound1StartStr('');
+                    setRound1EndStr('');
+                    setRound2StartStr('');
+                    setRound2EndStr('');
+                    playSound('click');
+                  }}
+                  style={{
+                    padding: '6px 10px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    borderRadius: '6px',
+                    background: t.bgInput,
+                    border: `1px solid ${t.borderStrong}`,
+                    color: t.textMuted,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Clear Schedules (Live Open Access)
+                </button>
+              </div>
             </div>
 
-            {paperSaveSuccess && (
+            {/* Paper Selection */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: t.textSecondary, marginBottom: '6px' }}>
+                Round 1 Aptitude Examination Paper
+              </label>
+              <div style={{ maxWidth: '640px' }}>
+                <SimpleSelect
+                  value={selectedExamToAssign || (currentAssignedExam?.id || '')}
+                  onChange={(val) => setSelectedExamToAssign(val)}
+                  placeholder="-- Choose Exam Paper from Question Bank --"
+                  size="md"
+                  options={[
+                    { value: '', label: '-- Choose Exam Paper from Question Bank --' },
+                    ...allExams.map((exam) => ({
+                      value: exam.id,
+                      label: `${exam.title} (${exam.questionCount} Questions â€¢ ${exam.durationMinutes}m)`,
+                      badge: `${exam.questionCount} Qs`
+                    }))
+                  ]}
+                />
+              </div>
+              {currentAssignedExam && (
+                <div style={{ marginTop: '6px', fontSize: '11.5px', color: t.textMuted }}>
+                  Active Paper: <strong style={{ color: t.textPrimary }}>{currentAssignedExam.title}</strong> â€¢ {currentAssignedExam.questionCount} Questions â€¢ {currentAssignedExam.durationMinutes} mins duration â€¢ {examTotalMarks} total marks
+                </div>
+              )}
+            </div>
 
-              <div style={{ marginTop: '10px', color: '#10b981', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {/* Scheduling Grid: Round 1 & Round 2 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+              {/* Round 1 Schedule */}
+              <div style={{ background: isDark ? '#141417' : '#f8fafc', border: `1px solid ${t.border}`, borderRadius: '6px', padding: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Clock size={14} color="#6366f1" />
+                    <span style={{ fontSize: '12.5px', fontWeight: 700, color: t.textPrimary }}>
+                      Round 1: General Aptitude
+                    </span>
+                  </div>
+                  {round1StartStr && new Date(round1StartStr).getTime() > Date.now() ? (
+                    <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#f59e0b', background: isDark ? 'rgba(245, 158, 11, 0.12)' : '#fef3c7', padding: '2px 7px', borderRadius: '4px' }}>
+                      Scheduled
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#10b981', background: isDark ? 'rgba(16, 185, 129, 0.12)' : '#d1fae5', padding: '2px 7px', borderRadius: '4px' }}>
+                      {round1StartStr ? 'Live Active' : 'Open Access'}
+                    </span>
+                  )}
+                </div>
 
-                <CheckCircle2 size={13} />
-
-                <span>{paperSaveSuccess}</span>
-
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: t.textMuted, marginBottom: '3px' }}>
+                      Scheduled Start (Candidates cannot enter before this time):
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={round1StartStr}
+                      onChange={(e) => setRound1StartStr(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '7px 10px',
+                        borderRadius: '6px',
+                        border: `1px solid ${t.borderStrong}`,
+                        background: t.bgInput,
+                        color: t.textPrimary,
+                        fontSize: '12px',
+                        outline: 'none',
+                        colorScheme: isDark ? 'dark' : 'light',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: t.textMuted, marginBottom: '3px' }}>
+                      Scheduled End / Deadline (Optional):
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={round1EndStr}
+                      onChange={(e) => setRound1EndStr(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '7px 10px',
+                        borderRadius: '6px',
+                        border: `1px solid ${t.borderStrong}`,
+                        background: t.bgInput,
+                        color: t.textPrimary,
+                        fontSize: '12px',
+                        outline: 'none',
+                        colorScheme: isDark ? 'dark' : 'light',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
 
-            )}
+              {/* Round 2 Schedule */}
+              <div style={{ background: isDark ? '#141417' : '#f8fafc', border: `1px solid ${t.border}`, borderRadius: '6px', padding: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Code2 size={14} color="#10b981" />
+                    <span style={{ fontSize: '12.5px', fontWeight: 700, color: t.textPrimary }}>
+                      Round 2: Algorithmic Code Sprint
+                    </span>
+                  </div>
+                  {round2StartStr && new Date(round2StartStr).getTime() > Date.now() ? (
+                    <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#f59e0b', background: isDark ? 'rgba(245, 158, 11, 0.12)' : '#fef3c7', padding: '2px 7px', borderRadius: '4px' }}>
+                      Scheduled
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#10b981', background: isDark ? 'rgba(16, 185, 129, 0.12)' : '#d1fae5', padding: '2px 7px', borderRadius: '4px' }}>
+                      {round2StartStr ? 'Live Active' : 'Open When Shortlisted'}
+                    </span>
+                  )}
+                </div>
 
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: t.textMuted, marginBottom: '3px' }}>
+                      Scheduled Start (Round 2 keys rejected before this time):
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={round2StartStr}
+                      onChange={(e) => setRound2StartStr(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '7px 10px',
+                        borderRadius: '6px',
+                        border: `1px solid ${t.borderStrong}`,
+                        background: t.bgInput,
+                        color: t.textPrimary,
+                        fontSize: '12px',
+                        outline: 'none',
+                        colorScheme: isDark ? 'dark' : 'light',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: t.textMuted, marginBottom: '3px' }}>
+                      Scheduled End / Final Cutoff (Optional):
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={round2EndStr}
+                      onChange={(e) => setRound2EndStr(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '7px 10px',
+                        borderRadius: '6px',
+                        border: `1px solid ${t.borderStrong}`,
+                        background: t.bgInput,
+                        color: t.textPrimary,
+                        fontSize: '12px',
+                        outline: 'none',
+                        colorScheme: isDark ? 'dark' : 'light',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions & Status */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => handleSaveScheduleAndPaper()}
+                disabled={!selectedExamToAssign && !currentAssignedExam?.id}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: '6px',
+                  background: t.btnPrimaryBg,
+                  color: t.btnPrimaryColor,
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: (!selectedExamToAssign && !currentAssignedExam?.id) ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Check size={14} />
+                <span>Save Paper & Schedules to Cloud</span>
+              </button>
+
+              {paperSaveSuccess && (
+                <div style={{ color: '#10b981', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <CheckCircle2 size={13} />
+                  <span>{paperSaveSuccess}</span>
+                </div>
+              )}
+            </div>
           </div>
-
         </div>
-
       )}
 
 
 
-      {/* ── MODAL 1: CANDIDATE MCQ ANSWER SHEET INSPECTOR ── */}
+      {/* â”€â”€ MODAL 1: CANDIDATE MCQ ANSWER SHEET INSPECTOR â”€â”€ */}
 
       {selectedCandidateSheet && (
 
@@ -5975,7 +6191,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                   <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: t.textPrimary }}>
 
-                    Candidate MCQ Answer Sheet • {selectedCandidateSheet.studentName}
+                    Candidate MCQ Answer Sheet â€¢ {selectedCandidateSheet.studentName}
 
                   </h3>
 
@@ -5989,7 +6205,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                 <div style={{ fontSize: '12px', color: '#a1a1aa', marginTop: '2px' }}>
 
-                  Score: <strong style={{ color: '#10b981' }}>{selectedCandidateSheet.score ?? 0} / {selectedCandidateSheet.totalMarks || selectedCandidateSheet.maxScore || examTotalMarks}</strong> • Completed {new Date(selectedCandidateSheet.endTime || selectedCandidateSheet.submittedAt || Date.now()).toLocaleTimeString()}
+                  Score: <strong style={{ color: '#10b981' }}>{selectedCandidateSheet.score ?? 0} / {selectedCandidateSheet.totalMarks || selectedCandidateSheet.maxScore || examTotalMarks}</strong> â€¢ Completed {new Date(selectedCandidateSheet.endTime || selectedCandidateSheet.submittedAt || Date.now()).toLocaleTimeString()}
 
                 </div>
 
@@ -6183,7 +6399,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                           <span style={{ fontSize: '10.5px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.35)', fontWeight: 800 }}>
 
-                            ✓ CORRECT (+{q.marks || 1})
+                            âœ“ CORRECT (+{q.marks || 1})
 
                           </span>
 
@@ -6191,7 +6407,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                           <span style={{ fontSize: '10.5px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.35)', fontWeight: 800 }}>
 
-                            ✗ INCORRECT (-{q.negativeMarks ?? 0.25})
+                            âœ— INCORRECT (-{q.negativeMarks ?? 0.25})
 
                           </span>
 
@@ -6261,7 +6477,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                             textColor = '#10b981';
 
-                            badgeLabel = 'CANDIDATE PICK ✓ (CORRECT)';
+                            badgeLabel = 'CANDIDATE PICK âœ“ (CORRECT)';
 
                             badgeBg = 'rgba(16, 185, 129, 0.2)';
 
@@ -6275,7 +6491,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                             textColor = '#ef4444';
 
-                            badgeLabel = 'CANDIDATE PICK ✗ (WRONG)';
+                            badgeLabel = 'CANDIDATE PICK âœ— (WRONG)';
 
                             badgeBg = 'rgba(239, 68, 68, 0.2)';
 
@@ -6445,7 +6661,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* ── MODAL 2: SHORTLIST EMAIL INVITATION & REAL GMAIL SMTP DISPATCH ENGINE ── */}
+      {/* â”€â”€ MODAL 2: SHORTLIST EMAIL INVITATION & REAL GMAIL SMTP DISPATCH ENGINE â”€â”€ */}
 
       {showEmailDispatchModal && (
 
@@ -7005,7 +7221,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* ── MODAL 2: SHORTLIST EMAIL INVITATION & REAL GMAIL SMTP DISPATCH ENGINE ── */}
+      {/* â”€â”€ MODAL 2: SHORTLIST EMAIL INVITATION & REAL GMAIL SMTP DISPATCH ENGINE â”€â”€ */}
 
       {showEmailDispatchModal && (
 
@@ -7685,7 +7901,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* ── MODAL 3: CONCLUDE ROUND 1 & MULTI-LAB COMBINED SHORTLIST ── */}
+      {/* â”€â”€ MODAL 3: CONCLUDE ROUND 1 & MULTI-LAB COMBINED SHORTLIST â”€â”€ */}
 
       {showConcludeModal && (
 
@@ -7953,7 +8169,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                 <div style={{ marginTop: '4px', color: '#60a5fa' }}>
 
-                  ✓ Shortlisted candidates will immediately have dedicated <span style={{ fontFamily: 'monospace', fontWeight: 800 }}>AXENT-R2-XXXX</span> keys provisioned.
+                  âœ“ Shortlisted candidates will immediately have dedicated <span style={{ fontFamily: 'monospace', fontWeight: 800 }}>AXENT-R2-XXXX</span> keys provisioned.
 
                 </div>
 
@@ -8047,7 +8263,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* ── GOOGLE FORM / TEXT / QUIZ DIRECT IMPORTER ── */}
+      {/* â”€â”€ GOOGLE FORM / TEXT / QUIZ DIRECT IMPORTER â”€â”€ */}
 
       {showGoogleFormModal && (
 
@@ -8069,7 +8285,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* ── MODAL 5: AI PAPER GENERATOR ── */}
+      {/* â”€â”€ MODAL 5: AI PAPER GENERATOR â”€â”€ */}
 
       {showAIPaperModal && (
 
@@ -8087,7 +8303,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* ── MODAL 6: BULK CANDIDATE IMPORT ── */}
+      {/* â”€â”€ MODAL 6: BULK CANDIDATE IMPORT â”€â”€ */}
 
       {showImportModal && (
 

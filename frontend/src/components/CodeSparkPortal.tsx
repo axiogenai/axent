@@ -39,7 +39,10 @@ import {
   prepareCandidateForRound1Retake,
   lookupCandidateAny,
   isAccessKeyUsed,
-  recordAccessKeyUsed
+  recordAccessKeyUsed,
+  getCodeSparkSchedule,
+  asyncGetCodeSparkSchedule,
+  CodeSparkSchedule
 } from '../services/codeSparkService';
 import { getAllAttempts, getAllExams } from '../services/mcqService';
 import { MCQExamConfig } from '../types/mcq';
@@ -104,6 +107,13 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
   const [keyDigits, setKeyDigits] = useState('');
   const [activeCandidate, setActiveCandidate] = useState<CodeSparkCandidate | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
+  const [scheduledWaitInfo, setScheduledWaitInfo] = useState<{
+    roundName: string;
+    startTime: number;
+    formattedDate: string;
+    candidateName: string;
+    key: string;
+  } | null>(null);
 
   // Candidate Details
   const [candidateName, setCandidateName] = useState('');
@@ -541,6 +551,30 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
         return;
       }
 
+      // Check Round 2 Schedule
+      const schedule = getCodeSparkSchedule();
+      if (schedule.round2StartTime && Date.now() < schedule.round2StartTime) {
+        playSound('warning');
+        const formattedDate = new Date(schedule.round2StartTime).toLocaleString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        });
+        setKeyError(`Exam not started yet. Round 2 is scheduled on ${formattedDate}.`);
+        setScheduledWaitInfo({
+          roundName: 'Round 2: Algorithmic Code Sprint Arena',
+          startTime: schedule.round2StartTime,
+          formattedDate,
+          candidateName: cand.name,
+          key: cand.round2Key || cand.accessKey
+        });
+        return;
+      }
+
       const derivedRoll = cand.rollNumber || cand.email.split('@')[0].toUpperCase();
       const codingProfile = {
         name: cand.name.trim(),
@@ -614,11 +648,27 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       return;
     }
 
-    if (targetExam.startTime && Date.now() < targetExam.startTime) {
+    const schedule = getCodeSparkSchedule();
+    const effectiveR1Start = schedule.round1StartTime || (targetExam.startTime ? Number(targetExam.startTime) : null);
+    if (effectiveR1Start && Date.now() < effectiveR1Start) {
       playSound('warning');
-      setKeyError(
-        `This examination is scheduled for ${new Date(targetExam.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Early entry is strictly prohibited.`
-      );
+      const formattedDate = new Date(effectiveR1Start).toLocaleString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+      setKeyError(`Exam not started yet. It is scheduled on ${formattedDate}.`);
+      setScheduledWaitInfo({
+        roundName: `Round 1: ${targetExam.title || 'General Aptitude'}`,
+        startTime: effectiveR1Start,
+        formattedDate,
+        candidateName: cand.name,
+        key: cand.accessKey
+      });
       return;
     }
 
@@ -977,6 +1027,30 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
         return;
       }
       const safeExam: MCQExamConfig = targetExam;
+      const schedule = getCodeSparkSchedule();
+      const effectiveR1Start = schedule.round1StartTime || (safeExam.startTime ? Number(safeExam.startTime) : null);
+      if (effectiveR1Start && Date.now() < effectiveR1Start) {
+        playSound('warning');
+        const formattedDate = new Date(effectiveR1Start).toLocaleString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        });
+        setKeyError(`Exam not started yet. It is scheduled on ${formattedDate}.`);
+        setScheduledWaitInfo({
+          roundName: `Round 1: ${safeExam.title || 'General Aptitude'}`,
+          startTime: effectiveR1Start,
+          formattedDate,
+          candidateName: candidateName.trim(),
+          key: accessKey.trim()
+        });
+        return;
+      }
+
       const cleanEmail = candidateEmail.trim().toLowerCase();
       const profile = {
         name: candidateName.trim(),
@@ -1007,6 +1081,29 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
   const handleLaunchRound2 = async () => {
     playSound('click');
     try {
+      const schedule = getCodeSparkSchedule();
+      if (schedule.round2StartTime && Date.now() < schedule.round2StartTime) {
+        playSound('warning');
+        const formattedDate = new Date(schedule.round2StartTime).toLocaleString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        });
+        setKeyError(`Exam not started yet. Round 2 is scheduled on ${formattedDate}.`);
+        setScheduledWaitInfo({
+          roundName: 'Round 2: Algorithmic Code Sprint Arena',
+          startTime: schedule.round2StartTime,
+          formattedDate,
+          candidateName: candidateName.trim(),
+          key: accessKey.trim()
+        });
+        return;
+      }
+
       localStorage.setItem('codedna_active_exam_mode', 'CODING');
       const codingExams = getAllCodingExams();
       const targetCodingExam =
@@ -1932,6 +2029,42 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                   <div className="text-xs text-[#ea1a1c] font-bold flex items-center gap-2 font-mono p-3 bg-red-50 border border-[#ea1a1c]/30">
                     <AlertCircle size={15} className="shrink-0 text-[#ea1a1c]" />
                     <span>{keyError}</span>
+                  </div>
+                )}
+
+                {scheduledWaitInfo && (
+                  <div className="p-4 bg-zinc-900 border-2 border-zinc-700 text-white font-mono flex flex-col gap-3 shadow-[4px_4px_0px_#000]">
+                    <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-wider">
+                      <Clock size={16} />
+                      <span>Exam Not Started Yet</span>
+                    </div>
+                    <div>
+                      <div className="text-sm font-black text-white">{scheduledWaitInfo.roundName}</div>
+                      <div className="text-xs text-zinc-300 mt-1">
+                        Scheduled on: <strong className="text-amber-300">{scheduledWaitInfo.formattedDate}</strong>
+                      </div>
+                    </div>
+                    <p className="text-[11.5px] text-zinc-400 leading-relaxed">
+                      Candidate verified: <strong className="text-zinc-200">{scheduledWaitInfo.candidateName}</strong> [{scheduledWaitInfo.key}]. Your seat is authenticated. Early access is restricted until the official session begins.
+                    </p>
+                    <div className="grid grid-cols-4 gap-2 text-center bg-black/60 p-2.5 border border-zinc-800">
+                      <div>
+                        <div className="text-lg font-black text-white">{Math.max(0, Math.floor((scheduledWaitInfo.startTime - Date.now()) / (1000 * 60 * 60 * 24)))}</div>
+                        <div className="text-[9px] text-zinc-500 uppercase">Days</div>
+                      </div>
+                      <div>
+                        <div className="text-lg font-black text-white">{Math.max(0, Math.floor(((scheduledWaitInfo.startTime - Date.now()) % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)))}</div>
+                        <div className="text-[9px] text-zinc-500 uppercase">Hours</div>
+                      </div>
+                      <div>
+                        <div className="text-lg font-black text-white">{Math.max(0, Math.floor(((scheduledWaitInfo.startTime - Date.now()) % (1000 * 60 * 60)) / (1000 * 60)))}</div>
+                        <div className="text-[9px] text-zinc-500 uppercase">Mins</div>
+                      </div>
+                      <div>
+                        <div className="text-lg font-black text-white">{Math.max(0, Math.floor(((scheduledWaitInfo.startTime - Date.now()) % (1000 * 60)) / 1000))}</div>
+                        <div className="text-[9px] text-zinc-500 uppercase">Secs</div>
+                      </div>
+                    </div>
                   </div>
                 )}
 
