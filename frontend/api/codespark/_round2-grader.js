@@ -10,6 +10,44 @@ const LANGUAGE_ALIASES = {
 export const normalizeRound2Key = (value) => String(value || "").trim().toUpperCase().replace(/\s+/g, "").replace(/^(AXENT-R2-|AXENT-|R2-)/, "");
 const normalizeOutput = (value) => String(value ?? "").replace(/\r\n/g, "\n").trim();
 
+const MAX_WANDBOX_CONCURRENCY = 4;
+let activeWandboxRequests = 0;
+const wandboxWaiters = [];
+
+function acquireWandboxSlot(deadlineAt) {
+  if (activeWandboxRequests < MAX_WANDBOX_CONCURRENCY) {
+    activeWandboxRequests += 1;
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const waiter = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const remaining = Math.max(0, deadlineAt - Date.now());
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      const index = wandboxWaiters.indexOf(waiter);
+      if (index >= 0) wandboxWaiters.splice(index, 1);
+      const error = new Error("The compiler is busy. Your code has been saved; retry grading.");
+      error.statusCode = 503;
+      reject(error);
+    }, remaining);
+    wandboxWaiters.push(waiter);
+  });
+}
+
+function releaseWandboxSlot() {
+  const next = wandboxWaiters.shift();
+  if (next) next();
+  else activeWandboxRequests = Math.max(0, activeWandboxRequests - 1);
+}
+
+
 let compilerListCache = null;
 let compilerListFetchedAt = 0;
 let compilerListRequest = null;
@@ -99,12 +137,13 @@ function assignedProblems(pool, key) {
   return list.slice(0, 5);
 }
 
-async function execute(code, language, stdin) {
+async function execute(code, language, stdin, deadlineAt = Date.now() + 15000) {
   const compiler = await getWandboxCompiler(language);
   const processedCode = language === "Java" ? code.replace(/\bpublic\s+class\b/g, "class ") : code;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   const compilerRequestStartedAt = Date.now();
+  await acquireWandboxSlot(deadlineAt);
   try {
     const response = await fetch("https://wandbox.org/api/compile.json", {
       method: "POST",
@@ -160,6 +199,7 @@ async function execute(code, language, stdin) {
     };
   } finally {
     clearTimeout(timer);
+    releaseWandboxSlot();
   }
 }
 
@@ -203,7 +243,7 @@ export async function runRound2Code(keyInput, problemIdInput, codeInput, languag
   if (!problems.some((problem) => String(problem.id) === problemId)) {
     const error = new Error("This problem is not assigned to this candidate."); error.statusCode = 403; throw error;
   }
-  return execute(code, language, stdin);
+  return execute(code, language, stdin, Date.now() + 15000);
 }
 
 export async function gradeRound2Code(
@@ -278,7 +318,7 @@ export async function gradeRound2Code(
 
   let runResult = null;
   if (customStdin !== undefined && customStdin !== null && String(customStdin).length > 0) {
-    runResult = await execute(code, language, String(customStdin));
+    runResult = await execute(code, language, String(customStdin), deadlineAt);
   }
 
   const testResults = [];
@@ -293,7 +333,7 @@ export async function gradeRound2Code(
     }
     const batch = allTests.slice(offset, offset + 3);
     const batchResults = await Promise.all(batch.map(async (test) => {
-      const result = await execute(code, language, String(test.input ?? ""));
+      const result = await execute(code, language, String(test.input ?? ""), deadlineAt);
       const runtimeMs = parseRuntimeMs(result.time);
       const memoryValue = result.memory == null ? null : Number(result.memory);
       const outputPassed = !result.isError &&
