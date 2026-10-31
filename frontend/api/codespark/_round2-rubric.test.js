@@ -34,36 +34,36 @@ test("rubric applies correctness, efficiency and robustness weights", () => {
   assert.equal(result.rubric.robustness.weight, 10);
 });
 
-test("missing runtime telemetry cannot earn efficiency marks", () => {
+test("large-input benchmark cases can earn efficiency marks without fabricated runtime telemetry", () => {
   const result = scoreRound2Rubric({
     maxScore: 100,
     correctnessTests: [{ passed: true }],
-    performanceTests: [{ passed: true, runtimeMs: null, maxTimeMs: 100 }]
+    performanceTests: [{ passed: true, runtimeMs: null, compilerElapsedMs: 240, memoryValue: null }]
   });
-  assert.equal(result.score, 90);
-  assert.equal(result.rubric.efficiency.earned, 0);
-  assert.equal(result.allPassed, false);
+  assert.equal(result.score, 100);
+  assert.equal(result.rubric.efficiency.earned, 10);
+  assert.equal(result.allPassed, true);
 });
 
-test("performance thresholds fail efficiency without removing correctness credit", () => {
+test("failed large-input benchmark removes efficiency credit but preserves correctness credit", () => {
   const result = scoreRound2Rubric({
     maxScore: 50,
     correctnessTests: [{ passed: true }],
-    performanceTests: [{ passed: true, runtimeMs: 120, maxTimeMs: 100 }]
+    performanceTests: [{ passed: false, runtimeMs: null, compilerElapsedMs: 250, memoryValue: null }]
   });
   assert.equal(result.score, 45);
   assert.equal(result.rubric.correctness.earned, 90);
   assert.equal(result.rubric.efficiency.earned, 0);
 });
 
-test("optional memory threshold is checked only against a measured compiler value", () => {
+test("missing memory is not represented as a fabricated zero", () => {
   const result = scoreRound2Rubric({
     maxScore: 100,
     correctnessTests: [{ passed: true }],
-    performanceTests: [{ passed: true, runtimeMs: 10, maxTimeMs: 20, memoryValue: null, maxMemoryValue: 50 }]
+    performanceTests: [{ passed: true, runtimeMs: null, compilerElapsedMs: 250, memoryValue: null }]
   });
-  assert.equal(result.score, 90);
-  assert.equal(result.rubric.efficiency.earned, 0);
+  assert.equal(result.score, 100);
+  assert.equal(result.rubric.efficiency.earned, 10);
 });
 
 test("test weights are respected within a rubric category", () => {
