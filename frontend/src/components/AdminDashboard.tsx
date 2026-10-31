@@ -616,7 +616,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const sidebarNavItems = [
     { id: 'control_room', label: 'Control Room', icon: Home },
     { id: 'code_spark', label: 'Code Spark (3 Nov)', icon: Zap },
-    { id: 'paper_setter', label: 'Paper Setter', icon: GraduationCap },
+    { id: 'paper_setter', label: 'Paper Setter Portal', icon: GraduationCap },
     { id: 'live_proctoring', label: 'Live Proctoring', icon: Video },
     { id: 'candidates', label: 'Candidates', icon: Users, badge: activeCount > 0 ? activeCount : undefined },
     { id: 'examinations', label: 'Examinations', icon: FileText },
@@ -715,7 +715,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         }}
       >
         {/* Navigation Items List */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', overflowY: 'auto', flex: 1, paddingRight: '2px', scrollbarWidth: 'none' }}>
           {sidebarNavItems.map((item) => {
             const isActive = activeSidebarItem === item.id;
             return (

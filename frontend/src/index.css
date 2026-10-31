@@ -2130,8 +2130,8 @@ header.no-print {
     max-height: calc(100vh - 52px) !important;
     min-height: calc(100vh - 52px) !important;
     flex-shrink: 0 !important;
-    overflow: hidden !important;
-    overflow-y: hidden !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
     scrollbar-width: none !important;
     z-index: 40 !important;
     box-sizing: border-box !important;

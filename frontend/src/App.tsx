@@ -442,17 +442,18 @@ export const App: React.FC = () => {
             path="/login"
             element={<AuthorityLogin theme={theme} />}
           />
+          {/* Paper Setter Portal has NO separate login page - directly accessible */}
           <Route
             path="/login/paper-setter"
-            element={<Navigate to="/login/admin?redirect=%2Fadmin%3Ftab%3Dpaper_setter" replace />}
+            element={<Navigate to="/paper-setter" replace />}
           />
           <Route
             path="/login/setter"
-            element={<Navigate to="/login/paper-setter" replace />}
+            element={<Navigate to="/paper-setter" replace />}
           />
           <Route
             path="/setter-login"
-            element={<Navigate to="/login/paper-setter" replace />}
+            element={<Navigate to="/paper-setter" replace />}
           />
           <Route
             path="/login/admin"
@@ -558,9 +559,10 @@ export const App: React.FC = () => {
             path="/mcq"
             element={<MCQHub />}
           />
+          {/* Paper Setter Portal - Open access directly, no login gate */}
           <Route
             path="/paper-setter"
-            element={<Navigate to="/admin?tab=paper_setter" replace />}
+            element={<PaperSetterPortal />}
           />
           <Route
             path="/admin"

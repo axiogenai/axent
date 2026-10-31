@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation, Link, Navigate } from 'react-router-dom';
 
 const SAFE_AUTH_REDIRECTS = new Set([
   '/admin',
@@ -80,6 +80,12 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole, theme
   const redirectTarget = resolveSafeRedirect(searchParams.get('redirect'), defaultRedirect);
 
   const [role, setRole] = useState<AuthorityRole>(effectiveRole);
+
+  useEffect(() => {
+    if (fixedRole === 'paper_setter' || isSetterPath || roleParam === 'paper_setter') {
+      navigate('/paper-setter', { replace: true });
+    }
+  }, [fixedRole, isSetterPath, roleParam, navigate]);
 
   useEffect(() => {
     setRole(effectiveRole);
@@ -391,7 +397,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole, theme
                 type="button"
                 onClick={() => {
                   playSound('click');
-                  navigate('/login/paper-setter');
+                  navigate('/paper-setter');
                 }}
                 style={{
                   display: 'flex',
@@ -409,7 +415,7 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole, theme
                   cursor: 'pointer'
                 }}
               >
-                <span>Enter Paper Setter Gateway</span>
+                <span>Open Paper Setter Portal</span>
                 <ArrowRight size={14} />
               </button>
             </div>
@@ -1010,8 +1016,8 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole, theme
   );
 };
 
-export const PaperSetterLogin: React.FC<{ theme?: 'light' | 'dark' }> = ({ theme }) => (
-  <AuthorityLogin fixedRole="paper_setter" theme={theme} />
+export const PaperSetterLogin: React.FC<{ theme?: 'light' | 'dark' }> = () => (
+  <Navigate to="/paper-setter" replace />
 );
 export const AdminLogin: React.FC<{ theme?: 'light' | 'dark' }> = ({ theme }) => (
   <AuthorityLogin fixedRole="admin" theme={theme} />

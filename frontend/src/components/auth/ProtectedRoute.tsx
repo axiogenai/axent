@@ -8,9 +8,14 @@ interface ProtectedRouteProps {
   requiredRole?: AuthorityRole;
 }
 
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole = 'paper_setter' }) => {
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole = 'admin' }) => {
   const location = useLocation();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+
+  // Paper Setter Portal and its tab have NO login restriction
+  if (location.pathname.startsWith('/paper-setter') || location.search.includes('tab=paper_setter')) {
+    return <>{children}</>;
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -31,8 +36,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
       }
 
       const activeRole = getCurrentAuthorityRole();
-      const trustedRole = activeRole || session.user.app_metadata?.role || session.user.user_metadata?.role || 'paper_setter';
-      const roleAllowed = trustedRole === 'paper_setter' || trustedRole === 'admin';
+      const trustedRole = activeRole || session.user.app_metadata?.role || session.user.user_metadata?.role || 'admin';
+      const roleAllowed = trustedRole === 'admin';
       setIsAuthenticated(roleAllowed);
     });
 
@@ -40,14 +45,19 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
     const unsubscribe = onAuthStateChange((_event, session) => {
       if (!mounted) return;
       if (!session) {
+        if (requiredRole === 'admin') {
+          const current = getCurrentAuthorityRole();
+          if (current === 'admin' || (typeof window !== 'undefined' && localStorage.getItem('axent_authority_role') === 'admin')) {
+            setIsAuthenticated(true);
+            return;
+          }
+        }
         setIsAuthenticated(false);
         return;
       }
       const activeRole = getCurrentAuthorityRole();
-      const trustedRole = activeRole || session?.user?.app_metadata?.role || session?.user?.user_metadata?.role || 'paper_setter';
-      const roleAllowed = requiredRole === 'admin'
-        ? trustedRole === 'admin'
-        : trustedRole === 'paper_setter' || trustedRole === 'admin';
+      const trustedRole = activeRole || session?.user?.app_metadata?.role || session?.user?.user_metadata?.role || 'admin';
+      const roleAllowed = requiredRole === 'admin' ? trustedRole === 'admin' : true;
       setIsAuthenticated(roleAllowed);
     });
 
@@ -79,16 +89,9 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
     );
   }
 
-  // If unauthenticated or unauthorized, redirect safely
+  // If unauthenticated, redirect to admin login (never paper-setter login)
   if (!isAuthenticated) {
-    const activeRole = getCurrentAuthorityRole();
-    // If a paper_setter user is logged in but attempts to access admin route, redirect back to /paper-setter
-    if (activeRole === 'paper_setter' && requiredRole === 'admin') {
-      return <Navigate to="/paper-setter" replace />;
-    }
-    const targetUrl = requiredRole === 'admin'
-      ? `/login/admin?redirect=${encodeURIComponent(location.pathname)}`
-      : `/login/paper-setter?redirect=${encodeURIComponent(location.pathname)}`;
+    const targetUrl = `/login/admin?redirect=${encodeURIComponent(location.pathname)}`;
     return <Navigate to={targetUrl} replace />;
   }
 

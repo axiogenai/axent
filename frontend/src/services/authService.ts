@@ -233,7 +233,7 @@ export async function sendMagicLink(
   }
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const loginPath = role === 'admin' ? '/login/admin' : '/login/paper-setter';
+  const loginPath = role === 'admin' ? '/login/admin' : '/paper-setter';
 
   // Generate resilient invitation token
   const tokenPayload = {
