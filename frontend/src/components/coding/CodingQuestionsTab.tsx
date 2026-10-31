@@ -45,7 +45,7 @@ export const CodingQuestionsTab: React.FC<CodingQuestionsTabProps> = ({ createdB
     return matchSearch && matchDiff;
   });
 
-  // â”€â”€ Builder view â”€â”€
+  // ── Builder view ──
   if (editingQuestion !== undefined) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -59,7 +59,7 @@ export const CodingQuestionsTab: React.FC<CodingQuestionsTabProps> = ({ createdB
     );
   }
 
-  // â”€â”€ List view â”€â”€
+  // ── List view ──
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '16px 0' }}>
       {/* Toolbar */}

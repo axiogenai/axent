@@ -120,6 +120,7 @@ import {
   SimpleSelect
 } from './watermelon-ui';
 import { AdminMCQTicketIssuer } from './AdminMCQTicketIssuer';
+import { PaperSetterPortal } from './PaperSetterPortal';
 
 function isStationListEqual(a: CandidateStation[], b: CandidateStation[]): boolean {
   if (a.length !== b.length) return false;
@@ -615,6 +616,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const sidebarNavItems = [
     { id: 'control_room', label: 'Control Room', icon: Home },
     { id: 'code_spark', label: 'Code Spark (3 Nov)', icon: Zap },
+    { id: 'paper_setter', label: 'Paper Setter', icon: GraduationCap },
     { id: 'live_proctoring', label: 'Live Proctoring', icon: Video },
     { id: 'candidates', label: 'Candidates', icon: Users, badge: activeCount > 0 ? activeCount : undefined },
     { id: 'examinations', label: 'Examinations', icon: FileText },
@@ -693,7 +695,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         position: 'relative'
       }}
     >
-      {/* â”€â”€ LEFT DESKTOP NAVIGATION SIDEBAR (Exact axent.axiogen.in standard) â”€â”€ */}
+      {/* ── LEFT DESKTOP NAVIGATION SIDEBAR (Exact axent.axiogen.in standard) ── */}
       <aside
         className={`admin-left-sidebar ${mobileSidebarOpen ? 'admin-sidebar-mobile-open' : ''}`}
         style={{
@@ -821,7 +823,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         />
       )}
 
-      {/* â”€â”€ RIGHT MAIN DASHBOARD CONTENT AREA â”€â”€ */}
+      {/* ── RIGHT MAIN DASHBOARD CONTENT AREA ── */}
       <div
         className="admin-dashboard-content"
         style={{
@@ -844,6 +846,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               onInspectReport={handleViewStudentReport}
               theme={theme}
             />
+          </div>
+        )}
+
+        {activeSidebarItem === 'paper_setter' && (
+          <div style={{ width: '100%' }}>
+            <PaperSetterPortal />
           </div>
         )}
 
@@ -964,7 +972,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {activeSidebarItem === 'control_room' && (
           <>
-            {/* â”€â”€ TOP CAMPUS MACRO KPI RIBBON (Exact axent.axiogen.in matching) â”€â”€ */}
+            {/* ── TOP CAMPUS MACRO KPI RIBBON (Exact axent.axiogen.in matching) ── */}
         <div
           style={{
             display: 'grid',
@@ -1162,7 +1170,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
 
-      {/* â”€â”€ TOP INVIGILATOR COMMAND & LAB SELECTOR BAR â”€â”€ */}
+      {/* ── TOP INVIGILATOR COMMAND & LAB SELECTOR BAR ── */}
       <div
         className="card-elevated admin-header-card"
         style={{
@@ -1298,7 +1306,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
-      {/* â”€â”€ 50 LAB SELECTOR DROPDOWN & SEARCH FILTER â”€â”€ */}
+      {/* ── 50 LAB SELECTOR DROPDOWN & SEARCH FILTER ── */}
       <div
         className="card"
         style={{
@@ -1391,7 +1399,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
-      {/* â”€â”€ SELECTED LAB METADATA BANNER (Watermelon UI MetaChips Pattern) â”€â”€ */}
+      {/* ── SELECTED LAB METADATA BANNER (Watermelon UI MetaChips Pattern) ── */}
       {currentLabInfo && selectedLabId !== 'all' && (
         <div
           style={{
@@ -1423,7 +1431,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* â”€â”€ LAB / CAMPUS LOCKDOWN ACTIVE NOTIFICATION â”€â”€ */}
+      {/* ── LAB / CAMPUS LOCKDOWN ACTIVE NOTIFICATION ── */}
       {isCurrentLabLocked && (
         <div
           style={{
@@ -1459,7 +1467,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* â”€â”€ Filter Tabs & View Mode Toggle (Watermelon UI ContinuousTabs) â”€â”€ */}
+      {/* ── Filter Tabs & View Mode Toggle (Watermelon UI ContinuousTabs) ── */}
       <div
         style={{
           display: 'flex',
@@ -1578,7 +1586,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
-      {/* â”€â”€ Examination Concluded Notification Banner â”€â”€ */}
+      {/* ── Examination Concluded Notification Banner ── */}
       {activeCount === 0 && submittedCount > 0 && viewMode === 'cctv' && (
         <div
           className="admin-concluded-card"
@@ -1650,7 +1658,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* â”€â”€ VIEW MODE 1: CCTV LIVE SECURITY CAMERA GRID â”€â”€ */}
+      {/* ── VIEW MODE 1: CCTV LIVE SECURITY CAMERA GRID ── */}
       {viewMode === 'cctv' ? (
         filteredStations.length === 0 ? (
           <div
@@ -1790,7 +1798,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     boxSizing: 'border-box'
                   }}
                 >
-                  {/* â”€â”€ CARD HEADER (Station Number on Left, Status Pill on Right) â”€â”€ */}
+                  {/* ── CARD HEADER (Station Number on Left, Status Pill on Right) ── */}
                   <div
                     style={{
                       display: 'flex',
@@ -1882,7 +1890,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* â”€â”€ CCTV / SCREEN STREAM WINDOW (Matching Screenshot) â”€â”€ */}
+                  {/* ── CCTV / SCREEN STREAM WINDOW (Matching Screenshot) ── */}
                   <div
                     style={{
                       height: '190px',
@@ -2172,7 +2180,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     )}
                   </div>
 
-                  {/* â”€â”€ CANDIDATE DETAILS (Matching Screenshot - Pure White Name & Clean Dot) â”€â”€ */}
+                  {/* ── CANDIDATE DETAILS (Matching Screenshot - Pure White Name & Clean Dot) ── */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '14px' }}>
                     <h4
                       style={{
@@ -2190,7 +2198,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* â”€â”€ METRICS ROW (Strikes/Keys on Left, Marks on Right) â”€â”€ */}
+                  {/* ── METRICS ROW (Strikes/Keys on Left, Marks on Right) ── */}
                   <div
                     style={{
                       display: 'flex',
@@ -2252,7 +2260,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* â”€â”€ PRIMARY ACTION BUTTON (Differentiated: View submission vs Inspect audit) â”€â”€ */}
+                  {/* ── PRIMARY ACTION BUTTON (Differentiated: View submission vs Inspect audit) ── */}
                   <button
                     type="button"
                     onClick={() => {
@@ -2292,7 +2300,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span>{isSubmitted ? 'View submission' : 'Inspect audit'}</span>
                   </button>
 
-                  {/* â”€â”€ QUICK PROCTOR TOOLS (Integrated & High Contrast) â”€â”€ */}
+                  {/* ── QUICK PROCTOR TOOLS (Integrated & High Contrast) ── */}
                   <div
                     style={{
                       display: 'grid',
@@ -2501,7 +2509,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )
       ) : (
-        /* â”€â”€ VIEW MODE 2: UNIVERSITY EXAMINATION AUDIT LEDGER TABLE â”€â”€ */
+        /* ── VIEW MODE 2: UNIVERSITY EXAMINATION AUDIT LEDGER TABLE ── */
         <div className="ledger-table-container" style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <table className="ledger-table">
             <thead>
@@ -2680,7 +2688,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </>
         )}
 
-      {/* â”€â”€ WORKSTATION CCTV SURVEILLANCE & TELEMETRY INSPECTION MODAL â”€â”€ */}
+      {/* ── WORKSTATION CCTV SURVEILLANCE & TELEMETRY INSPECTION MODAL ── */}
       {selectedStation && (
         <div
           style={{

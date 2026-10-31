@@ -232,7 +232,7 @@ export const PaperSetterPortal: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  navigate('/admin');
+                  navigate('/admin?tab=control_room');
                   playSound('click');
                 }}
                 style={{

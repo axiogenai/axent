@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     if (await isRound2EvaluationRateLimited(normalizeRound2Key(body.key))) {
       return res.status(429).json({ success: false, error: "Evaluation limit reached. Please wait before running more tests." });
     }
-    const result = await gradeRound2Code(body.key, body.problemId, body.code, body.language);
+    const result = await gradeRound2Code(body.key, body.problemId, body.code, body.language, true, body.stdin || body.customStdin || "");
     await recordRound2Evaluation(normalizeRound2Key(body.key));
     return res.status(200).json({ success: true, ...result });
   } catch (error) {

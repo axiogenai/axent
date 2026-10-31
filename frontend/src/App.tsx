@@ -444,7 +444,7 @@ export const App: React.FC = () => {
           />
           <Route
             path="/login/paper-setter"
-            element={<PaperSetterLogin theme={theme} />}
+            element={<Navigate to="/login/admin?redirect=%2Fadmin%3Ftab%3Dpaper_setter" replace />}
           />
           <Route
             path="/login/setter"
@@ -560,11 +560,7 @@ export const App: React.FC = () => {
           />
           <Route
             path="/paper-setter"
-            element={
-              <ProtectedRoute requiredRole="paper_setter">
-                <PaperSetterPortal />
-              </ProtectedRoute>
-            }
+            element={<Navigate to="/admin?tab=paper_setter" replace />}
           />
           <Route
             path="/admin"

@@ -58,7 +58,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', maxWidth: '100%' }}>
-      {/* â”€â”€ HEADER â”€â”€ */}
+      {/* ── HEADER ── */}
       <div
         style={{
           display: 'flex',
@@ -108,7 +108,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
         </button>
       </div>
 
-      {/* â”€â”€ SECTION 1: AI PROCTORING & INTEGRITY THRESHOLDS â”€â”€ */}
+      {/* ── SECTION 1: AI PROCTORING & INTEGRITY THRESHOLDS ── */}
       <div
         style={{
           background: 'var(--bg-elevated)',
@@ -211,7 +211,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
         </div>
       </div>
 
-      {/* â”€â”€ SECTION 2: EXAM ENVIRONMENT & HARDWARE SECURITY â”€â”€ */}
+      {/* ── SECTION 2: EXAM ENVIRONMENT & HARDWARE SECURITY ── */}
       <div
         style={{
           background: 'var(--bg-elevated)',
@@ -284,7 +284,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
         </div>
       </div>
 
-      {/* â”€â”€ SECTION 3: CLOUD DATABASE & REALTIME â”€â”€ */}
+      {/* ── SECTION 3: CLOUD DATABASE & REALTIME ── */}
       <div
         style={{
           background: 'var(--bg-elevated)',
@@ -334,7 +334,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
         </button>
       </div>
 
-      {/* â”€â”€ SECTION 4: DANGER ZONE â”€â”€ */}
+      {/* ── SECTION 4: DANGER ZONE ── */}
       <div
         style={{
           background: 'var(--bg-elevated)',

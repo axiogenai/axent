@@ -65,7 +65,7 @@ export const AdminLiveProctoringView: React.FC<AdminLiveProctoringViewProps> = (
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
-      {/* â”€â”€ TOP CONTROL HEADER â”€â”€ */}
+      {/* ── TOP CONTROL HEADER ── */}
       <div
         style={{
           display: 'flex',
@@ -213,7 +213,7 @@ export const AdminLiveProctoringView: React.FC<AdminLiveProctoringViewProps> = (
         </div>
       </div>
 
-      {/* â”€â”€ SEARCH & TEST BUTTONS ROW â”€â”€ */}
+      {/* ── SEARCH & TEST BUTTONS ROW ── */}
       <div
         style={{
           display: 'flex',
@@ -254,7 +254,7 @@ export const AdminLiveProctoringView: React.FC<AdminLiveProctoringViewProps> = (
         </div>
       </div>
 
-      {/* â”€â”€ LIVE VIDEO/SCREEN SURVEILLANCE GRID â”€â”€ */}
+      {/* ── LIVE VIDEO/SCREEN SURVEILLANCE GRID ── */}
       {displayedStations.length === 0 ? (
         <div
           style={{
@@ -414,7 +414,7 @@ export const AdminLiveProctoringView: React.FC<AdminLiveProctoringViewProps> = (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                       <Video size={28} color="#71717a" />
                       <span style={{ fontSize: '11px', color: '#a1a1aa', fontFamily: 'var(--font-mono)' }}>
-                        WEBRTC FEED LIVE Â· {station.ipAddress || '10.77.210.15'}
+                        WEBRTC FEED LIVE · {station.ipAddress || '10.77.210.15'}
                       </span>
                     </div>
                   )}

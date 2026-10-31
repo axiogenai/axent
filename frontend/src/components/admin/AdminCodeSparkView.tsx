@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 
 import {
 
@@ -2138,7 +2138,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
   
   const handleWipeEntireDatabase = async () => {
-    if (!window.confirm('[CRITICAL DATABASE WIPE]\n\nAre you sure you want to completely WIPE THE ENTIRE DATABASE?\n\nThis will permanently delete from cloud:\nâ€¢ All exams & question banks\nâ€¢ All student attempts, scores & answer sheets\nâ€¢ All workstations & live sessions\nâ€¢ All Round 2 coding submissions & leaderboards\n\nThis action cannot be undone. Click OK to wipe everything.')) {
+    if (!window.confirm('[CRITICAL DATABASE WIPE]\n\nAre you sure you want to completely WIPE THE ENTIRE DATABASE?\n\nThis will permanently delete from cloud:\n• All exams & question banks\n• All student attempts, scores & answer sheets\n• All workstations & live sessions\n• All Round 2 coding submissions & leaderboards\n\nThis action cannot be undone. Click OK to wipe everything.')) {
       return;
     }
     playSound('click');
@@ -2232,7 +2232,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-  // â”€â”€ Domain-Intelligent Theme Awareness (Dual-Mode Responsive) â”€â”€
+  // ── Domain-Intelligent Theme Awareness (Dual-Mode Responsive) ──
 
   const isDark = theme === 'dark' || (theme === undefined && typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark');
 
@@ -2352,7 +2352,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
     >
 
-      {/* â”€â”€ 1. MASTER CODESPARK CONTROL ROOM BANNER â”€â”€ */}
+      {/* ── 1. MASTER CODESPARK CONTROL ROOM BANNER ── */}
 
       <div
 
@@ -2480,7 +2480,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
             <p style={{ fontSize: '12px', color: t.textMuted, margin: '4px 0 0 0' }}>
 
-              Round 1: Cognitive Aptitude MCQ â€¢ Automated Shortlist â€¢ Round 2: Algorithmic Code Sprint Arena
+              Round 1: Cognitive Aptitude MCQ • Automated Shortlist • Round 2: Algorithmic Code Sprint Arena
 
             </p>
 
@@ -2595,7 +2595,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                   { value: '', label: '-- Choose Exam Paper --' },
                   ...allExams.map((e) => ({
                     value: e.id,
-                    label: `${e.title} (${e.questionCount} Qs â€¢ ${e.durationMinutes}m)`,
+                    label: `${e.title} (${e.questionCount} Qs • ${e.durationMinutes}m)`,
                     badge: `${e.questionCount} Qs`
                   }))
                 ]}
@@ -2728,7 +2728,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* â”€â”€ 2. SUB-NAVIGATION TABS (High-Density Dual-Mode Pills) â”€â”€ */}
+      {/* ── 2. SUB-NAVIGATION TABS (High-Density Dual-Mode Pills) ── */}
 
       <div
 
@@ -2836,11 +2836,11 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* â”€â”€ 3. TAB CONTENT â”€â”€ */}
+      {/* ── 3. TAB CONTENT ── */}
 
 
 
-      {/* â”€â”€ TAB: ROUND 1 MCQ CCTV SURVEILLANCE GRID â”€â”€ */}
+      {/* ── TAB: ROUND 1 MCQ CCTV SURVEILLANCE GRID ── */}
 
       {activeTab === 'mcq_cctv' && (
 
@@ -3288,9 +3288,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                     {isRound1Concluded
 
-                      ? 'âœ“ ROUND 1 CONCLUDED & SEALED'
+                      ? '✓ ROUND 1 CONCLUDED & SEALED'
 
-                      : 'â— ROUND 1 LIVE ACROSS ALL LABS â€” SHORTLIST PENDING'}
+                      : '● ROUND 1 LIVE ACROSS ALL LABS — SHORTLIST PENDING'}
 
                   </span>
 
@@ -4312,7 +4312,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                                   {isAnswered && !isCurrent && (
 
-                                    <span style={{ fontSize: '9px' }}>âœ“</span>
+                                    <span style={{ fontSize: '9px' }}>✓</span>
 
                                   )}
 
@@ -4380,7 +4380,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                                   : station.isStandby
 
-                                  ? 'â€”'
+                                  ? '—'
 
                                   : 'In Progress'}
 
@@ -4786,9 +4786,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* â”€â”€ TAB: MCQ PAPER & BLUEPRINT SOLUTIONS â”€â”€ */}
+      {/* ── TAB: MCQ PAPER & BLUEPRINT SOLUTIONS ── */}
 
-            {/* â”€â”€ TAB: ROUND 1 RESULTS & CANDIDATE MCQ ANSWER SHEETS â”€â”€ */}
+            {/* ── TAB: ROUND 1 RESULTS & CANDIDATE MCQ ANSWER SHEETS ── */}
 
       {activeTab === 'round1' && (
 
@@ -4994,7 +4994,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                       <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: '12px', color: t.textPrimary }}>
 
-                        {c.studentRoll || c.studentEmail || 'â€”'}
+                        {c.studentRoll || c.studentEmail || '—'}
 
                       </td>
 
@@ -5184,7 +5184,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                         >
 
-                          {c.isShortlisted ? 'âœ“ SHORTLISTED' : '+ Shortlist'}
+                          {c.isShortlisted ? '✓ SHORTLISTED' : '+ Shortlist'}
 
                         </button>
 
@@ -5208,7 +5208,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* â”€â”€ TAB: SHORTLIST GATEKEEPER & ROUND 2 KEY DISPATCH â”€â”€ */}
+      {/* ── TAB: SHORTLIST GATEKEEPER & ROUND 2 KEY DISPATCH ── */}
 
       {activeTab === 'shortlist' && (
 
@@ -5330,7 +5330,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                     const name = matchAttempt?.studentName || matchCand?.name || 'Candidate';
 
-                    const email = matchAttempt?.studentEmail || matchCand?.email || 'â€”';
+                    const email = matchAttempt?.studentEmail || matchCand?.email || '—';
 
                     const score = matchAttempt?.score !== undefined ? `${matchAttempt.score}/${matchAttempt.totalMarks}` : 'N/A';
 
@@ -5456,7 +5456,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* â”€â”€ TAB: ROUND 2 CODING ARENA LIVE STREAM & LEADERBOARD â”€â”€ */}
+      {/* ── TAB: ROUND 2 CODING ARENA LIVE STREAM & LEADERBOARD ── */}
 
       {activeTab === 'round2' && (
 
@@ -5477,7 +5477,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* â”€â”€ TAB: CANDIDATE ROSTER & AXENT KEYS â”€â”€ */}
+      {/* ── TAB: CANDIDATE ROSTER & AXENT KEYS ── */}
 
       {activeTab === 'candidates' && (
 
@@ -5649,7 +5649,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                       <td style={{ padding: '10px 14px', fontWeight: 600 }}>{c.name}</td>
 
-                      <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: '#a1a1aa' }}>{c.email || 'â€”'}</td>
+                      <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: '#a1a1aa' }}>{c.email || '—'}</td>
 
                       <td style={{ padding: '10px 14px' }}>
 
@@ -5851,7 +5851,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* â”€â”€ TAB: OVERVIEW & PAPER CONFIGURATION â”€â”€ */}
+      {/* ── TAB: OVERVIEW & PAPER CONFIGURATION ── */}
       {activeTab === 'overview' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {/* Main Paper & Schedule Configuration Card */}
@@ -5932,7 +5932,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                     { value: '', label: '-- Choose Exam Paper from Question Bank --' },
                     ...allExams.map((exam) => ({
                       value: exam.id,
-                      label: `${exam.title} (${exam.questionCount} Questions â€¢ ${exam.durationMinutes}m)`,
+                      label: `${exam.title} (${exam.questionCount} Questions • ${exam.durationMinutes}m)`,
                       badge: `${exam.questionCount} Qs`
                     }))
                   ]}
@@ -5940,7 +5940,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
               </div>
               {currentAssignedExam && (
                 <div style={{ marginTop: '6px', fontSize: '11.5px', color: t.textMuted }}>
-                  Active Paper: <strong style={{ color: t.textPrimary }}>{currentAssignedExam.title}</strong> â€¢ {currentAssignedExam.questionCount} Questions â€¢ {currentAssignedExam.durationMinutes} mins duration â€¢ {examTotalMarks} total marks
+                  Active Paper: <strong style={{ color: t.textPrimary }}>{currentAssignedExam.title}</strong> • {currentAssignedExam.questionCount} Questions • {currentAssignedExam.durationMinutes} mins duration • {examTotalMarks} total marks
                 </div>
               )}
             </div>
@@ -6121,7 +6121,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* â”€â”€ MODAL 1: CANDIDATE MCQ ANSWER SHEET INSPECTOR â”€â”€ */}
+      {/* ── MODAL 1: CANDIDATE MCQ ANSWER SHEET INSPECTOR ── */}
 
       {selectedCandidateSheet && (
 
@@ -6191,7 +6191,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                   <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: t.textPrimary }}>
 
-                    Candidate MCQ Answer Sheet â€¢ {selectedCandidateSheet.studentName}
+                    Candidate MCQ Answer Sheet • {selectedCandidateSheet.studentName}
 
                   </h3>
 
@@ -6205,7 +6205,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                 <div style={{ fontSize: '12px', color: '#a1a1aa', marginTop: '2px' }}>
 
-                  Score: <strong style={{ color: '#10b981' }}>{selectedCandidateSheet.score ?? 0} / {selectedCandidateSheet.totalMarks || selectedCandidateSheet.maxScore || examTotalMarks}</strong> â€¢ Completed {new Date(selectedCandidateSheet.endTime || selectedCandidateSheet.submittedAt || Date.now()).toLocaleTimeString()}
+                  Score: <strong style={{ color: '#10b981' }}>{selectedCandidateSheet.score ?? 0} / {selectedCandidateSheet.totalMarks || selectedCandidateSheet.maxScore || examTotalMarks}</strong> • Completed {new Date(selectedCandidateSheet.endTime || selectedCandidateSheet.submittedAt || Date.now()).toLocaleTimeString()}
 
                 </div>
 
@@ -6399,7 +6399,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                           <span style={{ fontSize: '10.5px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.35)', fontWeight: 800 }}>
 
-                            âœ“ CORRECT (+{q.marks || 1})
+                            ✓ CORRECT (+{q.marks || 1})
 
                           </span>
 
@@ -6407,7 +6407,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                           <span style={{ fontSize: '10.5px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.35)', fontWeight: 800 }}>
 
-                            âœ— INCORRECT (-{q.negativeMarks ?? 0.25})
+                            ✓ INCORRECT (-{q.negativeMarks ?? 0.25})
 
                           </span>
 
@@ -6477,7 +6477,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                             textColor = '#10b981';
 
-                            badgeLabel = 'CANDIDATE PICK âœ“ (CORRECT)';
+                            badgeLabel = 'CANDIDATE PICK ✓ (CORRECT)';
 
                             badgeBg = 'rgba(16, 185, 129, 0.2)';
 
@@ -6491,7 +6491,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                             textColor = '#ef4444';
 
-                            badgeLabel = 'CANDIDATE PICK âœ— (WRONG)';
+                            badgeLabel = 'CANDIDATE PICK ✓ (WRONG)';
 
                             badgeBg = 'rgba(239, 68, 68, 0.2)';
 
@@ -6661,7 +6661,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* â”€â”€ MODAL 2: SHORTLIST EMAIL INVITATION & REAL GMAIL SMTP DISPATCH ENGINE â”€â”€ */}
+      {/* ── MODAL 2: SHORTLIST EMAIL INVITATION & REAL GMAIL SMTP DISPATCH ENGINE ── */}
 
       {showEmailDispatchModal && (
 
@@ -7221,7 +7221,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* â”€â”€ MODAL 2: SHORTLIST EMAIL INVITATION & REAL GMAIL SMTP DISPATCH ENGINE â”€â”€ */}
+      {/* ── MODAL 2: SHORTLIST EMAIL INVITATION & REAL GMAIL SMTP DISPATCH ENGINE ── */}
 
       {showEmailDispatchModal && (
 
@@ -7901,7 +7901,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* â”€â”€ MODAL 3: CONCLUDE ROUND 1 & MULTI-LAB COMBINED SHORTLIST â”€â”€ */}
+      {/* ── MODAL 3: CONCLUDE ROUND 1 & MULTI-LAB COMBINED SHORTLIST ── */}
 
       {showConcludeModal && (
 
@@ -8169,7 +8169,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                 <div style={{ marginTop: '4px', color: '#60a5fa' }}>
 
-                  âœ“ Shortlisted candidates will immediately have dedicated <span style={{ fontFamily: 'monospace', fontWeight: 800 }}>AXENT-R2-XXXX</span> keys provisioned.
+                  ✓ Shortlisted candidates will immediately have dedicated <span style={{ fontFamily: 'monospace', fontWeight: 800 }}>AXENT-R2-XXXX</span> keys provisioned.
 
                 </div>
 
@@ -8263,7 +8263,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* â”€â”€ GOOGLE FORM / TEXT / QUIZ DIRECT IMPORTER â”€â”€ */}
+      {/* ── GOOGLE FORM / TEXT / QUIZ DIRECT IMPORTER ── */}
 
       {showGoogleFormModal && (
 
@@ -8285,7 +8285,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* â”€â”€ MODAL 5: AI PAPER GENERATOR â”€â”€ */}
+      {/* ── MODAL 5: AI PAPER GENERATOR ── */}
 
       {showAIPaperModal && (
 
@@ -8303,7 +8303,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-      {/* â”€â”€ MODAL 6: BULK CANDIDATE IMPORT â”€â”€ */}
+      {/* ── MODAL 6: BULK CANDIDATE IMPORT ── */}
 
       {showImportModal && (
 

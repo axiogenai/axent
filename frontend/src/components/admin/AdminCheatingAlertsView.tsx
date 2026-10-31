@@ -145,7 +145,7 @@ export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = (
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
-      {/* â”€â”€ SECURITY RESPONSE STATUS HEADER â”€â”€ */}
+      {/* ── SECURITY RESPONSE STATUS HEADER ── */}
       <div
         style={{
           display: 'flex',
@@ -243,7 +243,7 @@ export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = (
         </div>
       </div>
 
-      {/* â”€â”€ INCIDENTS LIST â”€â”€ */}
+      {/* ── INCIDENTS LIST ── */}
       {displayedAlerts.length === 0 ? (
         <div
           style={{
@@ -351,7 +351,7 @@ export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = (
                   </div>
 
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                    LAB: {station.labName || station.labId} Â· IP: {station.ipAddress || '10.77.210.15'}
+                    LAB: {station.labName || station.labId} · IP: {station.ipAddress || '10.77.210.15'}
                   </div>
                 </div>
 
@@ -423,7 +423,7 @@ export const AdminCheatingAlertsView: React.FC<AdminCheatingAlertsViewProps> = (
                         {studentKey.code}
                       </span>
                       <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-                        (Bound strictly to {station.student?.name || 'this candidate'} Â· No other kid can use it)
+                        (Bound strictly to {station.student?.name || 'this candidate'} · No other kid can use it)
                       </span>
                     </div>
 

@@ -42,14 +42,14 @@ export interface CctvBroadcastMessage {
   emergencyKey?: any;
 }
 
-// â”€â”€ WORKSTATION IDENTIFIER GENERATOR â”€â”€
+// ── WORKSTATION IDENTIFIER GENERATOR ──
 export function buildWorkstationId(labId?: string, stationNumber?: string): string {
   const activeLab = (labId || getActiveLabId() || 'LAB-01').toUpperCase();
   const cleanNum = (stationNumber || '01').replace(/[^0-9]/g, '') || '01';
   return `${activeLab}-WS-${cleanNum.padStart(2, '0')}`;
 }
 
-// â”€â”€ BROADCAST CHANNEL & REAL-TIME MULTI-BUS EVENT SYSTEM â”€â”€
+// ── BROADCAST CHANNEL & REAL-TIME MULTI-BUS EVENT SYSTEM ──
 const localSubscribers: Set<(msg: CctvBroadcastMessage) => void> = new Set();
 let broadcastSenderChannel: BroadcastChannel | null = null;
 
@@ -191,7 +191,7 @@ export function subscribeToCctvBroadcast(
   };
 }
 
-// â”€â”€ REAL INSTITUTE LABORATORIES (Zero Hardcoded / Seed Data Enforcement) â”€â”€
+// ── REAL INSTITUTE LABORATORIES (Zero Hardcoded / Seed Data Enforcement) ──
 export const DEFAULT_INSTITUTE_LABS: CollegeLabInfo[] = [];
 export const COLLEGE_LABS: CollegeLabInfo[] = [];
 
@@ -201,7 +201,7 @@ export const CAMPUS_LOCK_KEY = 'codedna_lock_all';
 export const CUSTOM_LABS_KEY = 'codedna_custom_institute_labs';
 export const DELETED_LABS_KEY = 'codedna_deleted_college_lab_ids';
 
-// â”€â”€ PERSISTENT LAB TOMBSTONE REGISTRY â”€â”€
+// ── PERSISTENT LAB TOMBSTONE REGISTRY ──
 export function getDeletedLabIds(): Set<string> {
   if (typeof window === 'undefined') return new Set();
   try {
@@ -241,7 +241,7 @@ export function resetDeletedLabsRegistry(): void {
   } catch {}
 }
 
-// â”€â”€ PHANTOM LAB DETECTOR â”€â”€
+// ── PHANTOM LAB DETECTOR ──
 export function isPhantomLab(lab: Partial<CollegeLabInfo> | null | undefined): boolean {
   if (!lab || !lab.labId) return false;
   const name = (lab.labName || '').trim().toLowerCase();
@@ -255,7 +255,7 @@ export function isPhantomLab(lab: Partial<CollegeLabInfo> | null | undefined): b
   return false;
 }
 
-// â”€â”€ DYNAMIC COLLEGE LAB MANAGEMENT (Zero Hardcoded Labs) â”€â”€
+// ── DYNAMIC COLLEGE LAB MANAGEMENT (Zero Hardcoded Labs) ──
 
 export function pruneAndDeduplicateLabs(labs: CollegeLabInfo[]): CollegeLabInfo[] {
   const deletedIds = getDeletedLabIds();
@@ -651,7 +651,7 @@ if (typeof window !== 'undefined') {
   });
 }
 
-// â”€â”€ PURGE CORRUPTED / LEGACY ENTRIES FROM LOCAL STORAGE â”€â”€
+// ── PURGE CORRUPTED / LEGACY ENTRIES FROM LOCAL STORAGE ──
 export function cleanCorruptedStations(): void {
   if (typeof window === 'undefined') return;
   try {
@@ -850,7 +850,7 @@ function reconcileAttemptsIntoStations(stations: CandidateStation[]): CandidateS
   return Array.from(stationMap.values());
 }
 
-// â”€â”€ GET ONLY REAL REGISTERED / ACTIVE WORKSTATIONS (NO AUTO FAKE INJECTION) â”€â”€
+// ── GET ONLY REAL REGISTERED / ACTIVE WORKSTATIONS (NO AUTO FAKE INJECTION) ──
 export function getLiveStations(): CandidateStation[] {
   if (typeof window === 'undefined') return [];
   cleanCorruptedStations();
@@ -897,7 +897,7 @@ export function saveAllStations(stations: CandidateStation[]): void {
   }
 }
 
-// â”€â”€ PERSISTENT CLASS & CAMPUS LOCK ENFORCEMENT â”€â”€
+// ── PERSISTENT CLASS & CAMPUS LOCK ENFORCEMENT ──
 export function isCampusLocked(): boolean {
   if (typeof window === 'undefined') return false;
   return localStorage.getItem(CAMPUS_LOCK_KEY) === 'true';
@@ -980,7 +980,7 @@ export function setLabLock(labId: string, isLocked: boolean): void {
   });
 }
 
-// â”€â”€ FLUSH & RESET CONTROL ROOM (WIPES ALL DATA CLEANLY) â”€â”€
+// ── FLUSH & RESET CONTROL ROOM (WIPES ALL DATA CLEANLY) ──
 export async function clearAllStations(labId?: string): Promise<void> {
   if (typeof window === 'undefined') return;
   try {
@@ -1136,7 +1136,7 @@ export function removeSingleStation(stationId: string): void {
   }
 }
 
-// â”€â”€ GET ACTIVE LAB ID â”€â”€
+// ── GET ACTIVE LAB ID ──
 export function getActiveLabId(): string {
   if (typeof window === 'undefined') return '';
   const stored = localStorage.getItem(CURRENT_LAB_KEY);
@@ -1150,14 +1150,14 @@ export function setActiveLabId(labId: string): void {
   localStorage.setItem(CURRENT_LAB_KEY, labId);
 }
 
-// â”€â”€ GET STATIONS FOR A SPECIFIC LAB â”€â”€
+// ── GET STATIONS FOR A SPECIFIC LAB ──
 export function getStationsForLab(labId: string): CandidateStation[] {
   const all = getLiveStations();
   const cleanTarget = String(labId || '').toUpperCase().trim();
   return all.filter((s) => String(s.labId || '').toUpperCase().trim() === cleanTarget);
 }
 
-// â”€â”€ GET DYNAMIC LAB INFO HELPER â”€â”€
+// ── GET DYNAMIC LAB INFO HELPER ──
 export function getLabInfoOrDefault(labId?: string): CollegeLabInfo {
   const labs = getAllCollegeLabs();
   const matched = labs.find((l) => l.labId === labId);
@@ -1174,7 +1174,7 @@ export function getLabInfoOrDefault(labId?: string): CollegeLabInfo {
   };
 }
 
-// â”€â”€ CAMPUS-WIDE MACRO KPI STATISTICS ACROSS DYNAMIC LABS â”€â”€
+// ── CAMPUS-WIDE MACRO KPI STATISTICS ACROSS DYNAMIC LABS ──
 export function getCampusStats(): {
   totalLabs: number;
   totalWorkstations: number;
@@ -1203,7 +1203,7 @@ export function getCampusStats(): {
   };
 }
 
-// â”€â”€ REAL-TIME BROADCAST: SYNCS CANDIDATE WORKSTATION TO ADMIN CCTV ROOM â”€â”€
+// ── REAL-TIME BROADCAST: SYNCS CANDIDATE WORKSTATION TO ADMIN CCTV ROOM ──
 export function syncCurrentLiveStation(
   submission: CodeSubmission,
   extra?: {
@@ -1318,7 +1318,7 @@ export function syncCurrentLiveStation(
   return updatedStation;
 }
 
-// â”€â”€ FINAL SUBMISSION TO ADMIN CCTV CONTROL ROOM â”€â”€
+// ── FINAL SUBMISSION TO ADMIN CCTV CONTROL ROOM ──
 export function submitAndMarkDone(
   submission: CodeSubmission,
   compilerResult?: CompilerExecutionResult,
@@ -1385,7 +1385,7 @@ export function submitAndMarkDone(
   return updatedStation;
 }
 
-// â”€â”€ REMOTE PROCTOR COMMAND: LOCK OR UNLOCK A WORKSTATION OR ENTIRE LAB â”€â”€
+// ── REMOTE PROCTOR COMMAND: LOCK OR UNLOCK A WORKSTATION OR ENTIRE LAB ──
 export function sendProctorLockCommand(stationId: string, isLocked: boolean, labId?: string): void {
   if (stationId === 'all') {
     setLabLock(labId || 'all', isLocked);
@@ -1506,7 +1506,7 @@ export function sendProctorConcludeAndFreeCommand(stationId: string, labId?: str
   });
 }
 
-// â”€â”€ REMOTE PROCTOR COMMAND: SEND INSTANT WARNING MESSAGE TO CANDIDATE SCREEN â”€â”€
+// ── REMOTE PROCTOR COMMAND: SEND INSTANT WARNING MESSAGE TO CANDIDATE SCREEN ──
 export const sendProctorWarning = (stationId: string, message: string, labId?: string) => sendProctorWarningMessage(stationId, message, labId);
 export function sendProctorWarningMessage(stationId: string, message: string, labId?: string): void {
   const stations = getLiveStations();
@@ -1521,7 +1521,7 @@ export function sendProctorWarningMessage(stationId: string, message: string, la
   broadcastCctvMessage({ type: 'PROCTOR_MESSAGE', stationId, labId, warningMessage: message });
 }
 
-// â”€â”€ SYNC MCQ ATTEMPT STATE WITH ADMIN CCTV CONTROL ROOM & SUPABASE â”€â”€
+// ── SYNC MCQ ATTEMPT STATE WITH ADMIN CCTV CONTROL ROOM & SUPABASE ──
 export function syncMcqLiveStation(
   attempt: MCQAttempt,
   exam: MCQExamConfig,

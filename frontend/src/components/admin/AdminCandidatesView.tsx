@@ -74,7 +74,7 @@ export const AdminCandidatesView: React.FC<AdminCandidatesViewProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
-      {/* â”€â”€ TOP KPI METRIC CARDS â”€â”€ */}
+      {/* ── TOP KPI METRIC CARDS ── */}
       <div
         style={{
           display: 'grid',
@@ -236,7 +236,7 @@ export const AdminCandidatesView: React.FC<AdminCandidatesViewProps> = ({
         </div>
       </div>
 
-      {/* â”€â”€ TOOLBAR & SEARCH â”€â”€ */}
+      {/* ── TOOLBAR & SEARCH ── */}
       <div
         style={{
           display: 'flex',
@@ -301,7 +301,7 @@ export const AdminCandidatesView: React.FC<AdminCandidatesViewProps> = ({
         </div>
       </div>
 
-      {/* â”€â”€ CANDIDATE ROSTER TABLE â”€â”€ */}
+      {/* ── CANDIDATE ROSTER TABLE ── */}
       <div
         style={{
           background: 'var(--bg-elevated)',

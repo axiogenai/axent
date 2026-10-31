@@ -1,6 +1,6 @@
 // ============================================================================
 
-// MCQ SERVICE â€” Dual Storage: Supabase Cloud + Local Cache Persistence
+// MCQ SERVICE — Dual Storage: Supabase Cloud + Local Cache Persistence
 
 // Authoritative server-side grading, Fisher-Yates shuffle, and cloud sync.
 
@@ -90,7 +90,7 @@ import {
 
 
 
-// â”€â”€ Persistence helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Persistence helpers ───────────────────────────────────────────────────────
 
 
 
@@ -290,7 +290,7 @@ const LEGACY_PURGED_EXAM_IDS = new Set([
 
 
 
-// â”€â”€ LEGACY MOCK DATA PURGE (Zero Hardcoded / Seed Data Enforcement) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── LEGACY MOCK DATA PURGE (Zero Hardcoded / Seed Data Enforcement) ───────────
 
 function purgeLegacySeedData(): void {
   try {
@@ -379,7 +379,7 @@ if (typeof window !== 'undefined') {
 
 
 
-// â”€â”€ ZERO HARDCODED / MOCK TEST DATA ENFORCEMENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── ZERO HARDCODED / MOCK TEST DATA ENFORCEMENT ──────────────────────────────
 export const DEMO_3Q_QUESTIONS: MCQQuestion[] = [];
 export const DEMO_3Q_EXAM: MCQExamConfig | null = null;
 
@@ -614,7 +614,7 @@ export function validateQuestion(q: Partial<MCQQuestion>): string[] {
 
 
 
-// â”€â”€ MCQ EXAMS (Authoritative Real Exams Only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── MCQ EXAMS (Authoritative Real Exams Only) ─────────────────────────────────
 
 
 
@@ -1290,11 +1290,11 @@ export function validateExamForPublish(exam: MCQExamConfig): string[] {
 
 
 
-// â”€â”€ ATTEMPTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── ATTEMPTS ──────────────────────────────────────────────────────────────────
 
 
 
-// Permanent registry of finalized attempt IDs â€” survives page refresh, prevents
+// Permanent registry of finalized attempt IDs — survives page refresh, prevents
 
 // getActiveAttempt() from ever resurrecting a submitted/timed-out attempt.
 
@@ -1573,7 +1573,7 @@ function saveAttempt(attempt: MCQAttempt): void {
 
  * Generates the immutable shuffled assignment right here and persists it.
 
- * Subsequent reloads just restore from localStorage/cloud â€” no re-shuffling.
+ * Subsequent reloads just restore from localStorage/cloud — no re-shuffling.
 
  */
 
@@ -1984,7 +1984,7 @@ export function startAttempt(
 
 
 
-/** Autosave an answer â€” called on every option selection */
+/** Autosave an answer — called on every option selection */
 
 export function saveAnswer(attemptId: string, questionId: string, optionId: string): boolean {
 
@@ -2117,7 +2117,7 @@ export function pardonInfractions(attemptId: string): void {
 
 
 
-// â”€â”€ GRADING ENGINE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── GRADING ENGINE ────────────────────────────────────────────────────────────
 
 
 
@@ -2305,7 +2305,7 @@ export function gradeAttempt(attempt: MCQAttempt): MCQGradeResult {
 
 
 
-/** Submit attempt â€” grades it and persists the result to local and Supabase cloud */
+/** Submit attempt — grades it and persists the result to local and Supabase cloud */
 
 export function submitAttempt(
 
@@ -2465,7 +2465,7 @@ export function submitAttempt(
 
 
 
-// â”€â”€ MCQ option builder helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── MCQ option builder helper ─────────────────────────────────────────────────
 
 
 
@@ -2477,7 +2477,7 @@ export function buildOption(text: string, isCorrect = false): MCQOption {
 
 
 
-// â”€â”€ INITIAL BACKGROUND SUPABASE SYNC & REALTIME SUBSCRIPTION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── INITIAL BACKGROUND SUPABASE SYNC & REALTIME SUBSCRIPTION ──────────────────
 
 
 
@@ -2559,7 +2559,7 @@ function mergeAttempts(localAttempts: MCQAttempt[], cloudAttempts: MCQAttempt[])
 
       if (cloudAttempt.status === 'IN_PROGRESS' && concludedIds.has(cloudAttempt.id)) {
 
-        // We have locally concluded this attempt â€” don't restore it as IN_PROGRESS from cloud
+        // We have locally concluded this attempt — don't restore it as IN_PROGRESS from cloud
 
         continue;
 
@@ -2583,7 +2583,7 @@ function mergeAttempts(localAttempts: MCQAttempt[], cloudAttempts: MCQAttempt[])
 
     if (localFinal && !cloudFinal) {
 
-      // Local is finalized, cloud still shows IN_PROGRESS (sync lag) â€” keep local
+      // Local is finalized, cloud still shows IN_PROGRESS (sync lag) — keep local
 
       continue;
 
@@ -2595,7 +2595,7 @@ function mergeAttempts(localAttempts: MCQAttempt[], cloudAttempts: MCQAttempt[])
 
     } else if (!localFinal && !cloudFinal) {
 
-      // Both IN_PROGRESS â€” take the more recent/complete version
+      // Both IN_PROGRESS — take the more recent/complete version
 
       if ((cloudAttempt.lastActivityAt ?? cloudAttempt.submitTime ?? 0) >
 

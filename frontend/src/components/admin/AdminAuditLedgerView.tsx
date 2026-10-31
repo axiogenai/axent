@@ -61,7 +61,7 @@ export const AdminAuditLedgerView: React.FC<AdminAuditLedgerViewProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
-      {/* â”€â”€ AUDIT LEDGER TOP BRANDING & VERIFICATION HEADER â”€â”€ */}
+      {/* ── AUDIT LEDGER TOP BRANDING & VERIFICATION HEADER ── */}
       <div
         style={{
           display: 'flex',
@@ -115,7 +115,7 @@ export const AdminAuditLedgerView: React.FC<AdminAuditLedgerViewProps> = ({
               </span>
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-              SHA-256 Tamper-Evident Examination Ledger Â· Axiogen Examination Network
+              SHA-256 Tamper-Evident Examination Ledger · Axiogen Examination Network
             </div>
           </div>
         </div>
@@ -163,7 +163,7 @@ export const AdminAuditLedgerView: React.FC<AdminAuditLedgerViewProps> = ({
         </div>
       </div>
 
-      {/* â”€â”€ SEARCH & COUNT ROW â”€â”€ */}
+      {/* ── SEARCH & COUNT ROW ── */}
       <div
         style={{
           display: 'flex',
@@ -208,7 +208,7 @@ export const AdminAuditLedgerView: React.FC<AdminAuditLedgerViewProps> = ({
         </div>
       </div>
 
-      {/* â”€â”€ THE AUDIT LEDGER TABLE â”€â”€ */}
+      {/* ── THE AUDIT LEDGER TABLE ── */}
       <div
         style={{
           background: 'var(--bg-elevated)',

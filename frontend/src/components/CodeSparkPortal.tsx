@@ -575,6 +575,16 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
         return;
       }
 
+      // Check if candidate key is proctor-locked
+      const activeKey = cand.round2Key || rawInput;
+      const cleanKey = activeKey.trim().toUpperCase();
+      const isLockedLocally = localStorage.getItem(`codedna_r2_locked_${cleanKey}`) === 'true';
+      if (isLockedLocally) {
+        playSound('warning');
+        setKeyError('Workstation Locked: This key is frozen due to academic integrity violations. Contact the invigilator.');
+        return;
+      }
+
       const derivedRoll = cand.rollNumber || cand.email.split('@')[0].toUpperCase();
       const codingProfile = {
         name: cand.name.trim(),

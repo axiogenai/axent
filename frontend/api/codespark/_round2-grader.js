@@ -73,7 +73,7 @@ export async function getRound2AssignedProblems(keyInput, allowLocked = false) {
   return { candidate, problems: assignedProblems(Array.isArray(problemConfig.problems) ? problemConfig.problems : [], candidate.round2Key) };
 }
 
-export async function gradeRound2Code(keyInput, problemIdInput, codeInput, languageInput, allowLocked = true) {
+export async function gradeRound2Code(keyInput, problemIdInput, codeInput, languageInput, allowLocked = true, customStdin = "") {
   const key = normalizeRound2Key(keyInput);
   const code = String(codeInput || "");
   const language = String(languageInput || "");
@@ -104,7 +104,46 @@ export async function gradeRound2Code(keyInput, problemIdInput, codeInput, langu
     ...(Array.isArray(problem.sampleTestCases) ? problem.sampleTestCases.map((test) => ({ ...test, hidden: false })) : []),
     ...(Array.isArray(problem.hiddenTestCases) ? problem.hiddenTestCases.map((test) => ({ ...test, hidden: true })) : [])
   ];
-  if (!tests.length || tests.length > 230) { const error = new Error("This problem has no valid evaluation cases."); error.statusCode = 422; throw error; }
+
+  // If no predefined test cases were configured by paper setter, execute code directly on compiler
+  if (!tests.length) {
+    const maxScore = Number(problem.marks) || 20;
+    if (!code.trim()) {
+      return {
+        questionId: problem.id,
+        sampleResults: [],
+        hiddenResults: [],
+        passedTests: 0,
+        totalTests: 1,
+        score: 0,
+        maxScore,
+        status: "PENDING"
+      };
+    }
+    const result = await execute(code, language, String(customStdin || ""));
+    const compileFailed = Boolean(result.compileError);
+    const runtimeFailed = !result.compileError && Boolean(result.isError);
+    const passed = !compileFailed && !runtimeFailed;
+    const status = compileFailed ? "COMPILE_ERROR" : runtimeFailed ? "RUNTIME_ERROR" : "ACCEPTED";
+    return {
+      questionId: problem.id,
+      sampleResults: [{
+        testCaseId: "exec_1",
+        input: String(customStdin || "(Standard input)"),
+        expected: "(Clean compilation & execution)",
+        actual: result.stdout || (compileFailed ? result.stderr : ""),
+        passed,
+        error: result.stderr || undefined
+      }],
+      hiddenResults: [],
+      passedTests: passed ? 1 : 0,
+      totalTests: 1,
+      score: passed ? maxScore : 0,
+      maxScore,
+      status
+    };
+  }
+  if (tests.length > 230) { const error = new Error("Too many test cases for evaluation."); error.statusCode = 422; throw error; }
   const sampleResults = [];
   const hiddenResults = [];
   let passed = 0;

@@ -66,7 +66,7 @@ export const AdminTestStationsView: React.FC<AdminTestStationsViewProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
-      {/* â”€â”€ HEADER SUMMARY CARDS â”€â”€ */}
+      {/* ── HEADER SUMMARY CARDS ── */}
       <div
         style={{
           display: 'grid',
@@ -190,7 +190,7 @@ export const AdminTestStationsView: React.FC<AdminTestStationsViewProps> = ({
         </div>
       </div>
 
-      {/* â”€â”€ TOOLBAR & SEARCH â”€â”€ */}
+      {/* ── TOOLBAR & SEARCH ── */}
       <div
         style={{
           display: 'flex',
@@ -255,7 +255,7 @@ export const AdminTestStationsView: React.FC<AdminTestStationsViewProps> = ({
         </div>
       </div>
 
-      {/* â”€â”€ WORKSTATIONS INVENTORY TABLE â”€â”€ */}
+      {/* ── WORKSTATIONS INVENTORY TABLE ── */}
       <div
         style={{
           background: 'var(--bg-elevated)',
@@ -343,7 +343,7 @@ export const AdminTestStationsView: React.FC<AdminTestStationsViewProps> = ({
                           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11.5px', color: 'var(--text-primary)' }}>
                             {station.ipAddress || '10.77.210.12'}
                           </span>
-                          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Â· 18ms</span>
+                          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>· 18ms</span>
                         </div>
                       </td>
 

@@ -350,7 +350,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
 
   if (!isOpen) return null;
 
-  // â”€â”€ ADVANCE FROM PAGE 1 (BLUEPRINT) TO PAGE 2 (RULES & TIMING) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── ADVANCE FROM PAGE 1 (BLUEPRINT) TO PAGE 2 (RULES & TIMING) ──────────────
   const handleNextPage = () => {
     setError(null);
     if (examCategory === 'ISE') {
@@ -400,7 +400,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
     playSound('click');
   };
 
-  // â”€â”€ 1. GENERATE DRAFT WITH AI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── 1. GENERATE DRAFT WITH AI ────────────────────────────────────────────────
   const handleGenerate = async (e?: React.FormEvent | React.MouseEvent) => {
     if (e && 'preventDefault' in e) e.preventDefault();
     if (configPage !== 2) {
@@ -604,7 +604,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
     }
   };
 
-  // â”€â”€ 2. REVIEW STAGE HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── 2. REVIEW STAGE HELPERS ──────────────────────────────────────────────────
   const liveTotalMarks = useMemo(() => {
     return reviewedQuestions.reduce((acc, q) => acc + (Number(q.marks) || 0), 0);
   }, [reviewedQuestions]);
@@ -969,7 +969,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                       letterSpacing: '0.04em'
                     }}
                   >
-                    Draft Â· Pending Confirmation
+                    Draft · Pending Confirmation
                   </span>
                 )}
                 {step === 'published' && (
@@ -1040,7 +1040,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
             </div>
           )}
 
-          {/* â”€â”€ STEP 1: CONFIG FORM (2-PAGE SYSTEM) â”€â”€ */}
+          {/* ── STEP 1: CONFIG FORM (2-PAGE SYSTEM) ── */}
           {step === 'config' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {/* 2-Page Step Selector Tabs */}
@@ -1208,7 +1208,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                 </div>
               </div>
 
-              {/* â”€â”€ CONDITIONAL MODE: APTITUDE VS ISE â”€â”€ */}
+              {/* ── CONDITIONAL MODE: APTITUDE VS ISE ── */}
               {examCategory === 'Aptitude' ? (
                 <div
                   style={{
@@ -1539,7 +1539,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                         </span>
                       </div>
                       <div style={{ color: 'var(--text-muted)' }}>
-                        Quotas: {sections.map(s => `${s.count || 0} ${s.topic || 'Topic'}`).join(' â€¢ ')}
+                        Quotas: {sections.map(s => `${s.count || 0} ${s.topic || 'Topic'}`).join(' • ')}
                       </div>
                     </div>
                   </div>
@@ -1752,7 +1752,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                 )}
               </div>
             ) : (
-                /* â”€â”€ ISE MODE: SYLLABUS & UNIT CURRICULUM DRIVEN â”€â”€ */
+                /* ── ISE MODE: SYLLABUS & UNIT CURRICULUM DRIVEN ── */
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   {/* Subject Quick Chips */}
                   <div>
@@ -2096,7 +2096,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                         </span>
                       </div>
                       <div style={{ color: 'var(--text-muted)' }}>
-                        Exact Quota: <span style={{ color: 'var(--success)', fontWeight: 700 }}>{easyCount} Easy</span> â€¢ <span style={{ color: 'var(--warning)', fontWeight: 700 }}>{mediumCount} Medium</span> â€¢ <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{hardCount} Hard</span>
+                        Exact Quota: <span style={{ color: 'var(--success)', fontWeight: 700 }}>{easyCount} Easy</span> • <span style={{ color: 'var(--warning)', fontWeight: 700 }}>{mediumCount} Medium</span> • <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{hardCount} Hard</span>
                       </div>
                     </div>
                   </div>
@@ -2110,7 +2110,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
             </div>
           )}
 
-          {/* â”€â”€ PAGE 2: RULES, TIMING & DELIVERY â”€â”€ */}
+          {/* ── PAGE 2: RULES, TIMING & DELIVERY ── */}
           {configPage === 2 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {/* Duration & Negative Penalty */}
@@ -2457,7 +2457,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
       </div>
     )}
 
-          {/* â”€â”€ STEP 2: AUTONOMOUS GENERATION & PSYCHOMETRIC SYNTHESIS (HIGH-TECH ANIMATION) â”€â”€ */}
+          {/* ── STEP 2: AUTONOMOUS GENERATION & PSYCHOMETRIC SYNTHESIS (HIGH-TECH ANIMATION) ── */}
           {step === 'loading' && (
             <div
               style={{
@@ -2722,7 +2722,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '110px', overflowY: 'auto' }}>
                     <div style={{ color: '#71717a' }}>[00:00] Initializing cognitive test synthesis pipeline...</div>
-                    <div style={{ color: '#71717a' }}>[00:01] Target: {effectiveTotalQuestions} questions Â· {durationMinutes} mins Â· {isPrivate ? 'PRIVATE (TICKET-ONLY)' : 'PUBLIC CATALOG'}</div>
+                    <div style={{ color: '#71717a' }}>[00:01] Target: {effectiveTotalQuestions} questions · {durationMinutes} mins · {isPrivate ? 'PRIVATE (TICKET-ONLY)' : 'PUBLIC CATALOG'}</div>
                     {telemetryLogs.map((log, idx) => (
                       <div key={idx} style={{ color: '#d4d4d8' }}>
                         {log}
@@ -2754,11 +2754,11 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                     <span style={{ color: 'var(--text-muted)' }}>
                       Subject: <strong style={{ color: 'var(--text-primary)' }}>{subject || 'General Aptitude'}</strong>
                     </span>
-                    <span style={{ color: 'var(--border)' }}>â€¢</span>
+                    <span style={{ color: 'var(--border)' }}>•</span>
                     <span style={{ color: 'var(--text-muted)' }}>
                       Items: <strong style={{ color: 'var(--text-primary)' }}>{effectiveTotalQuestions} Qs</strong>
                     </span>
-                    <span style={{ color: 'var(--border)' }}>â€¢</span>
+                    <span style={{ color: 'var(--border)' }}>•</span>
                     <span style={{ color: 'var(--text-muted)' }}>
                       Duration: <strong style={{ color: 'var(--text-primary)' }}>{durationMinutes}m</strong>
                     </span>
@@ -2782,7 +2782,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
             </div>
           )}
 
-          {/* â”€â”€ STEP 3: INTERACTIVE REVIEW WORKSPACE â”€â”€ */}
+          {/* ── STEP 3: INTERACTIVE REVIEW WORKSPACE ── */}
           {step === 'review' && reviewedExam && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               
@@ -2915,7 +2915,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                         {reviewedExam.topic}
                       </span>
                       <span style={{ color: 'var(--text-muted)', marginLeft: '4px', flexShrink: 0, fontSize: '10.5px' }}>
-                        Â· {reviewedExam.subject}
+                        · {reviewedExam.subject}
                       </span>
                     </div>
                   </div>
@@ -3883,7 +3883,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
             </div>
           )}
 
-          {/* â”€â”€ STEP 4: SUCCESS PUBLISHED VIEW â”€â”€ */}
+          {/* ── STEP 4: SUCCESS PUBLISHED VIEW ── */}
           {step === 'published' && reviewedExam && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div
@@ -3902,7 +3902,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                   {reviewedExam.title}
                 </h3>
                 <p style={{ margin: '0 0 14px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  {reviewedExam.subject} Â· {reviewedExam.topic} Â· {reviewedQuestions.length} Questions Â· {liveTotalMarks} Total Marks
+                  {reviewedExam.subject} · {reviewedExam.topic} · {reviewedQuestions.length} Questions · {liveTotalMarks} Total Marks
                 </p>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '16px' }}>
@@ -4061,19 +4061,19 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
                 <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '11.5px' }}>
                   Total: {effectiveTotalQuestions} Questions
                 </span>
-                <span style={{ color: 'var(--border)' }}>â€¢</span>
+                <span style={{ color: 'var(--border)' }}>•</span>
                 <span style={{ fontWeight: 600, color: 'var(--accent)', fontSize: '11.5px' }}>
                   {effectiveTotalMarks} Marks
                 </span>
                 {configPage === 2 && (
                   <>
-                    <span style={{ color: 'var(--border)' }}>â€¢</span>
+                    <span style={{ color: 'var(--border)' }}>•</span>
                     <span style={{ color: 'var(--text-secondary)', fontSize: '11.5px' }}>
                       {durationMinutes} Mins Duration
                     </span>
                   </>
                 )}
-                <span style={{ color: 'var(--border)' }}>â€¢</span>
+                <span style={{ color: 'var(--border)' }}>•</span>
                 <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
                   Page {configPage} of 2
                 </span>
@@ -4178,7 +4178,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
               <span>Powered by Axent Autonomous Reasoning Engine</span>
               <span>
                 {step === 'review'
-                  ? 'Draft state Â· All edits autosaved locally and sync to Question Bank'
+                  ? 'Draft state · All edits autosaved locally and sync to Question Bank'
                   : 'University Academic Integrity & Proctored Examination Standards'}
               </span>
             </>

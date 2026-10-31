@@ -71,7 +71,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
-      {/* â”€â”€ ACADEMIC ANALYTICS SUMMARY â”€â”€ */}
+      {/* ── ACADEMIC ANALYTICS SUMMARY ── */}
       <div
         style={{
           display: 'grid',
@@ -180,7 +180,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
         </div>
       </div>
 
-      {/* â”€â”€ TOOLBAR & SEARCH â”€â”€ */}
+      {/* ── TOOLBAR & SEARCH ── */}
       <div
         style={{
           display: 'flex',
@@ -257,7 +257,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
         </div>
       </div>
 
-      {/* â”€â”€ REPORTS & EVALUATION TABLE â”€â”€ */}
+      {/* ── REPORTS & EVALUATION TABLE ── */}
       <div
         style={{
           background: 'var(--bg-elevated)',
@@ -321,7 +321,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                           {station.student?.name || 'Candidate'}
                         </div>
                         <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-                          {station.labName || station.labId} Â· {station.stationNumber}
+                          {station.labName || station.labId} · {station.stationNumber}
                         </div>
                       </td>
 

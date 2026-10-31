@@ -20,7 +20,7 @@ import { playSound } from '../utils/sounds';
 import { ConfirmationModal } from './ConfirmationModal';
 import { SimpleSelect } from './watermelon/Select';
 
-// â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Constants ─────────────────────────────────────────────────────────────────
 const DIFFICULTY_COLORS: Record<MCQDifficulty, string> = {
   EASY: 'var(--success)',
   MEDIUM: 'var(--warning)',
@@ -50,7 +50,7 @@ function emptyQuestion(): Omit<MCQQuestion, 'id' | 'createdAt' | 'updatedAt'> {
   };
 }
 
-// â”€â”€ Question Editor Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Question Editor Modal ─────────────────────────────────────────────────────
 interface QuestionEditorProps {
   initial?: MCQQuestion;
   onSave: (q: MCQQuestion) => void;
@@ -146,7 +146,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({ initial, onSave, onClos
             borderRadius: 'var(--radius-sm)', padding: '10px 14px', marginBottom: '16px',
           }}>
             {errors.map((e, i) => (
-              <p key={i} style={{ color: 'var(--danger)', fontSize: '13px', margin: '2px 0' }}>â€¢ {e}</p>
+              <p key={i} style={{ color: 'var(--danger)', fontSize: '13px', margin: '2px 0' }}>• {e}</p>
             ))}
           </div>
         )}
@@ -327,7 +327,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({ initial, onSave, onClos
   );
 };
 
-// â”€â”€ AI Question Generator Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── AI Question Generator Modal ───────────────────────────────────────────────
 interface AiGeneratorModalProps {
   onAddQuestions: (questions: MCQQuestion[]) => void;
   onClose: () => void;
@@ -503,7 +503,7 @@ const AiGeneratorModal: React.FC<AiGeneratorModalProps> = ({ onAddQuestions, onC
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '4px', marginBottom: '6px' }}>
                           {q.options.map((opt, oIdx) => (
                             <div key={oIdx} style={{ fontSize: '11.5px', color: opt.isCorrect ? 'var(--success)' : 'var(--text-secondary)', fontWeight: opt.isCorrect ? 700 : 400 }}>
-                              {String.fromCharCode(65 + oIdx)}. {opt.text} {opt.isCorrect && 'âœ“'}
+                              {String.fromCharCode(65 + oIdx)}. {opt.text} {opt.isCorrect && '✓'}
                             </div>
                           ))}
                         </div>
@@ -539,7 +539,7 @@ const AiGeneratorModal: React.FC<AiGeneratorModalProps> = ({ onAddQuestions, onC
   );
 };
 
-// â”€â”€ Batch Import Modal (JSON / CSV) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Batch Import Modal (JSON / CSV) ───────────────────────────────────────────
 interface ImportModalProps {
   onImportComplete: () => void;
   onClose: () => void;
@@ -691,12 +691,12 @@ const ImportModal: React.FC<ImportModalProps> = ({ onImportComplete, onClose }) 
         {parseResult && (
           <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <div style={{ padding: '8px 12px', background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 'var(--radius-sm)', color: 'var(--success)', fontSize: '12px', fontWeight: 700 }}>
-              âœ“ Found {parseResult.valid.length} valid question(s) ready to import.
+              ✓ Found {parseResult.valid.length} valid question(s) ready to import.
             </div>
             {parseResult.errors.length > 0 && (
               <div style={{ padding: '8px 12px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 'var(--radius-sm)', color: 'var(--danger)', fontSize: '12px' }}>
                 <p style={{ margin: '0 0 4px', fontWeight: 700 }}>Errors ({parseResult.errors.length}):</p>
-                {parseResult.errors.slice(0, 3).map((e, i) => <p key={i} style={{ margin: '2px 0' }}>â€¢ {e}</p>)}
+                {parseResult.errors.slice(0, 3).map((e, i) => <p key={i} style={{ margin: '2px 0' }}>• {e}</p>)}
               </div>
             )}
           </div>
@@ -714,7 +714,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ onImportComplete, onClose }) 
   );
 };
 
-// â”€â”€ Main Question Bank Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Main Question Bank Component ──────────────────────────────────────────────
 export const MCQQuestionBank: React.FC = () => {
   const [questions, setQuestions] = useState<MCQQuestion[]>(() => getAllQuestions());
   const [search, setSearch] = useState('');
@@ -793,7 +793,7 @@ export const MCQQuestionBank: React.FC = () => {
   const handlePublish = (id: string) => {
     const errors = publishQuestion(id);
     if (errors.length > 0) {
-      setPublishErrorText(errors.map((error) => `â€¢ ${error}`).join('\n'));
+      setPublishErrorText(errors.map((error) => `• ${error}`).join('\n'));
       return;
     }
     reload();
@@ -1018,8 +1018,8 @@ export const MCQQuestionBank: React.FC = () => {
                     </p>
                     <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{q.subject}</span>
-                      {q.topic && <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>â€¢ {q.topic}</span>}
-                      <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>â€¢ {q.marks}pt{q.negativeMarks > 0 ? ` / -${q.negativeMarks}` : ''}</span>
+                      {q.topic && <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>• {q.topic}</span>}
+                      <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>• {q.marks}pt{q.negativeMarks > 0 ? ` / -${q.negativeMarks}` : ''}</span>
                       <span style={{ fontSize: '11px', color: STATUS_COLORS[q.status], fontWeight: 600 }}>{q.status}</span>
                       {q.tags.slice(0, 3).map((t) => (
                         <span key={t} style={{ fontSize: '10px', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-pill)', padding: '1px 7px', color: 'var(--text-dim)' }}>

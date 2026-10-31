@@ -311,7 +311,7 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
     >
       {/* Fullscreen overlay disabled to prevent student lockout */ null}
 
-      {/* â”€â”€ Active Stage Area â”€â”€ */}
+      {/* ── Active Stage Area ── */}
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
         {activeStage === 'round1' ? (
           /* Round 1: General Aptitude MCQ Conduction */
@@ -368,7 +368,7 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
                       marginBottom: '6px'
                     }}
                   >
-                    CODE SPARK 2026 â€¢ ROUND 01 CONCLUDED
+                    CODE SPARK 2026 • ROUND 01 CONCLUDED
                   </div>
 
                   <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#f4f4f5', margin: '0 0 10px 0' }}>

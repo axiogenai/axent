@@ -574,7 +574,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
   const [problems, setProblems] = useState<Round2Problem[]>(() => getAllRound2Problems());
 
-  // Dynamic total max marks â€” computed from actual per-problem marks set by admin
+  // Dynamic total max marks — computed from actual per-problem marks set by admin
   const totalMaxMarks = useMemo(() => {
     return problems.reduce((sum, p) => sum + (Number(p.marks) || 0), 0);
   }, [problems]);
@@ -2844,7 +2844,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                              {entry.averageRuntimeMs ? `${entry.averageRuntimeMs} ms` : 'â€”'}
+                              {entry.averageRuntimeMs ? `${entry.averageRuntimeMs} ms` : '—'}
 
 
 
@@ -3116,7 +3116,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
                 <strong style={{ fontSize: '13.5px', color: t.textPrimary }}>Import Coding Questions (Paste Text)</strong>
                 <span style={{ fontSize: '11px', color: isDark ? '#60a5fa' : '#2563eb', background: isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(37, 99, 235, 0.08)', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Fast Mode</span>
               </div>
-              <span style={{ fontSize: '11.5px', color: t.textMuted }}>Paste your questions directly (one per line or numbered) â€” titles, boilerplates & test cases are auto-configured!</span>
+              <span style={{ fontSize: '11.5px', color: t.textMuted }}>Paste your questions directly (one per line or numbered) — titles, boilerplates & test cases are auto-configured!</span>
             </div>
             <textarea
               value={quickPasteText}
@@ -3429,7 +3429,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                    {prob.difficulty} â€¢ {prob.marks}p
+                    {prob.difficulty} • {prob.marks}p
 
 
 
@@ -3770,7 +3770,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                    WPM: {station.metrics?.typingSpeed || 0} â€¢ Keystrokes: {station.metrics?.keystrokes || 0}
+                    WPM: {station.metrics?.typingSpeed || 0} • Keystrokes: {station.metrics?.keystrokes || 0}
 
 
 
@@ -4155,7 +4155,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                  Total Score: <strong style={{ color: '#f4f4f5' }}>{selectedDossier.totalScore} / {selectedDossier.maxScore || totalMaxMarks}</strong> â€¢ Language: {selectedDossier.dominantLanguage} â€¢ Solved: {selectedDossier.solvedCount}/5
+                  Total Score: <strong style={{ color: '#f4f4f5' }}>{selectedDossier.totalScore} / {selectedDossier.maxScore || totalMaxMarks}</strong> • Language: {selectedDossier.dominantLanguage} • Solved: {selectedDossier.solvedCount}/5
 
 
 
@@ -4479,7 +4479,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                          Status: <strong style={{ color: rep.status === 'ACCEPTED' ? '#10b981' : '#f59e0b' }}>{rep.status}</strong> â€¢ Score: <strong>{rep.score} / {rep.maxScore}</strong> â€¢ Tests Passed: {rep.passedTests} / {rep.totalTests}
+                          Status: <strong style={{ color: rep.status === 'ACCEPTED' ? '#10b981' : '#f59e0b' }}>{rep.status}</strong> • Score: <strong>{rep.score} / {rep.maxScore}</strong> • Tests Passed: {rep.passedTests} / {rep.totalTests}
 
 
 
@@ -4787,11 +4787,11 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                          {rep.compiledAt && <span>â€¢ Compiled: {rep.compiledAtFormatted || new Date(rep.compiledAt).toLocaleTimeString()}</span>}
+                          {rep.compiledAt && <span>• Compiled: {rep.compiledAtFormatted || new Date(rep.compiledAt).toLocaleTimeString()}</span>}
 
 
 
-                          {rep.nextQuestionStartedAt && <span>â€¢ Next Q: {rep.nextQuestionStartedAtFormatted || new Date(rep.nextQuestionStartedAt).toLocaleTimeString()}</span>}
+                          {rep.nextQuestionStartedAt && <span>• Next Q: {rep.nextQuestionStartedAtFormatted || new Date(rep.nextQuestionStartedAt).toLocaleTimeString()}</span>}
 
 
 
@@ -5356,7 +5356,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                âœ•
+                ✦
 
 
 

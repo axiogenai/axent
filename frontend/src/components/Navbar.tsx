@@ -30,6 +30,7 @@ import {
   AuthorityRole
 } from '../services/authService';
 import { ContinuousTabs } from './watermelon-ui';
+import { playSound } from '../utils/sounds';
 import { broadcastRemoteHardRefresh } from '../services/remoteControlService';
 import { wipeEntireDatabaseFromCloud } from '../services/mcqService';
 
@@ -359,12 +360,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
 
 
-            {/* If in Admin, provide 1-click switch to Paper Setter */}
+            {/* If in Admin, provide 1-click switch to Paper Setter tab */}
             {isAdminRoute && (
               <button
                 className="btn btn-ghost btn-sm"
-                onClick={() => navigate('/paper-setter')}
-                title="Open Paper Setter & Examination Builder Portal"
+                onClick={() => {
+                  navigate('/admin?tab=paper_setter');
+                  playSound('click');
+                }}
+                title="Switch to Paper Setter & Question Matrix Tab"
                 style={{
                   height: '30px',
                   padding: '0 10px',
@@ -372,9 +376,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                   fontSize: '11px',
                   fontWeight: 600,
                   borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg-surface)',
-                  color: 'var(--text-secondary)'
+                  border: location.search.includes('tab=paper_setter') ? '1px solid var(--accent)' : '1px solid var(--border)',
+                  background: location.search.includes('tab=paper_setter') ? 'var(--accent-subtle)' : 'var(--bg-surface)',
+                  color: location.search.includes('tab=paper_setter') ? 'var(--accent)' : 'var(--text-secondary)'
                 }}
               >
                 <Layers size={13} />
@@ -566,15 +570,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            {/* Paper Setter Portal */}
-            {(isAdmin || isAdminRoute || isPaperSetterRoute) && (
+            {/* Paper Setter Tab */}
+            {(isAdmin || isAdminRoute) && (
               <button
                 onClick={() => {
                   setMobileMenuOpen(false);
-                  navigate('/paper-setter');
+                  navigate('/admin?tab=paper_setter');
+                  playSound('click');
                 }}
                 className={`w-full flex items-center justify-between p-3.5 rounded-lg border text-sm font-semibold text-left transition-colors ${
-                  isPaperSetterRoute
+                  location.search.includes('tab=paper_setter')
                     ? 'border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-primary)]'
                     : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-primary)]'
                 }`}
@@ -583,7 +588,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <Layers size={16} className="text-[var(--accent)]" />
                   <span>Paper Setter &amp; Question Matrix</span>
                 </div>
-                {isPaperSetterRoute && (
+                {location.search.includes('tab=paper_setter') && (
                   <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border)]">
                     Active
                   </span>

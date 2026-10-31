@@ -133,61 +133,140 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
   });
 
   // Round 2 integrity controls: three-strike policy aligned with the MCQ exam.
-  const [proctorStrikes, setProctorStrikes] = useState(0);
-  const [strikeNotice, setStrikeNotice] = useState<{strike:number;reason:string}|null>(null);
-  const [proctorLocked, setProctorLocked] = useState(false);
+  const [proctorStrikes, setProctorStrikes] = useState(() => {
+    try {
+      const cached = localStorage.getItem(`codedna_r2_strikes_${candidateKey}`);
+      return cached ? Math.max(0, parseInt(cached, 10)) : 0;
+    } catch {
+      return 0;
+    }
+  });
+  const [strikeNotice, setStrikeNotice] = useState<{ strike: number; reason: string } | null>(null);
+  const [proctorLocked, setProctorLocked] = useState(() => {
+    try {
+      return localStorage.getItem(`codedna_r2_locked_${candidateKey}`) === 'true';
+    } catch {
+      return false;
+    }
+  });
   const lastViolationAt = useRef(0);
+
   const recordRound2Violation = useCallback((reason: string) => {
     if (submission.isSubmitted || proctorLocked) return;
     const now = Date.now();
-    if (now - lastViolationAt.current < 1400) return;
+    if (now - lastViolationAt.current < 1500) return;
     lastViolationAt.current = now;
+
     setProctorStrikes((previous) => {
       const next = previous + 1;
+      try {
+        localStorage.setItem(`codedna_r2_strikes_${candidateKey}`, String(next));
+        if (next >= 3) {
+          localStorage.setItem(`codedna_r2_locked_${candidateKey}`, 'true');
+        }
+      } catch {}
+
       void fetch('/api/codespark/proctor-event', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: candidateKey, reason })
       }).then(async (response) => {
         const result = await response.json();
         if (!response.ok || !result?.success) throw new Error('Proctor event sync failed');
-        setProctorStrikes(Number(result.strikeCount) || next);
-        setStrikeNotice({ strike: Number(result.strikeCount) || next, reason });
-        if (result.locked) setProctorLocked(true);
+        const count = Number(result.strikeCount) || next;
+        setProctorStrikes(count);
+        try {
+          localStorage.setItem(`codedna_r2_strikes_${candidateKey}`, String(count));
+        } catch {}
+        if (result.locked || count >= 3) {
+          setProctorLocked(true);
+          try {
+            localStorage.setItem(`codedna_r2_locked_${candidateKey}`, 'true');
+          } catch {}
+        }
       }).catch(() => {
-        // Fail closed locally if the event ledger cannot be reached.
-        if (next >= 3) setProctorLocked(true);
+        if (next >= 3) {
+          setProctorLocked(true);
+          try {
+            localStorage.setItem(`codedna_r2_locked_${candidateKey}`, 'true');
+          } catch {}
+        }
       });
+
       playSound('warning');
       setStrikeNotice({ strike: next, reason });
-      if (next >= 3) setProctorLocked(true);
+      if (next >= 3) {
+        setProctorLocked(true);
+        try {
+          localStorage.setItem(`codedna_r2_locked_${candidateKey}`, 'true');
+        } catch {}
+      }
       return next;
     });
   }, [candidateKey, proctorLocked, submission.isSubmitted]);
 
+  // Strict anti-cheating event listeners
   useEffect(() => {
-    if (submission.isSubmitted) return;
-    const onVisibility = () => { /* Passive monitor - no strikes on visibility change */ };
-    const onBlur = () => { /* Passive monitor - no strikes on blur */ };
-    const onFullscreen = () => { /* Passive monitor - no strikes on fullscreen exit */ };
-    const onClipboard = (event: Event) => {
-      event.preventDefault();
-      recordRound2Violation(event.type === 'paste' ? 'Paste action blocked' : event.type === 'copy' ? 'Copy action blocked' : 'Cut action blocked');
-    };
-    const onContext = (event: Event) => event.preventDefault();
-    const onDrop = (event: DragEvent) => { event.preventDefault(); recordRound2Violation('External content drop blocked'); };
-    const onDragOver = (event: DragEvent) => event.preventDefault();
-    const onKeys = (event: KeyboardEvent) => {
-      const key = event.key.toLowerCase();
-      if ((event.ctrlKey || event.metaKey) && ['c','v','x','insert'].includes(key)) {
-        event.preventDefault(); event.stopPropagation();
-        recordRound2Violation(key === 'v' || key === 'insert' ? 'Paste shortcut blocked' : 'Copy/cut shortcut blocked');
-      } else if (key === 'printscreen') {
-        event.preventDefault(); recordRound2Violation('Print Screen shortcut detected');
+    if (submission.isSubmitted || proctorLocked) return;
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        recordRound2Violation('Tab switch / backgrounding detected');
       }
     };
+
+    const onBlur = () => {
+      recordRound2Violation('Window focus lost / application switch detected');
+    };
+
+    const onFullscreen = () => {
+      if (!document.fullscreenElement) {
+        recordRound2Violation('Fullscreen examination mode exited');
+      }
+    };
+
+    const onResize = () => {
+      if (window.innerWidth < screen.availWidth * 0.75 || window.innerHeight < screen.availHeight * 0.7) {
+        recordRound2Violation('Split-screen / window resizing violation');
+      }
+    };
+
+    const onClipboard = (event: Event) => {
+      event.preventDefault();
+      recordRound2Violation(
+        event.type === 'paste'
+          ? 'Paste action blocked'
+          : event.type === 'copy'
+          ? 'Copy action blocked'
+          : 'Cut action blocked'
+      );
+    };
+
+    const onContext = (event: Event) => event.preventDefault();
+    const onDrop = (event: DragEvent) => {
+      event.preventDefault();
+      recordRound2Violation('External content drop blocked');
+    };
+    const onDragOver = (event: DragEvent) => event.preventDefault();
+
+    const onKeys = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if ((event.ctrlKey || event.metaKey) && ['c', 'v', 'x', 'insert'].includes(key)) {
+        event.preventDefault();
+        event.stopPropagation();
+        recordRound2Violation(key === 'v' || key === 'insert' ? 'Paste shortcut blocked' : 'Copy/cut shortcut blocked');
+      } else if (key === 'printscreen') {
+        event.preventDefault();
+        recordRound2Violation('Print Screen shortcut detected');
+      } else if (event.altKey && key === 'tab') {
+        recordRound2Violation('Alt-Tab application switch detected');
+      }
+    };
+
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('blur', onBlur);
     document.addEventListener('fullscreenchange', onFullscreen);
+    window.addEventListener('resize', onResize);
     document.addEventListener('copy', onClipboard, true);
     document.addEventListener('cut', onClipboard, true);
     document.addEventListener('paste', onClipboard, true);
@@ -195,10 +274,12 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     document.addEventListener('drop', onDrop, true);
     document.addEventListener('dragover', onDragOver, true);
     window.addEventListener('keydown', onKeys, true);
+
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('blur', onBlur);
       document.removeEventListener('fullscreenchange', onFullscreen);
+      window.removeEventListener('resize', onResize);
       document.removeEventListener('copy', onClipboard, true);
       document.removeEventListener('cut', onClipboard, true);
       document.removeEventListener('paste', onClipboard, true);
@@ -207,27 +288,50 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       document.removeEventListener('dragover', onDragOver, true);
       window.removeEventListener('keydown', onKeys, true);
     };
-  }, [recordRound2Violation, submission.isSubmitted]);
+  }, [recordRound2Violation, submission.isSubmitted, proctorLocked]);
 
-
+  // Periodic polling for proctor status & remote unlock detection
   useEffect(() => {
     if (submission.isSubmitted) return;
     let active = true;
-    void fetch('/api/codespark/proctor-event', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'status', key: candidateKey })
-    }).then(async (response) => {
-      const result = await response.json();
-      if (!active || !response.ok || !result?.success) return;
-      const count = Math.max(0, Number(result.strikeCount) || 0);
-      setProctorStrikes(count);
-      if (result.locked) {
-        setProctorLocked(true);
-        setStrikeNotice({ strike: Math.max(3, count), reason: 'This workstation was previously locked by the examination proctoring system.' });
-      }
-    }).catch(() => {});
-    return () => { active = false; };
-  }, [candidateKey, submission.isSubmitted]);
+
+    const checkProctorStatus = async () => {
+      try {
+        const response = await fetch(`/api/codespark/proctor-status?key=${encodeURIComponent(candidateKey)}`);
+        if (!response.ok) return;
+        const result = await response.json();
+        if (!active || !result?.success) return;
+
+        const count = Math.max(0, Number(result.strikeCount) || 0);
+        setProctorStrikes(count);
+        try {
+          localStorage.setItem(`codedna_r2_strikes_${candidateKey}`, String(count));
+        } catch {}
+
+        if (result.locked) {
+          setProctorLocked(true);
+          try {
+            localStorage.setItem(`codedna_r2_locked_${candidateKey}`, 'true');
+          } catch {}
+        } else if (result.locked === false && proctorLocked) {
+          // Invigilator remotely unlocked the terminal!
+          setProctorLocked(false);
+          setStrikeNotice(null);
+          try {
+            localStorage.removeItem(`codedna_r2_locked_${candidateKey}`);
+          } catch {}
+          playSound('success');
+        }
+      } catch {}
+    };
+
+    checkProctorStatus();
+    const interval = setInterval(checkProctorStatus, 4000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [candidateKey, submission.isSubmitted, proctorLocked]);
 
   // Current Active Question (1-indexed: 1 to 5)
   const [currentQIndex, setCurrentQIndex] = useState<number>(submission.currentQuestion || 1);
@@ -1142,6 +1246,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                 {/* Header: Title, Difficulty, Marks */}
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                    {/* Single Clean Difficulty Badge */}
                     <span
                       style={{
                         fontSize: '11px',
@@ -1149,6 +1254,13 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                         textTransform: 'uppercase',
                         padding: '2px 8px',
                         borderRadius: '4px',
+                        border: `1px solid ${
+                          currentProblem.difficulty === 'Easy'
+                            ? 'rgba(16, 185, 129, 0.4)'
+                            : currentProblem.difficulty === 'Medium'
+                            ? 'rgba(245, 158, 11, 0.4)'
+                            : 'rgba(239, 68, 68, 0.4)'
+                        }`,
                         background:
                           currentProblem.difficulty === 'Easy'
                             ? 'rgba(16, 185, 129, 0.15)'
@@ -1165,6 +1277,21 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                     >
                       {currentProblem.difficulty || 'Medium'}
                     </span>
+                    {/* Dynamic Marks Badge */}
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        color: '#f4f4f5',
+                        background: '#18181b',
+                        border: '1px solid #27272a',
+                        padding: '2px 8px',
+                        borderRadius: '4px'
+                      }}
+                    >
+                      {currentProblem.marks || (currentProblem.difficulty === 'Hard' ? 60 : currentProblem.difficulty === 'Medium' ? 40 : 20)} Marks
+                    </span>
+                    {/* Time Limit Badge */}
                     <span
                       style={{
                         fontSize: '11px',
@@ -1176,12 +1303,11 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                         borderRadius: '4px'
                       }}
                     >
-                      {currentProblem.difficulty || 'Core Challenge'}
+                      {currentProblem.timeLimitMs || 2000} ms
                     </span>
-
                   </div>
                   <h1 style={{ fontSize: isMobileScreen ? '15px' : '18px', fontWeight: 800, margin: 0, color: '#f4f4f5', wordBreak: 'break-word', overflowWrap: 'anywhere', lineHeight: 1.35 }}>
-                    {currentProblem.number}. {currentProblem.title}
+                    {currentProblem.number}. {(currentProblem.title || '').replace(/^\d+\.\s*/, '')}
                   </h1>
                 </div>
 
@@ -2155,50 +2281,151 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
           </div>
         </div>
       )}
-      {strikeNotice && (
-        <div role="alertdialog" aria-modal="true" style={{position:'fixed',inset:0,zIndex:100000,background:'rgba(0,0,0,.88)',display:'grid',placeItems:'center',padding:20}}>
-          <div style={{width:'min(460px,100%)',background:'#18181b',border:'1px solid #ef4444',borderRadius:12,padding:28,color:'#f4f4f5',textAlign:'center'}}>
-            <div style={{fontSize:11,fontWeight:800,letterSpacing:'.14em',color:'#f87171',textTransform:'uppercase'}}>Academic integrity · Strike {strikeNotice.strike}/3</div>
-            <h2 style={{fontSize:24,fontWeight:900,margin:'12px 0'}}>{strikeNotice.strike >= 3 ? 'Examination Locked' : 'Proctor Warning'}</h2>
-            <p style={{fontSize:13,lineHeight:1.6,color:'#d4d4d8'}}>{strikeNotice.reason}</p>
-            {strikeNotice.strike >= 3 ? (
-             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: 16, alignItems: 'center' }}>
-               <p style={{fontSize:12,color:'#fca5a5', margin: 0}}>Your workstation is frozen after three violations. Contact the invigilator. Your saved code is preserved.</p>
-               <button
-                 type="button"
-                 onClick={() => {
-                   try {
-                     saveStoredRound2Submission(submission);
-                   } catch {}
-                   if (typeof onExit === 'function') {
-                     onExit();
-                   } else {
-                     window.location.href = '/code-spark';
-                   }
-                 }}
-                 style={{
-                   padding: '10px 22px',
-                   border: 0,
-                   borderRadius: 6,
-                   background: '#ef4444',
-                   color: '#ffffff',
-                   fontWeight: 800,
-                   fontSize: '13px',
-                   cursor: 'pointer',
-                   display: 'inline-flex',
-                   alignItems: 'center',
-                   gap: '8px'
-                 }}
-               >
-                 <span>Save Code &amp; Exit to Portal</span>
-               </button>
-             </div>
-           ) : (
-             <>
-               <p style={{fontSize:12,color:'#fbbf24'}}>Further violations may freeze your examination.</p>
-               <button type="button" onClick={()=>setStrikeNotice(null)} style={{marginTop:16,padding:'10px 22px',border:0,borderRadius:6,background:'#f4f4f5',color:'#09090b',fontWeight:800,cursor:'pointer'}}>I Understand</button>
-             </>
-           )}
+      {/* 1. Immovable Fullscreen Lockdown Overlay when Proctored/Locked */}
+      {proctorLocked && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 999999,
+            background: 'rgba(9, 9, 11, 0.96)',
+            backdropFilter: 'blur(8px)',
+            display: 'grid',
+            placeItems: 'center',
+            padding: '24px'
+          }}
+        >
+          <div
+            style={{
+              width: 'min(500px, 100%)',
+              background: '#121215',
+              border: '1px solid rgba(239, 68, 68, 0.5)',
+              borderRadius: '12px',
+              padding: '32px 28px',
+              color: '#f4f4f5',
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '16px',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.8)'
+            }}
+          >
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                display: 'grid',
+                placeItems: 'center',
+                color: '#ef4444'
+              }}
+            >
+              <ShieldAlert size={26} />
+            </div>
+
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.14em', color: '#f87171', textTransform: 'uppercase', marginBottom: '6px' }}>
+                Academic Integrity Violation · 3/3 Strikes Reached
+              </div>
+              <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '0 0 8px', color: '#ffffff' }}>
+                Workstation Locked
+              </h2>
+              <p style={{ fontSize: '13px', lineHeight: 1.6, color: '#a1a1aa', margin: 0 }}>
+                This examination terminal has been frozen due to repeated proctoring violations. All code editor inputs and navigation are disabled.
+              </p>
+            </div>
+
+            <div
+              style={{
+                width: '100%',
+                background: '#18181b',
+                border: '1px solid #27272a',
+                borderRadius: '8px',
+                padding: '14px 16px',
+                textAlign: 'left',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+                fontSize: '12px'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#71717a' }}>
+                <span>Candidate:</span>
+                <span style={{ color: '#f4f4f5', fontWeight: 600 }}>{cleanRoll || candidateKey}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#71717a' }}>
+                <span>Lockout Reason:</span>
+                <span style={{ color: '#f87171', fontWeight: 600 }}>{strikeNotice?.reason || 'Proctor strike limit exceeded'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#71717a' }}>
+                <span>Remote Listener:</span>
+                <span style={{ color: '#10b981', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }} />
+                  Listening for Proctor Unlock
+                </span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '12px', color: '#71717a', margin: 0 }}>
+              Please alert the invigilator. Once the proctor unlocks your workstation from the Chief Proctor Console, this screen will dismiss automatically.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Warning Modal for Strikes 1 and 2 */}
+      {strikeNotice && !proctorLocked && strikeNotice.strike < 3 && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 100000,
+            background: 'rgba(0,0,0,0.85)',
+            display: 'grid',
+            placeItems: 'center',
+            padding: 20
+          }}
+        >
+          <div
+            style={{
+              width: 'min(440px, 100%)',
+              background: '#18181b',
+              border: '1px solid #ef4444',
+              borderRadius: 12,
+              padding: 26,
+              color: '#f4f4f5',
+              textAlign: 'center'
+            }}
+          >
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', color: '#f87171', textTransform: 'uppercase' }}>
+              Academic Integrity · Strike {strikeNotice.strike}/3
+            </div>
+            <h2 style={{ fontSize: 20, fontWeight: 800, margin: '12px 0 8px' }}>Proctor Warning</h2>
+            <p style={{ fontSize: 13, lineHeight: 1.6, color: '#d4d4d8', margin: '0 0 14px' }}>{strikeNotice.reason}</p>
+            <p style={{ fontSize: 12, color: '#fbbf24', margin: '0 0 16px' }}>Further violations will freeze your examination workstation.</p>
+            <button
+              type="button"
+              onClick={() => setStrikeNotice(null)}
+              style={{
+                padding: '8px 24px',
+                border: 0,
+                borderRadius: 6,
+                background: '#f4f4f5',
+                color: '#09090b',
+                fontWeight: 700,
+                fontSize: '12.5px',
+                cursor: 'pointer'
+              }}
+            >
+              I Understand
+            </button>
           </div>
         </div>
       )}
