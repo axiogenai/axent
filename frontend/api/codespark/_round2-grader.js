@@ -380,6 +380,7 @@ export async function gradeRound2Code(
     const error = new Error("Too many test cases for evaluation."); error.statusCode = 422; throw error;
   }
   if (allTests.some((test) => !test || typeof test !== "object" ||
+      !Object.prototype.hasOwnProperty.call(test, "input") ||
       !Object.prototype.hasOwnProperty.call(test, "expectedOutput"))) {
     const error = new Error("This question has incomplete hidden test configuration. Ask the exam administrator to fix it before submitting.");
     error.statusCode = 422; throw error;
