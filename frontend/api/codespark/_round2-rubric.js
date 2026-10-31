@@ -35,7 +35,6 @@ export function scoreRound2Rubric({ maxScore, correctnessTests = [], robustnessT
   const hasCorrectness = correctnessTests.length > 0;
   const hasRobustness = robustnessTests.length > 0;
   const hasEfficiency = performanceTests.length > 0;
-
   const correctnessWeight = hasCorrectness
     ? ROUND2_RUBRIC.correctness +
       (!hasRobustness ? ROUND2_RUBRIC.robustness : 0) +
@@ -46,33 +45,18 @@ export function scoreRound2Rubric({ maxScore, correctnessTests = [], robustnessT
   const robustness = hasRobustness
     ? ROUND2_RUBRIC.robustness * weightedPassRate(robustnessTests)
     : 0;
+  // The current Wandbox compile API has no per-program CPU or memory fields.
+  // Efficiency is therefore represented only by passing admin-authored large-input
+  // scalability cases under the compiler sandbox's own limits.
   const efficiency = hasEfficiency
-    ? ROUND2_RUBRIC.efficiency * weightedPassRate(performanceTests, (test) => {
-        const runtime = test.runtimeMs == null ? null : Number(test.runtimeMs);
-        const runtimeLimit = Number(test.maxTimeMs);
-        const runtimeOk = runtime !== null && Number.isFinite(runtime) &&
-          Number.isFinite(runtimeLimit) && runtime <= runtimeLimit;
-        const memoryLimit = test.maxMemoryValue == null ? null : Number(test.maxMemoryValue);
-        const memory = test.memoryValue == null ? null : Number(test.memoryValue);
-        const memoryOk = memoryLimit === null ||
-          (memory !== null && Number.isFinite(memory) && Number.isFinite(memoryLimit) && memory <= memoryLimit);
-        return Boolean(test.passed && runtimeOk && memoryOk);
-      })
+    ? ROUND2_RUBRIC.efficiency * weightedPassRate(performanceTests)
     : 0;
 
   const score = Math.round((max * (correctness + robustness + efficiency) / 100) * 100) / 100;
   const allPassed = hasCorrectness &&
-    correctnessTests.every((test) => Boolean(test.passed)) &&
-    robustnessTests.every((test) => Boolean(test.passed)) &&
-    performanceTests.every((test) => {
-      const runtime = test.runtimeMs == null ? null : Number(test.runtimeMs);
-      const limit = Number(test.maxTimeMs);
-      const memoryLimit = test.maxMemoryValue == null ? null : Number(test.maxMemoryValue);
-      const memory = test.memoryValue == null ? null : Number(test.memoryValue);
-      return Boolean(test.passed && runtime !== null && Number.isFinite(runtime) &&
-        Number.isFinite(limit) && runtime <= limit &&
-        (memoryLimit === null || (memory !== null && Number.isFinite(memory) && memory <= memoryLimit)));
-    });
+    correctnessTests.every((item) => Boolean(item.passed)) &&
+    robustnessTests.every((item) => Boolean(item.passed)) &&
+    performanceTests.every((item) => Boolean(item.passed));
 
   return {
     score,
@@ -81,27 +65,19 @@ export function scoreRound2Rubric({ maxScore, correctnessTests = [], robustnessT
       correctness: {
         weight: correctnessWeight,
         earned: Math.round(correctness * 100) / 100,
-        passed: correctnessTests.filter((test) => Boolean(test.passed)).length,
+        passed: correctnessTests.filter((item) => Boolean(item.passed)).length,
         total: correctnessTests.length
       },
       efficiency: {
         weight: hasEfficiency ? ROUND2_RUBRIC.efficiency : 0,
         earned: Math.round(efficiency * 100) / 100,
-        passed: performanceTests.filter((test) => {
-          const runtime = test.runtimeMs == null ? null : Number(test.runtimeMs);
-          const limit = Number(test.maxTimeMs);
-          const memoryLimit = test.maxMemoryValue == null ? null : Number(test.maxMemoryValue);
-          const memory = test.memoryValue == null ? null : Number(test.memoryValue);
-          return Boolean(test.passed && runtime !== null && Number.isFinite(runtime) &&
-            Number.isFinite(limit) && runtime <= limit &&
-            (memoryLimit === null || (memory !== null && Number.isFinite(memory) && memory <= memoryLimit)));
-        }).length,
+        passed: performanceTests.filter((item) => Boolean(item.passed)).length,
         total: performanceTests.length
       },
       robustness: {
         weight: hasRobustness ? ROUND2_RUBRIC.robustness : 0,
         earned: Math.round(robustness * 100) / 100,
-        passed: robustnessTests.filter((test) => Boolean(test.passed)).length,
+        passed: robustnessTests.filter((item) => Boolean(item.passed)).length,
         total: robustnessTests.length
       }
     },
