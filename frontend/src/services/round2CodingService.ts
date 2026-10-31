@@ -1276,6 +1276,39 @@ function computeDynamicScore(
 const normalizeProgramOutput = (value: unknown): string =>
   String(value ?? '').replace(/\r\n/g, '\n').trim();
 
+function toCompilerExecutionResult(value: any): CompilerExecutionResult {
+  return {
+    stdout: String(value?.stdout || ""),
+    stderr: value?.stderr ? String(value.stderr) : null,
+    compileOutput: value?.compileOutput ? String(value.compileOutput) : null,
+    exitCode: Number.isFinite(Number(value?.exitCode)) ? Number(value.exitCode) : (value?.isError ? 1 : 0),
+    time: String(value?.time || "0.00s"),
+    memory: Number(value?.memory) || 0,
+    statusDescription: String(value?.statusDescription || (value?.isError ? "Execution Error" : "Accepted")),
+    isError: Boolean(value?.isError),
+    engineUsed: String(value?.engineUsed || "Wandbox")
+  };
+}
+
+export async function runRound2Code(
+  candidateKey: string,
+  problemId: string,
+  code: string,
+  language: 'C' | 'C++' | 'Python' | 'Java',
+  stdin: string
+): Promise<CompilerExecutionResult> {
+  const response = await fetch('/api/codespark/grade-round2', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'run', key: candidateKey, problemId, code, language, stdin })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.success || !payload?.result) {
+    throw new Error(payload?.error || ("Compiler request failed (" + response.status + ")."));
+  }
+  return toCompilerExecutionResult(payload.result);
+}
+
 export async function evaluateRound2Code(
   problem: Round2Problem,
   code: string,
@@ -1285,112 +1318,133 @@ export async function evaluateRound2Code(
   candidateKey?: string
 ): Promise<Round2QuestionReport> {
   const language = explicitLanguage || detectLanguageFromCode(code);
+  const complexity = analyzeCodeComplexity(code, language, '');
+  const maxMarks = Number(problem.marks) || 20;
+  const compiledAt = Date.now();
+
+  // Candidate execution and grading are server-authoritative. Never award marks
+  // from a browser fallback or a locally fabricated "offline compile" result.
+  if (candidateKey) {
+    const response = await fetch('/api/codespark/grade-round2', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'evaluate',
+        key: candidateKey,
+        problemId: problem.id,
+        code,
+        language,
+        stdin: customStdin ?? ''
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload?.success) {
+      throw new Error(payload?.error || ("Evaluation failed (" + response.status + ")."));
+    }
+
+    const runResult = payload.runResult ? toCompilerExecutionResult(payload.runResult) : null;
+    const parsedSeconds = runResult ? parseFloat(runResult.time.replace(/[^\d.]/g, '')) : NaN;
+    const runtimeMs = Number.isFinite(parsedSeconds) && parsedSeconds > 0 ? parsedSeconds * 1000 : undefined;
+
+    return {
+      questionNumber: problem.number,
+      questionId: problem.id,
+      questionTitle: problem.title,
+      code,
+      language,
+      compilerResult: runResult,
+      sampleResults: Array.isArray(payload.sampleResults) ? payload.sampleResults : [],
+      hiddenResults: Array.isArray(payload.hiddenResults) ? payload.hiddenResults : [],
+      passedTests: Number(payload.passedTests) || 0,
+      totalTests: Number(payload.totalTests) || 0,
+      score: Number.isFinite(Number(payload.score)) ? Number(payload.score) : 0,
+      maxScore: Number(payload.maxScore) || maxMarks,
+      status: payload.status || 'PENDING',
+      compiledAt,
+      executionTime: runtimeMs !== undefined ? runtimeMs.toFixed(1) + ' ms' : undefined,
+      executionTimeMs: runtimeMs,
+      timeComplexity: complexity.timeComplexity,
+      spaceComplexity: complexity.spaceComplexity,
+      complexityExplanation: complexity.explanation,
+      efficiencyRating: complexity.rating
+    };
+  }
+
+  // Local preview path is retained for non-exam development only.
   const tests = [
     ...(Array.isArray(problem.sampleTestCases) ? problem.sampleTestCases : []),
     ...(Array.isArray(problem.hiddenTestCases) ? problem.hiddenTestCases.map((test) => ({ ...test, isHidden: true })) : [])
   ];
-  const complexity = analyzeCodeComplexity(code, language, '');
-  const sampleResults: Round2QuestionReport['sampleResults'] = [];
-  const hiddenResults: Round2QuestionReport['hiddenResults'] = [];
-  let primaryCompilerResult: CompilerExecutionResult | null = null;
+  let compilerResult: CompilerExecutionResult | null = null;
   let passedTests = 0;
   let compileFailure = false;
   let runtimeFailure = false;
 
-  const runCase = async (input: string): Promise<CompilerExecutionResult | null> => {
-    try {
-      return await runRealCode(code, language, input || '');
-    } catch {
-      return null;
-    }
-  };
+  if (customStdin !== undefined) compilerResult = await runRealCode(code, language, customStdin);
+  const executedCases = await Promise.all(tests.map(async (test) => ({
+    test,
+    result: await runRealCode(code, language, test.input || '').catch(() => null)
+  })));
 
-  // Run custom input if provided or execute fallback when problem has no test cases
-  if (customStdin !== undefined && customStdin !== null && customStdin.trim() !== '') {
-    primaryCompilerResult = await runCase(customStdin);
+  if (!compilerResult && executedCases.length) compilerResult = executedCases[0].result;
+  if (!tests.length && !compilerResult) compilerResult = await runRealCode(code, language, '');
+
+  const sampleResults: Round2QuestionReport['sampleResults'] = [];
+  const hiddenResults: Round2QuestionReport['hiddenResults'] = [];
+  for (const { test, result } of executedCases) {
+    const failed = !result || result.isError;
+    if (result?.compileOutput) compileFailure = true;
+    else if (failed) runtimeFailure = true;
+    const passed = Boolean(result && !result.isError &&
+      normalizeProgramOutput(result.stdout) === normalizeProgramOutput(test.expectedOutput));
+    if (passed) passedTests++;
+    if (test.isHidden) hiddenResults.push({ testCaseId: test.id, passed });
+    else sampleResults.push({
+      testCaseId: test.id,
+      input: test.input || '',
+      expected: test.expectedOutput || '',
+      actual: result?.stdout || '',
+      passed,
+      error: result?.compileOutput || result?.stderr || undefined
+    });
   }
 
-  // Concurrent evaluation of test cases for flagship sub-second speed
-  const executedCases = await Promise.all(
-    tests.map(async (test) => {
-      const result = await runCase(test.input || '');
-      return { test, result };
-    })
-  );
-
-  // If no predefined test cases exist in problem, run with default/custom input once
-  if (tests.length === 0) {
-    if (!primaryCompilerResult) {
-      primaryCompilerResult = await runCase(customStdin || '');
-    }
-    const compileError = Boolean(primaryCompilerResult?.compileOutput);
-    const runtimeError = !primaryCompilerResult || Boolean(primaryCompilerResult.isError);
-    if (compileError) compileFailure = true;
-    else if (runtimeError) runtimeFailure = true;
-    const passed = !compileError && !runtimeError;
-    if (passed) passedTests++;
+  if (!tests.length) {
+    const passed = Boolean(compilerResult && !compilerResult.isError);
+    if (compilerResult?.compileOutput) compileFailure = true;
+    else if (!passed) runtimeFailure = true;
+    if (passed) passedTests = 1;
     sampleResults.push({
       testCaseId: 'exec_default',
       input: customStdin || '(Standard input)',
       expected: '(Compiled and executed cleanly)',
-      actual: primaryCompilerResult?.stdout || (compileError ? primaryCompilerResult?.compileOutput || '' : primaryCompilerResult?.stderr || ''),
+      actual: compilerResult?.stdout || '',
       passed,
-      error: primaryCompilerResult?.compileOutput || primaryCompilerResult?.stderr || undefined
+      error: compilerResult?.compileOutput || compilerResult?.stderr || undefined
     });
   }
 
-  for (const { test, result } of executedCases) {
-    if (!primaryCompilerResult) primaryCompilerResult = result;
-    const compileError = Boolean(result?.compileOutput);
-    const runtimeError = !result || Boolean(result.isError);
-    if (compileError) compileFailure = true;
-    else if (runtimeError) runtimeFailure = true;
-    const passed = Boolean(
-      result &&
-      !compileError &&
-      !runtimeError &&
-      normalizeProgramOutput(result.stdout) === normalizeProgramOutput(test.expectedOutput)
-    );
-    if (passed) passedTests++;
-    if (test.isHidden) {
-      hiddenResults.push({ testCaseId: test.id, passed });
-    } else {
-      sampleResults.push({
-        testCaseId: test.id,
-        input: test.input || '',
-        expected: test.expectedOutput || '',
-        actual: result?.stdout || '',
-        passed,
-        error: result?.compileOutput || result?.stderr || undefined
-      });
-    }
-  }
-
   const totalTests = tests.length || 1;
-  const allTestsPassed = totalTests > 0 && passedTests === totalTests;
-  const passRatio = totalTests > 0 ? passedTests / totalTests : 0;
-  const maxMarks = problem.marks || 20;
+  const allTestsPassed = passedTests === totalTests;
   const score = computeDynamicScore(
-    maxMarks, passRatio, allTestsPassed,
+    maxMarks, passedTests / totalTests, allTestsPassed,
     complexity.timeComplexity, complexity.spaceComplexity, timeTakenMs || 0
   );
+  const status: Round2QuestionReport['status'] = compileFailure
+    ? 'COMPILE_ERROR'
+    : runtimeFailure && passedTests === 0
+      ? 'RUNTIME_ERROR'
+      : allTestsPassed ? 'ACCEPTED' : 'PARTIAL';
+  const parsedSeconds = compilerResult ? parseFloat(compilerResult.time.replace(/[^\d.]/g, '')) : NaN;
+  const runtimeMs = Number.isFinite(parsedSeconds) && parsedSeconds > 0 ? parsedSeconds * 1000 : undefined;
 
-  let status: Round2QuestionReport['status'] = 'PARTIAL';
-  if (compileFailure) status = 'COMPILE_ERROR';
-  else if (runtimeFailure && passedTests === 0) status = 'RUNTIME_ERROR';
-  else if (allTestsPassed) status = 'ACCEPTED';
-
-  const rawTimeStr = primaryCompilerResult?.time || '';
-  const parsedTimeSec = parseFloat(rawTimeStr.replace(/[^\d.]/g, ''));
-  const runtimeMs = !Number.isNaN(parsedTimeSec) && parsedTimeSec > 0 ? parsedTimeSec * 1000 : undefined;
-
-  const report: Round2QuestionReport = {
+  return {
     questionNumber: problem.number,
     questionId: problem.id,
     questionTitle: problem.title,
     code,
     language,
-    compilerResult: primaryCompilerResult,
+    compilerResult,
     sampleResults,
     hiddenResults,
     passedTests,
@@ -1398,37 +1452,14 @@ export async function evaluateRound2Code(
     score,
     maxScore: maxMarks,
     status,
-    compiledAt: Date.now(),
-    executionTime: runtimeMs !== undefined ? `${runtimeMs.toFixed(1)} ms` : (primaryCompilerResult ? '< 1 ms' : undefined),
+    compiledAt,
+    executionTime: runtimeMs !== undefined ? runtimeMs.toFixed(1) + ' ms' : undefined,
     executionTimeMs: runtimeMs,
     timeComplexity: complexity.timeComplexity,
     spaceComplexity: complexity.spaceComplexity,
     complexityExplanation: complexity.explanation,
     efficiencyRating: complexity.rating
   };
-
-  if (candidateKey) {
-    try {
-      const response = await fetch('/api/codespark/grade-round2', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: candidateKey, problemId: problem.id, code, language, stdin: customStdin || '' })
-      });
-      const result = await response.json();
-      if (response.ok && result.success) {
-        report.sampleResults = result.sampleResults || report.sampleResults;
-        report.hiddenResults = result.hiddenResults || report.hiddenResults;
-        report.passedTests = Number(result.passedTests) || report.passedTests;
-        report.totalTests = Number(result.totalTests) || report.totalTests;
-        report.score = Number(result.score) || report.score;
-        report.maxScore = Number(result.maxScore) || maxMarks;
-        report.status = result.status || report.status;
-      }
-    } catch (e) {
-      console.warn('Authoritative server grading warning:', e);
-    }
-  }
-  return report;
 }
 
 export function getStoredRound2Submission(candidateKey: string): Round2CandidateSubmission | null {

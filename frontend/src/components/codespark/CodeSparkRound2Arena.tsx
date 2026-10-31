@@ -31,6 +31,7 @@ import {
   Round2CandidateSubmission,
   detectLanguageFromCode,
   evaluateRound2Code,
+  runRound2Code,
   fetchRound2ProblemsFromCloud,
   fetchRound2SubmissionFromCloud,
   getAllRound2Problems,
@@ -43,7 +44,7 @@ import {
 } from '../../services/round2CodingService';
 import { playSound } from '../../utils/sounds';
 import { requestExamFullscreen, isCurrentlyFullscreen, exitExamFullscreen } from '../../services/timeSyncService';
-import { ThemeMode } from '../../types/dna';
+import { CompilerExecutionResult, ThemeMode } from '../../types/dna';
 import { SimpleSelect } from '../watermelon/Select';
 interface CodeSparkRound2ArenaProps {
   candidateProfile: {
@@ -409,23 +410,16 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
   const [compileError, setCompileError] = useState<string | null>(null);
   const [customInputText, setCustomInputText] = useState('');
   const [lastEnteredStdin, setLastEnteredStdin] = useState('');
+  const [terminalInputLines, setTerminalInputLines] = useState<string[]>([]);
+  const [terminalRunResult, setTerminalRunResult] = useState<CompilerExecutionResult | null>(null);
+  const [isTerminalRunning, setIsTerminalRunning] = useState(false);
   const terminalInputRef = useRef<HTMLInputElement>(null);
   const [activeReport, setActiveReport] = useState<Round2QuestionReport | null>(() => {
     return submission.questionReports[currentQIndex] || null;
   });
 
-  const formatConsoleOutput = (rawStdout: string, enteredInput: string) => {
-    if (!rawStdout) return '';
-    const clean = rawStdout.replace(/\r\n/g, '\n');
-    if (enteredInput) {
-      const colonIdx = clean.indexOf(': ');
-      if (colonIdx !== -1 && !clean.slice(0, colonIdx).includes('\n')) {
-        const prompt = clean.slice(0, colonIdx + 2);
-        const rest = clean.slice(colonIdx + 2).trim();
-        return `${prompt}${enteredInput}\n${rest}`;
-      }
-    }
-    return clean;
+  const formatConsoleOutput = (rawStdout: string, _enteredInput: string) => {
+    return String(rawStdout || '').replace(/\r\n/g, '\n');
   };
 
   // Mobile Responsiveness & Viewport Navigation Tabs
@@ -492,6 +486,10 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
   useEffect(() => {
     setActiveReport(submission.questionReports[currentQIndex] || null);
     setCompileError(null);
+    setCustomInputText('');
+    setTerminalInputLines([]);
+    setTerminalRunResult(null);
+    setLastEnteredStdin('');
   }, [currentQIndex, submission.questionReports]);
   // Sync submission to backend when changes occur
   const updateSubmissionState = useCallback(
@@ -559,13 +557,90 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       void pushRound2LiveCodeToCloud(candidateProfile, code, effectiveLang, currentQIndex);
     }, 1000);
   };
-  // --- 3. Compile & Test Execution |
-  const handleCompileAndRun = async (overrideStdin?: string | React.MouseEvent) => {
-    if (!currentProblem || !currentProblem.id) return;
-    const stdinToUse = typeof overrideStdin === 'string' ? overrideStdin : customInputText;
-    if (stdinToUse.trim()) {
-      setLastEnteredStdin(stdinToUse.trim());
+  // Terminal input is accumulated and replayed as standard input on each execution.
+  // The Vercel runner is request-based, so this provides multi-line stdin without
+  // pretending that a serverless request is a persistent PTY process.
+  const handleTerminalInput = async () => {
+    if (!currentProblem?.id || isTerminalRunning || isCompiling || proctorLocked || submission.isSubmitted) return;
+    const nextLines = [...terminalInputLines, customInputText];
+    const stdin = nextLines.join('\n') + '\n';
+    setTerminalInputLines(nextLines);
+    setLastEnteredStdin(stdin);
+    setCustomInputText('');
+    setIsTerminalRunning(true);
+    setCompileError(null);
+    try {
+      const result = await runRound2Code(
+        candidateProfile.round2Key || candidateProfile.accessKey || candidateKey,
+        currentProblem.id,
+        activeCode,
+        effectiveLang,
+        stdin
+      );
+      setTerminalRunResult(result);
+      setActiveReport((previous) => previous ? {
+        ...previous,
+        compilerResult: result
+      } : {
+        questionNumber: currentProblem.number,
+        questionId: currentProblem.id,
+        questionTitle: currentProblem.title,
+        code: activeCode,
+        language: effectiveLang,
+        compilerResult: result,
+        sampleResults: [],
+        hiddenResults: [],
+        passedTests: 0,
+        totalTests: 0,
+        score: 0,
+        maxScore: currentProblem.marks || 20,
+        status: result.compileOutput ? 'COMPILE_ERROR' : result.isError ? 'RUNTIME_ERROR' : 'PENDING',
+        compiledAt: Date.now()
+      });
+      setCompileError(null);
+      if (isMobileScreen) setMobileTab('console');
+    } catch (error: any) {
+      const failure: CompilerExecutionResult = {
+        stdout: '',
+        stderr: error?.message || 'Terminal execution failed. Please retry.',
+        compileOutput: null,
+        exitCode: 1,
+        time: '0.00s',
+        memory: 0,
+        statusDescription: 'Runner Error',
+        isError: true,
+        engineUsed: 'Axent Round 2 Runner'
+      };
+      setTerminalRunResult(failure);
+      setActiveReport((previous) => previous ? { ...previous, compilerResult: failure } : {
+        questionNumber: currentProblem.number,
+        questionId: currentProblem.id,
+        questionTitle: currentProblem.title,
+        code: activeCode,
+        language: effectiveLang,
+        compilerResult: failure,
+        sampleResults: [],
+        hiddenResults: [],
+        passedTests: 0,
+        totalTests: 0,
+        score: 0,
+        maxScore: currentProblem.marks || 20,
+        status: 'RUNTIME_ERROR',
+        compiledAt: Date.now()
+      });
+      setCompileError(null);
+      if (isMobileScreen) setMobileTab('console');
+    } finally {
+      setIsTerminalRunning(false);
     }
+  };
+
+  // --- 3. Compile & Test Execution |
+  const handleCompileAndRun = async () => {
+    if (!currentProblem || !currentProblem.id || isCompiling || proctorLocked) return;
+    setTerminalInputLines([]);
+    setTerminalRunResult(null);
+    setLastEnteredStdin('');
     setCustomInputText('');
     setIsCompiling(true);
     setCompileError(null);
@@ -579,48 +654,42 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
         activeCode,
         effectiveLang,
         timeTakenMs,
-        stdinToUse.trim() ? stdinToUse.trim() : undefined,
+        undefined,
         candidateProfile.round2Key || candidateProfile.accessKey
       );
-      // Track question start and compiled timestamps
       report.startedAt = qStart;
       report.startedAtFormatted = new Date(qStart).toLocaleTimeString();
       report.timeTakenSeconds = Math.max(1, Math.round((report.compiledAt - qStart) / 1000));
       setActiveReport(report);
-      if (isMobileScreen) {
-        setMobileTab('console');
-      }
+      if (isMobileScreen) setMobileTab('console');
+
       const updatedTimestamps = {
         ...qTimestamps,
         [currentQIndex]: {
           startedAt: qStart,
           startedAtFormatted: new Date(qStart).toLocaleTimeString(),
           compiledAt: report.compiledAt,
-          compiledAtFormatted: report.compiledAtFormatted
+          compiledAtFormatted: new Date(report.compiledAt).toLocaleTimeString()
         }
       };
-      // Recalculate candidate total score
       const updatedReports = {
         ...submission.questionReports,
         [currentQIndex]: report
       };
       let totalScore = 0;
       let totalMax = 0;
-      const langCounts: Record<string, number> = { Python: 0, 'C++': 0, C: 0 };
+      const langCounts: Record<string, number> = { Python: 0, 'C++': 0, C: 0, Java: 0 };
       Object.values(updatedReports).forEach((rep) => {
         totalScore += rep.score || 0;
         totalMax += rep.maxScore || 20;
-        if (rep.language) {
-          langCounts[rep.language] = (langCounts[rep.language] || 0) + 1;
-        }
+        if (rep.language) langCounts[rep.language] = (langCounts[rep.language] || 0) + 1;
       });
-      // Find dominant language
       let dominant = 'Python';
       let maxCnt = -1;
-      Object.entries(langCounts).forEach(([l, cnt]) => {
-        if (cnt > maxCnt) {
-          maxCnt = cnt;
-          dominant = l;
+      Object.entries(langCounts).forEach(([language, count]) => {
+        if (count > maxCnt) {
+          maxCnt = count;
+          dominant = language;
         }
       });
       const updatedSub: Round2CandidateSubmission = {
@@ -629,23 +698,46 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
         questionTimestamps: updatedTimestamps,
         currentQuestion: currentQIndex,
         totalScore,
-        maxScore: totalMax > 0 ? totalMax : problems.reduce((s, p) => s + (p.marks || 20), 0) || 100,
+        maxScore: totalMax > 0 ? totalMax : (problems.reduce((sum, problem) => sum + (problem.marks || 20), 0) || 100),
         dominantLanguage: dominant
       };
       updateSubmissionState(updatedSub);
       void saveRound2ProgressToCloud(updatedSub);
       void pushRound2LiveCodeToCloud(candidateProfile, activeCode, effectiveLang, currentQIndex);
-      if (report.status === 'ACCEPTED') {
-        playSound('success');
-      } else {
-        playSound('warning');
-      }
-    } catch (err: any) {
-      console.error('Compilation error:', err);
-      setCompileError(err?.message || 'Compiler execution failed. Please verify syntax and retry.');
-      if (isMobileScreen) {
-        setMobileTab('console');
-      }
+      if (report.status === 'ACCEPTED') playSound('success');
+      else playSound('warning');
+    } catch (error: any) {
+      console.error('Compilation error:', error);
+      const failure: CompilerExecutionResult = {
+        stdout: '',
+        stderr: error?.message || 'Compiler execution failed. Please retry.',
+        compileOutput: null,
+        exitCode: 1,
+        time: '0.00s',
+        memory: 0,
+        statusDescription: 'Compiler Error',
+        isError: true,
+        engineUsed: 'Axent Round 2 Runner'
+      };
+      setTerminalRunResult(failure);
+      setActiveReport({
+        questionNumber: currentProblem.number,
+        questionId: currentProblem.id,
+        questionTitle: currentProblem.title,
+        code: activeCode,
+        language: effectiveLang,
+        compilerResult: failure,
+        sampleResults: [],
+        hiddenResults: [],
+        passedTests: 0,
+        totalTests: 0,
+        score: 0,
+        maxScore: currentProblem.marks || 20,
+        status: 'RUNTIME_ERROR',
+        compiledAt: Date.now()
+      });
+      setCompileError(null);
+      if (isMobileScreen) setMobileTab('console');
       playSound('error');
     } finally {
       setIsCompiling(false);
@@ -1147,7 +1239,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                     width: '6px',
                     height: '6px',
                     borderRadius: '50%',
-                    background: activeReport.status === 'ACCEPTED' ? '#10b981' : '#f59e0b'
+                    background: activeReport?.status === 'ACCEPTED' ? '#10b981' : '#f59e0b'
                   }}
                 />
               )}
@@ -1639,7 +1731,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                   }}
                 >
                   <Terminal size={12} color="#10b981" />
-                  <span>View Console {activeReport ? `(${activeReport.status})` : ''} &rarr;</span>
+                  <span>View Console {activeReport ? `(${activeReport?.status})` : ''} &rarr;</span>
                 </button>
               </div>
             )}
@@ -1747,6 +1839,8 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                           setCompileError(null);
                           setCustomInputText('');
                           setLastEnteredStdin('');
+                          setTerminalInputLines([]);
+                          setTerminalRunResult(null);
                         }}
                         style={{
                           background: 'transparent',
@@ -1784,22 +1878,28 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                     <pre style={{ margin: 0, color: '#ef4444', fontFamily: 'inherit', fontSize: '12.5px', whiteSpace: 'pre-wrap' }}>
                       {compileError}
                     </pre>
-                  ) : activeReport ? (
+                  ) : (terminalRunResult || activeReport) ? (
                     <div>
+                      {/* Submitted stdin lines appear in the terminal transcript. */}
+                      {terminalInputLines.length > 0 && (
+                        <pre style={{ margin: '0 0 8px', color: '#a1a1aa', fontFamily: 'inherit', fontSize: '12px', whiteSpace: 'pre-wrap' }}>
+                          {terminalInputLines.map((line) => '❯ ' + line).join('\n')}
+                        </pre>
+                      )}
                       {/* Program Output stream */}
-                      {(activeReport.compilerResult?.stdout || activeReport.sampleResults?.[0]?.actual) && (
+                      {(terminalRunResult?.stdout || activeReport?.compilerResult?.stdout || activeReport?.sampleResults?.[0]?.actual) && (
                         <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: '13px', color: '#f4f4f5', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
                           {formatConsoleOutput(
-                            activeReport.compilerResult?.stdout || activeReport.sampleResults?.[0]?.actual || '',
+                            terminalRunResult?.stdout || activeReport?.compilerResult?.stdout || activeReport?.sampleResults?.[0]?.actual || '',
                             lastEnteredStdin
                           )}
                         </pre>
                       )}
 
                       {/* Compilation / Runtime Errors */}
-                      {(activeReport.compilerResult?.compileOutput || activeReport.compilerResult?.stderr) && (
+                      {(terminalRunResult?.compileOutput || terminalRunResult?.stderr || activeReport?.compilerResult?.compileOutput || activeReport?.compilerResult?.stderr) && (
                         <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: '12.5px', color: '#f87171', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                          {activeReport.compilerResult.compileOutput || activeReport.compilerResult.stderr}
+                          {terminalRunResult?.compileOutput || terminalRunResult?.stderr || activeReport?.compilerResult?.compileOutput || activeReport?.compilerResult?.stderr}
                         </pre>
                       )}
 
@@ -1820,13 +1920,13 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                         <input
                           ref={terminalInputRef}
                           type="text"
-                          placeholder="Type stdin input (for scanf / cin / input()) and press Enter..."
+                          placeholder="Enter input for scanf / cin / input() · press Enter for next line..."
                           value={customInputText}
                           onChange={(e) => setCustomInputText(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault();
-                              handleCompileAndRun(customInputText);
+                              handleTerminalInput();
                             }
                           }}
                           style={{
@@ -1844,8 +1944,8 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                         />
                         <button
                           type="button"
-                          onClick={() => handleCompileAndRun(customInputText)}
-                          disabled={isCompiling}
+                          onClick={handleTerminalInput}
+                          disabled={isTerminalRunning || isCompiling}
                           style={{
                             padding: '3px 10px',
                             borderRadius: '4px',
@@ -1860,7 +1960,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                             gap: '4px'
                           }}
                         >
-                          Send Input ↵
+                          Enter ↵
                         </button>
                       </div>
                     </div>
@@ -1891,7 +1991,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault();
-                              handleCompileAndRun(customInputText);
+                              handleTerminalInput();
                             }
                           }}
                           style={{
@@ -1909,7 +2009,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                         />
                         <button
                           type="button"
-                          onClick={() => handleCompileAndRun(customInputText)}
+                          onClick={handleTerminalInput}
                           disabled={isCompiling}
                           style={{
                             padding: '3px 10px',
@@ -2089,15 +2189,15 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                   <div
                     style={{
                       background:
-                        activeReport.status === 'ACCEPTED'
+                        activeReport?.status === 'ACCEPTED'
                           ? 'rgba(16, 185, 129, 0.12)'
-                          : activeReport.status === 'PARTIAL'
+                          : activeReport?.status === 'PARTIAL'
                           ? 'rgba(245, 158, 11, 0.12)'
                           : 'rgba(239, 68, 68, 0.12)',
                       border:
-                        activeReport.status === 'ACCEPTED'
+                        activeReport?.status === 'ACCEPTED'
                           ? '1px solid rgba(16, 185, 129, 0.4)'
-                          : activeReport.status === 'PARTIAL'
+                          : activeReport?.status === 'PARTIAL'
                           ? '1px solid rgba(245, 158, 11, 0.4)'
                           : '1px solid rgba(239, 68, 68, 0.4)',
                       borderRadius: '6px',
@@ -2108,15 +2208,15 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: '13px', fontWeight: 800, color: activeReport.status === 'ACCEPTED' ? '#10b981' : activeReport.status === 'PARTIAL' ? '#f59e0b' : '#ef4444' }}>
-                        {activeReport.status}
+                      <div style={{ fontSize: '13px', fontWeight: 800, color: activeReport?.status === 'ACCEPTED' ? '#10b981' : activeReport?.status === 'PARTIAL' ? '#f59e0b' : '#ef4444' }}>
+                        {activeReport?.status}
                       </div>
                       <div style={{ fontSize: '11px', color: '#a1a1aa' }}>
-                        Passed {activeReport.passedTests} of {activeReport.totalTests} test cases
+                        Passed {activeReport?.passedTests} of {activeReport?.totalTests} test cases
                       </div>
                     </div>
                     <div style={{ fontSize: '12px', fontWeight: 700, color: '#10b981' }}>
-                      {activeReport.status === 'ACCEPTED' ? 'Verified Solution' : 'Evaluated'}
+                      {activeReport?.status === 'ACCEPTED' ? 'Verified Solution' : 'Evaluated'}
                     </div>
                   </div>
 
@@ -2125,9 +2225,14 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                     <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', marginBottom: '6px' }}>
                       Program Console
                     </div>
-                    {activeReport.compilerResult?.stdout && (
+                    {terminalInputLines.length > 0 && (
+                      <pre style={{ margin: '0 0 6px', color: '#a1a1aa', fontFamily: 'inherit', fontSize: '11px', whiteSpace: 'pre-wrap' }}>
+                        {terminalInputLines.map((line) => '❯ ' + line).join('\n')}
+                      </pre>
+                    )}
+                    {(terminalRunResult?.stdout || activeReport?.compilerResult?.stdout) && (
                       <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: '11.5px', color: '#f4f4f5', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                        {activeReport.compilerResult.stdout}
+                        {terminalRunResult?.stdout || activeReport?.compilerResult?.stdout}
                       </pre>
                     )}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
@@ -2139,10 +2244,10 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
-                            handleCompileAndRun();
+                            handleTerminalInput();
                           }
                         }}
-                        placeholder="Type input & press Enter or Run..."
+                        placeholder="Enter input line and press Enter..."
                         style={{
                           flex: 1,
                           background: 'transparent',
@@ -2158,13 +2263,13 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                   </div>
 
                   {/* Stderr Diagnostics */}
-                  {(activeReport.compilerResult?.compileOutput || activeReport.compilerResult?.stderr) && (
+                  {(terminalRunResult?.compileOutput || terminalRunResult?.stderr || activeReport?.compilerResult?.compileOutput || activeReport?.compilerResult?.stderr) && (
                     <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', padding: '10px 12px' }}>
                       <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#ef4444', textTransform: 'uppercase', marginBottom: '4px' }}>
                         Diagnostics &amp; Errors
                       </div>
                       <pre style={{ margin: 0, fontFamily: 'monospace', fontSize: '11.5px', color: '#fca5a5', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                        {activeReport.compilerResult.compileOutput || activeReport.compilerResult.stderr}
+                        {terminalRunResult?.compileOutput || terminalRunResult?.stderr || activeReport?.compilerResult?.compileOutput || activeReport?.compilerResult?.stderr}
                       </pre>
                     </div>
                   )}
@@ -2174,7 +2279,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                     <div style={{ fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase' }}>
                       Individual Test Verifications
                     </div>
-                    {activeReport.sampleResults?.map((res, i) => (
+                    {activeReport?.sampleResults?.map((res, i) => (
                       <div
                         key={i}
                         style={{

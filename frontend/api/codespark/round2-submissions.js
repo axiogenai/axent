@@ -86,7 +86,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, error: "Invalid live-code update." });
     }
     try {
-      const { candidate, problems } = await getRound2AssignedProblems(rawKey, true);
+      const { candidate, problems } = await getRound2AssignedProblems(rawKey, false);
       const candidateHash = createHash("sha256").update(normalizeRound2Key(key)).digest("hex");
       const finalized = await supabaseRest(`codespark_round2_finalizations?candidate_hash=eq.${candidateHash}&select=candidate_hash`);
       if (finalized?.length) {
@@ -155,7 +155,7 @@ export default async function handler(req, res) {
 
   try {
     const isSubmitted = submission.isSubmitted === true;
-    const { candidate, problems } = await getRound2AssignedProblems(rawKey, true);
+    const { candidate, problems } = await getRound2AssignedProblems(rawKey, false);
     const reports = submission.questionReports && typeof submission.questionReports === "object" ? submission.questionReports : {};
     const reportEntries = Object.values(reports).slice(0, 5);
     const safeReports = {};
