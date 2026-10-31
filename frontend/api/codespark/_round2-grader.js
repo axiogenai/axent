@@ -140,10 +140,11 @@ function assignedProblems(pool, key) {
 async function execute(code, language, stdin, deadlineAt = Date.now() + 15000) {
   const compiler = await getWandboxCompiler(language);
   const processedCode = language === "Java" ? code.replace(/\bpublic\s+class\b/g, "class ") : code;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
   const compilerRequestStartedAt = Date.now();
   await acquireWandboxSlot(deadlineAt);
+  const controller = new AbortController();
+  const requestTimeoutMs = Math.min(15000, Math.max(1, deadlineAt - Date.now()));
+  const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
   try {
     const response = await fetch("https://wandbox.org/api/compile.json", {
       method: "POST",
