@@ -155,11 +155,32 @@ export default async function handler(req, res) {
     try {
       const candidateHash = createHash("sha256").update(key).digest("hex");
       const rows = await supabaseRest(`codespark_round2_finalizations?candidate_hash=eq.${candidateHash}&select=result`);
-      if (!rows?.[0]?.result) return res.status(404).json({ success: false, error: "No finalized submission was found." });
-      return res.status(200).json({
-        success: true,
-        submission: { ...candidateSafeSubmission(rows[0].result), candidateKey: String(body.key || "") }
-      });
+      if (rows?.[0]?.result) {
+        return res.status(200).json({
+          success: true,
+          submission: { ...candidateSafeSubmission(rows[0].result), candidateKey: String(body.key || "") }
+        });
+      }
+
+      // If grading previously failed, restore the retryable code snapshot rather than
+      // forcing the candidate to re-enter work after a browser refresh.
+      const { candidate } = await getRound2AssignedProblems(key, false);
+      const roll = String(candidate.rollNumber || candidate.email || candidate.name || "candidate").trim();
+      const progressId = `r2_sub_${cleanId(roll)}`;
+      const progressRows = await supabaseRest(`candidate_stations?id=eq.${progressId}&select=code`);
+      let progress = null;
+      try {
+        const stored = progressRows?.[0]?.code;
+        progress = typeof stored === "string" ? JSON.parse(stored) : stored;
+      } catch {}
+      if (progress && progress.isSubmitted !== true && progress.questionReports) {
+        return res.status(200).json({
+          success: true,
+          isProgress: true,
+          submission: { ...candidateSafeSubmission(progress), candidateKey: String(body.key || "") }
+        });
+      }
+      return res.status(404).json({ success: false, error: "No saved Round 2 submission was found." });
     } catch (error) {
       console.error("[CodeSpark submission retrieval]", error?.message || "lookup failed");
       return res.status(503).json({ success: false, error: "Final submission retrieval is temporarily unavailable." });
