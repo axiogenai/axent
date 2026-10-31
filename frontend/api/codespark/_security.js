@@ -16,21 +16,16 @@ export function setApiHeaders(req, res) {
     res.setHeader("Vary", "Origin");
   }
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, x-authority-role");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
   res.setHeader("Cache-Control", "no-store");
 }
 
 export async function requireAdmin(req, res) {
   const authorization = req.headers.authorization || "";
   const match = authorization.match(/^Bearer\s+(.+)$/i);
-  const roleHeader = req.headers["x-authority-role"];
 
-  // 1. Direct authority role header override (for admin and paper_setter portals)
-  if (roleHeader === "admin" || roleHeader === "paper_setter") {
-    return { id: "local-authority", role: roleHeader };
-  }
-
-  // 2. Supabase JWT session verification
+  // Never trust a caller-supplied role header. Only server-issued Supabase
+  // app_metadata can grant access to privileged API routes.
   if (match) {
     const supabaseUrl = process.env.SUPABASE_URL;
     const anonKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
@@ -41,13 +36,14 @@ export async function requireAdmin(req, res) {
         });
         if (response.ok) {
           const user = await response.json();
-          if (user?.id) return user;
+          const role = user?.app_metadata?.role;
+          if (user?.id && (role === "admin" || role === "paper_setter")) return user;
         }
       } catch {}
     }
   }
 
-  json(res, 401, { success: false, error: "Authentication required." });
+  json(res, 401, { success: false, error: "Administrator authentication required." });
   return null;
 }
 
