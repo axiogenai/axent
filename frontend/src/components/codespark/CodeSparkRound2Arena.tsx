@@ -582,6 +582,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
 
     try {
       const stdin = customInputText;
+      setCustomInputText('');
       const result = await runRound2Code(
         candidateProfile.round2Key || candidateProfile.accessKey || candidateKey,
         currentProblem.id,
