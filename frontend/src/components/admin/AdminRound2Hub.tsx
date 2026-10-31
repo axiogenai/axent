@@ -1057,7 +1057,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-        const cloudProbs = await fetchRound2ProblemsFromCloud();
+        const cloudProbs = await fetchRound2ProblemsFromCloud(true);
 
 
 
