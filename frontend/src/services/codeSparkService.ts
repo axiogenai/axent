@@ -900,14 +900,7 @@ export function saveStoredSmtpConfig(config: SmtpConfig): void {
 }
 
 async function getCodesparkAdminHeaders(): Promise<Record<string, string>> {
-  const { data, error } = await supabase.auth.getSession();
-  if (error || !data.session?.access_token) {
-    throw new Error("Please sign in with your administrator Supabase account.");
-  }
-  return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${data.session.access_token}`
-  };
+  return getCodeSparkAdminHeaders();
 }
 
 export async function testSmtpConnection(
@@ -915,7 +908,11 @@ export async function testSmtpConnection(
 ): Promise<{ success: boolean; message?: string; error?: string }> {
   try {
     const headers = await getCodesparkAdminHeaders();
-    const response = await fetch("/api/codespark/test-smtp/", { method: "POST", headers, body: "{}" });
+    const response = await fetch("/api/codespark/send-emails?action=test", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ action: "test" })
+    });
     const data = await response.json();
     if (!response.ok) return { success: false, error: data.error || "SMTP verification failed." };
     return data;
