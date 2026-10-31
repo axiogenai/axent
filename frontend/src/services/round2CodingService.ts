@@ -90,6 +90,9 @@ export interface Round2Problem {
 
 
 
+  performanceTestCases?: Round2TestCase[];
+  robustnessTestCases?: Round2TestCase[];
+
   starterCode: {
     C: string;
     'C++': string;
