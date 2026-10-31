@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:round2": "node --test api/codespark/_round2-rubric.test.js",
     "dev": "vite",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
