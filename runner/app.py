@@ -9,10 +9,12 @@ import select
 import subprocess
 import tempfile
 import time
+import re
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
+from fastapi.responses import JSONResponse
 
 SECRET = os.environ.get("AXENT_RUNNER_SECRET", "")
 IMAGE = os.environ.get("EXECUTION_IMAGE", "axent-code-sandbox:latest")
@@ -21,6 +23,9 @@ LANGUAGES = {"C": "c", "C++": "cpp", "Python": "py", "Java": "java"}
 MAX_SOURCE = 100_000
 MAX_OUTPUT = 64_000
 MAX_SESSION_SECONDS = 90
+MAX_JUDGE_SECONDS = 12
+JUDGE_CONCURRENCY = int(os.environ.get("JUDGE_CONCURRENCY", "4"))
+JUDGE_SEMAPHORE = asyncio.Semaphore(max(1, min(JUDGE_CONCURRENCY, 16)))
 USED_NONCES = {}
 
 app = FastAPI(title="Axent Interactive Terminal", docs_url=None, redoc_url=None)
@@ -29,6 +34,117 @@ app = FastAPI(title="Axent Interactive Terminal", docs_url=None, redoc_url=None)
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "axent-interactive-terminal", "pty": True}
+
+
+
+def judge_command_for(language: str):
+    metric = "/usr/bin/time -f '__AXENT_METRICS__%e|%M'"
+    if language == "Python":
+        return ["sh", "-lc", f"exec {metric} python3 -u /workspace/Main.py"]
+    if language == "C":
+        return ["sh", "-lc", f"gcc -std=c11 -O2 -pipe /workspace/Main.c -o /tmp/axent-program || exit 86; exec {metric} /tmp/axent-program"]
+    if language == "C++":
+        return ["sh", "-lc", f"g++ -std=c++17 -O2 -pipe /workspace/Main.cpp -o /tmp/axent-program || exit 86; exec {metric} /tmp/axent-program"]
+    if language == "Java":
+        return ["sh", "-lc", f"javac -d /tmp /workspace/Main.java || exit 86; exec {metric} java -cp /tmp Main"]
+    raise ValueError("Unsupported language.")
+
+
+def run_judge(code: str, language: str, stdin: str):
+    started = time.monotonic()
+    with tempfile.TemporaryDirectory(prefix="axent-judge-") as folder:
+        prepare_source(language, code, folder)
+        container_name = "axent-judge-" + uuid.uuid4().hex[:12]
+        docker_command = [
+            "docker", "run", "--rm", "--name", container_name, "--init", "-i",
+            "--network", "none", "--memory", "128m", "--memory-swap", "128m",
+            "--cpus", "0.50", "--pids-limit", "48", "--read-only",
+            "--tmpfs", "/tmp:rw,noexec,nosuid,size=32m",
+            "--user", "10001:10001", "--security-opt", "no-new-privileges",
+            "--cap-drop", "ALL", "--ulimit", "cpu=8:8",
+            "--ulimit", "fsize=1048576:1048576", "--ulimit", "nofile=64:64",
+            "--mount", f"type=bind,src={folder},dst=/workspace,readonly",
+            "--workdir", "/workspace", IMAGE, *judge_command_for(language),
+        ]
+        try:
+            completed = subprocess.run(
+                docker_command, input=stdin.encode("utf-8"),
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=MAX_JUDGE_SECONDS, check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return {
+                "exitCode": 124, "stdout": "", "stderr": "Time limit exceeded.",
+                "compileError": False, "runtimeMs": None, "memoryKb": None,
+                "wallTimeMs": round((time.monotonic() - started) * 1000, 2),
+                "statusDescription": "Time Limit Exceeded",
+            }
+        except (FileNotFoundError, OSError) as exc:
+            raise RuntimeError("The isolated judge runtime is unavailable.") from exc
+
+        stdout = completed.stdout[:MAX_OUTPUT].decode("utf-8", errors="replace")
+        stderr = completed.stderr[:MAX_OUTPUT].decode("utf-8", errors="replace")
+        if len(completed.stdout) > MAX_OUTPUT or len(completed.stderr) > MAX_OUTPUT:
+            return {
+                "exitCode": 125, "stdout": stdout, "stderr": "Output limit exceeded (64 KB).",
+                "compileError": False, "runtimeMs": None, "memoryKb": None,
+                "wallTimeMs": round((time.monotonic() - started) * 1000, 2),
+                "statusDescription": "Output Limit Exceeded",
+            }
+
+        runtime_ms = None
+        memory_kb = None
+        match = re.search(r"__AXENT_METRICS__(\d+(?:\.\d+)?)\|(\d+)", stderr)
+        if match:
+            runtime_ms = round(float(match.group(1)) * 1000, 3)
+            memory_kb = int(match.group(2))
+            stderr = stderr[:match.start()].rstrip()
+
+        compile_error = completed.returncode == 86
+        status = "Compilation Error" if compile_error else "Accepted" if completed.returncode == 0 else "Runtime Error"
+        return {
+            "exitCode": int(completed.returncode),
+            "stdout": stdout,
+            "stderr": stderr or None,
+            "compileError": compile_error,
+            "runtimeMs": runtime_ms,
+            "memoryKb": memory_kb,
+            "wallTimeMs": round((time.monotonic() - started) * 1000, 2),
+            "statusDescription": status,
+        }
+
+
+@app.post("/judge")
+async def judge(request: Request):
+    if not SECRET:
+        raise HTTPException(status_code=503, detail="Judge authentication is not configured.")
+    try:
+        payload = await request.json()
+        token = decode_token(str(payload.get("token", "")))
+        code = str(payload.get("code", ""))
+        language = str(payload.get("language", ""))
+        stdin = str(payload.get("stdin", ""))
+        if language not in LANGUAGES or not code.strip() or len(code.encode("utf-8")) > MAX_SOURCE or len(stdin.encode("utf-8")) > 20_000:
+            raise ValueError("Invalid judge request.")
+        digest = hashlib.sha256(code.encode("utf-8")).hexdigest()
+        if not hmac.compare_digest(digest, str(token.get("code_sha256", ""))) or language != token.get("language"):
+            raise ValueError("The source code changed after judge authorization.")
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail=str(exc)[:180]) from exc
+
+    acquired = False
+    try:
+        await asyncio.wait_for(JUDGE_SEMAPHORE.acquire(), timeout=20)
+        acquired = True
+        result = await asyncio.to_thread(run_judge, code, language, stdin)
+        return result
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(status_code=503, detail="Judge capacity is busy. Retry the evaluation.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    finally:
+        if acquired:
+            JUDGE_SEMAPHORE.release()
 
 
 def decode_token(token: str):
