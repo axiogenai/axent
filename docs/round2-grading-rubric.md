@@ -46,5 +46,5 @@ The efficiency category is consequently a large-input scalability check: a solut
 ## Operational limits
 
 - At most 230 grading cases are accepted per question, with a maximum of 30 samples, 200 hidden correctness cases, 100 performance cases and 100 robustness cases.
-- The grader runs at most three Wandbox requests concurrently within a question and uses one 50-second deadline for the candidate's complete final submission.
+- The grader runs at most three Wandbox requests concurrently within a question and uses one 45-second deadline for the candidate's complete final submission.
 - This bounds load within one Vercel request; it does not guarantee a global concurrency cap across separately scaled serverless instances.
