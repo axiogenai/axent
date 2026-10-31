@@ -7,8 +7,9 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "GET" && req.method !== "POST") return res.status(405).json({ success: false, error: "Method not allowed." });
 
-  const admin = req.method === "POST" ? await requireAdmin(req, res) : null;
-  if (req.method === "POST" && !admin) return;
+  const wantsAdminRead = req.method === "GET" && String(req.query?.admin || "") === "1";
+  const admin = req.method === "POST" || wantsAdminRead ? await requireAdmin(req, res) : null;
+  if ((req.method === "POST" || wantsAdminRead) && !admin) return;
 
   try {
     if (req.method === "GET") {
