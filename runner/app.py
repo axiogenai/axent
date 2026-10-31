@@ -59,7 +59,7 @@ def run_judge(code: str, language: str, stdin: str):
             "docker", "run", "--rm", "--name", container_name, "--init", "-i",
             "--network", "none", "--memory", "128m", "--memory-swap", "128m",
             "--cpus", "0.50", "--pids-limit", "48", "--read-only",
-            "--tmpfs", "/tmp:rw,noexec,nosuid,size=32m",
+            "--tmpfs", "/tmp:rw,nosuid,size=32m",
             "--user", "10001:10001", "--security-opt", "no-new-privileges",
             "--cap-drop", "ALL", "--ulimit", "cpu=8:8",
             "--ulimit", "fsize=1048576:1048576", "--ulimit", "nofile=64:64",
