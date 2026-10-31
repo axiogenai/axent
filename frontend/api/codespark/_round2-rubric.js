@@ -34,9 +34,11 @@ export function scoreRound2Rubric({ maxScore, correctnessTests, robustnessTests 
   const correctnessPassed = correctnessTests.map(test => Boolean(test.passed));
   const robustnessPassed = robustnessTests.map(test => Boolean(test.passed));
   const efficiencyPassed = performanceTests.map(test => {
-    const timeOk = Number.isFinite(Number(test.maxTimeMs)) && Number(test.runtimeMs) <= Number(test.maxTimeMs);
+    const timeOk = test.runtimeMs != null && Number.isFinite(Number(test.runtimeMs)) &&
+      Number.isFinite(Number(test.maxTimeMs)) && Number(test.runtimeMs) <= Number(test.maxTimeMs);
     const memoryOk = test.maxMemoryKb == null ||
-      (Number.isFinite(Number(test.maxMemoryKb)) && Number(test.memoryKb) <= Number(test.maxMemoryKb));
+      (test.memoryKb != null && Number.isFinite(Number(test.memoryKb)) &&
+        Number.isFinite(Number(test.maxMemoryKb)) && Number(test.memoryKb) <= Number(test.maxMemoryKb));
     return Boolean(test.passed && timeOk && memoryOk);
   });
   const correctness = categoryScore(correctnessTests, correctnessPassed, correctnessWeight);
