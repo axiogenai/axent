@@ -54,11 +54,8 @@ export default async function handler(req, res) {
           problem.hiddenTestCases.length + performanceTests.length + robustnessTests.length > 230) {
         return res.status(400).json({ success: false, error: "Test case limit exceeded." });
       }
-      if (performanceTests.some((test) => !test ||
-          !Number.isFinite(Number(test.maxTimeMs)) || Number(test.maxTimeMs) <= 0 ||
-          (test.maxMemoryValue != null && (!Number.isFinite(Number(test.maxMemoryValue)) || Number(test.maxMemoryValue) <= 0)))) {
-        return res.status(400).json({ success: false, error: "Performance tests require positive maxTimeMs and an optional positive maxMemoryValue threshold." });
-      }
+      // Performance cases are admin-authored large-input scalability checks.
+      // The existing Wandbox API does not expose per-program runtime or memory thresholds.
     }
     const config = { problems: body.problems, updatedAt: Date.now() };
     await supabaseRest("candidate_stations?on_conflict=id", {
