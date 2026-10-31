@@ -3752,9 +3752,39 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
     };
   }, [attempt, submitted, exam, student, currentIdx]);
 
-  const handleStart = (studentData: StudentInfo) => {
+  const handleStart = async (studentData: StudentInfo) => {
     if (!exam) return;
     setStudent(studentData);
+
+    // 1. Check if single-use key was already consumed in cloud
+    const rawKey = ((studentData as any).accessKey || studentData.rollNumber || '').toUpperCase().trim();
+    if (rawKey.startsWith('AXENT-') || rawKey.startsWith('AXNT-')) {
+      try {
+        const res = await fetch('/api/codespark/data?entity=all');
+        if (res.ok) {
+          const json = await res.json();
+          const usedKeys: string[] = json.config?.usedAccessKeys || [];
+          if (usedKeys.includes(rawKey)) {
+            setAttemptStartError(`Access Key "${rawKey}" has already been used and submitted. Re-attempt is not authorized.`);
+            playSound('warning');
+            return;
+          }
+        }
+      } catch {}
+    }
+
+    // 2. Load questions from cloud backend to guarantee full paper count
+    if (Array.isArray(exam.questionIds) && exam.questionIds.length > 0) {
+      try {
+        const res = await fetch(`/api/codespark/data?entity=questions&examId=${encodeURIComponent(exam.id)}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.questions) && json.questions.length > 0) {
+            json.questions.forEach((q: any) => saveQuestion(q));
+          }
+        }
+      } catch {}
+    }
 
     // Ensure this candidate workstation starts 100% unlocked and wipe any stale test lockouts
     const cleanStationNum = (studentData.stationNumber || '01').replace(/[^0-9]/g, '') || '01';
@@ -4062,10 +4092,16 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       const finished = { ...attempt, status: 'SUBMITTED' as const, score: result.score, correctCount: result.correctCount, wrongCount: result.wrongCount };
       setAttempt(finished);
 
-    // Single-use key invalidation: record key & roll as consumed
-    if (student.rollNumber) void recordAccessKeyUsed(student.rollNumber);
-    if ((student as any).accessKey) void recordAccessKeyUsed((student as any).accessKey);
-    if (attempt?.studentRoll) void recordAccessKeyUsed(attempt.studentRoll);
+      // Single-use key invalidation: record key & roll as consumed both locally & in cloud
+      const keyToConsume = (student as any).accessKey || student.rollNumber || attempt?.studentRoll;
+      if (keyToConsume) {
+        void recordAccessKeyUsed(keyToConsume);
+        void fetch('/api/codespark/data?action=consume_key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'consume_key', key: keyToConsume, rollNumber: keyToConsume })
+        }).catch(() => null);
+      }
       try {
         localStorage.removeItem(`codedna_mcq_current_idx_${attempt.id}`);
       } catch {}

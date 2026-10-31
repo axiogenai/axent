@@ -104,7 +104,8 @@ import {
   clearAllAttemptsLocally,
 
   clearAllQuestions,
-  wipeEntireDatabaseFromCloud
+  wipeEntireDatabaseFromCloud,
+  syncFromSupabase
 
 } from '../../services/mcqService';
 
@@ -572,15 +573,11 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
   useEffect(() => {
-
+    void syncFromSupabase().then(() => setAllAttempts(getAllAttempts()));
     const unsub = onMcqDataChanged(() => {
-
       setAllAttempts(getAllAttempts());
-
     });
-
     return unsub;
-
   }, []);
 
 
@@ -789,6 +786,13 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       if (station.id) {
         await deleteStationFromCloud(station.id);
       }
+      try {
+        await fetch(`/api/codespark/data?action=delete_candidate&roll=${encodeURIComponent(candRoll)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-authority-role': 'admin' },
+          body: JSON.stringify({ action: 'delete_candidate', roll: candRoll, key: station.student?.accessKey })
+        });
+      } catch {}
       // Filter in-memory attempts
       setAllAttempts((prev: any[]) => prev.filter(a => (a.studentRoll || a.student_roll || '').toUpperCase() !== candRoll.toUpperCase() && (a.candidateRollNumber || '').toUpperCase() !== candRoll.toUpperCase() && a.id !== station.id));
       setRegisteredCandidates((prev: any[]) => prev.filter(c => (c.rollNumber || '').toUpperCase() !== candRoll.toUpperCase() && (c.accessKey || '').toUpperCase() !== candRoll.toUpperCase()));
@@ -819,7 +823,13 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
     setPurgeNotice('Purging all candidate workstations, test attempts, and local cache...');
 
     try {
-
+      try {
+        await fetch('/api/codespark/data?action=purge_attempts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-authority-role': 'admin' },
+          body: JSON.stringify({ action: 'purge_attempts' })
+        });
+      } catch {}
       try {
         await fetch('/api/codespark/roster?action=purge_all', {
           method: 'POST',
@@ -863,6 +873,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       setRegisteredCandidates([]);
 
       setShortlistedRolls([]);
+      try {
+        await broadcastRemoteHardRefresh();
+      } catch {}
 
       playSound('success');
 
@@ -2047,10 +2060,10 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
   const handlePurgeAllAttempts = async () => {
     if (!window.confirm('Are you sure you want to purge ALL Round 1 attempts from database and storage?')) return;
     try {
-      await fetch('/api/codespark/roster?action=purge_all', {
+      await fetch('/api/codespark/data?action=purge_attempts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-authority-role': 'admin' },
-        body: JSON.stringify({ action: 'purge_all' })
+        body: JSON.stringify({ action: 'purge_attempts' })
       }).catch(() => null);
     } catch {}
     await clearAllAttemptsFromEverywhere();

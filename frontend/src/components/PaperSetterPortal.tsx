@@ -71,6 +71,7 @@ export const PaperSetterPortal: React.FC = () => {
 
   useEffect(() => {
     loadData();
+    void syncFromSupabase().then(() => loadData());
     const unsubData = onMcqDataChanged(loadData);
     const unsubExams = onExamsChanged(loadData);
     const unsubCoding = onCodingDataChanged(loadData);

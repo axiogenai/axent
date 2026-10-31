@@ -35,6 +35,33 @@ export function subscribeToMcqCloudChanges(onChange: () => void): () => void {
 
 export async function fetchQuestionsFromCloud(): Promise<MCQQuestion[] | null> {
   try {
+    // 1. Primary: Serverless service role endpoint (RLS-bypass)
+    try {
+      const res = await fetch('/api/codespark/data?entity=questions');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.questions)) {
+          return json.questions.map((row: any): MCQQuestion => ({
+            id: row.id,
+            text: row.text,
+            options: row.options || [],
+            subject: row.subject,
+            topic: row.topic,
+            difficulty: row.difficulty,
+            marks: Number(row.marks) || 1,
+            negativeMarks: Number(row.negative_marks) || 0,
+            explanation: row.explanation || '',
+            status: row.status,
+            tags: row.tags || [],
+            createdAt: Number(row.created_at),
+            updatedAt: Number(row.updated_at),
+            createdBy: row.created_by || 'admin',
+            bankGroup: row.bank_group || '',
+          }));
+        }
+      }
+    } catch {}
+
     const { data, error } = await supabase.from('mcq_questions').select('*').order('created_at', { ascending: false });
     if (error) {
       console.warn('[Supabase] Failed to fetch questions (table may not exist yet):', error.message);
@@ -69,7 +96,7 @@ async function writeQuestionToCloud(q: MCQQuestion): Promise<boolean> {
   try {
     // 1. Primary: Serverless service role write (bypasses RLS)
     try {
-      const res = await fetch('/api/codespark/roster?action=save_questions', {
+      const res = await fetch('/api/codespark/data?action=save_questions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -121,7 +148,7 @@ async function writeQuestionToCloud(q: MCQQuestion): Promise<boolean> {
 export async function saveQuestionsBatchToCloud(questions: MCQQuestion[]): Promise<boolean> {
   if (!Array.isArray(questions) || questions.length === 0) return true;
   try {
-    const res = await fetch('/api/codespark/roster?action=save_questions', {
+    const res = await fetch('/api/codespark/data?action=save_questions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -165,6 +192,81 @@ export async function clearAllQuestionsFromCloud(): Promise<boolean> {
 
 export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
   try {
+    // 1. Primary: Serverless service role endpoint (RLS-bypass)
+    try {
+      const res = await fetch('/api/codespark/data?entity=exams');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.exams)) {
+          return json.exams.map((row: any): MCQExamConfig => {
+            let resultDeclMode: MCQResultDeclarationMode = 'IMMEDIATE';
+            let waGroupName = '';
+            let waGroupLink = '';
+            let assignedLabId = '';
+            let assignedLabName = '';
+            let isPrivate = false;
+            let cleanInstr = row.instructions || '';
+
+            const metaMatch = cleanInstr.match(/<!--AXENT_META:([\s\S]*?)-->/);
+            if (metaMatch) {
+              try {
+                const parsed = JSON.parse(metaMatch[1]);
+                if (parsed.resultDeclarationMode === 'WHATSAPP_GROUP' || parsed.resultDeclarationMode === 'IMMEDIATE') {
+                  resultDeclMode = parsed.resultDeclarationMode;
+                }
+                if (parsed.whatsappGroupName) waGroupName = parsed.whatsappGroupName;
+                if (parsed.whatsappGroupLink) waGroupLink = parsed.whatsappGroupLink;
+                if (parsed.assignedLabId) assignedLabId = parsed.assignedLabId;
+                if (parsed.assignedLabName) assignedLabName = parsed.assignedLabName;
+                if (parsed.isPrivate !== undefined) isPrivate = Boolean(parsed.isPrivate);
+              } catch {}
+              cleanInstr = cleanInstr.replace(/<!--AXENT_META:[\s\S]*?-->/g, '').trim();
+            }
+
+            if (row.result_declaration_mode) resultDeclMode = row.result_declaration_mode;
+            if (row.whatsapp_group_name) waGroupName = row.whatsapp_group_name;
+            if (row.whatsapp_group_link) waGroupLink = row.whatsapp_group_link;
+            if (row.is_private !== undefined) isPrivate = Boolean(row.is_private);
+
+            return {
+              id: row.id,
+              title: row.title,
+              description: row.description || '',
+              instructions: cleanInstr,
+              subject: row.subject || '',
+              topic: row.topic || '',
+              examCategory: row.exam_category || 'Internal Assessment (CIE)',
+              durationMinutes: Number(row.duration_minutes) || 30,
+              startTime: row.start_time ? Number(row.start_time) : undefined,
+              endTime: row.end_time ? Number(row.end_time) : undefined,
+              totalMarks: Number(row.total_marks) || 0,
+              questionCount: (Array.isArray(row.question_ids) && row.question_ids.length > 0)
+                ? row.question_ids.length
+                : (Number(row.question_count) || 0),
+              questionIds: Array.isArray(row.question_ids) ? row.question_ids : [],
+              shuffleQuestions: Boolean(row.shuffle_questions),
+              shuffleOptions: Boolean(row.shuffle_options),
+              negativeMarkingEnabled: Boolean(row.negative_marking_enabled),
+              allowReview: Boolean(row.allow_review),
+              showExplanationsAfterSubmit: Boolean(row.show_explanations_after_submit),
+              resultDeclarationMode: resultDeclMode,
+              whatsappGroupName: waGroupName,
+              whatsappGroupLink: waGroupLink,
+              assignedLabId: assignedLabId || undefined,
+              assignedLabName: assignedLabName || undefined,
+              isPrivate,
+              maxAttempts: Number(row.max_attempts) || 1,
+              status: row.status,
+              createdAt: Number(row.created_at),
+              updatedAt: Number(row.updated_at),
+              createdBy: row.created_by || 'admin',
+              publishedAt: row.published_at ? Number(row.published_at) : undefined,
+            };
+          });
+        }
+      }
+    } catch {}
+
     const { data, error } = await supabase.from('mcq_exams').select('*').order('created_at', { ascending: false });
     if (error) {
       console.warn('[Supabase] Failed to fetch exams:', error.message);
@@ -254,6 +356,19 @@ export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
 
 async function writeExamToCloud(e: MCQExamConfig): Promise<boolean> {
   try {
+    // 1. Primary: Serverless service role write (bypasses RLS)
+    try {
+      const res = await fetch('/api/codespark/data?action=save_exam', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-authority-role': 'admin'
+        },
+        body: JSON.stringify({ action: 'save_exam', exam: e })
+      }).catch(() => null);
+      if (res && res.ok) return true;
+    } catch {}
+
     const metaTag = `<!--AXENT_META:${JSON.stringify({
       resultDeclarationMode: e.resultDeclarationMode || 'IMMEDIATE',
       whatsappGroupName: e.whatsappGroupName || '',
@@ -313,7 +428,7 @@ async function writeDeleteExamFromCloud(id: string): Promise<boolean> {
   try {
     // 1. Primary: Serverless service-role deletion (bypasses RLS)
     try {
-      await fetch(`/api/codespark/roster?action=delete_exam&examId=${encodeURIComponent(id)}`, {
+      const res = await fetch(`/api/codespark/data?action=delete_exam&examId=${encodeURIComponent(id)}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -321,6 +436,7 @@ async function writeDeleteExamFromCloud(id: string): Promise<boolean> {
         },
         body: JSON.stringify({ action: 'delete_exam', examId: id })
       }).catch(() => null);
+      if (res && res.ok) return true;
     } catch {}
 
     // 2. Client-side fallback deletion
@@ -367,6 +483,15 @@ export function deleteQuestionFromCloud(id: string): Promise<boolean> {
 export async function deleteQuestionsByIdsFromCloud(questionIds: string[]): Promise<boolean> {
   if (!questionIds || questionIds.length === 0) return true;
   try {
+    try {
+      const res = await fetch('/api/codespark/data?action=delete_questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-authority-role': 'admin' },
+        body: JSON.stringify({ action: 'delete_questions', ids: questionIds })
+      }).catch(() => null);
+      if (res && res.ok) return true;
+    } catch {}
+
     const { error } = await supabase.from('mcq_questions').delete().in('id', questionIds);
     if (error) {
       console.warn('[Supabase] Failed to bulk delete questions from cloud:', error.message);
@@ -391,6 +516,45 @@ export function deleteExamFromCloud(id: string): Promise<boolean> {
 
 export async function fetchAttemptsFromCloud(): Promise<MCQAttempt[] | null> {
   try {
+    // 1. Primary: Serverless service role endpoint (RLS-bypass)
+    try {
+      const res = await fetch('/api/codespark/data?entity=attempts');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.attempts)) {
+          return json.attempts.map((row: any): MCQAttempt => ({
+            id: row.id,
+            examId: row.exam_id,
+            examTitle: row.exam_title,
+            studentName: row.student_name,
+            studentRoll: row.student_roll,
+            studentDept: row.student_dept || '',
+            studentSem: row.student_sem || '',
+            studentDiv: row.student_div || 'A',
+            startTime: Number(row.start_time),
+            deadline: Number(row.deadline),
+            lastActivityAt: row.last_activity_at ? Number(row.last_activity_at) : undefined,
+            submitTime: row.submit_time ? Number(row.submit_time) : undefined,
+            status: row.status,
+            assignedQuestions: row.assigned_questions || [],
+            answers: row.answers || {},
+            score: row.score !== null ? Number(row.score) : undefined,
+            maxScore: Number(row.max_score) || 0,
+            correctCount: row.correct_count !== null ? Number(row.correct_count) : undefined,
+            wrongCount: row.wrong_count !== null ? Number(row.wrong_count) : undefined,
+            unansweredCount: row.unanswered_count !== null ? Number(row.unanswered_count) : undefined,
+            percentageScore: row.score_percentage !== null ? Number(row.score_percentage) : (row.percentage_score !== null ? Number(row.percentage_score) : undefined),
+            gradedAt: row.graded_at ? Number(row.graded_at) : undefined,
+            tabSwitchCount: Number(row.tab_switch_count) || 0,
+            unfocusedSeconds: Number(row.unfocused_seconds) || 0,
+            infractionLog: row.infraction_log || [],
+            assignedLabId: row.assigned_lab_id || undefined,
+            assignedLabName: row.assigned_lab_name || undefined,
+          }));
+        }
+      }
+    } catch {}
+
     const { data, error } = await supabase.from('mcq_attempts').select('*').order('start_time', { ascending: false });
     if (error) {
       console.warn('[Supabase] Failed to fetch attempts:', error.message);
@@ -435,6 +599,19 @@ export async function fetchAttemptsFromCloud(): Promise<MCQAttempt[] | null> {
 
 async function writeAttemptToCloud(a: MCQAttempt): Promise<boolean> {
   try {
+    // 1. Primary: Serverless service role write (bypasses RLS)
+    try {
+      const res = await fetch('/api/codespark/data?action=save_attempt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-authority-role': 'admin'
+        },
+        body: JSON.stringify({ action: 'save_attempt', attempt: a })
+      }).catch(() => null);
+      if (res && res.ok) return true;
+    } catch {}
+
     const row = {
       id: a.id,
       exam_id: a.examId,
@@ -501,6 +678,15 @@ export function saveAttemptToCloud(attempt: MCQAttempt): Promise<boolean> {
 
 export async function deleteAttemptFromCloud(attemptId: string): Promise<boolean> {
   try {
+    try {
+      const res = await fetch(`/api/codespark/data?action=delete_attempt&attemptId=${encodeURIComponent(attemptId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-authority-role': 'admin' },
+        body: JSON.stringify({ action: 'delete_attempt', attemptId })
+      }).catch(() => null);
+      if (res && res.ok) return true;
+    } catch {}
+
     const { error } = await supabase.from('mcq_attempts').delete().eq('id', attemptId);
     if (error) {
       console.warn('[Supabase] Failed to delete attempt from cloud:', error.message);
@@ -866,6 +1052,15 @@ export function subscribeToCloudStations(onStationChange: (payload: any) => void
 
 export async function deleteStationFromCloud(stationId: string): Promise<boolean> {
   try {
+    try {
+      const res = await fetch(`/api/codespark/data?action=delete_station&stationId=${encodeURIComponent(stationId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-authority-role': 'admin' },
+        body: JSON.stringify({ action: 'delete_station', stationId })
+      }).catch(() => null);
+      if (res && res.ok) return true;
+    } catch {}
+
     const { error } = await supabase.from('candidate_stations').delete().eq('id', stationId);
     return !error;
   } catch (err) {
@@ -892,10 +1087,10 @@ export async function clearAllStationsFromCloud(labId?: string): Promise<boolean
   try {
     if (!labId || labId === 'all') {
       try {
-        await fetch('/api/codespark/roster?action=purge_all', {
+        await fetch('/api/codespark/data?action=purge_attempts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-authority-role': 'admin' },
-          body: JSON.stringify({ action: 'purge_all' })
+          body: JSON.stringify({ action: 'purge_attempts' })
         }).catch(() => null);
       } catch {}
     }
@@ -925,7 +1120,7 @@ export async function clearAllAttemptsFromCloud(labId?: string): Promise<boolean
   try {
     if (!labId || labId === 'all') {
       try {
-        await fetch('/api/codespark/roster?action=purge_attempts', {
+        await fetch('/api/codespark/data?action=purge_attempts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-authority-role': 'admin' },
           body: JSON.stringify({ action: 'purge_attempts' })
@@ -958,10 +1153,16 @@ export async function deleteAttemptByRollOrKeyFromCloud(rollOrKey: string): Prom
   try {
     const clean = rollOrKey.trim();
     if (!clean) return false;
+    try {
+      const res = await fetch(`/api/codespark/data?action=delete_candidate&roll=${encodeURIComponent(clean)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-authority-role': 'admin' },
+        body: JSON.stringify({ action: 'delete_candidate', roll: clean })
+      }).catch(() => null);
+      if (res && res.ok) return true;
+    } catch {}
+
     await supabase.from('mcq_attempts').delete().ilike('student_roll', clean);
-    await supabase.from('mcq_attempts').delete().ilike('candidate_ticket_id', clean);
-    await supabase.from('candidate_stations').delete().ilike('student_name', '%' + clean + '%');
-    await supabase.from('candidate_stations').delete().ilike('roll_number', clean);
     return true;
   } catch (err) {
     console.warn('[Supabase] Failed to delete attempt by roll from cloud:', err);
@@ -1206,4 +1407,22 @@ export async function syncAllLocalToCloud(
   }
 
   return { questionsSynced: qCount, examsSynced: eCount, labsSynced: lCount };
+}
+
+// ── UNIFIED FACTORY WIPE ───────────────────────────────────────────────────────
+export async function wipeEntireCloudDatabase(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/codespark/data?action=wipe_everything', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-authority-role': 'admin'
+      },
+      body: JSON.stringify({ action: 'wipe_everything' })
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('[wipeEntireCloudDatabase] error:', err);
+    return false;
+  }
 }

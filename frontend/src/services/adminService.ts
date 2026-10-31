@@ -774,7 +774,7 @@ function reconcileAttemptsIntoStations(stations: CandidateStation[]): CandidateS
                 maxMarks: a.maxScore || totalQ
               };
             }
-          } else if (!isDone && a.status === 'IN_PROGRESS') {
+          } else if (false) {
             const st: CandidateStation = {
               id: stationId,
               labId,

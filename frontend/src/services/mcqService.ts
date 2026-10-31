@@ -946,7 +946,7 @@ export async function deleteExam(id: string): Promise<boolean> {
 
   // Cloud and lab cascade deletion (Serverless Service Role + Direct sync)
   try {
-    await fetch(`/api/codespark/roster?action=delete_exam&examId=${encodeURIComponent(id)}`, {
+    await fetch(`/api/codespark/data?action=delete_exam&examId=${encodeURIComponent(id)}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2749,120 +2749,37 @@ export async function syncFromSupabase(): Promise<void> {
 
 
 
-        // 1. Reconcile Questions: Merge Supabase cloud with local question bank
+        // 1. Reconcile Questions: Supabase cloud is the ABSOLUTE SINGLE SOURCE OF TRUTH
     if (cloudQ !== null) {
-      const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
-      const localQ = load<MCQQuestion[]>(MCQ_STORAGE_KEYS.QUESTIONS, []);
-      const mergedQMap = new Map<string, MCQQuestion>();
-      cloudQ.forEach((q) => mergedQMap.set(q.id, q));
-      // Retain local questions if they were freshly created or drafted in the last 2 hours
-      localQ.forEach((q) => {
-        if (!mergedQMap.has(q.id)) {
-          if (q.status === 'DRAFT' || (q.createdAt || 0) > twoHoursAgo) {
-            mergedQMap.set(q.id, q);
-            void saveQuestionToCloud(q);
-          }
-        }
-      });
-      save(MCQ_STORAGE_KEYS.QUESTIONS, Array.from(mergedQMap.values()));
+      save(MCQ_STORAGE_KEYS.QUESTIONS, cloudQ);
+      notifyMcqDataChanged();
     }
 
 
 
-    // 2. Reconcile Exams: Intelligently merge so local unsynced exams are never lost
-
+    // 2. Reconcile Exams: Supabase cloud is the ABSOLUTE SINGLE SOURCE OF TRUTH
     if (cloudE !== null) {
-
       const deletedIds = getDeletedExamIds();
-
-
-
-      // If a cloud exam is in deletedIds, ensure it is deleted from cloud
-
       for (const ex of cloudE) {
-
         if (deletedIds.has(ex.id)) {
-
           void deleteExamFromCloud(ex.id);
-
         }
-
       }
-
-
 
       // Filter out deleted IDs from cloud results
-
       const activeCloudExams = cloudE.filter((e) => !deletedIds.has(e.id));
-
-      const localExams = load<MCQExamConfig[]>(MCQ_STORAGE_KEYS.EXAMS, []);
-
-      const mergedExamMap = new Map<string, MCQExamConfig>();
-
-      activeCloudExams.forEach((e) => mergedExamMap.set(e.id, e));
-
-
-
-      // Intelligently reconcile local and cloud exams.
-      // Cloud sync MUST NEVER destroy local papers or exams due to network delays or RLS restrictions!
-      // CRITICAL FIX: When an exam exists in BOTH local and cloud, take the one with the newer
-      // updatedAt timestamp. This prevents a stale cloud DRAFT from overwriting a freshly published
-      // local exam (race condition: publish → saveExamToCloud enqueued → sync reads cloud before upload).
-      localExams.forEach((e) => {
-        if (deletedIds.has(e.id)) return;
-        const cloudVersion = mergedExamMap.get(e.id);
-        if (!cloudVersion) {
-          // Exam only exists locally — push it to cloud and keep it
-          mergedExamMap.set(e.id, e);
-          void saveExamToCloud(e);
-        } else {
-          // Exam exists in both — pick the fresher version by updatedAt
-          const localNewer = (e.updatedAt || 0) > (cloudVersion.updatedAt || 0);
-          if (localNewer) {
-            mergedExamMap.set(e.id, e);
-            // Push the newer local state to cloud so they converge
-            void saveExamToCloud(e);
-          }
-          // else: cloud version is newer or same age — cloud already wins (set above)
-        }
-      });
-
-      const reconciledExams = Array.from(mergedExamMap.values());
-      save(MCQ_STORAGE_KEYS.EXAMS, reconciledExams);
+      save(MCQ_STORAGE_KEYS.EXAMS, activeCloudExams);
       try {
-        localStorage.setItem('codedna_mcq_exams_backup', JSON.stringify(reconciledExams));
+        localStorage.setItem('codedna_mcq_exams_backup', JSON.stringify(activeCloudExams));
       } catch {}
       notifyExamsChanged();
-
     }
 
-
-
-        // 3. Reconcile Attempts: Supabase cloud is the ABSOLUTE SOURCE OF TRUTH
+    // 3. Reconcile Attempts: Supabase cloud is the ABSOLUTE SINGLE SOURCE OF TRUTH
     if (cloudA !== null) {
-      const cutoff = Date.now() - TWO_DAYS_MS;
-      const recentCloudAttempts = cloudA.filter(
-        (a) => a.status === 'IN_PROGRESS' || (a.submitTime || a.startTime || 0) >= cutoff
-      );
-      // Supabase is authoritative. If Supabase is empty or an attempt was purged in cloud,
-      // purge it locally too! Only retain an in-progress attempt currently active on this specific device.
-      const cloudAttemptIds = new Set(recentCloudAttempts.map((a) => a.id));
-      const localAttempts = getAllAttempts();
-      const activeLocalId = typeof window !== 'undefined' ? localStorage.getItem(MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT) : null;
-      const activeSessionId = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('codedna_mcq_session_attempt') : null;
-      
-      const reconciled = [...recentCloudAttempts];
-      for (const loc of localAttempts) {
-        if (!cloudAttemptIds.has(loc.id)) {
-          // Never purge an in-progress attempt currently active on this machine!
-          if (loc.status === 'IN_PROGRESS' && (loc.id === activeLocalId || loc.id === activeSessionId)) {
-            reconciled.push(loc);
-            void saveAttemptToCloud(loc);
-          }
-        }
-      }
-      inMemoryAttempts = reconciled;
-      save(MCQ_STORAGE_KEYS.ATTEMPTS, reconciled);
+      inMemoryAttempts = cloudA;
+      save(MCQ_STORAGE_KEYS.ATTEMPTS, cloudA);
+      notifyMcqDataChanged();
     }
 
 
@@ -2911,26 +2828,18 @@ export async function wipeEntireDatabaseFromCloud(): Promise<boolean> {
   clearAllAttemptsLocally();
   clearAllQuestions();
   try {
-    await fetch('/api/codespark/roster?action=factory_reset_all_database', {
+    await fetch('/api/codespark/data?action=wipe_everything', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-authority-role': 'admin'
       },
-      body: JSON.stringify({ action: 'factory_reset_all_database' })
+      body: JSON.stringify({ action: 'wipe_everything' })
     });
   } catch (e) {
-    console.warn('[mcqService] factory reset POST error:', e);
+    console.warn('[mcqService] wipe_everything error:', e);
   }
-  try {
-    await fetch('/api/codespark/roster?action=factory_reset_all_database', {
-      method: 'POST',
-      body: JSON.stringify({ action: 'factory_reset_all_database' }),
-      headers: { 'x-authority-role': 'admin' }
-    });
-  } catch (e) {
-    console.warn('[mcqService] factory reset DELETE error:', e);
-  }
+
   try {
     await clearAllAttemptsFromCloud();
   } catch {}
@@ -2946,36 +2855,8 @@ export async function wipeEntireDatabaseFromCloud(): Promise<boolean> {
 
   if (typeof window !== 'undefined') {
     try {
-      const keysToClear = [
-        MCQ_STORAGE_KEYS.ATTEMPTS,
-        MCQ_STORAGE_KEYS.QUESTIONS,
-        MCQ_STORAGE_KEYS.EXAMS,
-        MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT,
-        'codedna_mcq_attempts',
-        'codedna_mcq_questions',
-        'codedna_mcq_exams',
-        'codedna_college_stations',
-        'codedna_live_stations',
-        'codedna_mcq_active_attempt_backup',
-        'codedna_student_profile',
-        'codedna_codespark_active_candidate',
-        'codedna_codespark_candidates',
-        'codedna_codespark_shortlisted_rolls',
-        'codedna_codespark_round1_exam_id',
-        'codedna_codespark_active_exam_id',
-        'codedna_codespark_r2_submissions',
-        'codedna_codespark_r2_active_key'
-      ];
-      keysToClear.forEach(k => {
-        localStorage.removeItem(k);
-        sessionStorage.removeItem(k);
-      });
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const key = localStorage.key(i);
-        if (key && (key.startsWith('codedna_') || key.startsWith('mcq_') || key.startsWith('spark_'))) {
-          localStorage.removeItem(key);
-        }
-      }
+      localStorage.clear();
+      sessionStorage.clear();
     } catch {}
   }
   notifyMcqDataChanged();

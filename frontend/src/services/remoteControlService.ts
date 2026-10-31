@@ -75,10 +75,14 @@ export function initRemoteHardRefreshListener(): () => void {
       const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
       if (remoteTs < tenMinutesAgo) return;
 
-      // Mark as processed before reload
-      localStorage.setItem(REMOTE_REFRESH_STORAGE_KEY, String(remoteTs));
+      // Purge all candidate, exam, and attempt caches on this workstation
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+        localStorage.setItem(REMOTE_REFRESH_STORAGE_KEY, String(remoteTs));
+      } catch {}
 
-      console.warn('[RemoteControl] Remote hard refresh triggered by administrator. Reloading now...');
+      console.warn('[RemoteControl] Remote wipe and refresh triggered by administrator. Reloading now...');
 
       // Cache-busting hard reload
       const cleanUrl = window.location.href.split('?')[0];

@@ -731,7 +731,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                   color: '#f4f4f5'
                 }}
               >
-                <span style={{ color: '#10b981' }}>{submission.totalScore}</span> / 100
+                <span>Task {currentProblem.number} of 5</span>
               </div>
               <button
                 type="button"
@@ -836,9 +836,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                     <CheckCircle2 size={11} color="#10b981" />
                   ) : isAttempted ? (
                     <AlertCircle size={11} color="#f59e0b" />
-                  ) : (
-                    <span style={{ fontSize: '9.5px', color: '#71717a' }}>20p</span>
-                  )}
+                  ) : null}
                 </button>
               );
             })}
@@ -1044,9 +1042,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                     <CheckCircle2 size={13} color="#10b981" />
                   ) : isAttempted ? (
                     <AlertCircle size={13} color="#f59e0b" />
-                  ) : (
-                    <span style={{ fontSize: '10px', color: '#71717a' }}>20p</span>
-                  )}
+                  ) : null}
                 </button>
               );
             })}
@@ -1167,7 +1163,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                         borderRadius: '4px'
                       }}
                     >
-                      {currentProblem.marks || 20} Marks
+                      {currentProblem.difficulty || 'Core Challenge'}
                     </span>
 
                   </div>
@@ -1229,18 +1225,6 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                       <div key={idx} style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', overflow: 'hidden' }}>
                         <div style={{ background: '#121214', borderBottom: '1px solid #27272a', padding: '6px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontSize: '11px', fontWeight: 700, color: '#f4f4f5' }}>Sample Case #{idx + 1}</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCustomInputText(tc.input);
-                              setShowCustomInput(true);
-                              if (isMobileScreen) setMobileTab('code');
-                              playSound('click');
-                            }}
-                            style={{ fontSize: '10px', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '3px', padding: '2px 8px', cursor: 'pointer' }}
-                          >
-                            Load to Stdin
-                          </button>
                         </div>
                         <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           <div>
@@ -1901,35 +1885,6 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                   </>
                 )}
               </button>
-            </div>
-
-            {/* Custom Input Drawer in Mobile Console */}
-            <div style={{ background: '#121214', borderBottom: '1px solid #27272a', padding: '12px 14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <span style={{ fontSize: '11px', color: '#a1a1aa', fontWeight: 700, textTransform: 'uppercase' }}>
-                  Custom Input (STDIN):
-                </span>
-                <span style={{ fontSize: '10px', color: '#71717a' }}>Fed to scanf / cin / input()</span>
-              </div>
-              <textarea
-                value={customInputText}
-                onChange={(e) => setCustomInputText(e.target.value)}
-                placeholder="Enter custom input arguments here..."
-                rows={2}
-                style={{
-                  width: '100%',
-                  background: '#09090b',
-                  border: '1px solid #27272a',
-                  borderRadius: '4px',
-                  color: '#f4f4f5',
-                  fontFamily: 'monospace',
-                  fontSize: '12px',
-                  padding: '8px',
-                  resize: 'vertical',
-                  outline: 'none',
-                  boxSizing: 'border-box'
-                }}
-              />
             </div>
 
             {/* Output & Test Results Body */}
