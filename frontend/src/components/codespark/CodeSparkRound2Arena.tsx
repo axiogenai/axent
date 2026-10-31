@@ -673,49 +673,50 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     return Object.keys(submission.questionReports).length;
   }, [submission.questionReports]);
   const handleConfirmFinalSubmit = async () => {
+    if (isSubmittingFinal || submission.isSubmitted) return;
     setIsSubmittingFinal(true);
     playSound('click');
+    const finalReports = { ...submission.questionReports };
+    for (const problem of problems) {
+      const questionNumber = problem.number;
+      const code = codeMap[questionNumber] || finalReports[questionNumber]?.code || '';
+      const selectedLanguage = explicitLanguageMap[questionNumber] || 'Auto';
+      const language = selectedLanguage === 'Auto' ? detectLanguageFromCode(code) : selectedLanguage;
+      finalReports[questionNumber] = {
+        ...(finalReports[questionNumber] || {}),
+        questionNumber,
+        questionId: problem.id,
+        questionTitle: problem.title,
+        code,
+        language
+      } as Round2QuestionReport;
+    }
+    const finalSub: Round2CandidateSubmission = {
+      ...submission,
+      questionReports: finalReports,
+      isSubmitted: true,
+      submittedAt: Date.now()
+    };
     try {
-      const finalReports = { ...submission.questionReports };
-      for (const problem of problems) {
-        const questionNumber = problem.number;
-        const code = codeMap[questionNumber] || finalReports[questionNumber]?.code || '';
-        const selectedLanguage = explicitLanguageMap[questionNumber] || 'Auto';
-        const language = selectedLanguage === 'Auto'
-          ? detectLanguageFromCode(code)
-          : selectedLanguage;
-        finalReports[questionNumber] = {
-          ...(finalReports[questionNumber] || {}),
-          questionNumber,
-          questionId: problem.id,
-          questionTitle: problem.title,
-          code,
-          language
-        } as Round2QuestionReport;
-      }
-      const finalSub: Round2CandidateSubmission = {
+      // The API re-grades every attempted answer and atomically seals the result.
+      // Never mark the browser session submitted unless the server confirms it.
+      const authoritativeSubmission = await finalizeRound2Submission(finalSub);
+      updateSubmissionState(authoritativeSubmission);
+      setShowSubmitModal(false);
+      setCompileError(null);
+      playSound('success');
+    } catch (error) {
+      console.error('Round 2 finalization remains unconfirmed:', error);
+      const retryableProgress: Round2CandidateSubmission = {
         ...submission,
         questionReports: finalReports,
-        isSubmitted: true,
-        submittedAt: Date.now()
+        isSubmitted: false
       };
-      let authoritativeSubmission: Round2CandidateSubmission | null = null;
-      try {
-        authoritativeSubmission = await finalizeRound2Submission(finalSub);
-      } catch (e) {
-        console.warn('Cloud finalization error, falling back to local finalization:', e);
-      }
-      const submissionToUse = authoritativeSubmission || finalSub;
-      updateSubmissionState(submissionToUse);
-      try {
-        saveStoredRound2Submission(submissionToUse);
-      } catch {}
-      setShowSubmitModal(false);
-      playSound('success');
-    } catch (err) {
-      console.error('Final submission fallback error:', err);
-      updateSubmissionState({ ...submission, isSubmitted: true, submittedAt: Date.now() });
-      setShowSubmitModal(false);
+      updateSubmissionState(retryableProgress);
+      setCompileError(error instanceof Error
+        ? error.message
+        : 'Submission could not be confirmed. Your work is preserved; please retry.');
+      // Keep the confirmation modal open and allow a retry. No local finalization.
     } finally {
       setIsSubmittingFinal(false);
     }
