@@ -255,7 +255,7 @@ export default async function handler(req, res) {
       }
     }
 
-    const gradingDeadlineAt = Date.now() + 50000;
+    const gradingDeadlineAt = Date.now() + 45000;
     const safeReports = {};
     let totalScore = 0;
     let maxScore = 0;
