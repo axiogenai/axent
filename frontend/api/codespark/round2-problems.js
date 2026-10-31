@@ -38,7 +38,8 @@ export default async function handler(req, res) {
       const performanceTests = Array.isArray(problem.performanceTestCases) ? problem.performanceTestCases : [];
       const robustnessTests = Array.isArray(problem.robustnessTestCases) ? problem.robustnessTestCases : [];
       if (problem.sampleTestCases.length > 30 || problem.hiddenTestCases.length > 200 ||
-          performanceTests.length > 100 || robustnessTests.length > 100) {
+          performanceTests.length > 100 || robustnessTests.length > 100 ||
+          problem.hiddenTestCases.length + performanceTests.length + robustnessTests.length > 230) {
         return res.status(400).json({ success: false, error: "Test case limit exceeded." });
       }
       if (performanceTests.some((test) => !test || !Number.isFinite(Number(test.maxTimeMs)) || Number(test.maxTimeMs) <= 0 ||
