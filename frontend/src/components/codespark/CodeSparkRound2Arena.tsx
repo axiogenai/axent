@@ -425,6 +425,53 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+  // Resizable Output Terminal (Slide Up / Down)
+  const [outputHeight, setOutputHeight] = useState<number>(260);
+  const [isDraggingOutput, setIsDraggingOutput] = useState<boolean>(false);
+  const dragStartYRef = useRef<number>(0);
+  const dragStartHeightRef = useRef<number>(260);
+
+  const handleOutputResizeStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    setIsDraggingOutput(true);
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    dragStartYRef.current = clientY;
+    dragStartHeightRef.current = outputHeight;
+  }, [outputHeight]);
+
+  useEffect(() => {
+    if (!isDraggingOutput) return;
+
+    const handleMove = (e: MouseEvent | TouchEvent) => {
+      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+      const deltaY = dragStartYRef.current - clientY;
+      const minHeight = 120;
+      const maxHeight = typeof window !== 'undefined' ? Math.floor(window.innerHeight * 0.75) : 600;
+      const newHeight = Math.min(Math.max(dragStartHeightRef.current + deltaY, minHeight), maxHeight);
+      setOutputHeight(newHeight);
+    };
+
+    const handleEnd = () => {
+      setIsDraggingOutput(false);
+    };
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleEnd);
+    window.addEventListener('touchmove', handleMove);
+    window.addEventListener('touchend', handleEnd);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleEnd);
+      window.removeEventListener('touchmove', handleMove);
+      window.removeEventListener('touchend', handleEnd);
+    };
+  }, [isDraggingOutput]);
+
+  const toggleOutputExpand = () => {
+    setOutputHeight((prev) => (prev > 360 ? 260 : 500));
+  };
+
   // Keep active report in sync when switching question tabs
   useEffect(() => {
     setActiveReport(submission.questionReports[currentQIndex] || null);
@@ -1560,16 +1607,46 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
               </div>
             )}
 
+            {/* Draggable Resizer Bar (Slide Up / Down) */}
+            {!isMobileScreen && (
+              <div
+                onMouseDown={handleOutputResizeStart}
+                onTouchStart={handleOutputResizeStart}
+                style={{
+                  height: '8px',
+                  background: isDraggingOutput ? 'rgba(16, 185, 129, 0.4)' : '#18181b',
+                  borderTop: '1px solid #27272a',
+                  borderBottom: '1px solid #27272a',
+                  cursor: 'row-resize',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  userSelect: 'none',
+                  transition: isDraggingOutput ? 'none' : 'background 0.15s ease',
+                  zIndex: 5
+                }}
+                title="Drag to resize Output terminal (Slide up or down)"
+              >
+                <div
+                  style={{
+                    width: '36px',
+                    height: '3px',
+                    borderRadius: '2px',
+                    background: isDraggingOutput ? '#10b981' : '#52525b'
+                  }}
+                />
+              </div>
+            )}
+
             {/* Desktop Output Window (>= 1024px) */}
             {!isMobileScreen && (
               <div
                 style={{
-                  height: activeReport || compileError ? '280px' : '180px',
-                  borderTop: '1px solid #27272a',
+                  height: `${outputHeight}px`,
                   background: '#09090b',
                   display: 'flex',
                   flexDirection: 'column',
-                  transition: 'height 0.2s ease',
+                  transition: isDraggingOutput ? 'none' : 'height 0.15s ease',
                   overflow: 'hidden'
                 }}
               >
@@ -1585,9 +1662,39 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                     padding: '0 14px'
                   }}
                 >
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#f4f4f5', letterSpacing: '0.02em' }}>
-                    Output
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#f4f4f5', letterSpacing: '0.02em' }}>
+                      Output
+                    </span>
+                    <button
+                      type="button"
+                      onClick={toggleOutputExpand}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#71717a',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '11px',
+                        padding: '2px 4px'
+                      }}
+                      title={outputHeight > 360 ? 'Collapse Output' : 'Slide Up / Expand Output'}
+                    >
+                      {outputHeight > 360 ? (
+                        <>
+                          <Minimize2 size={12} color="#10b981" />
+                          <span style={{ color: '#10b981' }}>Collapse</span>
+                        </>
+                      ) : (
+                        <>
+                          <Maximize2 size={12} />
+                          <span>Slide Up</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {isCompiling && (
                       <span style={{ fontSize: '11px', color: '#10b981', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
