@@ -8,6 +8,7 @@ import pty
 import select
 import subprocess
 import tempfile
+import threading
 import time
 import re
 import uuid
@@ -67,18 +68,76 @@ def run_judge(code: str, language: str, stdin: str):
             "--workdir", "/workspace", IMAGE, *judge_command_for(language),
         ]
         try:
-            completed = subprocess.run(
-                docker_command, input=stdin.encode("utf-8"),
+            process = subprocess.Popen(
+                docker_command, stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                timeout=MAX_JUDGE_SECONDS, check=False,
             )
-        except subprocess.TimeoutExpired as exc:
-            subprocess.run(["docker", "rm", "-f", container_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3, check=False)
-            raise TimeoutError("Judge worker exceeded its hard safety timeout; retry evaluation.") from exc
         except (FileNotFoundError, OSError) as exc:
             raise RuntimeError("The isolated judge runtime is unavailable.") from exc
 
-        if completed.returncode == 125:
+        stdout_buffer = bytearray()
+        stderr_buffer = bytearray()
+        output_total = [0]
+        output_lock = threading.Lock()
+        output_exceeded = threading.Event()
+
+        def drain(pipe, buffer):
+            while True:
+                chunk = pipe.read(4096)
+                if not chunk:
+                    break
+                with output_lock:
+                    output_total[0] += len(chunk)
+                    remaining = max(0, MAX_OUTPUT - len(buffer))
+                    if remaining:
+                        buffer.extend(chunk[:remaining])
+                    if output_total[0] > MAX_OUTPUT:
+                        output_exceeded.set()
+
+        stdout_thread = threading.Thread(target=drain, args=(process.stdout, stdout_buffer), daemon=True)
+        stderr_thread = threading.Thread(target=drain, args=(process.stderr, stderr_buffer), daemon=True)
+        stdout_thread.start()
+        stderr_thread.start()
+        try:
+            process.stdin.write(stdin.encode("utf-8"))
+            process.stdin.close()
+        except (BrokenPipeError, OSError):
+            pass
+
+        deadline = time.monotonic() + MAX_JUDGE_SECONDS
+        while process.poll() is None:
+            if output_exceeded.is_set():
+                subprocess.run(["docker", "rm", "-f", container_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3, check=False)
+                break
+            if time.monotonic() >= deadline:
+                subprocess.run(["docker", "rm", "-f", container_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3, check=False)
+                process.kill()
+                process.wait(timeout=3)
+                stdout_thread.join(timeout=2)
+                stderr_thread.join(timeout=2)
+                raise TimeoutError("Judge worker exceeded its hard safety timeout; retry evaluation.")
+            time.sleep(0.05)
+
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=2)
+        stdout_thread.join(timeout=2)
+        stderr_thread.join(timeout=2)
+        if output_exceeded.is_set():
+            return {
+                "exitCode": 125,
+                "stdout": stdout_buffer.decode("utf-8", errors="replace"),
+                "stderr": "Output limit exceeded (64 KB).",
+                "compileError": False, "runtimeMs": None, "memoryKb": None,
+                "wallTimeMs": round((time.monotonic() - started) * 1000, 2),
+                "statusDescription": "Output Limit Exceeded",
+            }
+        stdout = stdout_buffer.decode("utf-8", errors="replace")
+        stderr = stderr_buffer.decode("utf-8", errors="replace")
+        completed_returncode = int(process.returncode or 0)
+        if completed_returncode == 125:
             raise RuntimeError("The isolated sandbox could not start. Retry evaluation; no marks were awarded.")
         stdout = completed.stdout[:MAX_OUTPUT].decode("utf-8", errors="replace")
         stderr = completed.stderr[:MAX_OUTPUT].decode("utf-8", errors="replace")
@@ -98,10 +157,10 @@ def run_judge(code: str, language: str, stdin: str):
             memory_kb = int(match.group(2))
             stderr = stderr[:match.start()].rstrip()
 
-        compile_error = completed.returncode == 86
+        compile_error = completed_returncode == 86
         status = "Compilation Error" if compile_error else "Accepted" if completed.returncode == 0 else "Runtime Error"
         return {
-            "exitCode": int(completed.returncode),
+            "exitCode": completed_returncode,
             "stdout": stdout,
             "stderr": stderr or None,
             "compileError": compile_error,
