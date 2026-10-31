@@ -294,29 +294,6 @@ export const PaperSetterPortal: React.FC = () => {
 
         {/* Action Controls Cluster */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {/* 1-Click Return to Chief Proctor Admin Portal */}
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => {
-              navigate('/admin');
-              playSound('click');
-            }}
-            style={{
-              gap: '6px',
-              fontSize: '11.5px',
-              fontWeight: 700,
-              padding: '6px 14px',
-              border: '1px solid rgba(239, 68, 68, 0.4)',
-              background: 'rgba(239, 68, 68, 0.1)',
-              color: '#ef4444'
-            }}
-            title="Return to Chief Proctor CCTV Live Surveillance & Administration"
-          >
-            <ShieldAlert size={14} color="#ef4444" />
-            <span>Chief Proctor Admin</span>
-          </button>
-
           {/* AI Paper Generator Trigger */}
           <button
             type="button"
@@ -413,33 +390,6 @@ export const PaperSetterPortal: React.FC = () => {
           >
             <RefreshCw size={12} className={isSyncing ? 'spin' : ''} />
             <span>{isSyncing ? 'Syncing...' : 'Sync'}</span>
-          </button>
-
-          {/* 1-Click to Chief Proctor CCTV Control Room */}
-          <button
-            type="button"
-            onClick={() => {
-              playSound('click');
-              navigate('/admin');
-            }}
-            className="btn btn-secondary btn-sm"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '11.5px',
-              fontWeight: 600,
-              padding: '6px 14px',
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid rgba(239, 68, 68, 0.4)',
-              background: 'rgba(239, 68, 68, 0.08)',
-              color: '#ef4444',
-              cursor: 'pointer'
-            }}
-            title="Return to Chief Proctor CCTV Live Surveillance Control Room"
-          >
-            <ShieldAlert size={13} color="#ef4444" />
-            <span>Chief Proctor CCTV</span>
           </button>
         </div>
       </div>

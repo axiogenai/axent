@@ -230,6 +230,25 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
+  // Dynamic theme tokens responsive to light/dark mode
+  const t = useMemo(() => ({
+    bgApp: isDark ? '#09090b' : '#f8fafc',
+    bgCard: isDark ? '#121214' : '#ffffff',
+    bgCardElevated: isDark ? '#18181b' : '#f8fafc',
+    bgSurface: isDark ? '#18181b' : '#f1f5f9',
+    bgSubtle: isDark ? '#27272a' : '#e2e8f0',
+    bgInput: isDark ? '#18181b' : '#ffffff',
+    bgTableHead: isDark ? '#18181b' : '#f8fafc',
+    border: isDark ? '#27272a' : '#e2e8f0',
+    borderStrong: isDark ? '#3f3f46' : '#cbd5e1',
+    textPrimary: isDark ? '#f4f4f5' : '#0f172a',
+    textSecondary: isDark ? '#a1a1aa' : '#475569',
+    textMuted: isDark ? '#71717a' : '#64748b',
+    tabActiveBg: isDark ? '#27272a' : '#0f172a',
+    tabActiveText: '#ffffff',
+    tabActiveBorder: isDark ? '#f4f4f5' : '#0f172a',
+  }), [isDark]);
+
   const [subTab, setSubTab] = useState<'leaderboard' | 'questions' | 'live_streams'>('leaderboard');
 
 
@@ -561,8 +580,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
   // Dynamic total max marks — computed from actual per-problem marks set by admin
   const totalMaxMarks = useMemo(() => {
-    if (problems.length === 0) return 100;
-    return problems.reduce((sum, p) => sum + (p.marks || 20), 0);
+    return problems.reduce((sum, p) => sum + (Number(p.marks) || 0), 0);
   }, [problems]);
 
 
@@ -1034,54 +1052,51 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-  const activeProblem = useMemo(() => {
+  const defaultEmptyProblem: Round2Problem = useMemo(() => ({
+    id: 'r2_q' + (activeQTab || 1) + '_' + Date.now(),
+    number: activeQTab || 1,
+    title: 'Coding Problem ' + (activeQTab || 1),
+    difficulty: 'Medium',
+    marks: 40,
+    timeLimitMs: 2000,
+    description: '',
+    inputFormat: 'Standard input stream (stdin)',
+    outputFormat: 'Standard output stream (stdout)',
+    constraints: ['1 <= N <= 10^5'],
+    sampleTestCases: [],
+    hiddenTestCases: [],
+    starterCode: {
+      Python: '# Write your solution below\n\ndef solution():\n    pass\n\nif __name__ == "__main__":\n    solution()\n',
+      'C++': '// Write your solution below\n#include <iostream>\nusing namespace std;\n\nint main() {\n    // Code here\n    return 0;\n}\n',
+      Java: '// Write your solution below\nimport java.util.*;\n\npublic class Solution {\n    public static void main(String[] args) {\n        // Code here\n    }\n}\n',
+      C: '// Write your solution below\n#include <stdio.h>\n\nint main() {\n    // Code here\n    return 0;\n}\n',
+      JavaScript: '// Write your solution below\nconst fs = require("fs");\n\nfunction solution() {\n    // Code here\n}\nsolution();\n'
+    }
+  }), [activeQTab]);
 
-
-
-    return problems.find((p) => p.number === activeQTab) || problems[0] || ({ id: "q1", number: 1, title: "", difficulty: "Medium", marks: 20, timeLimitMs: 2000, description: "", inputFormat: "", outputFormat: "", constraints: [], sampleTestCases: [], hiddenTestCases: [], starterCode: { Python: "" } } as any);
-
-
-
-  }, [problems, activeQTab]);
-
-
+  const activeProblem: Round2Problem = useMemo(() => {
+    return problems.find((p) => p.number === activeQTab) || problems[0] || defaultEmptyProblem;
+  }, [problems, activeQTab, defaultEmptyProblem]);
 
   const updateActiveProblemField = (field: keyof Round2Problem, val: any) => {
-
-
-
-    setProblems((prev) =>
-
-
-
-      prev.map((prob) => {
-
-
-
-        if (prob.number === activeQTab) {
-
-
-
+    setProblems((prev) => {
+      const targetNum = activeQTab || 1;
+      const index = prev.findIndex((p) => p.number === targetNum);
+      if (index === -1) {
+        const baseProb = { ...defaultEmptyProblem, number: targetNum, id: 'r2_q' + targetNum + '_' + Date.now() };
+        const newProb = {
+          ...baseProb,
+          [field]: val
+        };
+        return [...prev, newProb].sort((a, b) => a.number - b.number);
+      }
+      return prev.map((prob) => {
+        if (prob.number === targetNum) {
           return { ...prob, [field]: val };
-
-
-
         }
-
-
-
         return prob;
-
-
-
-      })
-
-
-
-    );
-
-
-
+      });
+    });
   };
 
 
@@ -1230,11 +1245,8 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-          background: '#121214',
-
-
-
-          border: '1px solid #27272a',
+          background: t.bgCard,
+          border: `1px solid ${t.border}`,
 
 
 
@@ -1294,15 +1306,9 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-              border: subTab === 'leaderboard' ? '1px solid #f4f4f5' : '1px solid transparent',
-
-
-
-              background: subTab === 'leaderboard' ? '#27272a' : 'transparent',
-
-
-
-              color: subTab === 'leaderboard' ? '#ffffff' : '#a1a1aa',
+              border: subTab === 'leaderboard' ? `1px solid ${t.tabActiveBorder}` : '1px solid transparent',
+              background: subTab === 'leaderboard' ? t.tabActiveBg : 'transparent',
+              color: subTab === 'leaderboard' ? t.tabActiveText : t.textMuted,
 
 
 
@@ -1366,7 +1372,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                background: subTab === 'leaderboard' ? '#18181b' : '#27272a',
+                background: subTab === 'leaderboard' ? (isDark ? '#18181b' : '#334155') : t.bgSubtle,
 
 
 
@@ -1430,15 +1436,9 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-              border: subTab === 'questions' ? '1px solid #f4f4f5' : '1px solid transparent',
-
-
-
-              background: subTab === 'questions' ? '#27272a' : 'transparent',
-
-
-
-              color: subTab === 'questions' ? '#ffffff' : '#a1a1aa',
+              border: subTab === 'questions' ? `1px solid ${t.tabActiveBorder}` : '1px solid transparent',
+              background: subTab === 'questions' ? t.tabActiveBg : 'transparent',
+              color: subTab === 'questions' ? t.tabActiveText : t.textMuted,
 
 
 
@@ -1522,15 +1522,9 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-              border: subTab === 'live_streams' ? '1px solid #f4f4f5' : '1px solid transparent',
-
-
-
-              background: subTab === 'live_streams' ? '#27272a' : 'transparent',
-
-
-
-              color: subTab === 'live_streams' ? '#ffffff' : '#a1a1aa',
+              border: subTab === 'live_streams' ? `1px solid ${t.tabActiveBorder}` : '1px solid transparent',
+              background: subTab === 'live_streams' ? t.tabActiveBg : 'transparent',
+              color: subTab === 'live_streams' ? t.tabActiveText : t.textMuted,
 
 
 
@@ -1594,7 +1588,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                background: subTab === 'live_streams' ? '#18181b' : '#27272a',
+                background: subTab === 'live_streams' ? (isDark ? '#18181b' : '#334155') : t.bgSubtle,
 
 
 
@@ -1691,15 +1685,12 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                  background: '#18181b',
+                  background: t.bgInput,
+                  border: `1px solid ${t.border}`,
 
 
 
-                  border: '1px solid #27272a',
-
-
-
-                  color: '#e4e4e7',
+                  color: t.textPrimary,
 
 
 
@@ -1926,15 +1917,12 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                  background: 'transparent',
+                  background: t.bgCard,
+                  border: `1px solid ${t.border}`,
 
 
 
-                  border: '1px solid #27272a',
-
-
-
-                  color: '#f4f4f5',
+                  color: t.textPrimary,
 
 
 
@@ -2290,11 +2278,8 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-              background: '#121214',
-
-
-
-              border: '1px solid #27272a',
+              background: t.bgCard,
+              border: `1px solid ${t.border}`,
 
 
 
@@ -2354,7 +2339,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                  color: '#f4f4f5',
+                  color: t.textPrimary,
 
 
 
@@ -2486,11 +2471,8 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-              background: '#121214',
-
-
-
-              border: '1px solid #27272a',
+              background: t.bgCard,
+              border: `1px solid ${t.border}`,
 
 
 
@@ -2730,7 +2712,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                                background: '#18181b',
+                                background: t.bgSubtle,
 
 
 
@@ -3062,7 +3044,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                                background: '#18181b',
+                                background: t.bgSubtle,
 
 
 
@@ -3070,7 +3052,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                                color: '#e4e4e7',
+                                color: t.textPrimary,
 
 
 
@@ -3247,14 +3229,14 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
           {/* DIRECT ON-SCREEN QUICK-PASTE 10 QUESTIONS BOX */}
-          <div style={{ background: '#121214', border: '1px solid #3b82f6', borderRadius: '8px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ background: t.bgCard, border: `1px solid ${isDark ? '#3b82f6' : '#93c5fd'}`, borderRadius: '8px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <ListPlus size={16} color="#60a5fa" />
-                <strong style={{ fontSize: '13.5px', color: '#f4f4f5' }}>Import Coding Questions (Paste Text)</strong>
-                <span style={{ fontSize: '11px', color: '#60a5fa', background: 'rgba(59, 130, 246, 0.15)', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Fast Mode</span>
+                <ListPlus size={16} color={isDark ? '#60a5fa' : '#2563eb'} />
+                <strong style={{ fontSize: '13.5px', color: t.textPrimary }}>Import Coding Questions (Paste Text)</strong>
+                <span style={{ fontSize: '11px', color: isDark ? '#60a5fa' : '#2563eb', background: isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(37, 99, 235, 0.08)', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Fast Mode</span>
               </div>
-              <span style={{ fontSize: '11.5px', color: '#71717a' }}>Paste your questions directly (one per line or numbered) — titles, boilerplates & test cases are auto-configured!</span>
+              <span style={{ fontSize: '11.5px', color: t.textMuted }}>Paste your questions directly (one per line or numbered) — titles, boilerplates & test cases are auto-configured!</span>
             </div>
             <textarea
               value={quickPasteText}
@@ -3263,11 +3245,11 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
               rows={4}
               style={{
                 width: '100%',
-                background: '#09090b',
-                border: '1px solid #27272a',
+                background: t.bgInput,
+                border: `1px solid ${t.border}`,
                 borderRadius: '6px',
                 padding: '10px',
-                color: '#e4e4e7',
+                color: t.textPrimary,
                 fontSize: '12px',
                 fontFamily: 'monospace',
                 lineHeight: 1.5,
@@ -3276,7 +3258,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
               }}
             />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '11.5px', color: '#a1a1aa' }}>Ready to parse & save to cloud</span>
+              <span style={{ fontSize: '11.5px', color: t.textSecondary }}>Ready to parse & save to cloud</span>
               <button
                 type="button"
                 onClick={() => handleQuickPasteSubmit()}
@@ -3284,7 +3266,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
                 style={{
                   padding: '7px 18px',
                   borderRadius: '6px',
-                  background: quickPasteText.trim() ? '#2563eb' : '#27272a',
+                  background: quickPasteText.trim() ? '#2563eb' : t.bgSubtle,
                   border: 'none',
                   color: '#ffffff',
                   fontSize: '12px',
@@ -3305,7 +3287,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-          <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ background: t.bgCardElevated, border: `1px solid ${t.border}`, borderRadius: '6px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
 
 
 
@@ -3317,19 +3299,10 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-              <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#f4f4f5' }}>
-
-
-
+              <span style={{ fontSize: '12.5px', fontWeight: 700, color: t.textPrimary }}>
                 Question Pool: {problems.length} Questions Configured
-
-
-
               </span>
-
-
-
-              <span style={{ fontSize: '11px', color: '#a1a1aa' }}>
+              <span style={{ fontSize: '11px', color: t.textMuted }}>
 
 
 
@@ -3501,15 +3474,9 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                    border: isActive ? '1px solid #f4f4f5' : '1px solid #27272a',
-
-
-
-                    background: isActive ? '#27272a' : '#121214',
-
-
-
-                    color: isActive ? '#ffffff' : '#a1a1aa',
+                    border: isActive ? (isDark ? '1px solid #f4f4f5' : '1px solid #09090b') : `1px solid ${t.border}`,
+                    background: isActive ? t.tabActiveBg : t.bgCard,
+                    color: isActive ? t.tabActiveText : t.textMuted,
 
 
 
@@ -3565,7 +3532,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                      background: '#18181b',
+                      background: t.bgSubtle,
 
 
 
@@ -3621,11 +3588,8 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-              background: '#121214',
-
-
-
-              border: '1px solid #27272a',
+              background: t.bgCard,
+              border: `1px solid ${t.border}`,
 
 
 
@@ -3668,11 +3632,11 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
                 onChange={(e) => updateActiveProblemField('title', e.target.value)}
                 style={{
                   width: '100%',
-                  background: '#18181b',
-                  border: '1px solid #27272a',
+                  background: t.bgInput,
+                  border: `1px solid ${t.border}`,
                   borderRadius: '6px',
                   padding: '8px 10px',
-                  color: '#f4f4f5',
+                  color: t.textPrimary,
                   fontSize: '13px',
                   outline: 'none'
                 }}
@@ -3683,7 +3647,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
               {/* Difficulty */}
               <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: t.textSecondary, textTransform: 'uppercase', marginBottom: '4px' }}>
                   Difficulty
                 </label>
                 <select
@@ -3693,11 +3657,11 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
                     updateActiveProblemField('difficulty', diff);
                     // Auto-update marks when difficulty changes if marks are still at a default
                     const defaultMarks = activeProblem.difficulty === 'Easy' ? 20 : activeProblem.difficulty === 'Medium' ? 40 : 60;
-                    if (activeProblem.marks === defaultMarks) {
+                    if (Number(activeProblem.marks) === defaultMarks) {
                       updateActiveProblemField('marks', diff === 'Easy' ? 20 : diff === 'Medium' ? 40 : 60);
                     }
                   }}
-                  style={{ width: '100%', background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '8px 10px', color: '#f4f4f5', fontSize: '13px', outline: 'none' }}
+                  style={{ width: '100%', background: t.bgInput, border: `1px solid ${t.border}`, borderRadius: '6px', padding: '8px 10px', color: t.textPrimary, fontSize: '13px', outline: 'none' }}
                 >
                   <option value="Easy">Easy</option>
                   <option value="Medium">Medium</option>
@@ -3706,21 +3670,34 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
               </div>
               {/* Marks */}
               <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: t.textSecondary, textTransform: 'uppercase', marginBottom: '4px' }}>
                   Marks
                 </label>
                 <input
                   type="number"
                   min={1}
                   max={200}
-                  value={activeProblem.marks}
-                  onChange={(e) => updateActiveProblemField('marks', Math.max(1, Number(e.target.value) || 20))}
-                  style={{ width: '100%', background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '8px 10px', color: '#f4f4f5', fontSize: '13px', outline: 'none' }}
+                  value={activeProblem.marks !== undefined && activeProblem.marks !== null ? activeProblem.marks : ''}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === '') {
+                      updateActiveProblemField('marks', '');
+                    } else {
+                      const num = parseInt(raw, 10);
+                      updateActiveProblemField('marks', isNaN(num) ? '' : num);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!activeProblem.marks || Number(activeProblem.marks) < 1) {
+                      updateActiveProblemField('marks', activeProblem.difficulty === 'Easy' ? 20 : activeProblem.difficulty === 'Medium' ? 40 : 60);
+                    }
+                  }}
+                  style={{ width: '100%', background: t.bgInput, border: `1px solid ${t.border}`, borderRadius: '6px', padding: '8px 10px', color: t.textPrimary, fontSize: '13px', outline: 'none' }}
                 />
               </div>
               {/* Time Limit */}
               <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: t.textSecondary, textTransform: 'uppercase', marginBottom: '4px' }}>
                   Time Limit (ms)
                 </label>
                 <input
@@ -3730,14 +3707,14 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
                   step={500}
                   value={activeProblem.timeLimitMs}
                   onChange={(e) => updateActiveProblemField('timeLimitMs', Math.max(500, Number(e.target.value) || 2000))}
-                  style={{ width: '100%', background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '8px 10px', color: '#f4f4f5', fontSize: '13px', outline: 'none' }}
+                  style={{ width: '100%', background: t.bgInput, border: `1px solid ${t.border}`, borderRadius: '6px', padding: '8px 10px', color: t.textPrimary, fontSize: '13px', outline: 'none' }}
                 />
               </div>
             </div>
 
             {/* Total marks indicator */}
-            <div style={{ fontSize: '11px', color: '#71717a', textAlign: 'right', marginTop: '-4px' }}>
-              Total across all problems: <strong style={{ color: '#a1a1aa' }}>{totalMaxMarks} marks</strong>
+            <div style={{ fontSize: '11px', color: t.textMuted, textAlign: 'right', marginTop: '-4px' }}>
+              Total across all problems: <strong style={{ color: t.textPrimary }}>{totalMaxMarks} marks</strong>
             </div>
 
             {/* Problem Description */}
@@ -3784,11 +3761,8 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                  background: '#18181b',
-
-
-
-                  border: '1px solid #27272a',
+                  background: t.bgInput,
+                  border: `1px solid ${t.border}`,
 
 
 
@@ -3800,7 +3774,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                  color: '#f4f4f5',
+                  color: t.textPrimary,
 
 
 
@@ -4210,11 +4184,8 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-              background: '#121214',
-
-
-
-              border: '1px solid #27272a',
+              background: t.bgCard,
+              border: `1px solid ${t.border}`,
 
 
 
@@ -4758,7 +4729,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                          background: '#18181b',
+                          background: t.bgSubtle,
 
 
 
@@ -4766,7 +4737,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                          color: '#e4e4e7',
+                          color: t.textPrimary,
 
 
 
@@ -4830,7 +4801,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                        background: '#18181b',
+                        background: t.bgSubtle,
 
 
 
@@ -5182,7 +5153,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                          color: '#e4e4e7',
+                          color: t.textPrimary,
 
 
 
@@ -5250,7 +5221,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                              background: '#18181b',
+                              background: t.bgSubtle,
 
 
 
@@ -5486,11 +5457,8 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-              background: '#121214',
-
-
-
-              border: '1px solid #27272a',
+              background: t.bgCard,
+              border: `1px solid ${t.border}`,
 
 
 
@@ -5674,7 +5642,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                  color: '#e4e4e7',
+                  color: t.textPrimary,
 
 
 

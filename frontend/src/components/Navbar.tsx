@@ -17,7 +17,8 @@ import {
   Download,
   Zap,
   RefreshCw,
-  Trash2
+  Trash2,
+  ArrowLeft
 } from 'lucide-react';
 import { triggerInstallPrompt } from './ui/PWAInstallPrompt';
 import { ThemeMode } from '../types/dna';
@@ -284,12 +285,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            {/* If in Paper Setter, provide 1-click switch back to Admin CCTV */}
+            {/* If in Paper Setter, provide 1-click switch back to Admin */}
             {isPaperSetterRoute && (
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={() => navigate('/admin')}
-                title="Switch to Chief Proctor CCTV Live Surveillance"
+                title="Return to Chief Proctor Admin Portal"
                 style={{
                   height: '30px',
                   padding: '0 10px',
@@ -297,13 +298,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                   fontSize: '11px',
                   fontWeight: 600,
                   borderRadius: 'var(--radius-sm)',
-                  border: '1px solid rgba(239, 68, 68, 0.4)',
-                  background: 'rgba(239, 68, 68, 0.08)',
-                  color: '#ef4444'
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-card)',
+                  color: 'var(--text-secondary)'
                 }}
               >
-                <ShieldAlert size={13} color="#ef4444" />
-                <span>Admin CCTV</span>
+                <ArrowLeft size={13} />
+                <span>Admin Portal</span>
               </button>
             )}
 
