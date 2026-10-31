@@ -1,3 +1,4 @@
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { getCodeSparkRosterConfig, supabaseRest } from "./_security.js";
 import { parseRuntimeMs, scoreRound2Rubric } from "./_round2-rubric.js";
 
@@ -99,7 +100,58 @@ function assignedProblems(pool, key) {
   return list.slice(0, 5);
 }
 
-async function execute(code, language, stdin) {
+async function execute(code, language, stdin, candidateKey = "", problemId = "") {
+  const runnerUrl = String(process.env.CODE_RUNNER_URL || "").replace(/\\/+$/, "");
+  const runnerSecret = String(process.env.CODE_RUNNER_SECRET || "");
+  if (runnerUrl && runnerSecret) {
+    const encoded = Buffer.from(JSON.stringify({
+      candidate_hash: createHash("sha256").update(normalizeRound2Key(candidateKey)).digest("hex"),
+      problem_id: String(problemId),
+      language,
+      code_sha256: createHash("sha256").update(code).digest("hex"),
+      exp: Math.floor(Date.now() / 1000) + 30,
+      nonce: randomUUID()
+    })).toString("base64url");
+    const signature = createHmac("sha256", runnerSecret).update(encoded).digest("base64url");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25000);
+    try {
+      const response = await fetch(runnerUrl + "/judge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: encoded + "." + signature, code, language, stdin: String(stdin || "") }),
+        signal: controller.signal
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = new Error(payload.detail || payload.error || "The isolated judge is temporarily unavailable.");
+        error.statusCode = response.status >= 500 ? 503 : 422;
+        throw error;
+      }
+      const runtimeMs = payload.runtimeMs == null ? null : Number(payload.runtimeMs);
+      return {
+        stdout: String(payload.stdout || ""),
+        stderr: payload.stderr || null,
+        compileOutput: payload.compileError ? String(payload.stderr || "Compilation failed.") : null,
+        compileError: Boolean(payload.compileError),
+        isError: Number(payload.exitCode) !== 0,
+        exitCode: Number(payload.exitCode) || 0,
+        time: runtimeMs == null ? "" : String(runtimeMs / 1000) + "s",
+        memory: payload.memoryKb == null ? null : Number(payload.memoryKb),
+        statusDescription: String(payload.statusDescription || "Completed"),
+        engineUsed: "Axent Isolated Runner"
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  if (process.env.VERCEL_ENV === "production") {
+    const error = new Error("The private Axent judge is not configured. Contact the exam administrator; no marks were changed.");
+    error.statusCode = 503;
+    throw error;
+  }
+
+  // Public Wandbox is retained only as a local/development fallback.
   const compiler = await getWandboxCompiler(language);
   const processedCode = language === "Java" ? code.replace(/\bpublic\s+class\b/g, "class ") : code;
   const controller = new AbortController();
@@ -134,8 +186,8 @@ async function execute(code, language, stdin) {
       compileError: Boolean(compileOutput),
       isError,
       exitCode: Number.isFinite(status) ? status : (isError ? 1 : 0),
-      time: result.time ? String(result.time).endsWith("s") ? String(result.time) : String(result.time) + "s" : "0.00s",
-      memory: Number(result.memory) || 0,
+      time: result.time ? (String(result.time).endsWith("s") ? String(result.time) : String(result.time) + "s") : "",
+      memory: result.memory == null || result.memory === "" ? null : Number(result.memory),
       statusDescription,
       engineUsed: "Wandbox " + String(compiler.version || compiler.name)
     };
@@ -184,7 +236,7 @@ export async function runRound2Code(keyInput, problemIdInput, codeInput, languag
   if (!problems.some((problem) => String(problem.id) === problemId)) {
     const error = new Error("This problem is not assigned to this candidate."); error.statusCode = 403; throw error;
   }
-  return execute(code, language, stdin);
+  return execute(code, language, stdin, key, problemId);
 }
 
 export async function gradeRound2Code(keyInput, problemIdInput, codeInput, languageInput, allowLocked = false, customStdin = "") {
@@ -250,7 +302,7 @@ export async function gradeRound2Code(keyInput, problemIdInput, codeInput, langu
 
   let runResult = null;
   if (customStdin !== undefined && customStdin !== null && String(customStdin).length > 0) {
-    runResult = await execute(code, language, String(customStdin));
+    runResult = await execute(code, language, String(customStdin), key, problemId);
   }
 
   const testResults = [];
@@ -264,7 +316,7 @@ export async function gradeRound2Code(keyInput, problemIdInput, codeInput, langu
     for (const test of tests) {
       // Infrastructure failures throw from execute and abort grading. They are
       // deliberately not converted into failed tests or zero marks.
-      const result = await execute(code, language, String(test.input || ""));
+      const result = await execute(code, language, String(test.input || ""), key, problemId);
       if (!runResult) runResult = result;
       const runtimeMs = parseRuntimeMs(result.time);
       const memoryKb = Number.isFinite(Number(result.memory)) ? Number(result.memory) : null;
