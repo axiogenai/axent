@@ -34,8 +34,15 @@ export default async function handler(req, res) {
       if (!problem || typeof problem !== "object" || !Array.isArray(problem.sampleTestCases) || !Array.isArray(problem.hiddenTestCases)) {
         return res.status(400).json({ success: false, error: "Each problem must include sample and hidden test case arrays." });
       }
-      if (problem.sampleTestCases.length > 30 || problem.hiddenTestCases.length > 200) {
+      const performanceTests = Array.isArray(problem.performanceTestCases) ? problem.performanceTestCases : [];
+      const robustnessTests = Array.isArray(problem.robustnessTestCases) ? problem.robustnessTestCases : [];
+      if (problem.sampleTestCases.length > 30 || problem.hiddenTestCases.length > 200 ||
+          performanceTests.length > 100 || robustnessTests.length > 100) {
         return res.status(400).json({ success: false, error: "Test case limit exceeded." });
+      }
+      if (performanceTests.some((test) => !test || !Number.isFinite(Number(test.maxTimeMs)) || Number(test.maxTimeMs) <= 0 ||
+          (test.maxMemoryKb != null && (!Number.isFinite(Number(test.maxMemoryKb)) || Number(test.maxMemoryKb) <= 0)))) {
+        return res.status(400).json({ success: false, error: "Performance tests require positive maxTimeMs and optional positive maxMemoryKb thresholds." });
       }
     }
     const config = { problems: body.problems, updatedAt: Date.now() };
