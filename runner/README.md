@@ -20,6 +20,8 @@ A dedicated Linux host service for genuine interactive Round 2 terminals. Vercel
 5. Configure the Vercel frontend build variable:
    - `VITE_CODE_RUNNER_WS_URL`: `wss://terminal.axent.axiogen.in/ws/terminal`.
 6. Rebuild/redeploy Axent and verify `GET https://terminal.axent.axiogen.in/health` returns `{"status":"ok"}`.
+7. Configure Vercel server-only `CODE_RUNNER_URL` and `CODE_RUNNER_SECRET` to the same runner URL and secret. Production grading intentionally fails closed with a retryable service error if these are missing; it does not silently fall back to the public compiler.
+8. Run the concurrent staging smoke test from this directory: `AXENT_RUNNER_URL=https://terminal-staging.example.com AXENT_RUNNER_SECRET=... python smoke_test.py`. It sends eight concurrent isolated candidate-style requests and checks runtime/memory telemetry. Do not point it at the live college exam runner during an exam.
 
 ## Security
 
