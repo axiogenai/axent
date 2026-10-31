@@ -288,39 +288,23 @@ export default async function handler(req, res) {
       });
     }
 
-    try {
-      await supabaseRest("rpc/save_codespark_round2_progress", {
-        method: "POST",
-        body: JSON.stringify({
-          p_candidate_hash: candidateHash,
-          p_station_id: rowId,
-          p_submission: safeSubmission,
-          p_student: student,
-          p_station_number: stationNumber
-        })
-      });
-    } catch {}
-
-    // Direct fallback into candidate_stations so live leaderboard & dossier always reflect progress
-    await supabaseRest("candidate_stations?on_conflict=id", {
+    const progressSaved = await supabaseRest("rpc/save_codespark_round2_progress", {
       method: "POST",
-      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
-      body: JSON.stringify([{
-        id: rowId,
-        lab_id: "ROUND_2_ARENA",
-        station_number: stationNumber,
-        status: isSubmitted ? "SUBMITTED" : "IN_PROGRESS",
-        code: JSON.stringify(safeSubmission),
-        language: dominantLanguage,
-        exam_mode: "CODING",
-        student: {
-          ...student,
-          assignmentTitle: "Round 2 Algorithmic Code Sprint",
-          course: "Round 2 Code Sprint"
-        },
-        last_updated_timestamp: Date.now()
-      }])
+      body: JSON.stringify({
+        p_candidate_hash: candidateHash,
+        p_station_id: rowId,
+        p_submission: safeSubmission,
+        p_student: student,
+        p_station_number: stationNumber
+      })
     });
+    if (progressSaved === false) {
+      return res.status(409).json({
+        success: false,
+        error: "This submission has already been finalized. Refresh to retrieve the sealed result."
+      });
+    }
+
 
     return res.status(200).json({
       success: true,
