@@ -21,8 +21,20 @@ export default async function handler(req, res) {
       // Candidate problem payloads contain statements and starter code only.
       // Test inputs/expected outputs stay exclusively in server-side storage.
       const publicProblems = problems.map((problem) => {
-        const { sampleTestCases: _samples, hiddenTestCases: _hidden, ...publicProblem } = problem;
-        return { ...publicProblem, sampleTestCases: [], hiddenTestCases: [] };
+        const {
+          sampleTestCases: _samples,
+          hiddenTestCases: _hidden,
+          performanceTestCases: _performance,
+          robustnessTestCases: _robustness,
+          ...publicProblem
+        } = problem;
+        return {
+          ...publicProblem,
+          sampleTestCases: [],
+          hiddenTestCases: [],
+          performanceTestCases: [],
+          robustnessTestCases: []
+        };
       });
       return res.status(200).json({ success: true, problems: publicProblems });
     }
