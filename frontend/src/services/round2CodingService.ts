@@ -496,7 +496,13 @@ export async function fetchRound2ProblemsFromCloud(admin = false): Promise<Round
   const local = getAllRound2Problems();
   const { data } = await supabase.auth.getSession();
   const isAdmin = data.session?.user?.app_metadata?.role === "admin";
-  return isAdmin ? local : local.map((problem) => ({ ...problem, hiddenTestCases: [] }));
+  return isAdmin ? local : local.map((problem) => ({
+    ...problem,
+    sampleTestCases: [],
+    hiddenTestCases: [],
+    performanceTestCases: [],
+    robustnessTestCases: []
+  }));
 }
 
 /**
