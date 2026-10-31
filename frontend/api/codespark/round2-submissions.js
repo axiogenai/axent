@@ -18,6 +18,8 @@ function candidateSafeSubmission(submission) {
       totalTests: _totalTests,
       hiddenPassedTests: _hiddenPassedTests,
       hiddenTotalTests: _hiddenTotalTests,
+      testResults: _testResults,
+      rubric: _rubric,
       ...safeReport
     } = report;
     questionReports[question] = safeReport;
@@ -177,6 +179,82 @@ export default async function handler(req, res) {
     const { candidate, problems } = await getRound2AssignedProblems(rawKey, false);
     const reports = submission.questionReports && typeof submission.questionReports === "object" ? submission.questionReports : {};
     const reportEntries = Object.values(reports).slice(0, 5);
+
+    const roll = String(candidate.rollNumber || candidate.email || candidate.name || "candidate").trim();
+    const stableCandidateId = `candidate:${roll}`;
+    const rowId = `r2_sub_${cleanId(roll)}`;
+    const liveId = `r2_station_${cleanId(roll)}`;
+    const stationNumber = String(submission.stationNumber || "Station #01").slice(0, 80);
+    const candidateHash = createHash("sha256").update(key).digest("hex");
+    const priorProgressRows = await supabaseRest(`candidate_stations?id=eq.${rowId}&select=code`);
+    let priorStartedAt = 0;
+    try { priorStartedAt = Number(JSON.parse(priorProgressRows?.[0]?.code || "{}").startedAt) || 0; } catch {}
+    const liveRows = await supabaseRest(`candidate_stations?id=eq.${liveId}&select=student`);
+    const serverStartedAt = priorStartedAt || Number(liveRows?.[0]?.student?.startedAt) || Date.now();
+
+    // Persist the submitted source code as retryable progress BEFORE calling the compiler.
+    // If Wandbox is unavailable or a benchmark times out, the candidate's work is already safe.
+    if (isSubmitted) {
+      const progressReports = {};
+      for (let index = 0; index < problems.length; index++) {
+        const problem = problems[index];
+        const raw = reportEntries.find((item) => String(item?.questionId || "") === String(problem.id)) || {};
+        const code = String(raw?.code || "");
+        const language = ["Python", "C", "C++", "Java"].includes(String(raw?.language)) ? String(raw.language) : "Python";
+        if (code.length > 100000) return res.status(400).json({ success: false, error: "A code submission exceeds the allowed size." });
+        progressReports[index + 1] = {
+          questionNumber: index + 1,
+          questionId: problem.id,
+          questionTitle: String(problem.title || "").slice(0, 200),
+          code,
+          language,
+          score: 0,
+          maxScore: Number(problem.marks) > 0 ? Number(problem.marks) : 20,
+          status: code.trim() ? "GRADING" : "UNATTEMPTED"
+        };
+      }
+      const progressSnapshot = {
+        candidateKey: stableCandidateId,
+        candidateName: candidate.name,
+        rollNumber: candidate.rollNumber || "",
+        email: candidate.email || "",
+        department: candidate.department || "",
+        questionReports: progressReports,
+        currentQuestion: Math.min(5, Math.max(1, Number(submission.currentQuestion) || 1)),
+        totalScore: 0,
+        maxScore: 0,
+        isSubmitted: false,
+        startedAt: serverStartedAt,
+        dominantLanguage: "Python",
+        assignedProblemIds: Object.values(progressReports).map((report) => report.questionId),
+        updatedAt: Date.now()
+      };
+      const progressSaved = await supabaseRest("rpc/save_codespark_round2_progress", {
+        method: "POST",
+        body: JSON.stringify({
+          p_candidate_hash: candidateHash,
+          p_station_id: rowId,
+          p_submission: progressSnapshot,
+          p_student: {
+            name: candidate.name,
+            rollNumber: candidate.rollNumber || "",
+            email: candidate.email || "",
+            score: 0,
+            maxScore: 0,
+            isSubmitted: false,
+            startedAt: serverStartedAt
+          },
+          p_station_number: stationNumber
+        })
+      });
+      if (progressSaved === false) {
+        return res.status(409).json({
+          success: false,
+          error: "This submission has already been finalized. Refresh to retrieve the sealed result."
+        });
+      }
+    }
+
     const safeReports = {};
     let totalScore = 0;
     let maxScore = 0;
@@ -232,15 +310,6 @@ export default async function handler(req, res) {
       dominantLanguage = language;
     }
 
-    const roll = String(candidate.rollNumber || candidate.email || candidate.name || "candidate").trim();
-    const stableCandidateId = `candidate:${roll}`;
-    const rowId = `r2_sub_${cleanId(roll)}`;
-    const liveId = `r2_station_${cleanId(roll)}`;
-    const priorProgressRows = await supabaseRest(`candidate_stations?id=eq.${rowId}&select=code`);
-    let priorStartedAt = 0;
-    try { priorStartedAt = Number(JSON.parse(priorProgressRows?.[0]?.code || "{}").startedAt) || 0; } catch {}
-    const liveRows = await supabaseRest(`candidate_stations?id=eq.${liveId}&select=student`);
-    const serverStartedAt = priorStartedAt || Number(liveRows?.[0]?.student?.startedAt) || Date.now();
     const safeSubmission = {
       candidateKey: stableCandidateId,
       candidateName: candidate.name,
@@ -259,16 +328,11 @@ export default async function handler(req, res) {
       updatedAt: Date.now()
     };
 
-    const stationNumber = String(submission.stationNumber || "Station #01").slice(0, 80);
     const student = {
       name: candidate.name, rollNumber: candidate.rollNumber || "",
       email: candidate.email || "", score: safeSubmission.totalScore,
       maxScore: safeSubmission.maxScore, isSubmitted, startedAt: serverStartedAt
     };
-    const candidateHash = createHash("sha256")
-      .update(key)
-      .digest("hex");
-
     if (isSubmitted) {
       const finalized = await supabaseRest("rpc/finalize_codespark_round2_submission", {
         method: "POST",
