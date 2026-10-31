@@ -57,6 +57,19 @@ export default async function handler(req, res) {
           problem.hiddenTestCases.length + performanceTests.length + robustnessTests.length > 230) {
         return res.status(400).json({ success: false, error: "Test case limit exceeded." });
       }
+      const allGradingTests = [...problem.hiddenTestCases, ...performanceTests, ...robustnessTests];
+      const hasCorrectnessTest = problem.hiddenTestCases.some((test) => {
+        const category = String(test?.category || (test?.isPerformance ? "performance" : test?.isRobustness ? "robustness" : "correctness")).toLowerCase();
+        return category !== "performance" && category !== "robustness";
+      });
+      if (!hasCorrectnessTest) {
+        return res.status(400).json({ success: false, error: "Each problem needs at least one hidden correctness test." });
+      }
+      if (allGradingTests.some((test) => !test || typeof test !== "object" ||
+          !Object.prototype.hasOwnProperty.call(test, "input") ||
+          !Object.prototype.hasOwnProperty.call(test, "expectedOutput"))) {
+        return res.status(400).json({ success: false, error: "Every grading test must include input and expectedOutput fields." });
+      }
       // Performance cases are admin-authored large-input scalability checks.
       // The existing Wandbox API does not expose per-program runtime or memory thresholds.
     }
