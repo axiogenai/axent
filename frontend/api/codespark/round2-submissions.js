@@ -255,6 +255,7 @@ export default async function handler(req, res) {
       }
     }
 
+    const gradingDeadlineAt = Date.now() + 50000;
     const safeReports = {};
     let totalScore = 0;
     let maxScore = 0;
@@ -283,7 +284,7 @@ export default async function handler(req, res) {
         maxScore += report.maxScore;
       } else if (isSubmitted) {
         try {
-          report = await gradeRound2Code(key, problem.id, code, language);
+          report = await gradeRound2Code(key, problem.id, code, language, false, "", gradingDeadlineAt);
         } catch (gradingError) {
           console.error("[CodeSpark grading]", gradingError?.message || "evaluation failed");
           return res.status(gradingError?.statusCode || 503).json({
