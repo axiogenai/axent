@@ -359,30 +359,17 @@ function executeInBrowserSandbox(
     }
   }
 
-  // Offline syntax validation fallback for compiled languages
-  const lines = sourceCode.split('\n');
-  const hasBraceBalance = (sourceCode.match(/{/g) || []).length === (sourceCode.match(/}/g) || []).length;
-  const hasParenBalance = (sourceCode.match(/\(/g) || []).length === (sourceCode.match(/\)/g) || []).length;
-  const isSyntaxHealthy = hasBraceBalance && hasParenBalance;
-
+  // A balanced-bracket check is not a compiler. Never present it as successful execution.
   return {
-    stdout: isSyntaxHealthy
-      ? `[Offline Local Pre-Flight Check: Passed]\n` +
-        `• Source Code LOC: ${lines.length} lines\n` +
-        `• Bracket & Parentheses Structure: Balanced\n` +
-        `• Workstation Status: Code is securely cached in local storage with offline integrity timestamp.\n` +
-        `• Notice: Cloud compilers were temporarily unreachable. Code is queued for final submission verification.`
-      : `[Offline Local Pre-Flight Check: Warning]\n` +
-        `• Unbalanced brackets or parentheses detected in source code.\n` +
-        `• Please review syntax before final exam submission.`,
-    stderr: null,
+    stdout: '',
+    stderr: 'The cloud compiler is unavailable. This language cannot be executed locally in the browser.',
     compileOutput: null,
-    exitCode: isSyntaxHealthy ? 0 : 1,
-    time: '0.01s',
-    memory: 2048,
-    statusDescription: isSyntaxHealthy ? 'Offline Verified' : 'Syntax Check Warning',
-    isError: !isSyntaxHealthy,
-    engineUsed: 'Local Station Offline Pre-Flight Engine'
+    exitCode: 1,
+    time: '0.00s',
+    memory: 0,
+    statusDescription: 'Compiler Unavailable',
+    isError: true,
+    engineUsed: 'No execution engine'
   };
 }
 
@@ -393,20 +380,18 @@ function executeInBrowserSandbox(
  *  Tier 3: Wandbox High-Throughput Cluster (unthrottled fallback)
  *  Tier 4: In-Browser Client Sandbox / Offline Pre-flight Engine
  */
-function promiseAny<T>(promises: Promise<T>[]): Promise<T> {
-  return new Promise((resolve, reject) => {
-    let rejectedCount = 0;
-    const errors: any[] = [];
-    promises.forEach((p) => {
-      p.then(resolve).catch((err) => {
-        rejectedCount++;
-        errors.push(err);
-        if (rejectedCount === promises.length) {
-          reject(new Error('All execution promises rejected: ' + errors.join('; ')));
-        }
-      });
-    });
-  });
+async function promiseAny<T>(promises: Promise<T>[]): Promise<T> {
+  const settled = await Promise.allSettled(promises);
+  const fulfilled: T[] = [];
+  const errors: string[] = [];
+  for (const item of settled) {
+    if (item.status === 'fulfilled') fulfilled.push(item.value);
+    else errors.push(item.reason instanceof Error ? item.reason.message : String(item.reason));
+  }
+  const accepted = fulfilled.find((item: any) => !item?.isError);
+  if (accepted !== undefined) return accepted;
+  if (fulfilled.length) return fulfilled[0];
+  throw new Error('All execution engines failed: ' + errors.join('; '));
 }
 
 export async function runRealCode(
