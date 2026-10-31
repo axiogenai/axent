@@ -2893,7 +2893,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                              {entry.timeComplexities?.[1] || 'O(N)'}
+                              {entry.timeComplexities?.[1] || 'Not inferred'}
 
 
 
@@ -4696,7 +4696,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                            <strong style={{ color: '#f4f4f5' }}>{rep.executionTime || (rep.executionTimeMs ? `${rep.executionTimeMs} ms` : '38 ms')}</strong>
+                            <strong style={{ color: '#f4f4f5' }}>{rep.executionTime || (rep.executionTimeMs ? `${rep.executionTimeMs} ms` : 'Unavailable')}</strong>
 
 
 
@@ -4736,7 +4736,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                            <strong style={{ color: '#60a5fa' }}>{rep.spaceComplexity || 'O(1)'}</strong>
+                            <strong style={{ color: '#60a5fa' }}>{rep.spaceComplexity || 'Not inferred'}</strong>
 
 
 
@@ -4780,7 +4780,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                                background: rep.efficiencyRating === 'Optimal' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                background: rep.efficiencyRating === 'Not measured' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
 
 
 
@@ -5024,7 +5024,46 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                    {/* Sample Test Cases Feedback */}
+                    {                    {/* Admin-only hidden-test telemetry; candidate responses strip this data. */}
+                    {Array.isArray(rep.testResults) && rep.testResults.length > 0 && (
+                      <div style={{ border: '1px solid #27272a', borderRadius: '6px', padding: '12px', background: '#09090b' }}>
+                        <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#f4f4f5', marginBottom: '10px', textTransform: 'uppercase' }}>
+                          Hidden Evaluation & Large-Input Benchmarks
+                        </div>
+                        {rep.rubric && (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', marginBottom: '12px' }}>
+                            {(['correctness', 'efficiency', 'robustness'] as const).map((key) => {
+                              const item = rep.rubric?.[key];
+                              return (
+                                <div key={key} style={{ background: '#18181b', borderRadius: '4px', padding: '8px' }}>
+                                  <div style={{ color: '#a1a1aa', fontSize: '10px', textTransform: 'uppercase' }}>{key}</div>
+                                  <div style={{ color: '#f4f4f5', fontSize: '13px', fontWeight: 800 }}>{item?.earned ?? 0} / {item?.weight ?? 0}</div>
+                                  <div style={{ color: '#71717a', fontSize: '10px' }}>{item?.passed ?? 0} / {item?.total ?? 0} passed</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div style={{ display: 'grid', gap: '6px' }}>
+                          {rep.testResults.map((result, index) => (
+                            <div key={result.testCaseId || index} style={{ display: 'grid', gridTemplateColumns: 'minmax(90px, 1fr) repeat(3, minmax(75px, auto))', gap: '8px', alignItems: 'center', background: '#121214', borderRadius: '4px', padding: '8px', fontSize: '10.5px' }}>
+                              <div>
+                                <div style={{ color: '#f4f4f5', fontWeight: 700 }}>{result.category} #{index + 1}</div>
+                                <div style={{ color: '#71717a' }}>Input: {result.inputSizeBytes} bytes</div>
+                              </div>
+                              <div style={{ color: '#a1a1aa' }}>Compiler response<br /><strong style={{ color: '#f4f4f5' }}>{result.compilerElapsedMs == null ? 'Unavailable' : String(result.compilerElapsedMs) + ' ms'}</strong></div>
+                              <div style={{ color: '#a1a1aa' }}>Program runtime / memory<br /><strong style={{ color: '#f4f4f5' }}>Not provided by Wandbox</strong></div>
+                              <div style={{ color: result.passed ? '#10b981' : '#ef4444', fontWeight: 800 }}>{result.passed ? 'PASSED' : 'FAILED'}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ color: '#71717a', fontSize: '10px', marginTop: '8px' }}>
+                          Compiler response time includes network and queue delay. It is not program execution time and is not used to award marks.
+                        </div>
+                      </div>
+                    )}
+
+/* Sample Test Cases Feedback */}
 
 
 
