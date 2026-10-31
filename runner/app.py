@@ -22,6 +22,7 @@ IMAGE = os.environ.get("EXECUTION_IMAGE", "axent-code-sandbox:latest")
 ALLOWED_ORIGINS = {x.strip() for x in os.environ.get("ALLOWED_ORIGINS", "https://axent.axiogen.in").split(",") if x.strip()}
 LANGUAGES = {"C": "c", "C++": "cpp", "Python": "py", "Java": "java"}
 MAX_SOURCE = 100_000
+MAX_JUDGE_STDIN = 1_000_000
 MAX_OUTPUT = 64_000
 MAX_SESSION_SECONDS = 90
 MAX_JUDGE_SECONDS = 12
@@ -171,7 +172,7 @@ async def judge(request: Request):
         code = str(payload.get("code", ""))
         language = str(payload.get("language", ""))
         stdin = str(payload.get("stdin", ""))
-        if language not in LANGUAGES or not code.strip() or len(code.encode("utf-8")) > MAX_SOURCE or len(stdin.encode("utf-8")) > 20_000:
+        if language not in LANGUAGES or not code.strip() or len(code.encode("utf-8")) > MAX_SOURCE or len(stdin.encode("utf-8")) > MAX_JUDGE_STDIN:
             raise ValueError("Invalid judge request.")
         digest = hashlib.sha256(code.encode("utf-8")).hexdigest()
         if not hmac.compare_digest(digest, str(token.get("code_sha256", ""))) or language != token.get("language"):
