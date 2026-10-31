@@ -10,14 +10,18 @@ interface ProtectedRouteProps {
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole = 'admin' }) => {
   const location = useLocation();
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-
-  // Paper Setter Portal and its tab have NO login restriction
-  if (location.pathname.startsWith('/paper-setter') || location.search.includes('tab=paper_setter')) {
-    return <>{children}</>;
-  }
+  const isPaperSetter = location.pathname.startsWith('/paper-setter') || location.search.includes('tab=paper_setter');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(() => {
+    if (isPaperSetter) return true;
+    return null;
+  });
 
   useEffect(() => {
+    if (isPaperSetter) {
+      setIsAuthenticated(true);
+      return;
+    }
+
     let mounted = true;
 
     // Check initial session
@@ -65,7 +69,12 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
       mounted = false;
       unsubscribe();
     };
-  }, [requiredRole]);
+  }, [requiredRole, isPaperSetter]);
+
+  // If paper setter tab or path, grant access unconditionally (called AFTER all hooks)
+  if (isPaperSetter) {
+    return <>{children}</>;
+  }
 
   // Loading state while verifying credentials
   if (isAuthenticated === null) {

@@ -360,31 +360,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
 
 
-            {/* If in Admin, provide 1-click switch to Paper Setter tab */}
-            {isAdminRoute && (
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => {
-                  navigate('/admin?tab=paper_setter');
-                  playSound('click');
-                }}
-                title="Switch to Paper Setter & Question Matrix Tab"
-                style={{
-                  height: '30px',
-                  padding: '0 10px',
-                  gap: '5px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  borderRadius: 'var(--radius-sm)',
-                  border: location.search.includes('tab=paper_setter') ? '1px solid var(--accent)' : '1px solid var(--border)',
-                  background: location.search.includes('tab=paper_setter') ? 'var(--accent-subtle)' : 'var(--bg-surface)',
-                  color: location.search.includes('tab=paper_setter') ? 'var(--accent)' : 'var(--text-secondary)'
-                }}
-              >
-                <Layers size={13} />
-                <span>Paper Setter</span>
-              </button>
-            )}
+
 
             {/* Authority Sign Out */}
             {(isAdminRoute || isPaperSetterRoute) && (
