@@ -1876,10 +1876,11 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
   const round2Stations = useMemo(() => {
     const rawFiltered = stations.filter((s) => {
+      const isR2 = s.id?.startsWith('r2_') || s.labId === 'ROUND_2_ARENA';
       const title = (s.student?.assignmentTitle || s.student?.course || '').toLowerCase();
       const mode = s.examMode || (s.language === 'MCQ' ? 'MCQ' : 'CODING');
       const isMcq = mode === 'MCQ' || s.language === 'MCQ' || title.includes('aptitude') || title.includes('mcq');
-      return !isMcq && (mode === 'CODING' || title.includes('sprint') || title.includes('coding'));
+      return isR2 || (!isMcq && (mode === 'CODING' || title.includes('sprint') || title.includes('coding')));
     });
 
     // Deduplicate strictly by candidate roll number / email / ID so one candidate = exactly 1 CCTV card

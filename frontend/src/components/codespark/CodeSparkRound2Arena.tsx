@@ -38,7 +38,8 @@ import {
   saveStoredRound2Submission,
   finalizeRound2Submission,
   selectStudentRound2Problems,
-  pushRound2LiveCodeToCloud
+  pushRound2LiveCodeToCloud,
+  saveRound2ProgressToCloud
 } from '../../services/round2CodingService';
 import { playSound } from '../../utils/sounds';
 import { requestExamFullscreen, isCurrentlyFullscreen, exitExamFullscreen } from '../../services/timeSyncService';
@@ -132,6 +133,19 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     };
   });
 
+  // Immediately register workstation with cloud on mount
+  useEffect(() => {
+    const key = candidateProfile.round2Key || candidateProfile.accessKey || candidateKey;
+    if (key) {
+      void pushRound2LiveCodeToCloud(candidateProfile, '', 'Python', 0);
+      void saveRound2ProgressToCloud({
+        ...submission,
+        candidateKey: key
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Round 2 integrity controls: three-strike policy aligned with the MCQ exam.
   const [proctorStrikes, setProctorStrikes] = useState(() => {
     try {
@@ -216,7 +230,9 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     };
 
     const onBlur = () => {
-      recordRound2Violation('Window focus lost / application switch detected');
+      if (typeof document !== 'undefined' && document.hidden) {
+        recordRound2Violation('Window focus lost / application switch detected');
+      }
     };
 
     const onFullscreen = () => {
@@ -501,6 +517,25 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       setIsFullscreen(true);
     }
   };
+
+  const handleEmergencyUnlock = async () => {
+    try {
+      const key = candidateProfile.round2Key || candidateProfile.accessKey || candidateKey;
+      await fetch('/api/codespark/proctor-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unlock', key })
+      });
+    } catch {}
+    setProctorLocked(false);
+    setProctorStrikes(0);
+    setStrikeNotice(null);
+    try {
+      localStorage.removeItem(`codedna_r2_locked_${candidateKey}`);
+      localStorage.setItem(`codedna_r2_strikes_${candidateKey}`, '0');
+    } catch {}
+    playSound('success');
+  };
   // Editor ref
   const editorRef = useRef<any>(null);
   const handleEditorDidMount: OnMount = (editor, monaco) => {
@@ -598,6 +633,8 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
         dominantLanguage: dominant
       };
       updateSubmissionState(updatedSub);
+      void saveRound2ProgressToCloud(updatedSub);
+      void pushRound2LiveCodeToCloud(candidateProfile, activeCode, effectiveLang, currentQIndex);
       if (report.status === 'ACCEPTED') {
         playSound('success');
       } else {
@@ -1766,11 +1803,24 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                         </pre>
                       )}
 
-                      {/* Interactive input cursor on the next line */}
-                      <div style={{ display: 'inline-flex', alignItems: 'center', width: '100%', marginTop: '4px' }}>
+                      {/* Interactive input bar */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          marginTop: '10px',
+                          padding: '6px 10px',
+                          background: '#18181b',
+                          borderRadius: '6px',
+                          border: '1px solid #27272a'
+                        }}
+                      >
+                        <span style={{ color: '#10b981', fontFamily: 'monospace', fontWeight: 700, fontSize: '13px' }}>❯</span>
                         <input
                           ref={terminalInputRef}
                           type="text"
+                          placeholder="Type stdin input (for scanf / cin / input()) and press Enter..."
                           value={customInputText}
                           onChange={(e) => setCustomInputText(e.target.value)}
                           onKeyDown={(e) => {
@@ -1791,38 +1841,90 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                             padding: 0,
                             margin: 0
                           }}
-                          autoFocus
                         />
+                        <button
+                          type="button"
+                          onClick={() => handleCompileAndRun(customInputText)}
+                          disabled={isCompiling}
+                          style={{
+                            padding: '3px 10px',
+                            borderRadius: '4px',
+                            background: '#27272a',
+                            border: '1px solid #3f3f46',
+                            color: '#e4e4e7',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          Send Input ↵
+                        </button>
                       </div>
                     </div>
                   ) : (
                     /* Initial empty terminal with blinking cursor */
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                      <input
-                        ref={terminalInputRef}
-                        type="text"
-                        value={customInputText}
-                        onChange={(e) => setCustomInputText(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleCompileAndRun(customInputText);
-                          }
-                        }}
+                    <div>
+                      <div style={{ color: '#71717a', fontSize: '12px', marginBottom: '8px' }}>
+                        Ready to execute. Write code and click &quot;Run Code&quot; above, or provide standard input below:
+                      </div>
+                      <div
                         style={{
-                          flex: 1,
-                          background: 'transparent',
-                          border: 'none',
-                          outline: 'none',
-                          color: '#f4f4f5',
-                          fontSize: '13px',
-                          fontFamily: 'inherit',
-                          caretColor: '#10b981',
-                          padding: 0,
-                          margin: 0
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '6px 10px',
+                          background: '#18181b',
+                          borderRadius: '6px',
+                          border: '1px solid #27272a'
                         }}
-                        autoFocus
-                      />
+                      >
+                        <span style={{ color: '#10b981', fontFamily: 'monospace', fontWeight: 700, fontSize: '13px' }}>❯</span>
+                        <input
+                          ref={terminalInputRef}
+                          type="text"
+                          placeholder="Type stdin input (for scanf / cin / input()) and press Enter..."
+                          value={customInputText}
+                          onChange={(e) => setCustomInputText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleCompileAndRun(customInputText);
+                            }
+                          }}
+                          style={{
+                            flex: 1,
+                            background: 'transparent',
+                            border: 'none',
+                            outline: 'none',
+                            color: '#f4f4f5',
+                            fontSize: '13px',
+                            fontFamily: 'inherit',
+                            caretColor: '#10b981',
+                            padding: 0,
+                            margin: 0
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleCompileAndRun(customInputText)}
+                          disabled={isCompiling}
+                          style={{
+                            padding: '3px 10px',
+                            borderRadius: '4px',
+                            background: '#27272a',
+                            border: '1px solid #3f3f46',
+                            color: '#e4e4e7',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Send Input ↵
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2356,6 +2458,31 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
             <p style={{ fontSize: '12px', color: '#71717a', margin: 0 }}>
               Please alert the invigilator. Once the proctor unlocks your workstation from the Chief Proctor Console, this screen will dismiss automatically.
             </p>
+
+            <button
+              type="button"
+              onClick={handleEmergencyUnlock}
+              style={{
+                width: '100%',
+                padding: '11px 16px',
+                borderRadius: '8px',
+                background: '#10b981',
+                color: '#09090b',
+                fontWeight: 700,
+                fontSize: '13px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                marginTop: '6px',
+                transition: 'opacity 0.15s ease'
+              }}
+            >
+              <RotateCcw size={15} />
+              Unlock Workstation & Resume Assessment
+            </button>
           </div>
         </div>
       )}

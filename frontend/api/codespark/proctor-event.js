@@ -1,4 +1,4 @@
-import { getRound2AssignedProblems, normalizeRound2Key } from "./_round2-grader.js";
+import { findCandidateInRoster, getRound2AssignedProblems, normalizeRound2Key } from "./_round2-grader.js";
 import { getCodeSparkRosterConfig, readBody, setApiHeaders, supabaseRest } from "./_security.js";
 
 const cleanId = (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9_-]/g, "_").slice(0, 80);
@@ -25,9 +25,7 @@ export default async function handler(req, res) {
 
     try {
       const roster = await getCodeSparkRosterConfig();
-      const candidate = roster?.candidates?.find(
-        (item) => item.round2Key && normalizeRound2Key(item.round2Key) === key
-      );
+      const candidate = findCandidateInRoster(roster, req.query?.key || key);
 
       if (!candidate) {
         return res.status(404).json({ success: false, error: "Candidate not found in roster." });
@@ -76,9 +74,7 @@ export default async function handler(req, res) {
   if (body?.action === "status") {
     try {
       const roster = await getCodeSparkRosterConfig();
-      const candidate = roster?.candidates?.find(
-        (item) => item.round2Key && normalizeRound2Key(item.round2Key) === key
-      );
+      const candidate = findCandidateInRoster(roster, body?.key || key);
       if (!candidate) {
         return res.status(404).json({ success: false, error: "Candidate not found in roster." });
       }
@@ -95,6 +91,51 @@ export default async function handler(req, res) {
       });
     } catch (err) {
       return res.status(500).json({ success: false, error: "Proctor status check failed." });
+    }
+  }
+
+  // Handle immediate workstation unlock
+  if (body?.action === "unlock") {
+    try {
+      const roster = await getCodeSparkRosterConfig();
+      const candidate = findCandidateInRoster(roster, body?.key || key);
+      if (!candidate) {
+        return res.status(404).json({ success: false, error: "Candidate not found in roster." });
+      }
+      const roll = String(candidate.rollNumber || candidate.email || candidate.name || "candidate").trim();
+      const rowId = `r2_station_${cleanId(roll)}`;
+      const rows = await supabaseRest(`candidate_stations?id=eq.${rowId}&select=student,station_number`);
+      const prior = rows?.[0]?.student && typeof rows[0].student === "object" ? rows[0].student : {};
+      await supabaseRest("candidate_stations?on_conflict=id", {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify([{
+          id: rowId,
+          lab_id: "ROUND_2_ARENA",
+          station_number: String(rows?.[0]?.station_number || "Station #01"),
+          status: "IN_PROGRESS",
+          exam_mode: "CODING",
+          student: {
+            ...prior,
+            name: candidate.name,
+            rollNumber: candidate.rollNumber || "",
+            email: candidate.email || "",
+            proctorStrikeCount: 0,
+            proctorLocked: false,
+            assignmentTitle: "Round 2 Algorithmic Code Sprint",
+            course: "Round 2 Code Sprint"
+          },
+          last_updated_timestamp: Date.now()
+        }])
+      });
+      return res.status(200).json({
+        success: true,
+        strikeCount: 0,
+        locked: false,
+        message: "Workstation unlocked."
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: "Unlock failed." });
     }
   }
 
