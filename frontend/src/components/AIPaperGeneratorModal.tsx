@@ -53,6 +53,7 @@ import {
   deleteExam,
   getAllQuestions
 } from '../services/mcqService';
+import { saveQuestionsBatchToCloud } from '../services/supabaseService';
 import { MCQExamConfig, MCQQuestion, MCQResultDeclarationMode } from '../types/mcq';
 import { playSound } from '../utils/sounds';
 import { ConfirmationModal } from './ConfirmationModal';
@@ -772,6 +773,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
 
     // Persist all modified questions
     reviewedQuestions.forEach((q) => saveQuestion(q));
+    void saveQuestionsBatchToCloud(reviewedQuestions);
 
     const updatedExam: MCQExamConfig = {
       ...reviewedExam,
@@ -815,6 +817,7 @@ export const AIPaperGeneratorModal: React.FC<AIPaperGeneratorModalProps> = ({
     try {
       // 1. Save all edited questions
       reviewedQuestions.forEach((q) => saveQuestion(q));
+      void saveQuestionsBatchToCloud(reviewedQuestions);
 
       // 2. Prepare updated exam config
       const updatedExam: MCQExamConfig = {

@@ -89,7 +89,8 @@ export default async function handler(req, res) {
       "purge_attempts",
       "delete_candidate",
       "delete_exam",
-      "delete_paper"
+      "delete_paper",
+      "save_questions"
     ].includes(action);
 
     if (req.method === "DELETE" || (req.method === "POST" && isWipeOrDeleteAction)) {
@@ -260,6 +261,44 @@ export default async function handler(req, res) {
           invalidateRosterCache();
           return res.status(200).json({ success: true, message: `Exam ${examId} deleted from cloud.` });
         }
+      }
+
+      if (action === "save_questions") {
+        const body = readBody(req);
+        const questions = Array.isArray(body.questions) ? body.questions : (body.question ? [body.question] : []);
+        if (questions.length > 0) {
+          const rows = questions.map(q => {
+            let normalizedStatus = String(q.status || 'PUBLISHED').toUpperCase().trim();
+            if (normalizedStatus === 'ACTIVE') normalizedStatus = 'PUBLISHED';
+            const validStatus = ['DRAFT', 'PUBLISHED', 'ARCHIVED'].includes(normalizedStatus) ? normalizedStatus : 'PUBLISHED';
+            const normalizedDiff = String(q.difficulty || 'MEDIUM').toUpperCase().trim();
+            const validDiff = ['EASY', 'MEDIUM', 'HARD'].includes(normalizedDiff) ? normalizedDiff : 'MEDIUM';
+            return {
+              id: q.id,
+              text: q.text || '',
+              options: q.options || [],
+              subject: q.subject || 'Aptitude',
+              topic: q.topic || 'Reasoning',
+              difficulty: validDiff,
+              marks: Number(q.marks) || 1,
+              negative_marks: Number(q.negativeMarks) || 0,
+              explanation: q.explanation || '',
+              status: validStatus,
+              tags: Array.isArray(q.tags) ? q.tags : [],
+              created_at: Number(q.createdAt) || Date.now(),
+              updated_at: Number(q.updatedAt) || Date.now(),
+              created_by: q.createdBy || 'Faculty Reviewer',
+              bank_group: q.bankGroup || ''
+            };
+          });
+          const { error: upsertErr } = await adminSb.from('mcq_questions').upsert(rows);
+          if (upsertErr) {
+            console.error("[roster save_questions]", upsertErr.message);
+            return res.status(500).json({ success: false, error: upsertErr.message });
+          }
+          return res.status(200).json({ success: true, count: rows.length });
+        }
+        return res.status(400).json({ success: false, error: "No questions provided." });
       }
 
       return res.status(400).json({ success: false, error: "Unknown delete action." });

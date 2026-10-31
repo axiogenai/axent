@@ -1,4 +1,4 @@
-import { getCodeSparkRosterConfig, setApiHeaders, supabaseRest } from "./_security.js";
+import { getCodeSparkRosterConfig, setApiHeaders, supabaseRest, getSupabaseAdmin } from "./_security.js";
 
 const EXAM_FIELDS = "id,title,description,instructions,subject,topic,exam_category,duration_minutes,start_time,end_time,total_marks,question_count,question_ids,shuffle_questions,shuffle_options,negative_marking_enabled,allow_review,show_explanations_after_submit,max_attempts,status,created_at,updated_at,created_by";
 
@@ -39,14 +39,19 @@ export default async function handler(req, res) {
       return res.status(404).json({ success: false, error: "No examination paper is currently scheduled or available." });
     }
 
-    // Fetch questions assigned to this exam
+    // Fetch questions assigned to this exam using service role
     let questions = [];
     if (Array.isArray(examRow.question_ids) && examRow.question_ids.length > 0) {
       try {
-        const idsList = examRow.question_ids.map(id => `"${id}"`).join(",");
-        const qRows = await supabaseRest(`mcq_questions?id=in.(${idsList})&select=*`);
+        const adminSb = getSupabaseAdmin();
+        const { data: qRows, error: qErr } = await adminSb
+          .from('mcq_questions')
+          .select('*')
+          .in('id', examRow.question_ids);
+        if (qErr) {
+          console.warn("[CodeSpark public exam] qRows error:", qErr.message);
+        }
         if (Array.isArray(qRows) && qRows.length > 0) {
-          // Preserve the original order defined by question_ids
           const qMap = new Map(qRows.map(q => [q.id, q]));
           questions = examRow.question_ids.map(id => qMap.get(id)).filter(Boolean);
         }

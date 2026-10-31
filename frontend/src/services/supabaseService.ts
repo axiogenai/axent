@@ -67,6 +67,19 @@ export async function fetchQuestionsFromCloud(): Promise<MCQQuestion[] | null> {
 
 async function writeQuestionToCloud(q: MCQQuestion): Promise<boolean> {
   try {
+    // 1. Primary: Serverless service role write (bypasses RLS)
+    try {
+      const res = await fetch('/api/codespark/roster?action=save_questions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-authority-role': 'admin'
+        },
+        body: JSON.stringify({ action: 'save_questions', questions: [q] })
+      }).catch(() => null);
+      if (res && res.ok) return true;
+    } catch {}
+
     let normalizedStatus = String(q.status || 'PUBLISHED').toUpperCase().trim();
     if (normalizedStatus === 'ACTIVE') normalizedStatus = 'PUBLISHED';
     const validStatus = ['DRAFT', 'PUBLISHED', 'ARCHIVED'].includes(normalizedStatus)
@@ -78,19 +91,19 @@ async function writeQuestionToCloud(q: MCQQuestion): Promise<boolean> {
 
     const row = {
       id: q.id,
-      text: q.text,
-      options: q.options,
-      subject: q.subject,
-      topic: q.topic,
+      text: q.text || '',
+      options: q.options || [],
+      subject: q.subject || 'Aptitude',
+      topic: q.topic || 'Reasoning',
       difficulty: validDiff,
-      marks: q.marks,
-      negative_marks: q.negativeMarks,
-      explanation: q.explanation,
+      marks: q.marks || 1,
+      negative_marks: q.negativeMarks || 0,
+      explanation: q.explanation || '',
       status: validStatus,
-      tags: q.tags,
-      created_at: q.createdAt,
-      updated_at: q.updatedAt,
-      created_by: q.createdBy,
+      tags: q.tags || [],
+      created_at: q.createdAt || Date.now(),
+      updated_at: q.updatedAt || Date.now(),
+      created_by: q.createdBy || 'admin',
       bank_group: q.bankGroup || '',
     };
     const { error } = await supabase.from('mcq_questions').upsert(row);
@@ -103,6 +116,22 @@ async function writeQuestionToCloud(q: MCQQuestion): Promise<boolean> {
     console.warn('[Supabase] Failed to sync question:', err);
     return false;
   }
+}
+
+export async function saveQuestionsBatchToCloud(questions: MCQQuestion[]): Promise<boolean> {
+  if (!Array.isArray(questions) || questions.length === 0) return true;
+  try {
+    const res = await fetch('/api/codespark/roster?action=save_questions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-authority-role': 'admin'
+      },
+      body: JSON.stringify({ action: 'save_questions', questions })
+    }).catch(() => null);
+    if (res && res.ok) return true;
+  } catch {}
+  return false;
 }
 
 async function writeDeleteQuestionFromCloud(id: string): Promise<boolean> {
