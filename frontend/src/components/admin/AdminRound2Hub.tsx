@@ -5028,7 +5028,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                    {                    {/* Admin-only hidden-test telemetry; candidate responses strip this data. */}
+                    {/* Admin-only hidden-test telemetry; candidate responses strip this data. */}
                     {Array.isArray(rep.testResults) && rep.testResults.length > 0 && (
                       <div style={{ border: '1px solid #27272a', borderRadius: '6px', padding: '12px', background: '#09090b' }}>
                         <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#f4f4f5', marginBottom: '10px', textTransform: 'uppercase' }}>
