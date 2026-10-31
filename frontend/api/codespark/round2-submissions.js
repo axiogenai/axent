@@ -154,21 +154,6 @@ export default async function handler(req, res) {
     if (key.length < 4 || key.length > 64) return res.status(400).json({ success: false, error: "Invalid Round 2 key." });
     try {
       const candidateHash = createHash("sha256").update(key).digest("hex");
-    if (isSubmitted) {
-      const existingFinalized = await supabaseRest(
-        `codespark_round2_finalizations?candidate_hash=eq.${candidateHash}&select=result`
-      );
-      if (existingFinalized?.[0]?.result) {
-        return res.status(200).json({
-          success: true,
-          alreadyFinalized: true,
-          submission: {
-            ...candidateSafeSubmission(existingFinalized[0].result),
-            candidateKey: String(submission.candidateKey || submission.round2Key || "")
-          }
-        });
-      }
-    }
       const rows = await supabaseRest(`codespark_round2_finalizations?candidate_hash=eq.${candidateHash}&select=result`);
       if (!rows?.[0]?.result) return res.status(404).json({ success: false, error: "No finalized submission was found." });
       return res.status(200).json({
@@ -201,6 +186,22 @@ export default async function handler(req, res) {
     const liveId = `r2_station_${cleanId(roll)}`;
     const stationNumber = String(submission.stationNumber || "Station #01").slice(0, 80);
     const candidateHash = createHash("sha256").update(key).digest("hex");
+    if (isSubmitted) {
+      const existingFinalized = await supabaseRest(
+        `codespark_round2_finalizations?candidate_hash=eq.${candidateHash}&select=result`
+      );
+      if (existingFinalized?.[0]?.result) {
+        return res.status(200).json({
+          success: true,
+          alreadyFinalized: true,
+          submission: {
+            ...candidateSafeSubmission(existingFinalized[0].result),
+            candidateKey: String(submission.candidateKey || submission.round2Key || "")
+          }
+        });
+      }
+    }
+
     const priorProgressRows = await supabaseRest(`candidate_stations?id=eq.${rowId}&select=code`);
     let priorStartedAt = 0;
     try { priorStartedAt = Number(JSON.parse(priorProgressRows?.[0]?.code || "{}").startedAt) || 0; } catch {}
