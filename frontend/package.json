@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test:round2": "node --test api/codespark/_round2-rubric.test.js"
+    "test:round2": "node --test api/codespark/_round2-rubric.test.js api/codespark/_round2-grader.test.js"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
