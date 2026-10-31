@@ -495,7 +495,7 @@ export const AdminLiveProctoringView: React.FC<AdminLiveProctoringViewProps> = (
                     <div style={{ color: 'var(--text-muted)', fontSize: '9.5px', textTransform: 'uppercase' }}>
                       Marks
                     </div>
-                    <div style={{ fontWeight: 700, color: '#3b82f6' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
                       {station.marks ? station.marks.totalMarks : station.mcqProgress?.score ?? 0} pts
                     </div>
                   </div>

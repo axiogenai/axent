@@ -403,7 +403,7 @@ export default function Hero1({
                             )}
                             <div className="flex items-center justify-between text-[10px] font-mono text-[#71717A] tracking-wider">
                                 <div className="flex items-center gap-2">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-[#C5A059] animate-pulse" />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[#C5A059]" />
                                     <span className="uppercase tracking-[0.16em]">Zero-Tamper Ledger Active</span>
                                 </div>
                                 <span className="text-[#C5A059]/80 uppercase">Axent OS 2026.4</span>

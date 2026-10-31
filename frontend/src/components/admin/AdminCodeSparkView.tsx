@@ -2034,7 +2034,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
   
   const handleWipeEntireDatabase = async () => {
-    if (!window.confirm('⚠️ CRITICAL DATABASE WIPE ⚠️\n\nAre you sure you want to completely WIPE THE ENTIRE DATABASE?\n\nThis will permanently delete from cloud:\n• All exams & question banks\n• All student attempts, scores & answer sheets\n• All workstations & live sessions\n• All Round 2 coding submissions & leaderboards\n\nThis action cannot be undone. Click OK to wipe everything.')) {
+    if (!window.confirm('[CRITICAL DATABASE WIPE]\n\nAre you sure you want to completely WIPE THE ENTIRE DATABASE?\n\nThis will permanently delete from cloud:\n• All exams & question banks\n• All student attempts, scores & answer sheets\n• All workstations & live sessions\n• All Round 2 coding submissions & leaderboards\n\nThis action cannot be undone. Click OK to wipe everything.')) {
       return;
     }
     playSound('click');
@@ -6793,8 +6793,8 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
                       gap: '8px'
                     }}
                   >
-                    <Send size={14} color="#09090b" className={smtpSending ? 'animate-pulse' : ''} />
-                    <span>{smtpSending ? 'Dispatching invitations in parallel...' : `⚡ Dispatch Round 2 Keys to ${shortlistedRolls.length} Shortlisted Candidates (<2s)`}</span>
+                    <Send size={14} color="#09090b" />
+                    <span>{smtpSending ? 'Dispatching invitations in parallel...' : `Dispatch Round 2 Keys to ${shortlistedRolls.length} Shortlisted Candidates (<2s)`}</span>
                   </button>
 
                   <div style={{ display: 'flex', gap: '6px' }}>
@@ -7399,13 +7399,13 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                       gap: '6px',
 
-                      boxShadow: '0 2px 8px rgba(16, 185, 129, 0.2)'
+                      boxShadow: 'none'
 
                     }}
 
                   >
 
-                    <Send size={12} color="#09090b" className={smtpSending ? 'animate-pulse' : ''} />
+                    <Send size={12} color="#09090b" />
 
                     <span>{smtpSending ? 'Dispatching email invitations...' : `Dispatch Round 2 Codes to ${shortlistedRolls.length} Shortlisted Candidates`}</span>
 

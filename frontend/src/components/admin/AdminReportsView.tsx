@@ -344,11 +344,11 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                       {/* Score Obtained */}
                       <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
                         {station.marks ? (
-                          <span style={{ color: '#3b82f6' }}>
+                          <span style={{ color: 'var(--text-primary)' }}>
                             {station.marks.totalMarks} pts
                           </span>
                         ) : station.mcqProgress?.score !== undefined ? (
-                          <span style={{ color: '#3b82f6' }}>
+                          <span style={{ color: 'var(--text-primary)' }}>
                             {station.mcqProgress.score} pts
                           </span>
                         ) : (

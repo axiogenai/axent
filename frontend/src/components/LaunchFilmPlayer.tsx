@@ -1433,7 +1433,8 @@ const FilmShotRenderer: React.FC<FilmShotRendererProps> = ({
                   borderRadius: '50%',
                   background: C.accentBright,
                   transform: pipPulse ? 'scale(1.8)' : 'scale(1)',
-                  boxShadow: pipPulse ? '0 0 10px #0052FF' : 'none',
+                  boxShadow: 'none',
+                  opacity: pipPulse ? 1 : 0.6,
                   transition: 'transform 0.15s ease'
                 }}
               />

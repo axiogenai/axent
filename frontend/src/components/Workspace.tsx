@@ -662,7 +662,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
   });
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ TEST CASES STATE FOR CODING EXAMINATIONS Ã¢â€â‚¬Ã¢â€â‚¬
+  // TEST CASES STATE
   const [testCases, setTestCases] = useState<TestCaseItem[]>(() => {
     try {
       const saved = localStorage.getItem('codedna_last_testcases');
@@ -777,7 +777,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
 
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ LIVE EXAM SESSION TIMER STATE Ã¢â€â‚¬Ã¢â€â‚¬
+  // LIVE EXAM SESSION TIMER STATE
 
   const [examDurationMinutes, setExamDurationMinutes] = useState<number>(() => {
 
@@ -921,7 +921,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
 
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ REMOTE CCTV PROCTORING BUS LISTENER & CONTINUOUS LOCK ENFORCEMENT Ã¢â€â‚¬Ã¢â€â‚¬
+  // REMOTE CCTV PROCTORING
 
   useEffect(() => {
 
@@ -1265,7 +1265,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
 
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ HARD KEYSTROKE INTERCEPTION: PREVENT ANY TYPING IN WORKSPACE WHEN LOCKED Ã¢â€â‚¬Ã¢â€â‚¬
+  // HARD KEYSTROKE INTERCEPTION
 
   useEffect(() => {
 
@@ -1319,7 +1319,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
 
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ MULTI-VECTOR ANTI-CHEATING & AI SURVEILLANCE SHIELD (Workspace) Ã¢â€â‚¬Ã¢â€â‚¬
+  // MULTI-VECTOR ANTI-CHEATING
 
   useEffect(() => {
 
@@ -1398,7 +1398,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
 
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ ADVANCED KIOSK & TAB-SWITCH / ALT+TAB INFRACTION DETECTOR Ã¢â€â‚¬Ã¢â€â‚¬
+  // ADVANCED KIOSK
 
   useEffect(() => {
 
@@ -1675,7 +1675,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
 
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ REAL SCREEN PROCTORING CAPTURE (WEBSCREEN API) Ã¢â€â‚¬Ã¢â€â‚¬
+  // REAL SCREEN PROCTORING
 
   const startScreenProctoring = async () => {
 
@@ -2393,7 +2393,7 @@ const handleRun = useCallback(() => {
 
 
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ LIVE EXAM SESSION TIMER TICK & EXPIRATION WATCHDOG Ã¢â€â‚¬Ã¢â€â‚¬
+  // LIVE EXAM SESSION TIMER TICK
 
   useEffect(() => {
 
@@ -2513,7 +2513,7 @@ const handleRun = useCallback(() => {
 
     >
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ UNIFIED FULL-WIDTH WORKSPACE CONTROL BAR Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* UNIFIED FULL-WIDTH */}
 
       <div
 
@@ -2859,7 +2859,7 @@ const handleRun = useCallback(() => {
 
               {isCandidateRegistered
 
-                ? `${student.name || 'Candidate'} Ã‚· ${student.stationNumber || 'St#01'}`
+                ? `${student.name || 'Candidate'} - ${student.stationNumber || 'St#01'}`
 
                 : 'Register Candidate'}
 
@@ -3075,7 +3075,7 @@ const handleRun = useCallback(() => {
 
 
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ SPLIT VIEW CONTAINER (Editor on Left, Diagnostics/Terminal on Right) Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* SPLIT VIEW CONTAINER */}
 
       <div
 
@@ -3095,7 +3095,7 @@ const handleRun = useCallback(() => {
 
       >
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ LEFT PANE: CODE EDITOR Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* LEFT PANE */}
 
         <div
 
@@ -3681,7 +3681,7 @@ const handleRun = useCallback(() => {
 
 
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ RIGHT PANE: CONSOLE OUTPUT, WRITING ACTIVITY, VIVA Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* RIGHT PANE */}
 
       {isRightPaneOpen && (
 
@@ -4352,7 +4352,7 @@ const handleRun = useCallback(() => {
                       ) : (
                         <>
                           <AlertTriangle size={13} color="var(--danger)" />
-                          <span style={{ color: 'var(--danger)' }}>Test Case Failed Ã¢â‚¬â€ Output Mismatch</span>
+                          <span style={{ color: 'var(--danger)' }}>Test Case Failed - Output Mismatch</span>
                         </>
                       )}
                     </div>
@@ -4534,7 +4534,7 @@ const handleRun = useCallback(() => {
 
 
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ CANDIDATE PROFILE & LAB WORKSTATION REGISTRATION MODAL Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* CANDIDATE PROFILE */}
 
       {isProfileModalOpen && (
 
@@ -4862,7 +4862,7 @@ const handleRun = useCallback(() => {
 
 
 
-            {/* Ã¢â€â‚¬Ã¢â€â‚¬ MODE 1: MANUAL REGISTRATION FORM Ã¢â€â‚¬Ã¢â€â‚¬ */}
+            {/* MODE 1 */}
 
             {regMode === 'manual' && (
 
@@ -5086,7 +5086,7 @@ const handleRun = useCallback(() => {
 
                             value: ex.id,
 
-                            label: `${ex.title} (${ex.questionCount} Questions Ã‚· ${ex.durationMinutes} Min Ã‚· ${ex.totalMarks} Marks)`,
+                            label: `${ex.title} (${ex.questionCount} Questions | ${ex.durationMinutes} Min | ${ex.totalMarks} Marks)`,
 
                             badge: ex.subject || 'MCQ'
 
@@ -5426,7 +5426,7 @@ const handleRun = useCallback(() => {
 
                   <KeyRound size={12} color="var(--accent)" />
 
-                  <span>Have an Exam Pass Token? Switch to Token Auto-Fill (Upcoming Feature) Ã¢â€ â€™</span>
+                  <span>Have an Exam Pass Token? Switch to Token Auto-Fill (Upcoming Feature) -&gt;</span>
 
                 </button>
 
@@ -5566,7 +5566,7 @@ const handleRun = useCallback(() => {
 
 
 
-            {/* Ã¢â€â‚¬Ã¢â€â‚¬ MODE 2: IMPORT WITH TOKEN (UPCOMING FEATURE) Ã¢â€â‚¬Ã¢â€â‚¬ */}
+            {/* MODE 2 */}
 
             {regMode === 'token' && (
 
@@ -5780,7 +5780,7 @@ const handleRun = useCallback(() => {
 
                         <CheckCircle2 size={13} color="var(--success)" />
 
-                        <span>Verified Token Payload Ã¢â‚¬â€ Ready to Fill</span>
+                        <span>Verified Token Payload - Ready to Fill</span>
 
                       </span>
 
@@ -6186,7 +6186,7 @@ const handleRun = useCallback(() => {
 
     
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ INVIGILATOR EMERGENCY KEY UNLOCK MODAL Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* INVIGILATOR EMERGENCY */}
 
       {showEmergencyUnlockPrompt && (
 
@@ -6298,7 +6298,7 @@ const handleRun = useCallback(() => {
 
                 <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
 
-                  1-Time Daily Key Required Ã‚· Expires Immediately Upon Use
+                  1-Time Daily Key Required - Expires Immediately Upon Use
 
                 </span>
 

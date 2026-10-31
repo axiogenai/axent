@@ -99,7 +99,7 @@ export const PaperSetterPortal: React.FC = () => {
     }
   };
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ Metrics Calculations Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // Metrics Calculations
   const publishedCount = useMemo(
     () => exams.filter((e) => e.status === 'PUBLISHED').length,
     [exams]
@@ -157,7 +157,7 @@ export const PaperSetterPortal: React.FC = () => {
         boxSizing: 'border-box'
       }}
     >
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ 1. TOP FACULTY KPI METRICS RIBBON (Watermelon Stat Cards) Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* 1. TOP FACULTY KPI METRICS RIBBON */}
       <div
         style={{
           display: 'grid',
@@ -210,7 +210,7 @@ export const PaperSetterPortal: React.FC = () => {
         />
       </div>
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ 2. EXECUTIVE COMMAND & ACTION BAR (Matching AdminDashboard) Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* 2. EXECUTIVE COMMAND & ACTION BAR */}
       <div
         className="card-elevated"
         style={{
@@ -446,7 +446,7 @@ export const PaperSetterPortal: React.FC = () => {
 
 
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ 4. FILTER TABS & SUB-PORTAL SELECTION (ContinuousTabs) Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* 4. FILTER TABS & SUB-PORTAL SELECTION */}
       <div
         style={{
           display: 'flex',
@@ -502,7 +502,7 @@ export const PaperSetterPortal: React.FC = () => {
         </div>
       </div>
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ 5. MAIN TAB CONTENT AREA Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* 5. MAIN TAB CONTENT AREA */}
       <div style={{ width: '100%', boxSizing: 'border-box' }}>
         {activeTab === 'exams' && <MCQCreateExam />}
         {activeTab === 'bank' && <MCQQuestionBank />}
@@ -510,7 +510,7 @@ export const PaperSetterPortal: React.FC = () => {
         {activeTab === 'results' && <MCQResults />}
       </div>
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ Autonomous AI Paper Generator Modal Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* Autonomous AI Paper Generator Modal */}
             {/* CodeSpark Private Candidate Import & AXNT Key Generator Modal */}
       {showCandidateModal && (
         <CodeSparkCandidateImportModal

@@ -816,7 +816,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-      marks: 20,
+      marks: 40,
 
 
 

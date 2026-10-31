@@ -1025,7 +1025,7 @@ export function analyzeCodeComplexity(
 
 
 
-    timeComplexity = 'O(NÃ‚Â³)';
+    timeComplexity = 'O(N^3)';
 
 
 
@@ -1045,7 +1045,7 @@ export function analyzeCodeComplexity(
 
 
 
-      timeComplexity = 'O(NÃ‚Â² log N)';
+      timeComplexity = 'O(N^2 log N)';
 
 
 
@@ -1061,7 +1061,7 @@ export function analyzeCodeComplexity(
 
 
 
-      timeComplexity = 'O(NÃ‚Â²)';
+      timeComplexity = 'O(N^2)';
 
 
 
@@ -1221,7 +1221,7 @@ export function analyzeCodeComplexity(
 
 
 
-      timeComplexity = 'O(NÃ‚Â²)';
+      timeComplexity = 'O(N^2)';
 
 
 
@@ -1915,7 +1915,11 @@ export async function fetchRound2Leaderboard(): Promise<Round2LeaderboardEntry[]
       rollNumber: sub.rollNumber,
       email: sub.email,
       totalScore: sub.totalScore || 0,
-      maxScore: sub.maxScore || 100,
+      maxScore: (sub.maxScore && sub.maxScore > 0)
+        ? sub.maxScore
+        : (sub.questionReports && Object.keys(sub.questionReports).length > 0)
+          ? Object.values(sub.questionReports).reduce((sum, r) => sum + (r?.maxScore || 0), 0)
+          : 100,
       solvedCount,
       questionStatus,
       dominantLanguage: sub.dominantLanguage || 'Python',
@@ -1941,8 +1945,8 @@ export function parseQuestionsFromPlainText(text: string): Round2Problem[] {
         id: p.id || ('r2_q' + (idx + 1) + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)),
         number: idx + 1,
         title: p.title || ('Coding Question ' + (idx + 1)),
-        difficulty: (p.difficulty as any) || (idx < 3 ? 'Easy' : idx < 7 ? 'Medium' : 'Hard'),
-        marks: Number(p.marks) || 20,
+        difficulty: ((p.difficulty as any) || (idx < 3 ? 'Easy' : idx < 7 ? 'Medium' : 'Hard')) as 'Easy' | 'Medium' | 'Hard',
+        marks: Number(p.marks) || (p.difficulty === 'Hard' ? 60 : p.difficulty === 'Medium' ? 40 : (idx < 3 ? 20 : idx < 7 ? 40 : 60)),
         timeLimitMs: Number(p.timeLimitMs) || 2000,
         description: p.description || p.problemStatement || (typeof p === 'string' ? p : ''),
         inputFormat: p.inputFormat || 'Standard input stream (stdin)',
