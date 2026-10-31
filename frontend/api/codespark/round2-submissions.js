@@ -183,7 +183,10 @@ export default async function handler(req, res) {
       return res.status(404).json({ success: false, error: "No saved Round 2 submission was found." });
     } catch (error) {
       console.error("[CodeSpark submission retrieval]", error?.message || "lookup failed");
-      return res.status(503).json({ success: false, error: "Final submission retrieval is temporarily unavailable." });
+      return res.status(error.statusCode || 503).json({
+        success: false,
+        error: error.statusCode ? error.message : "Submission recovery is temporarily unavailable."
+      });
     }
   }
 
