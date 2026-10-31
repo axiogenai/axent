@@ -6,6 +6,25 @@ export const config = { maxDuration: 60 };
 
 const cleanId = (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9_-]/g, "_").slice(0, 80);
 
+function candidateSafeSubmission(submission) {
+  if (!submission || typeof submission !== "object") return submission;
+  const questionReports = {};
+  for (const [question, report] of Object.entries(submission.questionReports || {})) {
+    if (!report || typeof report !== "object") continue;
+    const {
+      sampleResults: _sampleResults,
+      hiddenResults: _hiddenResults,
+      passedTests: _passedTests,
+      totalTests: _totalTests,
+      hiddenPassedTests: _hiddenPassedTests,
+      hiddenTotalTests: _hiddenTotalTests,
+      ...safeReport
+    } = report;
+    questionReports[question] = safeReport;
+  }
+  return { ...submission, questionReports };
+}
+
 export default async function handler(req, res) {
   setApiHeaders(req, res);
   if (req.method === "OPTIONS") return res.status(204).end();
@@ -137,7 +156,7 @@ export default async function handler(req, res) {
       if (!rows?.[0]?.result) return res.status(404).json({ success: false, error: "No finalized submission was found." });
       return res.status(200).json({
         success: true,
-        submission: { ...rows[0].result, candidateKey: String(body.key || "") }
+        submission: { ...candidateSafeSubmission(rows[0].result), candidateKey: String(body.key || "") }
       });
     } catch (error) {
       console.error("[CodeSpark submission retrieval]", error?.message || "lookup failed");
@@ -265,7 +284,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         success: true,
         alreadyFinalized: finalized?.created === false,
-        submission: { ...sealedSubmission, candidateKey: String(submission.candidateKey || submission.round2Key || "") }
+        submission: { ...candidateSafeSubmission(sealedSubmission), candidateKey: String(submission.candidateKey || submission.round2Key || "") }
       });
     }
 
@@ -305,7 +324,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
-      submission: { ...safeSubmission, candidateKey: String(submission.candidateKey || submission.round2Key || "") }
+      submission: { ...candidateSafeSubmission(safeSubmission), candidateKey: String(submission.candidateKey || submission.round2Key || "") }
     });
   } catch (error) {
     console.error("[CodeSpark submission]", error?.message || "submission failed");
