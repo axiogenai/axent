@@ -2016,36 +2016,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                     </div>
                   )}
 
-                  {/* Test Cases List */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase' }}>
-                      Individual Test Verifications
-                    </div>
-                    {activeReport?.sampleResults?.map((res, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          background: '#121214',
-                          border: res.passed ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
-                          borderRadius: '6px',
-                          padding: '10px 12px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '4px'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#f4f4f5' }}>Case #{i + 1}</span>
-                          <span style={{ fontSize: '10px', fontWeight: 700, color: res.passed ? '#10b981' : '#ef4444' }}>
-                            {res.passed ? 'PASSED' : 'FAILED'}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '10.5px', color: '#71717a' }}>Input: <code style={{ color: '#d4d4d8' }}>{res.input}</code></div>
-                        <div style={{ fontSize: '10.5px', color: '#71717a' }}>Expected: <code style={{ color: '#10b981' }}>{res.expected}</code></div>
-                        <div style={{ fontSize: '10.5px', color: '#71717a' }}>Output: <code style={{ color: res.passed ? '#10b981' : '#ef4444' }}>{res.actual}</code></div>
-                      </div>
-                    ))}
-                  </div>
+                  {/* Per-test evaluation details are intentionally never shown to candidates. */}
                 </>
               ) : (
                 <div style={{ textAlign: 'center', padding: '32px 16px', color: '#71717a', fontSize: '12px' }}>
