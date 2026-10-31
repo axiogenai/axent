@@ -22,14 +22,11 @@ export function scoreRound2Rubric({ maxScore, correctnessTests, robustnessTests 
   const hasCorrectness = correctnessTests.length > 0;
   const hasRobustness = robustnessTests.length > 0;
   const hasEfficiency = performanceTests.length > 0;
-  const activeWeight = ROUND2_RUBRIC.correctness +
-    (hasRobustness ? ROUND2_RUBRIC.robustness : 0) +
-    (hasEfficiency ? ROUND2_RUBRIC.efficiency : 0);
-  const correctnessWeight = hasCorrectness ? ROUND2_RUBRIC.correctness : 0;
-  const redistributed = ROUND2_RUBRIC.correctness + (hasCorrectness ? 0 : 0) +
-    (!hasRobustness ? ROUND2_RUBRIC.robustness : 0) +
-    (!hasEfficiency ? ROUND2_RUBRIC.efficiency : 0);
-  const correctnessShare = hasCorrectness ? redistributed : 0;
+  const correctnessWeight = hasCorrectness
+    ? ROUND2_RUBRIC.correctness +
+      (!hasRobustness ? ROUND2_RUBRIC.robustness : 0) +
+      (!hasEfficiency ? ROUND2_RUBRIC.efficiency : 0)
+    : 0;
   const categoryScore = (tests, passed, weight) => tests.length
     ? weight * tests.reduce((sum, test, index) => sum + (passed[index] ? (Number(test.weight) > 0 ? Number(test.weight) : 1) : 0), 0) /
       tests.reduce((sum, test) => sum + (Number(test.weight) > 0 ? Number(test.weight) : 1), 0)
@@ -42,12 +39,10 @@ export function scoreRound2Rubric({ maxScore, correctnessTests, robustnessTests 
       (Number.isFinite(Number(test.maxMemoryKb)) && Number(test.memoryKb) <= Number(test.maxMemoryKb));
     return Boolean(test.passed && timeOk && memoryOk);
   });
-  const correctness = categoryScore(correctnessTests, correctnessPassed, hasCorrectness ? correctnessWeight : 0);
+  const correctness = categoryScore(correctnessTests, correctnessPassed, correctnessWeight);
   const robustness = categoryScore(robustnessTests, robustnessPassed, hasRobustness ? ROUND2_RUBRIC.robustness : 0);
   const efficiency = categoryScore(performanceTests, efficiencyPassed, hasEfficiency ? ROUND2_RUBRIC.efficiency : 0);
-  const earnedWeight = correctness + robustness + efficiency;
-  const normalized = activeWeight > 0 ? earnedWeight / activeWeight : 0;
-  const score = Math.round(max * normalized * 100) / 100;
+  const score = Math.round(max * (correctness + robustness + efficiency) / 100 * 100) / 100;
   return {
     score,
     maxScore: max,
