@@ -107,6 +107,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
   const [keyDigits, setKeyDigits] = useState('');
   const [activeCandidate, setActiveCandidate] = useState<CodeSparkCandidate | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
+  const [isLaunchingExam, setIsLaunchingExam] = useState(false);
   const [scheduledWaitInfo, setScheduledWaitInfo] = useState<{
     roundName: string;
     startTime: number;
@@ -455,6 +456,21 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     });
   };
 
+  const handleDirectExamLaunch = async (e?: React.FormEvent) => {
+    if (isLaunchingExam) {
+      e?.preventDefault();
+      return;
+    }
+    setIsLaunchingExam(true);
+    setKeyError(null);
+    playSound('click');
+    try {
+      await handleDirectExamLaunchWork(e);
+    } finally {
+      setIsLaunchingExam(false);
+    }
+  };
+
   // Automatically read ?key=... URL query parameter (from candidate email button click)
   useEffect(() => {
     try {
@@ -471,7 +487,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     } catch {}
   }, []);
 
-  const handleDirectExamLaunch = async (e?: React.FormEvent) => {
+  const handleDirectExamLaunchWork = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     let rawInput = keyDigits.trim().toUpperCase();
     if (!rawInput) {
@@ -2083,15 +2099,14 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                   <button
                     type="button"
                     onClick={handleDirectExamLaunch}
-                    disabled={!keyDigits.trim()}
+                    disabled={!keyDigits.trim() || isLaunchingExam}
                     className={`w-full py-4 px-6 font-mono font-black text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 ${
                       keyDigits.trim()
                         ? 'bg-black hover:bg-[#ea1a1c] text-white shadow-[4px_4px_0px_#ea1a1c] cursor-pointer'
                         : 'bg-zinc-200 text-zinc-400 cursor-not-allowed border border-zinc-300'
                     }`}
                   >
-                    <span>START EXAMINATION NOW</span>
-                    <ArrowRight size={14} />
+                    {isLaunchingExam ? <><RefreshCw size={14} className="animate-spin" /><span>VERIFYING &amp; STARTING…</span></> : <><span>START EXAMINATION NOW</span><ArrowRight size={14} /></>}
                   </button>
                 </div>
               </div>

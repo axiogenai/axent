@@ -31,7 +31,7 @@ import {
   Round2CandidateSubmission,
   detectLanguageFromCode,
   evaluateRound2Code,
-  createRound2TerminalSession,
+  runRound2Code,
   fetchRound2ProblemsFromCloud,
   fetchRound2SubmissionFromCloud,
   getAllRound2Problems,
@@ -413,7 +413,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
   const [terminalRunResult, setTerminalRunResult] = useState<CompilerExecutionResult | null>(null);
   const [isTerminalRunning, setIsTerminalRunning] = useState(false);
   const [terminalOutput, setTerminalOutput] = useState('');
-  const [terminalStatus, setTerminalStatus] = useState('Ready. Click Run Code to start an interactive session.');
+  const [terminalStatus, setTerminalStatus] = useState('Ready. Enter stdin above, then click Run Code.');
   const terminalSocketRef = useRef<WebSocket | null>(null);
   const terminalOutputRef = useRef('');
   const terminalInputRef = useRef<HTMLTextAreaElement>(null);
@@ -561,84 +561,52 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       void pushRound2LiveCodeToCloud(candidateProfile, code, effectiveLang, currentQIndex);
     }, 1000);
   };
-  // A single long-lived PTY process handles compile, stdout, stderr and stdin.
+  // Hosted compiler execution: stdin is collected in this terminal pane and submitted with the code.
   const handleTerminalInput = () => {
-    const socket = terminalSocketRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN || !isTerminalRunning) return;
-    socket.send(JSON.stringify({ type: 'input', data: customInputText + '\n' }));
-    setCustomInputText('');
+    setCustomInputText((value) => value + '\n');
+    terminalInputRef.current?.focus();
   };
 
   const handleCompileAndRun = async () => {
-    if (!currentProblem?.id || !activeCode.trim() || isCompiling || isTerminalRunning || proctorLocked || submission.isSubmitted) return;
+    if (!currentProblem?.id || !activeCode.trim() || isCompiling || proctorLocked || submission.isSubmitted) return;
     terminalSocketRef.current?.close();
+    setTerminalRunResult(null);
+    setIsCompiling(true);
+    setIsTerminalRunning(false);
+    setTerminalStatus('Compiling and running on the hosted compiler…');
+    setCompileError(null);
     setTerminalOutput('');
     terminalOutputRef.current = '';
-    setTerminalRunResult(null);
-    setCustomInputText('');
-    setIsCompiling(true);
-    setTerminalStatus('Authorizing secure terminal session...');
-    setCompileError(null);
     playSound('click');
+    if (isMobileScreen) setMobileTab('console');
 
     try {
-      const session = await createRound2TerminalSession(
+      const stdin = customInputText;
+      const result = await runRound2Code(
         candidateProfile.round2Key || candidateProfile.accessKey || candidateKey,
         currentProblem.id,
         activeCode,
-        effectiveLang
+        effectiveLang,
+        stdin
       );
-      const socket = new WebSocket(session.socketUrl);
-      terminalSocketRef.current = socket;
-      socket.onopen = () => socket.send(JSON.stringify({
-        type: 'start', token: session.token, code: activeCode, language: effectiveLang
-      }));
-      socket.onmessage = (event) => {
-        let message: any;
-        try { message = JSON.parse(event.data); } catch { return; }
-        if (message.type === 'status') {
-          setTerminalStatus(String(message.message || 'Starting...'));
-        } else if (message.type === 'ready') {
-          setTerminalStatus('Running · type directly below the program output');
-          setIsCompiling(false);
-          setIsTerminalRunning(true);
-          if (isMobileScreen) setMobileTab('console');
-          setTimeout(() => terminalInputRef.current?.focus(), 0);
-        } else if (message.type === 'output') {
-          terminalOutputRef.current += String(message.data || '');
-          setTerminalOutput(terminalOutputRef.current);
-        } else if (message.type === 'error') {
-          setTerminalOutput((previous) => previous + '\n' + String(message.message || 'Terminal error') + '\n');
-          setTerminalStatus('Execution stopped');
-        } else if (message.type === 'exit') {
-          setIsCompiling(false);
-          setIsTerminalRunning(false);
-          setTerminalStatus('Process exited · code ' + String(message.exitCode ?? 0));
-          setTerminalRunResult({
-            stdout: terminalOutputRef.current, stderr: null, compileOutput: null,
-            exitCode: Number(message.exitCode) || 0, time: '—', memory: 0,
-            statusDescription: 'Process exited', isError: Number(message.exitCode) !== 0,
-            engineUsed: 'Axent isolated PTY runner'
-          });
-          terminalSocketRef.current = null;
-        }
-      };
-      socket.onerror = () => {
-        setIsCompiling(false);
-        setIsTerminalRunning(false);
-        setTerminalStatus('Terminal connection failed');
-        setTerminalOutput((previous) => previous + '\n[Runner connection failed. Check terminal service configuration.]\n');
-      };
-      socket.onclose = () => {
-        setIsCompiling(false);
-        setIsTerminalRunning(false);
-        if (terminalSocketRef.current === socket) terminalSocketRef.current = null;
-      };
+      setTerminalRunResult(result);
+      const transcript = [
+        stdin ? '$ stdin\n' + stdin : '',
+        result.stdout || '',
+        result.compileOutput ? '\n' + result.compileOutput : '',
+        result.stderr ? '\n' + result.stderr : ''
+      ].filter(Boolean).join('');
+      setTerminalOutput(transcript || (result.isError ? 'Execution failed.' : 'Program finished with no output.'));
+      setTerminalStatus(result.statusDescription + ' · ' + result.time + ' · ' + (result.engineUsed || 'Hosted compiler'));
+      if (result.isError) setCompileError(result.compileOutput || result.stderr || result.statusDescription);
     } catch (error: any) {
+      const message = String(error?.message || 'Compiler request failed.');
+      setTerminalOutput(message);
+      setTerminalStatus('Execution failed');
+      setCompileError(message);
+    } finally {
       setIsCompiling(false);
       setIsTerminalRunning(false);
-      setTerminalStatus('Unable to start terminal');
-      setTerminalOutput((previous) => previous + String(error?.message || 'Unable to start terminal') + '\n');
     }
   };
 
@@ -1780,8 +1748,8 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                       autoComplete="off"
                       autoCapitalize="off"
                       spellCheck={false}
-                      disabled={!isTerminalRunning || proctorLocked || submission.isSubmitted}
-                      placeholder={isTerminalRunning ? '' : 'Run Code to start the program. Program prompts and your input will appear here.'}
+                      disabled={isCompiling || proctorLocked || submission.isSubmitted}
+                      placeholder="Enter program input here before running. Each line is passed to stdin."
                       value={terminalOutput + customInputText}
                       onChange={(event) => {
                         const value = event.target.value;
@@ -1792,9 +1760,9 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                         setCustomInputText(value.slice(terminalOutput.length));
                       }}
                       onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
+                        if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
                           event.preventDefault();
-                          handleTerminalInput();
+                          handleCompileAndRun();
                         }
                       }}
                       style={{
@@ -2009,7 +1977,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                       aria-label="Interactive program terminal"
                       autoComplete="off"
                       spellCheck={false}
-                      disabled={!isTerminalRunning || proctorLocked || submission.isSubmitted}
+                      disabled={isCompiling || proctorLocked || submission.isSubmitted}
                       value={terminalOutput + customInputText}
                       onChange={(event) => {
                         const value = event.target.value;
@@ -2020,12 +1988,12 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                         setCustomInputText(value.slice(terminalOutput.length));
                       }}
                       onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
+                        if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
                           event.preventDefault();
-                          handleTerminalInput();
+                          handleCompileAndRun();
                         }
                       }}
-                      placeholder={isTerminalRunning ? '' : 'Run Code to start · program prompts and input appear here'}
+                      placeholder="Enter program input here before running. Each line is passed to stdin."
                       style={{
                         display: 'block', width: '100%', minHeight: '120px', resize: 'vertical',
                         background: 'transparent', border: 0, outline: 0, color: '#f4f4f5',
