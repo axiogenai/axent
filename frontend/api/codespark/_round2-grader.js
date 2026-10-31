@@ -47,6 +47,15 @@ function releaseWandboxSlot() {
   else activeWandboxRequests = Math.max(0, activeWandboxRequests - 1);
 }
 
+export async function withWandboxSlot(task, deadlineAt = Date.now() + 15000) {
+  await acquireWandboxSlot(deadlineAt);
+  try {
+    return await task();
+  } finally {
+    releaseWandboxSlot();
+  }
+}
+
 
 let compilerListCache = null;
 let compilerListFetchedAt = 0;
@@ -140,7 +149,7 @@ function assignedProblems(pool, key) {
 async function execute(code, language, stdin, deadlineAt = Date.now() + 15000) {
   const compiler = await getWandboxCompiler(language);
   const processedCode = language === "Java" ? code.replace(/\bpublic\s+class\b/g, "class ") : code;
-  await acquireWandboxSlot(deadlineAt);
+  return withWandboxSlot(async () => {
   const compilerRequestStartedAt = Date.now();
   const controller = new AbortController();
   const requestTimeoutMs = Math.min(15000, Math.max(1, deadlineAt - Date.now()));
@@ -200,8 +209,8 @@ async function execute(code, language, stdin, deadlineAt = Date.now() + 15000) {
     };
   } finally {
     clearTimeout(timer);
-    releaseWandboxSlot();
   }
+  }, deadlineAt);
 }
 
 export async function getRound2AssignedProblems(keyInput, allowLocked = false) {
