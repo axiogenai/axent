@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { evaluateRound2TestCases } from "./_round2-grader.js";
+import { evaluateRound2TestCases, withWandboxSlot } from "./_round2-grader.js";
 
 const success = (stdout, extra = {}) => ({
   stdout,
@@ -94,5 +94,23 @@ test("a candidate's concurrent compiler requests are batched in groups of at mos
   });
 
   assert.ok(maxActive <= 3);
+  assert.equal(active, 0);
+});
+
+
+test("two simultaneous candidate submissions share the four-request per-instance cap", async () => {
+  let active = 0;
+  let maxActive = 0;
+  const candidateSubmission = () => Promise.all(
+    Array.from({ length: 3 }, () => withWandboxSlot(async () => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+    }, Date.now() + 5000))
+  );
+
+  await Promise.all([candidateSubmission(), candidateSubmission()]);
+  assert.ok(maxActive <= 4);
   assert.equal(active, 0);
 });
