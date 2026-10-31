@@ -229,6 +229,10 @@ export async function gradeRound2Code(keyInput, problemIdInput, codeInput, langu
     const error = new Error("This question has no hidden grading tests configured. Ask the exam administrator to complete its test data.");
     error.statusCode = 422; throw error;
   }
+  if (!correctnessTests.length) {
+    const error = new Error("This question needs at least one hidden correctness test before it can be graded.");
+    error.statusCode = 422; throw error;
+  }
   if (allTests.length > 230) {
     const error = new Error("Too many test cases for evaluation."); error.statusCode = 422; throw error;
   }
