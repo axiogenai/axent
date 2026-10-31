@@ -179,7 +179,7 @@ import { SimpleSelect } from '../watermelon/Select';
 import { CodeSparkCandidateImportModal } from '../codespark/CodeSparkCandidateImportModal';
 
 import { AdminRound2Hub } from './AdminRound2Hub';
-import { clearRound2Leaderboard } from '../../services/round2CodingService';
+import { clearRound2Leaderboard, fetchRound2Leaderboard } from '../../services/round2CodingService';
 
 import { AIPaperGeneratorModal } from '../AIPaperGeneratorModal';
 
@@ -306,6 +306,22 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
     }
     return '';
   });
+  const [round2LiveCount, setRound2LiveCount] = useState<number>(0);
+  useEffect(() => {
+    let active = true;
+    const updateCount = () => {
+      fetchRound2Leaderboard().then((data) => {
+        if (active && Array.isArray(data)) setRound2LiveCount(data.length);
+      }).catch(() => {});
+    };
+    updateCount();
+    const iv = setInterval(updateCount, 4000);
+    return () => {
+      active = false;
+      clearInterval(iv);
+    };
+  }, []);
+
   const [round2StartStr, setRound2StartStr] = useState<string>(() => {
     const s = getCodeSparkSchedule();
     if (s.round2StartTime) {
@@ -2757,7 +2773,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
           { id: 'shortlist', label: `Shortlist & Round 2 Keys (${shortlistedRolls.length})`, icon: ShieldCheck },
 
-          { id: 'round2', label: `Round 2 Live Arena (${round2Stations.length})`, icon: Code2 },
+          { id: 'round2', label: `Round 2 Live Arena (${Math.max(round2Stations.length, round2LiveCount)})`, icon: Code2 },
 
           { id: 'candidates', label: `Candidate Roster (${registeredCandidates.length})`, icon: Key },
 

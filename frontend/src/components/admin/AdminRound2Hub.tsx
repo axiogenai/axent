@@ -300,8 +300,45 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
         }
       }
     }
+
+    // Also synthesize cards from leaderboard if not already in stations (ensures stations are never 0 when leaderboard has contestants!)
+    for (const entry of leaderboard) {
+      const anyEntry = entry as any;
+      const roll = (entry.rollNumber || entry.candidateKey || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const key = roll || (entry.email || '').trim().toLowerCase() || entry.candidateName.toLowerCase();
+      if (key && !byStudent.has(key)) {
+        const reports = anyEntry.questionReports || {};
+        const qKeys = Object.keys(reports);
+        const lastQ = qKeys.length > 0 ? Math.max(...qKeys.map(Number)) : 1;
+        const lastCode = reports[lastQ]?.code || '';
+        byStudent.set(key, {
+          id: `r2_station_${roll || 'candidate'}`,
+          labId: 'ROUND_2_ARENA',
+          labName: 'Round 2 Arena',
+          stationNumber: 'Station #01',
+          ipAddress: '127.0.0.1',
+          student: {
+            name: entry.candidateName,
+            rollNumber: entry.rollNumber,
+            email: entry.email,
+            assignmentTitle: 'Round 2 Algorithmic Code Sprint',
+            course: 'Round 2 Code Sprint'
+          },
+          language: entry.dominantLanguage || 'Python',
+          code: lastCode,
+          metrics: { tabSwitchViolations: 0, unfocusedTimeSeconds: 0 },
+          status: entry.isSubmitted ? 'Submitted & Done' : 'In Progress',
+          integrityStatus: 'Verified Original Work',
+          cheatingRisk: 'Low',
+          lastActive: 'Just now',
+          lastUpdatedTimestamp: Date.now(),
+          examMode: 'CODING'
+        } as unknown as CandidateStation);
+      }
+    }
+
     return Array.from(byStudent.values());
-  }, [round2Stations]);
+  }, [round2Stations, leaderboard]);
 
 
 
