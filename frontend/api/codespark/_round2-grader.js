@@ -1,4 +1,5 @@
 import { getCodeSparkRosterConfig, supabaseRest } from "./_security.js";
+import { parseRuntimeMs, scoreRound2Rubric } from "./_round2-rubric.js";
 
 const LANGUAGE_ALIASES = {
   Python: ["python"],
@@ -34,9 +35,9 @@ async function getWandboxCompiler(language) {
         const timer = setTimeout(() => controller.abort(), 6000);
         try {
           const response = await fetch("https://wandbox.org/api/list.json", { signal: controller.signal });
-          if (!response.ok) throw new Error("Compiler registry is temporarily unavailable.");
+          if (!response.ok) { const error = new Error("Compiler registry is temporarily unavailable."); error.statusCode = 503; throw error; }
           const entries = await response.json();
-          if (!Array.isArray(entries)) throw new Error("Compiler registry returned an invalid response.");
+          if (!Array.isArray(entries)) { const error = new Error("Compiler registry returned an invalid response."); error.statusCode = 503; throw error; }
           compilerListCache = entries;
           compilerListFetchedAt = Date.now();
         } finally {
@@ -53,7 +54,7 @@ async function getWandboxCompiler(language) {
     typeof entry.name === "string" &&
     entry.name.length > 0
   );
-  if (!matches.length) throw new Error("No supported Wandbox compiler is currently available for " + language + ".");
+  if (!matches.length) { const error = new Error("No supported Wandbox compiler is currently available for " + language + "."); error.statusCode = 503; throw error; }
 
   matches.sort((left, right) => {
     const leftExperimental = /head|experimental|nightly|trunk/i.test(String(left.name) + " " + String(left.version));
@@ -111,14 +112,25 @@ async function execute(code, language, stdin) {
       signal: controller.signal
     });
     if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      throw new Error("Compiler request failed (" + response.status + "). " + detail.slice(0, 300));
+      const error = new Error("The existing Wandbox compiler is temporarily unavailable (HTTP " + response.status + ").");
+      error.statusCode = 503;
+      throw error;
     }
     const result = await response.json();
-    const status = Number.parseInt(result.status || "0", 10);
+    if (!result || typeof result !== "object" || result.status === undefined || result.status === null) {
+      const error = new Error("The compiler returned an invalid execution response.");
+      error.statusCode = 503;
+      throw error;
+    }
+    const status = Number.parseInt(String(result.status), 10);
+    if (!Number.isFinite(status)) {
+      const error = new Error("The compiler returned an invalid execution status.");
+      error.statusCode = 503;
+      throw error;
+    }
     const compilerError = String(result.compiler_error || "");
     const compilerOutput = String(result.compiler_output || "");
-    const compileOutput = compilerError || (status !== 0 && !result.program_output ? compilerOutput : "");
+    const compileOutput = status !== 0 ? (compilerError || compilerOutput || "Compilation or execution failed.") : "";
     const stderr = String(result.program_error || "");
     const isError = status !== 0 || Boolean(compileOutput);
     const statusDescription = compileOutput
@@ -133,8 +145,13 @@ async function execute(code, language, stdin) {
       compileError: Boolean(compileOutput),
       isError,
       exitCode: Number.isFinite(status) ? status : (isError ? 1 : 0),
-      time: result.time ? String(result.time).endsWith("s") ? String(result.time) : String(result.time) + "s" : "0.00s",
-      memory: Number(result.memory) || 0,
+      // Preserve missing telemetry as null; never manufacture a zero measurement.
+      time: result.time === undefined || result.time === null || result.time === ""
+        ? null
+        : (String(result.time).endsWith("s") || String(result.time).endsWith("ms") ? String(result.time) : String(result.time) + "s"),
+      memory: result.memory === undefined || result.memory === null || result.memory === "" || !Number.isFinite(Number(result.memory))
+        ? null
+        : Number(result.memory),
       statusDescription,
       engineUsed: "Wandbox " + String(compiler.version || compiler.name)
     };
@@ -186,7 +203,15 @@ export async function runRound2Code(keyInput, problemIdInput, codeInput, languag
   return execute(code, language, stdin);
 }
 
-export async function gradeRound2Code(keyInput, problemIdInput, codeInput, languageInput, allowLocked = false, customStdin = "") {
+export async function gradeRound2Code(
+  keyInput,
+  problemIdInput,
+  codeInput,
+  languageInput,
+  allowLocked = false,
+  customStdin = "",
+  deadlineAt = Date.now() + 50000
+) {
   const key = String(keyInput || "").trim().toUpperCase();
   const code = String(codeInput || "");
   const language = String(languageInput || "");
@@ -198,22 +223,57 @@ export async function gradeRound2Code(keyInput, problemIdInput, codeInput, langu
   const problem = problems.find((item) => String(item.id) === problemId);
   if (!problem) { const error = new Error("This problem is not assigned to this candidate."); error.statusCode = 403; throw error; }
 
-  const tests = [
-    ...(Array.isArray(problem.sampleTestCases) ? problem.sampleTestCases.map((test) => ({ ...test, hidden: false })) : []),
-    ...(Array.isArray(problem.hiddenTestCases) ? problem.hiddenTestCases.map((test) => ({ ...test, hidden: true })) : [])
+  // Only server-side hidden suites contribute to grading. Samples are never executed here.
+  const hidden = Array.isArray(problem.hiddenTestCases) ? problem.hiddenTestCases : [];
+  const performance = Array.isArray(problem.performanceTestCases) ? problem.performanceTestCases : [];
+  const robustness = Array.isArray(problem.robustnessTestCases) ? problem.robustnessTestCases : [];
+  const categorized = hidden.map((test) => ({
+    ...test,
+    category: String(test.category || (test.isPerformance ? "performance" : test.isRobustness ? "robustness" : "correctness")).toLowerCase()
+  }));
+  const correctnessTests = categorized.filter((test) => !["performance", "robustness"].includes(test.category));
+  const robustnessTests = [
+    ...robustness,
+    ...categorized.filter((test) => test.category === "robustness")
   ];
-  if (tests.length > 230) { const error = new Error("Too many test cases for evaluation."); error.statusCode = 422; throw error; }
-  const maxScore = Number(problem.marks) || 20;
+  const performanceTests = [
+    ...performance,
+    ...categorized.filter((test) => test.category === "performance")
+  ];
+  const allTests = [
+    ...correctnessTests.map((test) => ({ ...test, category: "correctness" })),
+    ...robustnessTests.map((test) => ({ ...test, category: "robustness" })),
+    ...performanceTests.map((test) => ({ ...test, category: "performance" }))
+  ];
+  const maxScore = Number(problem.marks) > 0 ? Number(problem.marks) : 20;
 
   if (!code.trim()) {
-    const sampleResults = tests.filter((test) => !test.hidden).map((test) => ({
-      testCaseId: String(test.id || ""), input: String(test.input || ""),
-      expected: String(test.expectedOutput || ""), actual: "", passed: false
-    }));
-    const hiddenResults = tests.filter((test) => test.hidden).map((test) => ({
-      testCaseId: String(test.id || ""), passed: false
-    }));
-    return { questionId: problem.id, sampleResults, hiddenResults, passedTests: 0, totalTests: tests.length || 1, score: 0, maxScore, status: "PENDING", runResult: null };
+    return {
+      questionId: problem.id, sampleResults: [], hiddenResults: [],
+      passedTests: 0, totalTests: allTests.length, score: 0, maxScore,
+      status: "PENDING", runResult: null, testResults: [], rubric: null
+    };
+  }
+  if (!allTests.length) {
+    const error = new Error("This question has no hidden grading tests configured. Ask the exam administrator to complete its test data.");
+    error.statusCode = 422; throw error;
+  }
+  if (!correctnessTests.length) {
+    const error = new Error("This question needs at least one hidden correctness test before it can be graded.");
+    error.statusCode = 422; throw error;
+  }
+  if (allTests.length > 230) {
+    const error = new Error("Too many test cases for evaluation."); error.statusCode = 422; throw error;
+  }
+  if (allTests.some((test) => !test || typeof test !== "object" ||
+      !Object.prototype.hasOwnProperty.call(test, "expectedOutput"))) {
+    const error = new Error("This question has incomplete hidden test configuration. Ask the exam administrator to fix it before submitting.");
+    error.statusCode = 422; throw error;
+  }
+  if (performanceTests.some((test) => !Number.isFinite(Number(test.maxTimeMs)) || Number(test.maxTimeMs) <= 0 ||
+      (test.maxMemoryValue != null && (!Number.isFinite(Number(test.maxMemoryValue)) || Number(test.maxMemoryValue) <= 0)))) {
+    const error = new Error("Performance tests require a positive maxTimeMs and an optional positive maxMemoryValue threshold.");
+    error.statusCode = 422; throw error;
   }
 
   let runResult = null;
@@ -221,63 +281,89 @@ export async function gradeRound2Code(keyInput, problemIdInput, codeInput, langu
     runResult = await execute(code, language, String(customStdin));
   }
 
-  if (!tests.length) {
-    const error = new Error("This problem is not configured for automatic grading: no sample or hidden test cases are available.");
-    error.statusCode = 422;
-    throw error;
-  }
-
-  const hiddenTests = tests.filter((test) => test.hidden);
-  if (!hiddenTests.length) {
-    const error = new Error("This question needs at least one hidden test case before it can be graded. Ask the exam administrator to complete its test data.");
-    error.statusCode = 422;
-    throw error;
-  }
-  if (tests.some((test) => !test || typeof test !== "object" ||
-      !Object.prototype.hasOwnProperty.call(test, "expectedOutput"))) {
-    const error = new Error("This question has incomplete test-case configuration. Ask the exam administrator to fix it before submitting.");
-    error.statusCode = 422;
-    throw error;
-  }
-
-  const sampleResults = [];
-  const hiddenResults = [];
-  let passed = 0;
-  let hiddenPassed = 0;
-  let hiddenTotalWeight = 0;
-  let hiddenPassedWeight = 0;
+  const testResults = [];
   let compileFailed = false;
   let runtimeFailed = false;
-  for (const test of tests) {
-    const result = await execute(code, language, String(test.input || ""));
-    if (!runResult) runResult = result;
-    const success = !result.isError && normalizeOutput(result.stdout) === normalizeOutput(test.expectedOutput);
-    if (success) passed++;
-    if (result.compileOutput) compileFailed = true;
-    else if (result.isError) runtimeFailed = true;
-    if (test.hidden) {
-      const configuredWeight = Number(test.weight);
-      const weight = Number.isFinite(configuredWeight) && configuredWeight > 0 ? configuredWeight : 1;
-      hiddenTotalWeight += weight;
-      if (success) {
-        hiddenPassed++;
-        hiddenPassedWeight += weight;
+  // Three requests per batch keeps pressure on the existing shared compiler bounded.
+  // A single overall deadline leaves time for persistence/finalization in the API route.
+  for (let offset = 0; offset < allTests.length; offset += 3) {
+    if (Date.now() + 1000 >= deadlineAt) {
+      const error = new Error("Grading exceeded its safe execution window. Your code has been saved; retry grading.");
+      error.statusCode = 503; throw error;
+    }
+    const batch = allTests.slice(offset, offset + 3);
+    const batchResults = await Promise.all(batch.map(async (test) => {
+      const result = await execute(code, language, String(test.input ?? ""));
+      const runtimeMs = parseRuntimeMs(result.time);
+      const memoryValue = result.memory == null ? null : Number(result.memory);
+      if (test.category === "performance" && runtimeMs === null) {
+        const error = new Error("The existing compiler did not return runtime telemetry for a performance test.");
+        error.statusCode = 503; throw error;
       }
-      hiddenResults.push({ testCaseId: String(test.id || ""), passed: success });
-    } else sampleResults.push({
-      testCaseId: String(test.id || ""), input: String(test.input || ""),
-      expected: String(test.expectedOutput ?? ""), actual: result.stdout,
-      passed: success, error: result.compileOutput || result.stderr || undefined
-    });
+      if (test.category === "performance" && test.maxMemoryValue != null && memoryValue === null) {
+        const error = new Error("The existing compiler did not return memory telemetry required by this performance test.");
+        error.statusCode = 503; throw error;
+      }
+      const outputPassed = !result.isError &&
+        normalizeOutput(result.stdout) === normalizeOutput(test.expectedOutput);
+      const memoryThreshold = test.maxMemoryValue == null ? null : Number(test.maxMemoryValue);
+      const efficiencyPassed = test.category !== "performance" ? undefined : Boolean(
+        outputPassed &&
+        runtimeMs !== null &&
+        runtimeMs <= Number(test.maxTimeMs) &&
+        (memoryThreshold === null || (memoryValue !== null && memoryValue <= memoryThreshold))
+      );
+      return {
+        testCaseId: String(test.id || ""),
+        category: test.category,
+        passed: outputPassed,
+        ...(test.category === "performance" ? {
+          efficiencyPassed,
+          runtimeMs,
+          memoryValue,
+          maxTimeMs: Number(test.maxTimeMs),
+          maxMemoryValue: memoryThreshold
+        } : {
+          runtimeMs,
+          memoryValue
+        }),
+        inputSizeBytes: Buffer.byteLength(String(test.input ?? ""), "utf8"),
+        error: result.compileOutput || result.stderr || undefined,
+        _runResult: result
+      };
+    }));
+    for (const item of batchResults) {
+      if (!runResult) runResult = item._runResult;
+      if (item._runResult.compileOutput) compileFailed = true;
+      else if (item._runResult.isError) runtimeFailed = true;
+      const { _runResult, ...safeResult } = item;
+      testResults.push(safeResult);
+    }
   }
-  const total = tests.length;
-  // Visible examples are feedback only; marks come from hidden tests.
-  const score = hiddenTotalWeight > 0 ? Math.round(maxScore * hiddenPassedWeight / hiddenTotalWeight) : 0;
-  const status = compileFailed ? "COMPILE_ERROR" : runtimeFailed && passed === 0 ? "RUNTIME_ERROR" : hiddenPassed === hiddenTests.length ? "ACCEPTED" : "PARTIAL";
+
+  const byCategory = (category) => testResults.filter((item) => item.category === category);
+  const rubric = scoreRound2Rubric({
+    maxScore,
+    correctnessTests: byCategory("correctness"),
+    robustnessTests: byCategory("robustness"),
+    performanceTests: byCategory("performance")
+  });
+  const passedTests = testResults.filter((item) => item.passed).length;
+  const status = compileFailed ? "COMPILE_ERROR"
+    : runtimeFailed && passedTests === 0 ? "RUNTIME_ERROR"
+    : rubric.allPassed ? "ACCEPTED" : "PARTIAL";
+
   return {
-    questionId: problem.id, sampleResults, hiddenResults,
-    passedTests: passed, totalTests: total,
-    hiddenPassedTests: hiddenPassed, hiddenTotalTests: hiddenTests.length,
-    score, maxScore, status, runResult
+    questionId: problem.id,
+    sampleResults: [],
+    hiddenResults: testResults.map(({ testCaseId, passed }) => ({ testCaseId, passed })),
+    testResults,
+    passedTests,
+    totalTests: testResults.length,
+    score: rubric.score,
+    maxScore,
+    rubric: rubric.rubric,
+    status,
+    runResult
   };
 }
