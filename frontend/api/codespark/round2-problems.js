@@ -18,6 +18,9 @@ export default async function handler(req, res) {
       let config = row?.student && typeof row.student === "object" ? row.student : null;
       if (!config && row?.code) { try { config = JSON.parse(row.code); } catch {} }
       const problems = Array.isArray(config?.problems) ? config.problems : [];
+      if (admin) {
+        return res.status(200).json({ success: true, problems });
+      }
       // Candidate problem payloads contain statements and starter code only.
       // Test inputs/expected outputs stay exclusively in server-side storage.
       const publicProblems = problems.map((problem) => {
