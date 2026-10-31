@@ -5024,6 +5024,42 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
+                    {/* Private judge telemetry: available only in the administrator dossier. */}
+                    {Array.isArray(rep.testResults) && rep.testResults.length > 0 && (
+                      <div style={{ border: '1px solid #27272a', borderRadius: '6px', padding: '12px', background: '#09090b' }}>
+                        <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#f4f4f5', marginBottom: '10px', textTransform: 'uppercase' }}>
+                          Hidden Evaluation & Performance Benchmarks
+                        </div>
+                        {rep.rubric && (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', marginBottom: '12px' }}>
+                            {(['correctness', 'efficiency', 'robustness'] as const).map((key) => {
+                              const item = rep.rubric?.[key];
+                              return (
+                                <div key={key} style={{ background: '#18181b', borderRadius: '4px', padding: '8px' }}>
+                                  <div style={{ color: '#a1a1aa', fontSize: '10px', textTransform: 'uppercase' }}>{key}</div>
+                                  <div style={{ color: '#f4f4f5', fontSize: '13px', fontWeight: 800 }}>{item?.earned ?? 0} / {item?.weight ?? 0}</div>
+                                  <div style={{ color: '#71717a', fontSize: '10px' }}>{item?.passed ?? 0} / {item?.total ?? 0} passed</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div style={{ display: 'grid', gap: '6px' }}>
+                          {rep.testResults.map((result, index) => (
+                            <div key={result.testCaseId || index} style={{ display: 'grid', gridTemplateColumns: 'minmax(90px, 1fr) repeat(3, minmax(75px, auto))', gap: '8px', alignItems: 'center', background: '#121214', borderRadius: '4px', padding: '8px', fontSize: '10.5px' }}>
+                              <div>
+                                <div style={{ color: '#f4f4f5', fontWeight: 700 }}>{result.category} #{index + 1}</div>
+                                <div style={{ color: '#71717a' }}>Input size: {result.inputSize}</div>
+                              </div>
+                              <div style={{ color: '#a1a1aa' }}>Runtime<br /><strong style={{ color: '#f4f4f5' }}>{result.runtimeMs == null ? 'Unavailable' : `${result.runtimeMs.toFixed(2)} ms`}</strong></div>
+                              <div style={{ color: '#a1a1aa' }}>Memory<br /><strong style={{ color: '#f4f4f5' }}>{result.memoryKb == null ? 'Unavailable' : `${result.memoryKb.toFixed(0)} KB`}</strong></div>
+                              <div style={{ color: result.passed ? '#10b981' : '#ef4444', fontWeight: 800 }}>{result.passed ? 'PASSED' : 'FAILED'}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Sample Test Cases Feedback */}
 
 
