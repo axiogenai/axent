@@ -5056,7 +5056,8 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
                                 <div style={{ color: '#71717a' }}>Input: {result.inputSizeBytes} bytes</div>
                               </div>
                               <div style={{ color: '#a1a1aa' }}>Compiler response<br /><strong style={{ color: '#f4f4f5' }}>{result.compilerElapsedMs == null ? 'Unavailable' : String(result.compilerElapsedMs) + ' ms'}</strong></div>
-                              <div style={{ color: '#a1a1aa' }}>Program runtime / memory<br /><strong style={{ color: '#f4f4f5' }}>Not provided by Wandbox</strong></div>
+                              <div style={{ color: '#a1a1aa' }}>Program runtime<br /><strong style={{ color: '#f4f4f5' }}>{result.runtimeMs == null ? 'Unavailable' : String(result.runtimeMs) + ' ms'}</strong></div>
+                              <div style={{ color: '#a1a1aa' }}>Memory value<br /><strong style={{ color: '#f4f4f5' }}>{result.memoryValue == null ? 'Unavailable' : String(result.memoryValue)}</strong></div>
                               <div style={{ color: result.passed ? '#10b981' : '#ef4444', fontWeight: 800 }}>{result.passed ? 'PASSED' : 'FAILED'}</div>
                             </div>
                           ))}
