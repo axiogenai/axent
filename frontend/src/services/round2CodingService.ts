@@ -456,10 +456,11 @@ export async function saveRound2ProblemsToCloud(problems: Round2Problem[]): Prom
   }
 }
 
-export async function fetchRound2ProblemsFromCloud(): Promise<Round2Problem[]> {
+export async function fetchRound2ProblemsFromCloud(admin = false): Promise<Round2Problem[]> {
   try {
     const headers = await round2ApiHeaders();
-    const response = await fetch("/api/codespark/round2-problems", { headers });
+    const endpoint = admin ? "/api/codespark/round2-problems?admin=1" : "/api/codespark/round2-problems";
+    const response = await fetch(endpoint, { headers });
     if (response.ok) {
       const result = await response.json();
       if (Array.isArray(result.problems)) {
