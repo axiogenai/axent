@@ -2855,8 +2855,19 @@ export async function wipeEntireDatabaseFromCloud(): Promise<boolean> {
 
   if (typeof window !== 'undefined') {
     try {
+      // Preserve admin auth session across wipe so admin stays logged in
+      const PRESERVE_KEYS = ['axent_authority_session', 'axent_authority_role', 'codedna_theme'];
+      const preserved: Record<string, string> = {};
+      PRESERVE_KEYS.forEach((k) => {
+        const v = localStorage.getItem(k) || sessionStorage.getItem(k);
+        if (v !== null && v !== undefined) preserved[k] = v;
+      });
       localStorage.clear();
       sessionStorage.clear();
+      // Restore preserved keys so admin doesn't get signed out
+      Object.entries(preserved).forEach(([k, v]) => {
+        try { localStorage.setItem(k, v); } catch {}
+      });
     } catch {}
   }
   notifyMcqDataChanged();

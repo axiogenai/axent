@@ -98,6 +98,18 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       mounted = false;
     };
   }, [candidateKey]);
+
+  // When problems load (async from cloud), recompute submission.maxScore from actual problem marks
+  useEffect(() => {
+    if (problems.length > 0 && !submission.isSubmitted) {
+      const computedMax = problems.reduce((sum, p) => sum + (p.marks || 20), 0);
+      if (computedMax !== submission.maxScore) {
+        setSubmission((prev) => ({ ...prev, maxScore: computedMax }));
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [problems]);
+
   const [submission, setSubmission] = useState<Round2CandidateSubmission>(() => {
     const existing = getStoredRound2Submission(candidateKey);
     if (existing) return existing;
@@ -112,7 +124,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       questionReports: {},
       currentQuestion: 1,
       totalScore: 0,
-      maxScore: 100,
+      maxScore: 0, // recomputed from actual problem marks when problems load
       isSubmitted: false,
       startedAt: Date.now(),
       dominantLanguage: 'Python'
@@ -403,7 +415,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
         questionTimestamps: updatedTimestamps,
         currentQuestion: currentQIndex,
         totalScore,
-        maxScore: totalMax || 100,
+        maxScore: totalMax > 0 ? totalMax : problems.reduce((s, p) => s + (p.marks || 20), 0) || 100,
         dominantLanguage: dominant
       };
       updateSubmissionState(updatedSub);

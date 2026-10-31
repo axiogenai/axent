@@ -2010,7 +2010,7 @@ export function parseQuestionsFromPlainText(text: string): Round2Problem[] {
       number: idx + 1,
       title: title || ('Problem ' + (idx + 1)),
       difficulty,
-      marks: 20,
+      marks: difficulty === 'Easy' ? 20 : difficulty === 'Medium' ? 40 : 60,
       timeLimitMs: 2000,
       description,
       inputFormat: 'Standard input stream (stdin)',

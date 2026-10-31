@@ -453,7 +453,6 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
   }, [leaderboard]);
 
 
-
   // Export CSV
 
 
@@ -470,7 +469,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-      ['Rank', 'Roll Number', 'Candidate Name', 'Email', 'Score / 100', 'Solved (Out of 5)', 'Dominant Language', 'Time Taken (m)', 'Status'],
+      ['Rank', 'Roll Number', 'Candidate Name', 'Email', `Score / ${totalMaxMarks}`, 'Solved (Out of 5)', 'Dominant Language', 'Time Taken (m)', 'Status'],
 
 
 
@@ -559,6 +558,12 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
   const [problems, setProblems] = useState<Round2Problem[]>(() => getAllRound2Problems());
+
+  // Dynamic total max marks — computed from actual per-problem marks set by admin
+  const totalMaxMarks = useMemo(() => {
+    if (problems.length === 0) return 100;
+    return problems.reduce((sum, p) => sum + (p.marks || 20), 0);
+  }, [problems]);
 
 
 
@@ -2201,7 +2206,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                <span style={{ fontSize: '12px', color: '#71717a', fontWeight: 500 }}>/ 100</span>
+                <span style={{ fontSize: '12px', color: '#71717a', fontWeight: 500 }}>/ {totalMaxMarks}</span>
 
 
 
@@ -2237,7 +2242,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                <span style={{ fontSize: '12px', color: '#71717a', fontWeight: 500 }}>/ 100</span>
+                <span style={{ fontSize: '12px', color: '#71717a', fontWeight: 500 }}>/ {totalMaxMarks}</span>
 
 
 
@@ -2957,7 +2962,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                              <span style={{ fontSize: '11px', color: '#71717a', fontWeight: 500 }}>/ 100</span>
+                              <span style={{ fontSize: '11px', color: '#71717a', fontWeight: 500 }}>/ {entry.maxScore || totalMaxMarks}</span>
 
 
 
@@ -3674,7 +3679,66 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
               />
             </div>
 
+            {/* Difficulty | Marks | Time Limit */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+              {/* Difficulty */}
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Difficulty
+                </label>
+                <select
+                  value={activeProblem.difficulty}
+                  onChange={(e) => {
+                    const diff = e.target.value as 'Easy' | 'Medium' | 'Hard';
+                    updateActiveProblemField('difficulty', diff);
+                    // Auto-update marks when difficulty changes if marks are still at a default
+                    const defaultMarks = activeProblem.difficulty === 'Easy' ? 20 : activeProblem.difficulty === 'Medium' ? 40 : 60;
+                    if (activeProblem.marks === defaultMarks) {
+                      updateActiveProblemField('marks', diff === 'Easy' ? 20 : diff === 'Medium' ? 40 : 60);
+                    }
+                  }}
+                  style={{ width: '100%', background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '8px 10px', color: '#f4f4f5', fontSize: '13px', outline: 'none' }}
+                >
+                  <option value="Easy">Easy</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Hard">Hard</option>
+                </select>
+              </div>
+              {/* Marks */}
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Marks
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={activeProblem.marks}
+                  onChange={(e) => updateActiveProblemField('marks', Math.max(1, Number(e.target.value) || 20))}
+                  style={{ width: '100%', background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '8px 10px', color: '#f4f4f5', fontSize: '13px', outline: 'none' }}
+                />
+              </div>
+              {/* Time Limit */}
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Time Limit (ms)
+                </label>
+                <input
+                  type="number"
+                  min={500}
+                  max={10000}
+                  step={500}
+                  value={activeProblem.timeLimitMs}
+                  onChange={(e) => updateActiveProblemField('timeLimitMs', Math.max(500, Number(e.target.value) || 2000))}
+                  style={{ width: '100%', background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '8px 10px', color: '#f4f4f5', fontSize: '13px', outline: 'none' }}
+                />
+              </div>
+            </div>
 
+            {/* Total marks indicator */}
+            <div style={{ fontSize: '11px', color: '#71717a', textAlign: 'right', marginTop: '-4px' }}>
+              Total across all problems: <strong style={{ color: '#a1a1aa' }}>{totalMaxMarks} marks</strong>
+            </div>
 
             {/* Problem Description */}
 
@@ -4314,7 +4378,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                  Total Score: <strong style={{ color: '#f4f4f5' }}>{selectedDossier.totalScore} / 100</strong> • Language: {selectedDossier.dominantLanguage} • Solved: {selectedDossier.solvedCount}/5
+                  Total Score: <strong style={{ color: '#f4f4f5' }}>{selectedDossier.totalScore} / {selectedDossier.maxScore || totalMaxMarks}</strong> • Language: {selectedDossier.dominantLanguage} • Solved: {selectedDossier.solvedCount}/5
 
 
 
@@ -4526,7 +4590,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                      {score}/20p
+                      {score}/{rep?.maxScore ?? 20}p
 
 
 
