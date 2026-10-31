@@ -9,5 +9,6 @@ services:
       AXENT_RUNNER_SECRET: ${AXENT_RUNNER_SECRET:?Set a long random AXENT_RUNNER_SECRET}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://axent.axiogen.in}
       EXECUTION_IMAGE: axent-code-sandbox:latest
+      JUDGE_CONCURRENCY: ${JUDGE_CONCURRENCY:-4}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
