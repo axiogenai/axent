@@ -120,6 +120,8 @@ import {
   SimpleSelect
 } from './watermelon-ui';
 import { AdminMCQTicketIssuer } from './AdminMCQTicketIssuer';
+import { PaperSetterPortal } from './PaperSetterPortal';
+import { wipeEntireDatabaseFromCloud } from '../services/mcqService';
 
 function isStationListEqual(a: CandidateStation[], b: CandidateStation[]): boolean {
   if (a.length !== b.length) return false;
@@ -334,6 +336,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       .catch(() => {});
   }, [selectedLabId, allLabs]);
 
+
+  
+  const handleWipeEntireDatabase = async () => {
+    if (!window.confirm('⚠️ CRITICAL DATABASE WIPE ⚠️\n\nAre you sure you want to completely WIPE THE ENTIRE DATABASE?\n\nThis will permanently delete from cloud:\n• All exams & question banks\n• All student attempts, scores & answer sheets\n• All workstations & live sessions\n\nThis action cannot be undone. Click OK to wipe everything.')) {
+      return;
+    }
+    playSound('click');
+    try {
+      await wipeEntireDatabaseFromCloud();
+      setStations([]);
+      setSelectedStationId(null);
+      saveAllStations([]);
+      loadData();
+      playSound('success');
+      alert('DATABASE WIPED: All records have been cleared from cloud.');
+    } catch (err: any) {
+      alert('Failed to wipe database: ' + (err?.message || 'Error'));
+    }
+  };
 
   const handleResetGridDirect = async () => {
     playSound('click');
@@ -614,6 +635,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const sidebarNavItems = [
     { id: 'control_room', label: 'Control Room', icon: Home },
     { id: 'code_spark', label: 'Code Spark (3 Nov)', icon: Zap },
+    { id: 'paper_setter', label: 'Paper Setter Portal', icon: GraduationCap },
     { id: 'live_proctoring', label: 'Live Proctoring', icon: Video },
     { id: 'candidates', label: 'Candidates', icon: Users, badge: activeCount > 0 ? activeCount : undefined },
     { id: 'examinations', label: 'Examinations', icon: FileText },
@@ -834,6 +856,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           minHeight: '100%'
         }}
       >
+        {activeSidebarItem === 'paper_setter' && (
+          <div style={{ width: '100%' }}>
+            <PaperSetterPortal />
+          </div>
+        )}
+
         {activeSidebarItem === 'code_spark' && (
           <div style={{ width: '100%' }}>
             <AdminCodeSparkView
@@ -1270,6 +1298,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <Trash2 size={13} />
                 <span>Reset Grid</span>
               </button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={handleWipeEntireDatabase}
+                style={{ fontSize: '11px', gap: '5px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)', background: 'rgba(239, 68, 68, 0.1)', whiteSpace: 'nowrap', fontWeight: 600 }}
+                title="Permanently wipe all database records, attempts, questions, and workstations from cloud"
+              >
+                <Database size={13} />
+                <span>Clear Database</span>
+              </button>
+
 
               <button
                 className="btn btn-secondary btn-sm admin-btn-full"

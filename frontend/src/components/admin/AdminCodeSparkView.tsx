@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 
 import {
+  Database,
 
   Zap,
 
@@ -101,6 +102,7 @@ import {
   deleteSingleAttempt,
 
   clearAllAttemptsFromEverywhere,
+  wipeEntireDatabaseFromCloud,
   clearAllAttemptsLocally,
 
   clearAllQuestions
@@ -802,10 +804,11 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
     playSound('click');
 
-    setPurgeNotice('Purging all candidate workstations, test attempts, and local cache...');
+    setPurgeNotice('Wiping entire cloud database and local cache...');
 
     try {
 
+      await wipeEntireDatabaseFromCloud();
       await clearAllAttemptsFromEverywhere();
       clearAllAttemptsLocally();
       await resetCodeSparkSystemInCloud();
@@ -3390,9 +3393,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
               >
 
-                <Trash2 size={12} />
+                <Database size={12} />
 
-                <span>Purge Submissions & Reset Wall</span>
+                <span>Clear Database (Wipe Everything)</span>
 
               </button>
 
@@ -4618,7 +4621,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
               >
 
-                <Trash2 size={13} /> Purge Attempts
+                <Database size={13} /> Clear Database (Wipe Everything)
 
               </button>
 

@@ -64,8 +64,9 @@ import {
 
   clearAllStationsFromCloud,
 
-  clearAllAttemptsFromCloud
-
+  clearAllAttemptsFromCloud,
+  clearAllCollegeLabsFromCloud,
+  supabase
 } from './supabaseService';
 
 import { getSynchronizedNow } from './timeSyncService';
@@ -2824,3 +2825,76 @@ if (typeof window !== 'undefined') {
 
 
 
+
+
+export async function wipeEntireDatabaseFromCloud(): Promise<boolean> {
+  clearAllAttemptsLocally();
+  clearAllQuestions();
+
+  try {
+    await Promise.allSettled([
+      supabase.from('mcq_attempts').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
+      supabase.from('candidate_stations').delete().neq('id', ''),
+      supabase.from('mcq_questions').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
+      supabase.from('mcq_exams').delete().neq('id', ''),
+      supabase.from('code_submissions').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
+      clearAllStationsFromCloud(),
+      clearAllAttemptsFromCloud(),
+      clearAllQuestionsFromCloud(),
+      clearAllCollegeLabsFromCloud()
+    ]);
+  } catch (e) {
+    console.warn('[mcqService] Supabase wipe error:', e);
+  }
+
+  // Clear local storage cache
+  if (typeof window !== 'undefined') {
+    try {
+      const keysToClear = [
+        MCQ_STORAGE_KEYS.ATTEMPTS,
+        MCQ_STORAGE_KEYS.QUESTIONS,
+        MCQ_STORAGE_KEYS.EXAMS,
+        MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT,
+        'codedna_mcq_active_attempt_backup',
+        'codedna_student_profile',
+        'codedna_codespark_active_candidate',
+        'codedna_codespark_candidates',
+        'codedna_codespark_shortlisted_rolls',
+        'codedna_codespark_round1_exam_id',
+        'codedna_codespark_active_exam_id',
+        'codedna_codespark_r2_submissions',
+        'codedna_codespark_r2_active_key',
+        'codedna_college_50_labs_workstations',
+        'codedna_college_stations',
+        'codedna_live_stations'
+      ];
+      keysToClear.forEach((k) => {
+        localStorage.removeItem(k);
+        sessionStorage.removeItem(k);
+      });
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('codedna_') || key.startsWith('mcq_') || key.startsWith('spark_')) && key !== 'codedna_theme') {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch {}
+  }
+
+  // Clear local in-memory caches
+  save(MCQ_STORAGE_KEYS.EXAMS, []);
+  save(MCQ_STORAGE_KEYS.QUESTIONS, []);
+  save(MCQ_STORAGE_KEYS.ATTEMPTS, []);
+  clearAllStations();
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('codedna_database_wiped'));
+    window.dispatchEvent(new Event('codedna_mcq_data_changed'));
+    window.dispatchEvent(new Event('codedna_exams_changed'));
+    window.dispatchEvent(new Event('codedna_codespark_candidates_updated'));
+    window.dispatchEvent(new Event('codedna_cctv_broadcast'));
+    window.dispatchEvent(new Event('storage'));
+  }
+
+  return true;
+}
