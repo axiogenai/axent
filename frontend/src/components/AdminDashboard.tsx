@@ -120,7 +120,6 @@ import {
   SimpleSelect
 } from './watermelon-ui';
 import { AdminMCQTicketIssuer } from './AdminMCQTicketIssuer';
-import { PaperSetterPortal } from './PaperSetterPortal';
 import { wipeEntireDatabaseFromCloud } from '../services/mcqService';
 
 function isStationListEqual(a: CandidateStation[], b: CandidateStation[]): boolean {
@@ -635,7 +634,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const sidebarNavItems = [
     { id: 'control_room', label: 'Control Room', icon: Home },
     { id: 'code_spark', label: 'Code Spark (3 Nov)', icon: Zap },
-    { id: 'paper_setter', label: 'Paper Setter Portal', icon: GraduationCap },
     { id: 'live_proctoring', label: 'Live Proctoring', icon: Video },
     { id: 'candidates', label: 'Candidates', icon: Users, badge: activeCount > 0 ? activeCount : undefined },
     { id: 'examinations', label: 'Examinations', icon: FileText },
@@ -856,12 +854,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           minHeight: '100%'
         }}
       >
-        {activeSidebarItem === 'paper_setter' && (
-          <div style={{ width: '100%' }}>
-            <PaperSetterPortal />
-          </div>
-        )}
-
         {activeSidebarItem === 'code_spark' && (
           <div style={{ width: '100%' }}>
             <AdminCodeSparkView

@@ -6,23 +6,17 @@ import 'katex/dist/katex.min.css';
 import App from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
-// Clean-slate purge of all legacy test attempts and mock stations from browser storage
+// Unconditional purge: No domain data in localStorage. Everything is cloud-first.
 try {
-  const PURGE_KEY = 'codedna_clean_slate_2026_10_28_v3';
-  if (localStorage.getItem(PURGE_KEY) !== 'true') {
-    localStorage.removeItem('codedna_mcq_attempts');
-    localStorage.removeItem('codedna_college_50_labs_workstations');
-    localStorage.removeItem('codedna_codespark_shortlist');
-    localStorage.removeItem('codedna_codespark_candidates');
-    localStorage.removeItem('codedna_codespark_active_candidate');
-    localStorage.removeItem('codedna_student_profile');
-    sessionStorage.removeItem('codedna_mcq_session_attempt');
-    sessionStorage.removeItem('codedna_mcq_last_finished_attempt');
-    sessionStorage.removeItem('codedna_mcq_active_attempt_backup');
-    localStorage.removeItem('codedna_mcq_active_attempt_backup');
-    localStorage.removeItem('codedna_mcq_active_attempt');
-    localStorage.setItem(PURGE_KEY, 'true');
+  const keysToRemove: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k !== 'codedna_theme' && (k.startsWith('codedna_') || k.startsWith('codespark_') || k.startsWith('mcq_') || k.startsWith('spark_') || k.startsWith('axent_'))) {
+      keysToRemove.push(k);
+    }
   }
+  keysToRemove.forEach((k) => localStorage.removeItem(k));
+  sessionStorage.clear();
 } catch {}
 
 const rootElement = document.getElementById('root');

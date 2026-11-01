@@ -12,6 +12,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
   const location = useLocation();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
+  // Paper Setter Portal allows direct open access
+  if (location.pathname.startsWith('/paper-setter')) {
+    return <>{children}</>;
+  }
+
   useEffect(() => {
     let mounted = true;
 
