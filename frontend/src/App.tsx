@@ -111,8 +111,8 @@ export const App: React.FC = () => {
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as any).standalone === true
     );
-    if (isStandalone && !location.pathname.startsWith('/code-spark') && !location.pathname.startsWith('/codespark') && location.pathname !== '/mcq') {
-      navigate('/mcq', { replace: true });
+    if (isStandalone && !location.pathname.startsWith('/code-spark') && !location.pathname.startsWith('/codespark')) {
+      navigate('/code-spark', { replace: true });
     }
   }, [location.pathname, navigate]);
 
@@ -539,6 +539,10 @@ export const App: React.FC = () => {
             element={<Navigate to="/codespark-exams" replace />}
           />
           <Route
+            path="/code-spark-exam-hall"
+            element={<Navigate to="/codespark-exams" replace />}
+          />
+          <Route
             path="/code-spark/exam"
             element={<Navigate to="/codespark-exams" replace />}
           />
@@ -548,16 +552,9 @@ export const App: React.FC = () => {
           />
           <Route
             path="/mcq"
-            element={<MCQHub />}
+            element={<Navigate to="/code-spark" replace />}
           />
-          <Route
-            path="/paper-setter"
-            element={
-              <ProtectedRoute requiredRole="paper_setter">
-                <PaperSetterPortal />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/paper-setter" element={<Navigate to="/admin?tab=paper_setter" replace />} />
           <Route
             path="/admin"
             element={

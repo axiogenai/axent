@@ -1,4 +1,4 @@
-﻿import {
+import {
   CandidateStation,
   CollegeLabInfo,
   CodeSubmission,
@@ -25,6 +25,7 @@ import {
   clearSubmittedAttemptsFromCloud,
   clearAllCollegeLabsFromCloud
 } from './supabaseService';
+import { cleanCandidateNameAndRoll } from '../utils/candidateFormatter';
 
 
 const STATIONS_KEY = 'codedna_college_50_labs_workstations';

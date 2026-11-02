@@ -33,6 +33,8 @@ import {
 import katex from 'katex';
 import { ErrorBoundary } from './ErrorBoundary';
 import { getCurrentAuthorityRole, isAuthorityAdmin } from '../services/authService';
+import { lookupCandidateAny, asyncLookupCandidateAny } from '../services/codeSparkService';
+import { cleanCandidateNameAndRoll } from '../utils/candidateFormatter';
 
 // ── Timer hook ────────────────────────────────────────────────────────────────
 function useCountdown(deadline: number, onExpire: () => void) {
@@ -574,48 +576,60 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
     }
   }, [exam, existingProfile]);
 
-  const handleStartManual = () => {
-    const errs: string[] = [];
-    const trimmedName = name.trim();
-    const trimmedRoll = roll.trim();
+  const [accessKeyInput, setAccessKeyInput] = useState('');
+  const [isVerifyingKey, setIsVerifyingKey] = useState(false);
 
-    if (!trimmedName || trimmedName.length < 2) {
-      errs.push('Candidate full name must contain at least 2 characters.');
-    }
-    if (!trimmedRoll || trimmedRoll.length < 2) {
-      errs.push(isTechFest ? 'Candidate Access Key is required.' : 'Roll number / University Seat Number (USN) must contain at least 2 characters.');
-    }
-    if (!isTechFest) {
-      if (!dept.trim()) errs.push('Academic department is required.');
-      if (!sem.trim()) errs.push('Semester is required.');
-      if (!division.trim()) errs.push('Class division is required.');
-    }
-
-    // Schedule timing guard: strictly prohibit early entry before exam.startTime
-    if (exam.startTime && getSynchronizedNow() < exam.startTime) {
-      errs.push(`This examination is scheduled for ${new Date(exam.startTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}. Early entry is strictly prohibited.`);
-    }
-
-    // Duplicate submission guard: check if candidate already submitted this exam
-    const normalizedRoll = trimmedRoll.toLowerCase();
-    const candidateAttempts = getAttemptsForExam(exam.id).filter(
-      (item) => String(item.studentRoll || '').trim().toLowerCase() === normalizedRoll
-    );
-    const existingSubmitted = candidateAttempts.find(
-      (item) => item.status === 'SUBMITTED' || item.status === 'TIMED_OUT'
-    );
-    if (existingSubmitted && Math.max(1, exam.maxAttempts || 1) <= 1) {
-      errs.push(`Candidate with Roll Number / USN "${trimmedRoll}" has already completed and submitted this examination. Re-taking is not permitted.`);
-    }
-
-    if (errs.length > 0) {
-      setErrors(errs);
+  const handleStartWithKey = async (overrideKey?: string) => {
+    const rawKey = (overrideKey || accessKeyInput).trim().toUpperCase().replace(/\s+/g, '');
+    if (!rawKey) {
+      setErrors(['Candidate Access Key is required. Please enter your official access key issued by the administrator.']);
       playSound('warning');
       return;
     }
+
+    setIsVerifyingKey(true);
+    let lookup = lookupCandidateAny(rawKey);
+    if (!lookup) {
+      lookup = await asyncLookupCandidateAny(rawKey);
+    }
+    setIsVerifyingKey(false);
+
+    if (!lookup) {
+      setErrors([
+        `Access Denied: Key "${rawKey}" is not registered in the examination roster. Only candidates with an authorized key created by the administrator can attend this examination.`
+      ]);
+      playSound('warning');
+      return;
+    }
+
+    const cand = lookup.candidate;
+    const { name: cleanName, roll: cleanRoll } = cleanCandidateNameAndRoll(cand.name, cand.rollNumber || cand.accessKey);
+
+    // Schedule timing guard: strictly prohibit early entry before exam.startTime
+    if (exam.startTime && getSynchronizedNow() < exam.startTime) {
+      setErrors([`This examination is scheduled for ${new Date(exam.startTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}. Early entry is strictly prohibited.`]);
+      playSound('warning');
+      return;
+    }
+
+    // Duplicate submission guard: check if candidate already submitted this exam
+    const normalizedRoll = cleanRoll.toLowerCase();
+    const candidateAttempts = getAttemptsForExam(exam.id).filter(
+      (item) => String(item.studentRoll || '').trim().toLowerCase() === normalizedRoll
+    );
+    const isRetake = Boolean(cand.allowRound1Retake);
+    const existingSubmitted = candidateAttempts.find(
+      (item) => item.status === 'SUBMITTED' || item.status === 'TIMED_OUT'
+    );
+    if (existingSubmitted && !isRetake && Math.max(1, exam.maxAttempts || 1) <= 1) {
+      setErrors([`Candidate "${cleanName}" (${cleanRoll}) has already completed and submitted this examination. Re-taking is not permitted.`]);
+      playSound('warning');
+      return;
+    }
+
     setErrors([]);
 
-    const rollDigits = trimmedRoll.replace(/[^0-9]/g, '');
+    const rollDigits = cleanRoll.replace(/[^0-9]/g, '');
     const stationDigits = rollDigits.length > 0 ? String(parseInt(rollDigits.slice(-2), 10) || 1).padStart(2, '0') : '01';
     const stationNumber = `Station #${stationDigits}`;
 
@@ -623,12 +637,12 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
     const dedicatedLabName = isTechFest ? 'CodeSpark Arena' : (exam.assignedLabName || `Exam: ${exam.title}`);
 
     const student: StudentInfo = {
-      name: trimmedName,
-      rollNumber: trimmedRoll,
-      department: isTechFest ? 'CodeSpark Participant' : dept.trim(),
-      semester: isTechFest ? 'Tech Fest' : sem.trim(),
-      division: isTechFest ? 'Open' : division.trim(),
-      course: isTechFest ? 'Code Spark 2026' : (exam.subject || 'MCQ Course'),
+      name: cleanName,
+      rollNumber: cleanRoll,
+      department: cand.department || 'Axent Candidate',
+      semester: 'Round 1 Assessment',
+      division: 'A',
+      course: exam.subject || 'Code Spark 2026',
       examType: (exam.examCategory as ExamCategory) || 'Aptitude',
       assignmentTitle: exam.title,
       labId: dedicatedLabId,
@@ -636,7 +650,8 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
       stationNumber,
       examDurationMinutes: exam.durationMinutes,
       examMode: 'MCQ',
-      mcqExamId: exam.id
+      mcqExamId: exam.id,
+      accessKey: cand.accessKey
     };
 
     try {
@@ -1031,76 +1046,21 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
           }}
         >
           
-          {/* Mode Switcher Tabs (Medium Size, Non-wrapping) */}
-          <div
-            style={{
-              display: 'flex',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '6px',
-              padding: '3px',
-              marginBottom: '14px',
-              height: '30px',
-              boxSizing: 'border-box',
-              overflow: 'hidden'
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => { setMode('manual'); playSound('click'); }}
-              className="no-touch-expand mcq-mode-tab-btn"
-              style={{
-                flex: 1,
-                height: '24px',
-                minHeight: 0,
-                padding: '0 8px',
-                border: 'none',
-                borderRadius: '4px',
-                background: mode === 'manual' ? 'var(--bg-elevated)' : 'transparent',
-                color: mode === 'manual' ? 'var(--text-primary)' : 'var(--text-muted)',
-                fontWeight: mode === 'manual' ? 600 : 500,
-                fontSize: '11px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '5px',
-                whiteSpace: 'nowrap',
-                boxShadow: mode === 'manual' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <User size={12} />
-              <span>Manual Entry</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => { setMode('token'); playSound('click'); }}
-              className="no-touch-expand mcq-mode-tab-btn"
-              style={{
-                flex: 1,
-                height: '24px',
-                minHeight: 0,
-                padding: '0 8px',
-                border: 'none',
-                borderRadius: '4px',
-                background: mode === 'token' ? 'var(--bg-elevated)' : 'transparent',
-                color: mode === 'token' ? 'var(--text-primary)' : 'var(--text-muted)',
-                fontWeight: mode === 'token' ? 600 : 500,
-                fontSize: '11px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '5px',
-                whiteSpace: 'nowrap',
-                boxShadow: mode === 'token' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <KeyRound size={12} />
-              <span>Import Token</span>
-            </button>
+          {/* Strict Admin Key Gate - Zero Manual Entry */}
+          <div style={{ marginBottom: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'var(--bg-surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>
+                <KeyRound size={15} />
+              </div>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Candidate Key Verification
+                </h4>
+                <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-muted)' }}>
+                  Only keys created by the administrator can attend. Manual registration is disabled.
+                </p>
+              </div>
+            </div>
           </div>
 
           {startError && (
@@ -1109,143 +1069,86 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
             </div>
           )}
 
-          {/* MODE 1: MANUAL ENTRY */}
-          {mode === 'manual' && (
-            <div>
-              {errors.length > 0 && (
-                <div style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', marginBottom: '14px' }}>
-                  {errors.map((e, i) => <p key={i} style={{ color: 'var(--danger)', fontSize: '12px', margin: '2px 0' }}>• {e}</p>)}
-                </div>
-              )}
-
-              {/* 1:1 Two-Column Compact Candidate Identity Form */}
-              <div className="mcq-candidate-form-grid">
-                {/* MCQ Exam Selection (Only if multiple exams exist) */}
-                {allExams.filter((e) => e.status === 'PUBLISHED').length > 1 && (
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
-                      Select Examination Session *
-                    </label>
-                    <SimpleSelect
-                      value={exam.id}
-                      onChange={(val) => {
-                        onSelectExam(String(val));
-                        playSound('click');
-                      }}
-                      options={allExams.filter((e) => e.status === 'PUBLISHED').map((ex) => ({
-                        value: ex.id,
-                        label: `${ex.title} (${ex.questionCount} Qs · ${ex.durationMinutes}m · ${ex.totalMarks} marks)`
-                      }))}
-                    />
-                  </div>
-                )}
-
-                {/* Candidate Full Name (Spans across) */}
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
-                    Full Name *
-                  </label>
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Enter your registered name"
-                    style={{ ...inputStyle, padding: '6px 10px', height: '32px', fontSize: '12px', borderRadius: '6px', background: 'var(--bg-surface)' }}
-                    onKeyDown={(e) => e.key === 'Enter' && handleStartManual()}
-                  />
-                </div>
-
-                {/* Row 2: Roll Number / Candidate Key (1fr) & Department (1fr) */}
-                <div style={isTechFest ? { gridColumn: '1 / -1' } : undefined}>
-                  <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
-                    {isTechFest ? 'Candidate Access Key *' : 'Roll Number / USN *'}
-                  </label>
-                  <input
-                    value={roll}
-                    onChange={(e) => setRoll(e.target.value)}
-                    placeholder={isTechFest ? "Access Key (e.g. AXENT-5401)" : "Roll Number / USN"}
-                    style={{ ...inputStyle, padding: '6px 10px', height: '32px', fontSize: '12px', borderRadius: '6px', background: 'var(--bg-surface)' }}
-                    onKeyDown={(e) => e.key === 'Enter' && handleStartManual()}
-                  />
-                </div>
-
-                {!isTechFest && (
-                  <div>
-                    <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
-                      Department *
-                    </label>
-                    <SimpleSelect
-                      value={dept}
-                      onChange={(val) => {
-                        setDept(String(val));
-                        playSound('click');
-                      }}
-                      options={DEPARTMENT_OPTIONS}
-                    />
-                  </div>
-                )}
-
-                {/* Row 3: Semester (1fr) & Division (1fr) -> 1:1 */}
-                {!isTechFest && (
-                  <>
-                    <div>
-                      <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
-                        Semester *
-                      </label>
-                      <SimpleSelect
-                        value={sem}
-                        onChange={(val) => {
-                          setSem(String(val));
-                          playSound('click');
-                        }}
-                        options={SEMESTER_OPTIONS}
-                      />
-                    </div>
-
-                    <div>
-                      <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
-                        Division *
-                      </label>
-                      <SimpleSelect
-                        value={division}
-                        onChange={(val) => {
-                          setDivision(String(val));
-                          playSound('click');
-                        }}
-                        options={DIVISION_OPTIONS}
-                      />
-                    </div>
-                  </>
-                )}
-
-                <div style={{ gridColumn: '1 / -1', marginTop: '6px' }}>
-                  <button
-                    onClick={handleStartManual}
-                    style={{
-                      width: '100%',
-                      background: 'var(--accent)',
-                      border: 'none',
-                      borderRadius: '6px',
-                      height: '34px',
-                      padding: '0 14px',
-                      cursor: 'pointer',
-                      color: 'var(--accent-contrast)',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      letterSpacing: '0.02em',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.06)'
-                    }}
-                  >
-                    <CheckCircle2 size={13} />
-                    <span>Start MCQ Examination</span>
-                  </button>
-                </div>
-              </div>
+          {errors.length > 0 && (
+            <div style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', marginBottom: '14px' }}>
+              {errors.map((e, i) => <p key={i} style={{ color: 'var(--danger)', fontSize: '12px', margin: '2px 0' }}>• {e}</p>)}
             </div>
           )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {allExams.filter((e) => e.status === 'PUBLISHED').length > 1 && (
+              <div>
+                <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
+                  Select Examination Session *
+                </label>
+                <SimpleSelect
+                  value={exam.id}
+                  onChange={(val) => {
+                    onSelectExam(String(val));
+                    playSound('click');
+                  }}
+                  options={allExams.filter((e) => e.status === 'PUBLISHED').map((ex) => ({
+                    value: ex.id,
+                    label: `${ex.title} (${ex.questionCount} Qs · ${ex.durationMinutes}m · ${ex.totalMarks} marks)`
+                  }))}
+                />
+              </div>
+            )}
+
+            <div>
+              <label style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
+                Admin-Issued Access Key *
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  value={accessKeyInput}
+                  onChange={(e) => setAccessKeyInput(e.target.value.toUpperCase())}
+                  placeholder="e.g. AXENT-5401 or AXENT-XXXX"
+                  style={{
+                    ...inputStyle,
+                    padding: '8px 12px',
+                    height: '36px',
+                    fontSize: '13px',
+                    fontFamily: 'monospace',
+                    fontWeight: 700,
+                    letterSpacing: '0.05em',
+                    borderRadius: '6px',
+                    background: 'var(--bg-surface)'
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleStartWithKey()}
+                  disabled={isVerifyingKey}
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={() => handleStartWithKey()}
+              disabled={isVerifyingKey}
+              style={{
+                width: '100%',
+                background: 'var(--accent)',
+                border: 'none',
+                borderRadius: '6px',
+                height: '36px',
+                padding: '0 14px',
+                cursor: isVerifyingKey ? 'not-allowed' : 'pointer',
+                color: 'var(--accent-contrast)',
+                fontSize: '12px',
+                fontWeight: 600,
+                letterSpacing: '0.02em',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+                marginTop: '4px'
+              }}
+            >
+              {isVerifyingKey ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+              <span>{isVerifyingKey ? 'Verifying Key...' : 'Verify Key & Enter Examination Hall'}</span>
+            </button>
+          </div>
 
           {/* MODE 2: OR IMPORT WITH TOKEN */}
           {mode === 'token' && (

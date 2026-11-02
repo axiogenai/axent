@@ -844,7 +844,7 @@ export async function clearAllStationsFromCloud(labId?: string): Promise<boolean
       console.warn('[Supabase] Failed to list stations for clearing:', selErr);
     }
     if (records && records.length > 0) {
-      const ids = records.map(r => r.id).filter(id => id !== 'codespark_system_config' && id !== 'codespark_round2_questions');
+      const ids = records.map(r => r.id);
       for (let i = 0; i < ids.length; i += 50) {
         const batch = ids.slice(i, i + 50);
         await supabase.from('candidate_stations').delete().in('id', batch);

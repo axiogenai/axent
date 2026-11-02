@@ -105,13 +105,15 @@ import {
   wipeEntireDatabaseFromCloud,
   clearAllAttemptsLocally,
 
-  clearAllQuestions
+  clearAllQuestions,
+
+  syncFromSupabase
 
 } from '../../services/mcqService';
 
 import { MCQExamConfig, MCQQuestion } from '../../types/mcq';
 
-import { getAllCodingQuestions } from '../../services/codingQuestionService';
+import { getAllRound2Problems } from '../../services/round2CodingService';
 
 import { playSound } from '../../utils/sounds';
 
@@ -169,6 +171,13 @@ import {
   deleteCodeSparkCandidateComplete,
   resetCodeSparkSystemInCloud
 } from '../../services/codeSparkService';
+
+import {
+  isRound2ArenaUnlocked,
+  setRound2ArenaUnlocked,
+  subscribeToRound2ArenaUnlocked
+} from '../../services/round2CodingService';
+import { cleanCandidateNameAndRoll } from '../../utils/candidateFormatter';
 
 import { CodeSparkCandidateImportModal } from '../codespark/CodeSparkCandidateImportModal';
 
@@ -278,6 +287,29 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
   const [selectedExamToAssign, setSelectedExamToAssign] = useState<string>('');
 
   const [paperSaveSuccess, setPaperSaveSuccess] = useState<string | null>(null);
+
+  // Round 2 Arena Gate State (Cloud Synced)
+  const [isRound2ArenaOpen, setIsRound2ArenaOpen] = useState<boolean>(() => isRound2ArenaUnlocked());
+
+  useEffect(() => {
+    const unsub = subscribeToRound2ArenaUnlocked((unlocked) => {
+      setIsRound2ArenaOpen(unlocked);
+    });
+    return unsub;
+  }, []);
+
+  const handleToggleRound2Gate = () => {
+    const next = !isRound2ArenaOpen;
+    playSound(next ? 'success' : 'click');
+    setIsRound2ArenaOpen(next);
+    setRound2ArenaUnlocked(next);
+    setPaperSaveSuccess(
+      next
+        ? 'Round 2 Coding Arena is now OPEN! Contestants can view challenges and submit code.'
+        : 'Round 2 Coding Arena is now LOCKED. Contestant workstations are held in Standby Hall.'
+    );
+    setTimeout(() => setPaperSaveSuccess(null), 5000);
+  };
 
 
 
@@ -437,63 +469,56 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
+  const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(true);
+
   useEffect(() => {
-
     const sync = () => {
-
       setAllExams(getAllExams());
-
       setAssignedExamId(localStorage.getItem('codedna_codespark_round1_exam_id') || '');
-
       setShortlistedRolls(getShortlistedRolls());
-
       setRegisteredCandidates(getAllCodeSparkCandidates());
-
       setRetakeRolls(getRound1RetakeRolls());
-
       setLabOverflowEnabled(isLabOverflowRetakeEnabledGlobally());
-
     };
 
-    void syncCandidatesFromCloud().then((synced) => {
-
-      if (synced && synced.length > 0) setRegisteredCandidates(synced);
-
+    void Promise.all([
+      syncFromSupabase(),
+      syncCandidatesFromCloud()
+    ]).then(([_, syncedCandidates]) => {
+      if (syncedCandidates && syncedCandidates.length > 0) {
+        setRegisteredCandidates(syncedCandidates);
+      }
+      sync();
+    }).finally(() => {
+      setIsCloudSyncing(false);
     });
 
     const unsub = onExamsChanged(sync);
-
+    const unsubMcq = onMcqDataChanged(sync);
     window.addEventListener('storage', sync);
-
     return () => {
-
       unsub();
-
+      unsubMcq();
       window.removeEventListener('storage', sync);
-
     };
-
   }, []);
 
-
-
   const currentAssignedExam = useMemo(() => {
-
     if (assignedExamId) {
-
       const found = allExams.find((e) => e.id === assignedExamId);
-
       if (found) return found;
-
     }
-
     const spark = allExams.find((e) => e.isCodeSpark);
-
     if (spark) return spark;
-
     return ensureCodeSparkAptitudeExam();
-
   }, [assignedExamId, allExams]);
+
+  useEffect(() => {
+    if (!assignedExamId && currentAssignedExam?.id) {
+      setAssignedExamId(currentAssignedExam.id);
+      localStorage.setItem('codedna_codespark_round1_exam_id', currentAssignedExam.id);
+    }
+  }, [assignedExamId, currentAssignedExam]);
 
 
 
@@ -547,7 +572,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
   const [allAttempts, setAllAttempts] = useState<any[]>(() => getAllAttempts());
 
-  const codingQuestions = useMemo(() => getAllCodingQuestions(), []);
+  const codingQuestions = useMemo(() => getAllRound2Problems(), []);
 
 
 
@@ -618,6 +643,56 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       .sort((a, b) => b.score - a.score);
 
   }, [allAttempts, shortlistedRolls, registeredCandidates, currentAssignedExam]);
+
+  // Shortlisted cohort prepared with credentials for Round 2 Arena (deduplicated & canonical)
+  const shortlistedCohort = useMemo(() => {
+    const seenRolls = new Set<string>();
+    const cohort: Array<{
+      rollNumber: string;
+      name: string;
+      email: string;
+      round2Key: string;
+      round1Score: number;
+      round1MaxScore: number;
+    }> = [];
+
+    for (const rawRoll of shortlistedRolls) {
+      const roll = (rawRoll || '').trim().toUpperCase();
+      if (!roll) continue;
+
+      // Find candidate by rollNumber or accessKey in registeredCandidates
+      const matchCand = registeredCandidates.find(
+        (c) =>
+          (c.rollNumber && c.rollNumber.toUpperCase() === roll) ||
+          (c.accessKey && c.accessKey.toUpperCase() === roll)
+      );
+
+      const canonicalRoll = matchCand?.rollNumber ? matchCand.rollNumber.toUpperCase() : roll;
+      // Filter out any raw accessKey like AXENT-... if it does not match a real candidate
+      if (canonicalRoll.startsWith('AXENT-') && !matchCand) continue;
+      if (seenRolls.has(canonicalRoll)) continue;
+      seenRolls.add(canonicalRoll);
+
+      const matchAttempt = aptitudeCandidates.find(
+        (c) =>
+          (c.studentRoll || '').toUpperCase() === canonicalRoll ||
+          (matchCand?.accessKey && (c.studentRoll || '').toUpperCase() === matchCand.accessKey.toUpperCase())
+      );
+
+      const cleaned = cleanCandidateNameAndRoll(matchCand?.name || matchAttempt?.studentName || canonicalRoll, canonicalRoll);
+
+      cohort.push({
+        rollNumber: canonicalRoll,
+        name: cleaned.name,
+        email: matchCand?.email || matchAttempt?.studentEmail || `${canonicalRoll.toLowerCase()}@college.edu`,
+        round2Key: matchCand?.round2Key || matchAttempt?.round2Key || `AXENT-R2-${canonicalRoll.slice(-4)}`,
+        round1Score: matchAttempt?.score ?? 0,
+        round1MaxScore: matchAttempt?.totalMarks || matchAttempt?.maxScore || currentAssignedExam?.totalMarks || examTotalMarks || 0
+      });
+    }
+
+    return cohort;
+  }, [shortlistedRolls, aptitudeCandidates, registeredCandidates]);
 
 
 
@@ -1265,122 +1340,31 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
     // 1. Registered candidates in CodeSpark (Strict deduplication by identity)
-
-    registeredCandidates.forEach((cand, idx) => {
-
+    // ONLY admin-issued keys and registered roster candidates can join or attend CodeSpark.
+    registeredCandidates.forEach((cand) => {
       const accessKey = (cand.accessKey || '').toUpperCase().trim();
+      const { name: cleanName, roll: cleanRoll } = cleanCandidateNameAndRoll(
+        cand.name,
+        cand.rollNumber || (cand.email ? cand.email.split('@')[0] : accessKey)
+      );
 
-      const normName = (cand.name || '').trim().toLowerCase();
-
-      const cleanRoll = (cand.rollNumber || (cand.email ? cand.email.split('@')[0] : accessKey)).toUpperCase().trim();
-
-      if (!cleanRoll && !normName) return;
-
-
-
-      const dedupeKey = cleanRoll || normName;
-
+      const dedupeKey = cleanRoll ? `roll-${cleanRoll.toUpperCase()}` : `key-${accessKey}`;
       if (!candMap.has(dedupeKey)) {
-
         candMap.set(dedupeKey, {
-
           id: `AXNT-SPARK-WS-${String(candMap.size + 1).padStart(2, '0')}`,
-
           defaultStationNumber: `Terminal #${String(candMap.size + 1).padStart(2, '0')}`,
-
           candidate: {
-
             ...cand,
-
+            name: cleanName,
             rollNumber: cleanRoll
-
           },
-
           cleanRoll
-
         });
-
       }
-
     });
 
-
-
-    // 2. Only incorporate attempts for candidates taking the CodeSpark exam who aren't already mapped
-
-    allAttempts.forEach((att) => {
-
-      const isSparkExam = !currentAssignedExam?.id || att.examId === currentAssignedExam.id || att.examId === 'codespark-round1-aptitude' || (att as any).isCodeSpark;
-
-      if (!isSparkExam) return;
-
-
-
-      const cleanRoll = (att.studentRoll || '').trim().toUpperCase();
-
-      const attName = (att.studentName || '').trim().toLowerCase();
-
-      if (!cleanRoll && !attName) return;
-
-
-
-      const alreadyMapped = Array.from(candMap.values()).some(({ candidate }) => {
-
-        const candRoll = (candidate.rollNumber || '').trim().toUpperCase();
-
-        const candKey = (candidate.accessKey || '').trim().toUpperCase();
-
-        const candName = (candidate.name || '').trim().toLowerCase();
-
-        return (
-
-          (cleanRoll && (candRoll === cleanRoll || candKey === cleanRoll)) ||
-
-          (attName && candName && candName === attName)
-
-        );
-
-      });
-
-
-
-      if (!alreadyMapped) {
-
-        const dedupeKey = cleanRoll || attName;
-
-        if (!candMap.has(dedupeKey)) {
-
-          candMap.set(dedupeKey, {
-
-            id: `AXNT-SPARK-WS-${String(candMap.size + 1).padStart(2, '0')}`,
-
-            defaultStationNumber: `Terminal #${String(candMap.size + 1).padStart(2, '0')}`,
-
-            candidate: {
-
-              name: att.studentName || cleanRoll,
-
-              email: att.studentEmail || `${(cleanRoll || 'candidate').toLowerCase()}@institution.edu`,
-
-              rollNumber: cleanRoll,
-
-              accessKey: att.accessKey || `AXENT-${cleanRoll.slice(-4) || '9999'}`,
-
-              status: att.status === 'SUBMITTED' ? 'ROUND1_COMPLETED' : 'CHECKED_IN',
-
-              registeredAt: Date.now()
-
-            },
-
-            cleanRoll
-
-          });
-
-        }
-
-      }
-
-    });
+    // NOTE: Removed phantom unmapped attempt auto-generation.
+    // Strictly adheres to: "only student key that admin creates will attend test no one else can attend"
 
 
 
@@ -1704,6 +1688,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
   const round2Stations = useMemo(() => {
     const rawFiltered = stations.filter((s) => {
+      const anySt = s as any;
+      const labId = (s.labId || anySt.lab_id || '').toUpperCase();
+      if (labId === 'ROUND_2_ARENA' || s.id.startsWith('r2_')) return true;
       const title = (s.student?.assignmentTitle || s.student?.course || '').toLowerCase();
       const mode = s.examMode || (s.language === 'MCQ' ? 'MCQ' : 'CODING');
       return mode === 'CODING' || title.includes('spark') || title.includes('coding');
@@ -2239,7 +2226,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
           <div style={{ padding: '8px 14px', borderRadius: '6px', background: isDark ? '#18181b' : '#ecfdf5', border: isDark ? '1px solid #10b981' : '1px solid #a7f3d0', textAlign: 'center' }}>
 
-            <div style={{ fontSize: '16px', fontWeight: 800, color: isDark ? '#10b981' : '#059669' }}>{shortlistedRolls.length}</div>
+            <div style={{ fontSize: '16px', fontWeight: 800, color: isDark ? '#10b981' : '#059669' }}>{shortlistedCohort.length}</div>
 
             <div style={{ fontSize: '9.5px', color: isDark ? '#10b981' : '#059669', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Shortlisted for R2</div>
 
@@ -2268,8 +2255,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
       {/* Active Paper Status or Unscheduled Warning Banner */}
-
-      {!currentAssignedExam ? (
+      {!currentAssignedExam && !isCloudSyncing ? (
 
         <div
 
@@ -2433,7 +2419,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
             <span style={{ fontSize: '12px', color: t.textMuted }}>Active CodeSpark Paper:</span>
 
-            <strong style={{ fontSize: '13px', color: t.textPrimary }}>{currentAssignedExam.title}</strong>
+            <strong style={{ fontSize: '13px', color: t.textPrimary }}>{currentAssignedExam?.title || 'General Aptitude Assessment'}</strong>
 
             <span
 
@@ -2529,9 +2515,9 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
           { id: 'round1', label: `Round 1 Results & Sheets (${aptitudeCandidates.length})`, icon: Trophy },
 
-          { id: 'shortlist', label: `Shortlist & Round 2 Keys (${shortlistedRolls.length})`, icon: ShieldCheck },
+          { id: 'shortlist', label: `Shortlist & Round 2 Keys (${shortlistedCohort.length})`, icon: ShieldCheck },
 
-          { id: 'round2', label: `Round 2 Live Arena (${round2Stations.length})`, icon: Code2 },
+          { id: 'round2', label: `Round 2 Live Arena (${shortlistedCohort.length > 0 ? shortlistedCohort.length : round2Stations.length})`, icon: Code2 },
 
           { id: 'candidates', label: `Candidate Roster (${registeredCandidates.length})`, icon: Key },
 
@@ -2921,6 +2907,48 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
               </button>
 
+              <button
+
+                type="button"
+
+                onClick={handlePurgeCloudData}
+
+                style={{
+
+                  display: 'flex',
+
+                  alignItems: 'center',
+
+                  gap: '6px',
+
+                  padding: '6px 12px',
+
+                  borderRadius: '6px',
+
+                  background: '#dc2626',
+
+                  border: '1px solid #b91c1c',
+
+                  color: '#ffffff',
+
+                  fontSize: '11.5px',
+
+                  fontWeight: 700,
+
+                  cursor: 'pointer'
+
+                }}
+
+                title="Permanently wipe all candidate stations, attempts, and registrations from database"
+
+              >
+
+                <Database size={12} />
+
+                <span>Clear Database</span>
+
+              </button>
+
             </div>
 
           </div>
@@ -3225,6 +3253,29 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
+              {/* Round 2 Arena Gatekeeper Master Action Button */}
+              <button
+                type="button"
+                onClick={handleToggleRound2Gate}
+                style={{
+                  padding: '8px 14px',
+                  borderRadius: '6px',
+                  background: isRound2ArenaOpen ? '#271b08' : '#052e16',
+                  border: isRound2ArenaOpen ? '1px solid #713f12' : '1px solid #166534',
+                  color: isRound2ArenaOpen ? '#fde047' : '#86efac',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                title={isRound2ArenaOpen ? "Click to LOCK Round 2 Coding Arena (Hold all workstations in Standby Hall)" : "Click to OPEN Round 2 Coding Arena for all contestants"}
+              >
+                {isRound2ArenaOpen ? <Lock size={12} /> : <Unlock size={12} />}
+                <span>{isRound2ArenaOpen ? 'Lock Round 2 Arena' : 'Open Round 2 Arena'}</span>
+              </button>
+
               <button
 
                 type="button"
@@ -3365,15 +3416,15 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                 style={{
 
-                  padding: '8px 12px',
+                  padding: '8px 14px',
 
                   borderRadius: '6px',
 
-                  background: t.btnSecondaryBg,
+                  background: '#dc2626',
 
-                  border: `1px solid ${t.btnSecondaryBorder}`,
+                  border: '1px solid #b91c1c',
 
-                  color: t.textSecondary,
+                  color: '#ffffff',
 
                   fontSize: '11.5px',
 
@@ -4153,111 +4204,119 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
                     {/* Candidate Details */}
 
-                    <div>
+                    {(() => {
+                      const { name: cleanCandName, roll: cleanCandRoll } = cleanCandidateNameAndRoll(
+                        station.student.name,
+                        station.student.rollNumber
+                      );
+                      return (
+                        <div>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
 
-                          <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: t.textPrimary }}>
+                              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: t.textPrimary }}>
 
-                            {station.student.name}
+                                {cleanCandName}
 
-                          </h4>
+                              </h4>
 
-                          {isCandidateAuthorizedForRound1Retake(station.student.rollNumber || candKey) ? (
+                              {isCandidateAuthorizedForRound1Retake(cleanCandRoll || candKey) ? (
 
-                            <span
+                                <span
 
-                              style={{
+                                  style={{
 
-                                fontSize: '9px',
+                                    fontSize: '9px',
 
-                                fontWeight: 800,
+                                    fontWeight: 800,
 
-                                padding: '1px 5px',
+                                    padding: '1px 5px',
 
-                                borderRadius: '3px',
+                                    borderRadius: '3px',
 
-                                background: 'rgba(245, 158, 11, 0.15)',
+                                    background: 'rgba(245, 158, 11, 0.15)',
 
-                                color: '#f59e0b',
+                                    color: '#f59e0b',
 
-                                border: '1px solid rgba(245, 158, 11, 0.35)',
+                                    border: '1px solid rgba(245, 158, 11, 0.35)',
 
-                                fontFamily: 'monospace'
+                                    fontFamily: 'monospace'
 
-                              }}
+                                  }}
 
-                            >
+                                >
 
-                              BATCH 2 (2ND SITTING)
+                                  BATCH 2 (2ND SITTING)
+
+                                </span>
+
+                              ) : (
+
+                                <span
+
+                                  style={{
+
+                                    fontSize: '9px',
+
+                                    fontWeight: 700,
+
+                                    padding: '1px 5px',
+
+                                    borderRadius: '3px',
+
+                                    background: t.badgeBg,
+
+                                    color: t.textMuted,
+
+                                    border: `1px solid ${t.border}`, 
+
+                                    fontFamily: 'monospace'
+
+                                  }}
+
+                                >
+
+                                  BATCH 1
+
+                                </span>
+
+                              )}
+
+                            </div>
+
+                            <span style={{ fontSize: '11px', color: '#71717a', fontFamily: 'monospace' }}>
+
+                              {cleanCandRoll}
 
                             </span>
 
-                          ) : (
+                          </div>
 
-                            <span
+                          <div style={{ fontSize: '11.5px', color: '#a1a1aa', marginTop: '2px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
 
-                              style={{
+                            <span>Access Key: <strong style={{ color: t.textPrimary, fontFamily: 'monospace' }}>{candKey}</strong></span>
 
-                                fontSize: '9px',
+                            {(station.metrics?.tabSwitchViolations || 0) > 0 ? (
 
-                                fontWeight: 700,
+                              <span style={{ color: '#ef4444', fontWeight: 700, fontSize: '10.5px' }}>
 
-                                padding: '1px 5px',
+                                {station.metrics?.tabSwitchViolations} Tab Violations
 
-                                borderRadius: '3px',
+                              </span>
 
-                                background: t.badgeBg,
+                            ) : (
 
-                                color: t.textMuted,
+                              <span style={{ color: '#10b981', fontSize: '10.5px' }}>0 Infractions</span>
 
-                                border: `1px solid ${t.border}`, 
+                            )}
 
-                                fontFamily: 'monospace'
-
-                              }}
-
-                            >
-
-                              BATCH 1
-
-                            </span>
-
-                          )}
+                          </div>
 
                         </div>
-
-                        <span style={{ fontSize: '11px', color: '#71717a', fontFamily: 'monospace' }}>
-
-                          {station.student.rollNumber}
-
-                        </span>
-
-                      </div>
-
-                      <div style={{ fontSize: '11.5px', color: '#a1a1aa', marginTop: '2px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-
-                        <span>Access Key: <strong style={{ color: t.textPrimary, fontFamily: 'monospace' }}>{candKey}</strong></span>
-
-                        {(station.metrics?.tabSwitchViolations || 0) > 0 ? (
-
-                          <span style={{ color: '#ef4444', fontWeight: 700, fontSize: '10.5px' }}>
-
-                            {station.metrics?.tabSwitchViolations} Tab Violations
-
-                          </span>
-
-                        ) : (
-
-                          <span style={{ color: '#10b981', fontSize: '10.5px' }}>0 Infractions</span>
-
-                        )}
-
-                      </div>
-
-                    </div>
+                      );
+                    })()}
 
 
 
@@ -5190,6 +5249,83 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       {/* ── TAB: ROUND 2 CODING ARENA LIVE STREAM & LEADERBOARD ── */}
 
       {activeTab === 'round2' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Round 2 Master Gate Controller Banner */}
+          <div
+            style={{
+              padding: '14px 18px',
+              borderRadius: '8px',
+              background: isRound2ArenaOpen ? 'rgba(34, 197, 94, 0.08)' : 'rgba(234, 179, 8, 0.08)',
+              border: isRound2ArenaOpen ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(234, 179, 8, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '6px',
+                  background: isRound2ArenaOpen ? 'rgba(34, 197, 94, 0.15)' : 'rgba(234, 179, 8, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: isRound2ArenaOpen ? '#22c55e' : '#eab308'
+                }}
+              >
+                {isRound2ArenaOpen ? <Unlock size={18} /> : <Lock size={18} />}
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#ffffff' }}>
+                    Round 2 Coding Arena: {isRound2ArenaOpen ? 'LIVE & UNLOCKED' : 'LOCKED (STANDBY MODE)'}
+                  </h3>
+                  <span
+                    style={{
+                      padding: '2px 7px',
+                      borderRadius: '4px',
+                      fontSize: '10.5px',
+                      fontWeight: 700,
+                      background: isRound2ArenaOpen ? '#14532d' : '#713f12',
+                      color: isRound2ArenaOpen ? '#86efac' : '#fde047'
+                    }}
+                  >
+                    {isRound2ArenaOpen ? 'QUESTIONS VISIBLE' : 'ZERO QUESTION LEAKAGE'}
+                  </span>
+                </div>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#a1a1aa' }}>
+                  {isRound2ArenaOpen
+                    ? 'The coding arena is open. Contestants can view the 5 challenges, write code, run test cases, and submit.'
+                    : 'All contestant workstations are held in Standby Hall. Questions and test cases cannot be seen until you open Round 2.'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleToggleRound2Gate}
+              style={{
+                padding: '9px 18px',
+                borderRadius: '6px',
+                background: isRound2ArenaOpen ? '#dc2626' : '#15803d',
+                border: 'none',
+                color: '#ffffff',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              {isRound2ArenaOpen ? <Lock size={14} /> : <Unlock size={14} />}
+              <span>{isRound2ArenaOpen ? 'Lock Round 2 Arena' : 'Open Round 2 Coding Arena'}</span>
+            </button>
+          </div>
 
         <AdminRound2Hub
 
@@ -5201,7 +5337,10 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
           isDark={isDark}
 
+          shortlistedCohort={shortlistedCohort}
+
         />
+        </div>
 
       )}
 
@@ -5210,8 +5349,39 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       {/* ── TAB: CANDIDATE ROSTER & AXENT KEYS ── */}
 
       {activeTab === 'candidates' && (
-
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Key & Portal Guidelines Banner */}
+          <div style={{ ...darkCardStyle, background: 'rgba(59, 130, 246, 0.05)', border: '1px solid rgba(59, 130, 246, 0.25)', padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Key size={16} color="#60a5fa" />
+                <span style={{ fontSize: '13px', fontWeight: 800, color: '#f4f4f5' }}>
+                  CodeSpark Access Keys &amp; Proctor Master Credentials
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '11px', color: '#a1a1aa' }}>Proctor Master Key:</span>
+                <code style={{ fontSize: '12px', fontWeight: 800, color: '#60a5fa', background: '#18181b', padding: '3px 8px', borderRadius: '4px', border: '1px solid #27272a' }}>
+                  AXENT-PROCTOR
+                </code>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText('AXENT-PROCTOR');
+                    playSound('click');
+                  }}
+                  style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '4px', padding: '3px 8px', color: '#a1a1aa', fontSize: '11px', cursor: 'pointer' }}
+                >
+                  Copy Key
+                </button>
+              </div>
+            </div>
+            <div style={{ fontSize: '11.5px', color: '#a1a1aa', lineHeight: '1.6' }}>
+              • <strong>Round 1 (MCQ):</strong> Candidates navigate to <code style={{ color: '#10b981' }}>/code-spark</code> and enter their <strong>AXENT Key</strong> (or Roll Number).<br />
+              • <strong>Round 2 (Coding):</strong> Shortlisted candidates access <code style={{ color: '#10b981' }}>/codespark-exams?round=2</code> using their provisioned <strong>Round 2 Email Key</strong> (<span style={{ fontFamily: 'monospace', color: '#60a5fa' }}>AXENT-R2-XXXX</span>).<br />
+              • <strong>Lockdown Release:</strong> If a student triggers Academic Lockdown, enter <code style={{ color: '#60a5fa' }}>AXENT-PROCTOR</code> on their workstation to unlock instantly.
+            </div>
+          </div>
 
           <div style={{ ...darkCardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
 

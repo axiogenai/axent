@@ -87,7 +87,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         }
         navLinks={[
           { label: 'CodeSpark (3 Nov)', href: '/code-spark', active: true },
-          { label: 'Examination Hall', href: '/mcq' },
+
           { label: '25s Launch Film', href: '/launch' },
           { label: 'Install App', href: '#install' }
         ]}

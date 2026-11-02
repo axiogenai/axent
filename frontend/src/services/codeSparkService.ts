@@ -10,6 +10,20 @@ import {
   getAllAttempts,
 } from './mcqService';
 import { saveExamToCloud } from './supabaseService';
+import { cleanCandidateNameAndRoll } from '../utils/candidateFormatter';
+import {
+  isRound2ArenaUnlocked,
+  setRound2ArenaUnlocked,
+  subscribeToRound2ArenaUnlocked,
+  ROUND2_ARENA_UNLOCKED_KEY
+} from './round2CodingService';
+
+export {
+  isRound2ArenaUnlocked,
+  setRound2ArenaUnlocked,
+  subscribeToRound2ArenaUnlocked,
+  ROUND2_ARENA_UNLOCKED_KEY
+};
 
 /**
  * CodeSpark Private Examination Service
@@ -20,7 +34,7 @@ import { saveExamToCloud } from './supabaseService';
 
 export interface CodeSparkCandidate {
   accessKey: string;
-  assignedExamId?: string; // Strictly 'AXENT-XXXX' (4 digits)
+  assignedExamId?: string; // Strictly 'AXENT-XXXX'
   round2Key?: string; // Dedicated Round 2 access key for shortlisted candidates e.g. 'AXENT-R2-XXXX'
   name: string;
   email: string;
@@ -47,6 +61,7 @@ export interface CodeSparkSystemConfig {
   isConcluded: boolean;
   concludedAt?: number;
   candidates: CodeSparkCandidate[];
+  isRound2ArenaOpen?: boolean;
   updatedAt: number;
 }
 
@@ -64,17 +79,17 @@ export function normalizeCodeSparkKey(rawKey: string): string {
   if (!rawKey) return '';
   const cleaned = rawKey.trim().toUpperCase().replace(/\s+/g, '');
   
-  if (/^AXENT-\d{4}$/.test(cleaned)) {
+  if (/^AXENT-R2-[A-Z0-9]+$/i.test(cleaned)) {
     return cleaned;
   }
-  if (/^AXENT\d{4}$/.test(cleaned)) {
+  if (/^AXENT-[A-Z0-9]+$/i.test(cleaned)) {
+    return cleaned;
+  }
+  if (/^AXENT[A-Z0-9]+$/i.test(cleaned)) {
     return `AXENT-${cleaned.slice(5)}`;
   }
-  if (/^AXNT-\d{4}$/.test(cleaned)) {
-    return `AXENT-${cleaned.slice(5)}`;
-  }
-  if (/^AXNT\d{4}$/.test(cleaned)) {
-    return `AXENT-${cleaned.slice(4)}`;
+  if (/^AXNT-?([A-Z0-9]+)$/i.test(cleaned)) {
+    return `AXENT-${cleaned.replace(/^AXNT-?/i, '')}`;
   }
   if (/^\d{4}$/.test(cleaned)) {
     return `AXENT-${cleaned}`;
@@ -88,21 +103,36 @@ export function deduplicateCandidates(candidates: CodeSparkCandidate[]): CodeSpa
     if (!c || !c.accessKey) continue;
     const cleanKey = normalizeCodeSparkKey(c.accessKey);
     if (!cleanKey) continue;
-    const itemRoll = c.rollNumber || (c.email ? c.email.split('@')[0].toUpperCase() : cleanKey);
+    
+    const { name: cleanName, roll: cleanRoll } = cleanCandidateNameAndRoll(
+      c.name,
+      c.rollNumber || (c.email ? c.email.split('@')[0].toUpperCase() : cleanKey)
+    );
     
     if (!keyMap.has(cleanKey)) {
-      keyMap.set(cleanKey, { ...c, accessKey: cleanKey, rollNumber: itemRoll });
+      keyMap.set(cleanKey, {
+        ...c,
+        name: cleanName,
+        accessKey: cleanKey,
+        rollNumber: cleanRoll,
+        round2Key: c.round2Key ? c.round2Key.trim().toUpperCase() : undefined
+      });
     } else {
       const existing = keyMap.get(cleanKey)!;
-      existing.name = c.name || existing.name;
+      existing.name = cleanName || existing.name;
       existing.email = c.email || existing.email;
-      existing.rollNumber = existing.rollNumber || itemRoll;
+      existing.rollNumber = cleanRoll || existing.rollNumber;
       existing.department = c.department || existing.department;
       if (c.status && c.status !== 'REGISTERED') existing.status = c.status;
       if (c.round1Score !== undefined) existing.round1Score = c.round1Score;
       if (c.round1MaxScore !== undefined) existing.round1MaxScore = c.round1MaxScore;
-      if (c.isShortlisted !== undefined) existing.isShortlisted = c.isShortlisted;
-      if (c.round2Key) existing.round2Key = c.round2Key;
+      if (c.isShortlisted !== undefined) existing.isShortlisted = c.isShortlisted || existing.isShortlisted;
+      if (c.round2Key && c.round2Key.trim()) {
+        existing.round2Key = c.round2Key.trim().toUpperCase();
+      }
+      if (existing.isShortlisted && (!existing.round2Key || !existing.round2Key.startsWith('AXENT-R2-'))) {
+        existing.round2Key = generateRound2KeyForCandidate(existing);
+      }
     }
   }
   return Array.from(keyMap.values());
@@ -177,17 +207,40 @@ export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): P
     const assignedId = typeof window !== 'undefined'
       ? localStorage.getItem('codedna_codespark_round1_exam_id')
       : null;
-    const isConcluded = typeof window !== 'undefined'
-      ? localStorage.getItem(ROUND1_CONCLUDED_STORAGE_KEY) === 'true'
-      : false;
+    const isConcluded = isRound1ConcludedGlobally();
+    const localShortlist = getShortlistedRolls();
+    const shortlistedSet = new Set(localShortlist.map((r) => r.trim().toUpperCase()));
+
+    // Guarantee that all shortlisted candidates have their round2Key assigned in cloud payload
+    const finalCandidates = deduped.map((c) => {
+      const cleanKey = (c.accessKey || '').trim().toUpperCase();
+      const cleanRoll = (c.rollNumber || '').trim().toUpperCase();
+      const isShort = Boolean(
+        c.isShortlisted ||
+        c.status === 'SHORTLISTED' ||
+        shortlistedSet.has(cleanKey) ||
+        (cleanRoll && shortlistedSet.has(cleanRoll))
+      );
+      if (isShort) {
+        return {
+          ...c,
+          isShortlisted: true,
+          status: 'SHORTLISTED' as const,
+          round2Key: (c.round2Key && c.round2Key.startsWith('AXENT-R2-')) ? c.round2Key : generateRound2KeyForCandidate(c),
+          round2InvitedAt: c.round2InvitedAt || Date.now()
+        };
+      }
+      return c;
+    });
 
     const payload: CodeSparkSystemConfig = {
-      activeExamId: currentConfig.activeExamId || assignedId || null,
+      activeExamId: assignedId || currentConfig.activeExamId || null,
       shortlistMode: currentConfig.shortlistMode || 'cutoff',
       shortlistValue: currentConfig.shortlistValue || 12,
-      manualShortlistRolls: currentConfig.manualShortlistRolls || getShortlistedRolls(),
-      isConcluded: currentConfig.isConcluded !== undefined ? currentConfig.isConcluded : isConcluded,
-      candidates: deduped,
+      manualShortlistRolls: localShortlist,
+      isConcluded: isConcluded,
+      candidates: finalCandidates,
+      isRound2ArenaOpen: isRound2ArenaUnlocked(),
       updatedAt: Date.now()
     };
 
@@ -276,7 +329,7 @@ export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
 
         if (!error && record?.instructions) {
           const parsed = JSON.parse(record.instructions);
-          if (parsed && Array.isArray(parsed.candidates)) {
+          if (parsed && typeof parsed === 'object') {
             config = parsed;
           }
         }
@@ -285,7 +338,7 @@ export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
       }
     }
 
-    if (config && Array.isArray(config.candidates)) {
+    if (config) {
       if (config.activeExamId && typeof window !== 'undefined') {
         localStorage.setItem('codedna_codespark_round1_exam_id', config.activeExamId);
       }
@@ -293,16 +346,58 @@ export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
         localStorage.setItem('codedna_codespark_shortlist_mode', config.shortlistMode);
         localStorage.setItem('codedna_codespark_shortlist_value', String(config.shortlistValue || 12));
       }
-      if (Array.isArray(config.manualShortlistRolls) && typeof window !== 'undefined') {
-        localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(config.manualShortlistRolls));
+
+      const cloudCandidates = Array.isArray(config.candidates) ? config.candidates : [];
+
+      // Automatically extract shortlisted candidate keys & rolls
+      const candidateShortlistRolls = cloudCandidates
+        .filter(c => c.isShortlisted || c.status === 'SHORTLISTED' || Boolean(c.round2Key))
+        .map(c => (c.rollNumber || c.accessKey || '').trim().toUpperCase())
+        .filter(Boolean);
+
+      const rawShortlistRolls = Array.from(new Set([
+        ...getShortlistedRolls(),
+        ...(Array.isArray(config.manualShortlistRolls) ? config.manualShortlistRolls : []),
+        ...candidateShortlistRolls
+      ]));
+
+      // Prune any access keys that were mistakenly recorded as roll numbers
+      const knownCandidateKeys = new Set(cloudCandidates.map(c => (c.accessKey || '').trim().toUpperCase()));
+      const allShortlistRolls = rawShortlistRolls.filter(r => {
+        const upper = r.toUpperCase();
+        if (upper.startsWith('AXENT-') && knownCandidateKeys.has(upper)) {
+          const matchingCand = cloudCandidates.find(c => (c.accessKey || '').trim().toUpperCase() === upper);
+          if (matchingCand && matchingCand.rollNumber) return false;
+        }
+        return true;
+      });
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(allShortlistRolls));
       }
+
       if (config.isConcluded !== undefined && typeof window !== 'undefined') {
         localStorage.setItem(ROUND1_CONCLUDED_STORAGE_KEY, config.isConcluded ? 'true' : 'false');
         window.dispatchEvent(new CustomEvent('codedna_codespark_concluded_updated', { detail: config.isConcluded }));
       }
+      if (typeof config.isRound2ArenaOpen === 'boolean' && typeof window !== 'undefined') {
+        setRound2ArenaUnlocked(config.isRound2ArenaOpen);
+      }
 
       const local = getAllCodeSparkCandidates();
-      const combined = deduplicateCandidates([...local, ...config.candidates]);
+
+      // CRITICAL FIX: If cloud candidates array is empty but local has real candidates,
+      // preserve local and sync them back to cloud. NEVER wipe candidates!
+      let combined: CodeSparkCandidate[];
+      if (cloudCandidates.length === 0 && local.length > 0) {
+        combined = local;
+        void pushCandidatesToCloud(combined);
+      } else if (local.length === 0 && cloudCandidates.length > 0) {
+        combined = deduplicateCandidates(cloudCandidates);
+      } else {
+        // Merge without losing local round2Key
+        combined = deduplicateCandidates([...local, ...cloudCandidates]);
+      }
 
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(combined));
@@ -1092,38 +1187,33 @@ export async function asyncLookupCandidateAny(rawKey: string): Promise<KeyLookup
 
 function extractPureKeySuffix(k: string): string {
   if (!k) return '';
-  return k.toUpperCase().replace(/^AXENT-R2-|^AXENT-|^R2-?/i, '').replace(/\D/g, '');
+  return k.toUpperCase().replace(/^AXENT-R2-|^AXENT-|^R2-?/i, '').trim();
 }
 
 export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
   if (!rawKey) return null;
   const cleaned = rawKey.trim().toUpperCase().replace(/\s+/g, '');
-  const inputPure = extractPureKeySuffix(cleaned);
-  const inputDigits = cleaned.replace(/\D/g, '');
-
-  // Strictly require at least 4 digits or a valid AXENT- key.
-  // Never match empty string, partial prefixes like 'AXENT-R2-', or fewer than 4 digits.
-  if (inputPure.length < 4 && inputDigits.length < 4 && !/^AXENT-\d{4}$/.test(cleaned) && !/^AXENT-R2-\d{4}$/.test(cleaned)) {
+  if (!cleaned || cleaned === 'AXENT-' || cleaned === 'AXENT-R2-' || cleaned.length < 3) {
     return null;
   }
 
   const all = getAllCodeSparkCandidates();
   const normalizedKey = normalizeCodeSparkKey(cleaned);
   const isRound1Over = isRound1ConcludedGlobally();
+  const cleanedSuffix = extractPureKeySuffix(cleaned);
 
   // 1. Check Round 2 keys first
   for (const c of all) {
     if (c.round2Key) {
       const cleanR2 = c.round2Key.trim().toUpperCase().replace(/\s+/g, '');
-      const r2Pure = extractPureKeySuffix(cleanR2);
-      const r2Digits = cleanR2.replace(/\D/g, '');
+      const r2Suffix = extractPureKeySuffix(cleanR2);
 
       if (
         cleanR2 === cleaned ||
-        cleanR2.replace('AXENT-', '') === cleaned ||
-        cleanR2.replace('AXENT-R2-', '') === cleaned ||
-        (r2Pure.length >= 4 && inputPure.length >= 4 && inputPure === r2Pure) ||
-        (r2Digits.length >= 4 && inputDigits.length >= 4 && inputDigits === r2Digits)
+        cleanR2 === normalizedKey ||
+        cleanR2.replace(/^AXENT-/, '') === cleaned ||
+        cleanR2.replace(/^AXENT-R2-/, '') === cleaned ||
+        (cleanedSuffix && r2Suffix && cleanedSuffix === r2Suffix)
       ) {
         return {
           candidate: c,
@@ -1135,20 +1225,20 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
     }
   }
 
-  // 2. Check Round 1 keys
+  // 2. Check Round 1 keys & candidate access keys
   for (const c of all) {
     const cleanR1 = c.accessKey.trim().toUpperCase().replace(/\s+/g, '');
     const normR1 = normalizeCodeSparkKey(cleanR1);
-    const r1Pure = extractPureKeySuffix(cleanR1);
-    const r1Digits = cleanR1.replace(/\D/g, '');
+    const r1Suffix = extractPureKeySuffix(cleanR1);
+    const candRoll = (c.rollNumber || '').trim().toUpperCase();
 
     if (
       cleanR1 === cleaned ||
       normR1 === normalizedKey ||
       cleanR1 === normalizedKey ||
       normR1 === cleaned ||
-      (r1Pure.length >= 4 && inputPure.length >= 4 && inputPure === r1Pure) ||
-      (r1Digits.length >= 4 && inputDigits.length >= 4 && inputDigits === r1Digits)
+      (cleanedSuffix && r1Suffix && cleanedSuffix === r1Suffix) ||
+      (candRoll && candRoll === cleaned)
     ) {
       const isShortlisted = Boolean(
         c.isShortlisted ||
@@ -1181,11 +1271,14 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
 
 export function shortlistCandidateForRound2(identifier: string, isShortlisted = true): void {
   if (!identifier) return;
-  const clean = identifier.trim().toUpperCase();
+  const rawId = identifier.trim().toUpperCase();
+  const { name: parsedName, roll: parsedRoll } = cleanCandidateNameAndRoll(rawId, rawId);
+  const clean = parsedRoll || rawId;
+
   const currentRolls = getShortlistedRolls();
   const nextRolls = isShortlisted
     ? Array.from(new Set([...currentRolls, clean]))
-    : currentRolls.filter((r) => r !== clean);
+    : currentRolls.filter((r) => r !== clean && r !== rawId);
 
   try {
     localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(nextRolls));
@@ -1193,21 +1286,32 @@ export function shortlistCandidateForRound2(identifier: string, isShortlisted = 
 
   const all = getAllCodeSparkCandidates();
   let updated = false;
+  let matched = false;
 
   for (const c of all) {
     const cRoll = (c.rollNumber || '').trim().toUpperCase();
     const cKey = c.accessKey.trim().toUpperCase();
     const cEmail = (c.email || '').trim().toUpperCase();
+    const cName = (c.name || '').trim().toUpperCase();
 
-    if (cRoll === clean || cKey === clean || cEmail === clean) {
+    if (
+      cRoll === clean || cRoll === rawId ||
+      cKey === clean || cKey === rawId ||
+      cEmail === clean || cEmail === rawId ||
+      (clean.includes(cRoll) && cRoll.length >= 3) ||
+      (cName && (cName === parsedName || cName.includes(parsedName)))
+    ) {
+      matched = true;
       c.isShortlisted = isShortlisted;
       c.status = isShortlisted ? 'SHORTLISTED' : 'ROUND1_COMPLETED';
-      if (isShortlisted && !c.round2Key) {
-        c.round2Key = generateRound2KeyForCandidate(c);
-      } else if (!isShortlisted) {
+      if (isShortlisted) {
+        if (!c.round2Key || !c.round2Key.startsWith('AXENT-R2-')) {
+          c.round2Key = generateRound2KeyForCandidate(c);
+        }
+        c.round2InvitedAt = Date.now();
+      } else {
         c.round2Key = undefined;
       }
-      c.round2InvitedAt = isShortlisted ? Date.now() : undefined;
       updated = true;
     }
   }
@@ -1215,6 +1319,31 @@ export function shortlistCandidateForRound2(identifier: string, isShortlisted = 
   if (updated) {
     saveCodeSparkCandidates(all);
   }
+}
+
+export function ensureAllShortlistedHaveRound2Keys(): CodeSparkCandidate[] {
+  const all = getAllCodeSparkCandidates();
+  const shortlistedRolls = new Set(getShortlistedRolls().map((r) => r.trim().toUpperCase()));
+  let updated = false;
+
+  for (const c of all) {
+    const candRoll = (c.rollNumber || '').trim().toUpperCase();
+    const candKey = c.accessKey.trim().toUpperCase();
+    const isShortlisted = Boolean(c.isShortlisted || c.status === 'SHORTLISTED' || shortlistedRolls.has(candRoll) || shortlistedRolls.has(candKey));
+    if (isShortlisted) {
+      c.isShortlisted = true;
+      c.status = 'SHORTLISTED';
+      if (!c.round2Key || !c.round2Key.startsWith('AXENT-R2-')) {
+        c.round2Key = generateRound2KeyForCandidate(c);
+        updated = true;
+      }
+    }
+  }
+
+  if (updated) {
+    saveCodeSparkCandidates(all);
+  }
+  return all;
 }
 
 export function onCodeSparkCandidatesChanged(callback: (candidates: CodeSparkCandidate[]) => void): () => void {
@@ -1469,28 +1598,19 @@ export async function deleteCodeSparkCandidateComplete(accessKeyOrRoll: string):
 }
 
 export async function resetCodeSparkSystemInCloud(): Promise<boolean> {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem('codedna_codespark_candidates');
+    localStorage.removeItem('codedna_codespark_shortlist');
+    localStorage.removeItem('codedna_codespark_round1_concluded');
+    localStorage.removeItem('codedna_codespark_round1_exam_id');
+    localStorage.removeItem('codedna_codespark_used_keys');
+    localStorage.removeItem('codedna_codespark_active_candidate');
+    localStorage.removeItem('codedna_student_profile');
+  }
   if (!supabase) return false;
   try {
-    const emptyConfig: CodeSparkSystemConfig = {
-      activeExamId: null,
-      shortlistMode: 'cutoff',
-      shortlistValue: 12,
-      manualShortlistRolls: [],
-      isConcluded: false,
-      candidates: [],
-      updatedAt: Date.now()
-    };
-    await supabase
-      .from('candidate_stations')
-      .upsert({
-        id: CODESPARK_SYSTEM_CONFIG_ID,
-        lab_id: 'SYSTEM_CONFIG',
-        station_number: 'CONFIG',
-        status: 'CONFIG',
-        code: JSON.stringify(emptyConfig),
-        student: emptyConfig,
-        last_updated_timestamp: Date.now()
-      });
+    await supabase.from('candidate_stations').delete().eq('id', CODESPARK_SYSTEM_CONFIG_ID);
     return true;
   } catch (err) {
     console.warn('[CodeSpark Cloud] resetCodeSparkSystemInCloud failed:', err);

@@ -9,6 +9,7 @@ import { AdminAuditLedgerView } from './admin/AdminAuditLedgerView';
 import { AdminInstitutionsView } from './admin/AdminInstitutionsView';
 import { AdminSettingsView } from './admin/AdminSettingsView';
 import { AdminCodeSparkView } from './admin/AdminCodeSparkView';
+import { cleanCandidateNameAndRoll } from '../utils/candidateFormatter';
 import {
   CandidateStation,
   AnalysisReport,
@@ -120,6 +121,7 @@ import {
   SimpleSelect
 } from './watermelon-ui';
 import { AdminMCQTicketIssuer } from './AdminMCQTicketIssuer';
+import { PaperSetterPortal } from './PaperSetterPortal';
 import { wipeEntireDatabaseFromCloud } from '../services/mcqService';
 
 function isStationListEqual(a: CandidateStation[], b: CandidateStation[]): boolean {
@@ -291,13 +293,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
     }
 
-    // Deduplicate by ID, keep latest timestamp, strip ghosts
+    // Deduplicate by canonical student identity (clean roll or name), keep latest timestamp, strip ghosts
     const deduped = new Map<string, CandidateStation>();
     list.forEach((s) => {
       if (!s.student?.name?.trim() || s.student.name === 'Candidate' || s.student.name === 'Candidate (N/A)') return;
-      const existing = deduped.get(s.id);
+      const { name: cleanName, roll: cleanRoll } = cleanCandidateNameAndRoll(s.student?.name, s.student?.rollNumber);
+      if (s.student) {
+        s.student.name = cleanName;
+        s.student.rollNumber = cleanRoll;
+      }
+
+      const canonKey = cleanRoll
+        ? `roll-${cleanRoll.toUpperCase()}`
+        : cleanName
+        ? `name-${cleanName.toLowerCase()}`
+        : s.id;
+
+      const existing = deduped.get(canonKey);
       if (!existing || (s.lastUpdatedTimestamp || 0) >= (existing.lastUpdatedTimestamp || 0)) {
-        deduped.set(s.id, s);
+        deduped.set(canonKey, s);
       }
     });
     const cleanList = Array.from(deduped.values());
@@ -309,19 +323,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return cleanList;
     });
 
-    // Async cloud merge
+    // Async cloud merge with composite deduplication
     fetchStationsFromCloud(selectedLabId === 'all' ? undefined : selectedLabId)
       .then((cloudStations) => {
         if (!cloudStations || cloudStations.length === 0) return;
         const mergeMap = new Map<string, CandidateStation>();
         cloudStations.forEach((cs) => {
           if (!cs.student?.name?.trim() || cs.student.name === 'Candidate' || cs.student.name === 'Candidate (N/A)') return;
-          mergeMap.set(cs.id, cs);
+          const { name: cleanName, roll: cleanRoll } = cleanCandidateNameAndRoll(cs.student?.name, cs.student?.rollNumber);
+          if (cs.student) {
+            cs.student.name = cleanName;
+            cs.student.rollNumber = cleanRoll;
+          }
+          const canonKey = cleanRoll
+            ? `roll-${cleanRoll.toUpperCase()}`
+            : cleanName
+            ? `name-${cleanName.toLowerCase()}`
+            : cs.id;
+          mergeMap.set(canonKey, cs);
         });
         cleanList.forEach((s) => {
-          const existing = mergeMap.get(s.id);
+          const canonKey = s.student?.rollNumber
+            ? `roll-${s.student.rollNumber.toUpperCase()}`
+            : s.student?.name
+            ? `name-${s.student.name.toLowerCase()}`
+            : s.id;
+          const existing = mergeMap.get(canonKey);
           if (!existing || (s.lastUpdatedTimestamp || 0) >= (existing.lastUpdatedTimestamp || 0)) {
-            mergeMap.set(s.id, s);
+            mergeMap.set(canonKey, s);
           }
         });
         const merged = Array.from(mergeMap.values());
@@ -634,6 +663,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const sidebarNavItems = [
     { id: 'control_room', label: 'Control Room', icon: Home },
     { id: 'code_spark', label: 'Code Spark (3 Nov)', icon: Zap },
+    { id: 'paper_setter', label: 'Paper Setter Portal', icon: GraduationCap },
     { id: 'live_proctoring', label: 'Live Proctoring', icon: Video },
     { id: 'candidates', label: 'Candidates', icon: Users, badge: activeCount > 0 ? activeCount : undefined },
     { id: 'examinations', label: 'Examinations', icon: FileText },
@@ -854,6 +884,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           minHeight: '100%'
         }}
       >
+        {activeSidebarItem === 'paper_setter' && (
+          <div style={{ width: '100%' }}>
+            <PaperSetterPortal />
+          </div>
+        )}
+
         {activeSidebarItem === 'code_spark' && (
           <div style={{ width: '100%' }}>
             <AdminCodeSparkView
@@ -2201,23 +2237,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     )}
                   </div>
 
-                  {/* â”€â”€ CANDIDATE DETAILS (Matching Screenshot - Pure White Name & Clean Dot) â”€â”€ */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '14px' }}>
-                    <h4
-                      style={{
-                        margin: 0,
-                        fontSize: '16px',
-                        fontWeight: 700,
-                        color: '#ffffff',
-                        letterSpacing: '-0.01em'
-                      }}
-                    >
-                      {station.student.name || 'Candidate (Unregistered)'}
-                    </h4>
-                    <div style={{ fontSize: '12px', color: '#a1a1aa' }}>
-                      Candidate • {station.examMode === 'MCQ' || station.language === 'MCQ' ? 'MCQ exam' : 'Practical coding'}{station.student.rollNumber ? ` • ${station.student.rollNumber.replace(/^#/, '')}` : ''}
-                    </div>
-                  </div>
+                  {/* ── CANDIDATE DETAILS (Pure White Clean Name & Pristine Roll) ── */}
+                  {(() => {
+                    const { name: cleanCandName, roll: cleanCandRoll } = cleanCandidateNameAndRoll(
+                      station.student.name,
+                      station.student.rollNumber
+                    );
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '14px' }}>
+                        <h4
+                          style={{
+                            margin: 0,
+                            fontSize: '16px',
+                            fontWeight: 700,
+                            color: '#ffffff',
+                            letterSpacing: '-0.01em'
+                          }}
+                        >
+                          {cleanCandName || 'Candidate (Unregistered)'}
+                        </h4>
+                        <div style={{ fontSize: '12px', color: '#a1a1aa' }}>
+                          Candidate • {station.examMode === 'MCQ' || station.language === 'MCQ' ? 'MCQ exam' : 'Practical coding'}{cleanCandRoll ? ` • ${cleanCandRoll.replace(/^#/, '')}` : ''}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* â”€â”€ METRICS ROW (Strikes/Keys on Left, Marks on Right) â”€â”€ */}
                   <div

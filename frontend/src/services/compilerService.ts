@@ -93,7 +93,7 @@ export const LANGUAGE_IDS: Record<
 
 // High-Throughput Wandbox Open Compiler Mapping (Failover Cluster)
 const WANDBOX_COMPILERS: Record<string, { compiler: string; displayName: string }> = {
-  Python: { compiler: 'cpython-3.10.15', displayName: 'Python 3.10 (Wandbox Cluster)' },
+  Python: { compiler: 'cpython-3.14.0', displayName: 'Python 3.14 (Wandbox Cluster)' },
   'C++': { compiler: 'gcc-13.2.0', displayName: 'GCC 13.2.0 C++ (Wandbox Cluster)' },
   C: { compiler: 'gcc-13.2.0-c', displayName: 'GCC 13.2.0 C11 (Wandbox Cluster)' },
   Java: { compiler: 'openjdk-jdk-21+35', displayName: 'OpenJDK 21 (Wandbox Cluster)' },

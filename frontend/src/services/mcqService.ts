@@ -2782,6 +2782,7 @@ export async function syncFromSupabase(): Promise<void> {
       }
       inMemoryAttempts = reconciled;
       save(MCQ_STORAGE_KEYS.ATTEMPTS, reconciled);
+      notifyMcqDataChanged();
     }
 
 
@@ -2832,11 +2833,18 @@ export async function wipeEntireDatabaseFromCloud(): Promise<boolean> {
   clearAllQuestions();
 
   try {
+    await fetch('/api/codespark/wipe?full=true', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch {}
+
+  try {
     await Promise.allSettled([
       supabase.from('mcq_attempts').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-      supabase.from('candidate_stations').delete().neq('id', ''),
+      supabase.from('candidate_stations').delete().neq('id', 'codespark_round2_questions'),
       supabase.from('mcq_questions').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-      supabase.from('mcq_exams').delete().neq('id', ''),
+      supabase.from('mcq_exams').delete().neq('id', 'codespark_round2_questions').neq('id', 'codespark_system_config'),
       supabase.from('code_submissions').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
       clearAllStationsFromCloud(),
       clearAllAttemptsFromCloud(),

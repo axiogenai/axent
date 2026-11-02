@@ -163,6 +163,7 @@ import {
 
 
   DEFAULT_ROUND2_PROBLEMS,
+  OFFICIAL_5_LEETCODE_PROBLEMS,
   extractCleanCandidateCode,
   parseQuestionsFromPlainText,
   clearRound2Leaderboard
@@ -173,6 +174,15 @@ import {
 import { playSound } from '../../utils/sounds';
 
 
+
+export interface ShortlistedCohortMember {
+  rollNumber: string;
+  name: string;
+  email: string;
+  round2Key: string;
+  round1Score: number;
+  round1MaxScore: number;
+}
 
 interface AdminRound2HubProps {
 
@@ -191,6 +201,8 @@ interface AdminRound2HubProps {
 
 
   isDark?: boolean;
+
+  shortlistedCohort?: ShortlistedCohortMember[];
 
 
 
@@ -214,7 +226,9 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-  isDark = true
+  isDark = true,
+
+  shortlistedCohort = []
 
 
 
@@ -287,169 +301,250 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
     return Array.from(byStudent.values());
   }, [round2Stations]);
 
-
-
-  const loadLeaderboardData = async () => {
-
-
-
-    setLoadingLeaderboard(true);
-
-
-
-    try {
-
-
-
-      const data = await fetchRound2Leaderboard();
-
-
-
-      setLeaderboard(data);
-
-
-
-    } catch (e) {
-
-
-
-      console.warn('Failed to load Round 2 leaderboard:', e);
-
-
-
-    } finally {
-
-
-
-      setLoadingLeaderboard(false);
-
-
-
-    }
-
-
-
-  };
-
-
-
-  useEffect(() => {
-
-
-
-    void loadLeaderboardData();
-
-
-
-    const interval = setInterval(loadLeaderboardData, 4500);
-
-
-
-    return () => clearInterval(interval);
-
-
-
-  }, []);
-
-
-
-  // Filtered leaderboard
-
-
-
-  const filteredLeaderboard = useMemo(() => {
-
-
-
-    return leaderboard.filter((entry) => {
-
-
-
-      const q = searchQuery.trim().toLowerCase();
-
-
-
-      const matchSearch =
-
-
-
-        !q ||
-
-
-
-        entry.candidateName.toLowerCase().includes(q) ||
-
-
-
-        entry.rollNumber.toLowerCase().includes(q) ||
-
-
-
-        entry.candidateKey.toLowerCase().includes(q);
-
-
-
-      const matchLang = langFilter === 'ALL' || entry.dominantLanguage === langFilter;
-
-
-
-      return matchSearch && matchLang;
-
-
-
+  // Unified Workstation Slots: Guarantees every shortlisted candidate has a dedicated station slot
+  const workstationSlots = useMemo(() => {
+    const slots: Array<{
+      stationId: string;
+      stationNumber: string;
+      cand?: ShortlistedCohortMember;
+      liveStation?: CandidateStation;
+      isLive: boolean;
+    }> = [];
+    const seenRolls = new Set<string>();
+
+    shortlistedCohort.forEach((cand, idx) => {
+      const cleanRoll = (cand.rollNumber || '').trim().toUpperCase();
+      const cleanKey = (cand.round2Key || '').trim().toUpperCase();
+      if (!cleanRoll) return;
+      seenRolls.add(cleanRoll);
+
+      const live = uniqueRound2Stations.find((st) => {
+        const anySt = st as any;
+        const sRoll = (st.student?.rollNumber || anySt.cleanRoll || '').trim().toUpperCase();
+        const sKey = (anySt.student?.accessKey || st.id || '').trim().toUpperCase();
+        const sEmail = ((st.student as any)?.email || anySt.student?.email || '').trim().toUpperCase();
+        return (
+          sRoll === cleanRoll ||
+          sKey === cleanKey ||
+          (cand.email && sEmail === cand.email.toUpperCase())
+        );
+      });
+
+      slots.push({
+        stationId: live ? live.id : `r2_ws_${cleanRoll}`,
+        stationNumber: `Workstation #${String(idx + 1).padStart(2, '0')}`,
+        cand,
+        liveStation: live,
+        isLive: Boolean(live)
+      });
     });
 
+    uniqueRound2Stations.forEach((st) => {
+      const anySt = st as any;
+      const sRoll = (st.student?.rollNumber || anySt.cleanRoll || '').trim().toUpperCase();
+      if (sRoll && !seenRolls.has(sRoll)) {
+        seenRolls.add(sRoll);
+        slots.push({
+          stationId: st.id,
+          stationNumber: `Workstation #${String(slots.length + 1).padStart(2, '0')}`,
+          liveStation: st,
+          isLive: true
+        });
+      }
+    });
 
+    return slots;
+  }, [shortlistedCohort, uniqueRound2Stations]);
 
-  }, [leaderboard, searchQuery, langFilter]);
+  const loadLeaderboardData = async () => {
+    setLoadingLeaderboard(true);
+    try {
+      const data = await fetchRound2Leaderboard();
+      setLeaderboard(data);
+    } catch (e) {
+      console.warn('Failed to load Round 2 leaderboard:', e);
+    } finally {
+      setLoadingLeaderboard(false);
+    }
+  };
 
+  useEffect(() => {
+    void loadLeaderboardData();
+    const interval = setInterval(loadLeaderboardData, 4500);
+    return () => clearInterval(interval);
+  }, []);
 
+  // Unified Ranked Contenders: Merges finalized submissions, active coding stations, and shortlisted candidates
+  const rankedContenders = useMemo<Round2LeaderboardEntry[]>(() => {
+    const list: Round2LeaderboardEntry[] = [];
+    const seenRolls = new Set<string>();
 
-  // Leaderboard KPIs
+    for (const cand of shortlistedCohort) {
+      const cleanRoll = (cand.rollNumber || '').trim().toUpperCase();
+      const cleanKey = (cand.round2Key || '').trim().toUpperCase();
+      if (!cleanRoll || seenRolls.has(cleanRoll)) continue;
+      seenRolls.add(cleanRoll);
 
+      const matchLead = leaderboard.find(
+        (l) =>
+          (l.candidateKey && l.candidateKey.toUpperCase() === cleanKey) ||
+          (l.rollNumber && l.rollNumber.toUpperCase() === cleanRoll) ||
+          (cand.email && l.email && l.email.toUpperCase() === cand.email.toUpperCase())
+      );
 
+      if (matchLead) {
+        list.push({
+          ...matchLead,
+          candidateName: matchLead.candidateName || cand.name,
+          rollNumber: matchLead.rollNumber || cand.rollNumber,
+          candidateKey: matchLead.candidateKey || cand.round2Key,
+          round2Key: matchLead.round2Key || cand.round2Key,
+          email: matchLead.email || cand.email,
+          status: matchLead.isSubmitted ? 'SUBMITTED' : 'IN_PROGRESS',
+          round1Score: cand.round1Score,
+          round1MaxScore: cand.round1MaxScore
+        });
+        continue;
+      }
 
-  const totalParticipants = leaderboard.length;
+      const liveStation = uniqueRound2Stations.find((st) => {
+        const anySt = st as any;
+        const sRoll = (st.student?.rollNumber || anySt.cleanRoll || '').trim().toUpperCase();
+        const sKey = (anySt.student?.accessKey || st.id || '').trim().toUpperCase();
+        const sEmail = ((st.student as any)?.email || anySt.student?.email || '').trim().toUpperCase();
+        return (
+          sRoll === cleanRoll ||
+          sKey === cleanKey ||
+          (cand.email && sEmail === cand.email.toUpperCase())
+        );
+      });
 
+      if (liveStation) {
+        const anySt = liveStation as any;
+        const totalMarks = Number(liveStation.marks?.totalMarks) || 0;
+        const dominantLang = (liveStation.language && liveStation.language !== 'MCQ') ? liveStation.language : 'Python';
+        list.push({
+          rank: 0,
+          candidateKey: cand.round2Key,
+          round2Key: cand.round2Key,
+          rollNumber: cand.rollNumber,
+          candidateName: cand.name,
+          email: cand.email,
+          totalScore: totalMarks,
+          maxScore: 50,
+          solvedCount: totalMarks > 0 ? Math.min(5, Math.ceil(totalMarks / 10)) : 0,
+          dominantLanguage: dominantLang,
+          timeTakenMinutes: Math.round(((anySt.metrics?.timeSpent || 0) / 60)) || 1,
+          isSubmitted: false,
+          status: 'IN_PROGRESS',
+          questionStatus: { 1: totalMarks >= 10 ? 'ACCEPTED' : 'PENDING', 2: 'PENDING', 3: 'PENDING', 4: 'PENDING', 5: 'PENDING' },
+          submission: {
+            candidateKey: cand.round2Key,
+            rollNumber: cand.rollNumber,
+            candidateName: cand.name,
+            email: cand.email,
+            dominantLanguage: dominantLang,
+            totalScore: totalMarks,
+            solvedCount: totalMarks > 0 ? Math.min(5, Math.ceil(totalMarks / 10)) : 0,
+            timeTakenMinutes: Math.round(((anySt.metrics?.timeSpent || 0) / 60)) || 1,
+            submittedAt: Date.now(),
+            questionReports: {}
+          } as any,
+          round1Score: cand.round1Score,
+          round1MaxScore: cand.round1MaxScore
+        });
+        continue;
+      }
 
+      list.push({
+        rank: 0,
+        candidateKey: cand.round2Key,
+        round2Key: cand.round2Key,
+        rollNumber: cand.rollNumber,
+        candidateName: cand.name,
+        email: cand.email,
+        totalScore: 0,
+        maxScore: 50,
+        solvedCount: 0,
+        dominantLanguage: '—',
+        timeTakenMinutes: 0,
+        isSubmitted: false,
+        status: 'STANDBY',
+        questionStatus: { 1: 'PENDING', 2: 'PENDING', 3: 'PENDING', 4: 'PENDING', 5: 'PENDING' },
+        submission: {
+          candidateKey: cand.round2Key,
+          rollNumber: cand.rollNumber,
+          candidateName: cand.name,
+          email: cand.email,
+          dominantLanguage: 'Python',
+          totalScore: 0,
+          solvedCount: 0,
+          timeTakenMinutes: 0,
+          submittedAt: 0,
+          questionReports: {}
+        } as any,
+        round1Score: cand.round1Score,
+        round1MaxScore: cand.round1MaxScore
+      });
+    }
 
-  const completedSubmissions = leaderboard.filter((l) => l.isSubmitted).length;
+    for (const l of leaderboard) {
+      const cleanRoll = l.rollNumber.trim().toUpperCase();
+      if (!seenRolls.has(cleanRoll)) {
+        seenRolls.add(cleanRoll);
+        list.push({
+          ...l,
+          status: l.isSubmitted ? 'SUBMITTED' : 'IN_PROGRESS'
+        });
+      }
+    }
 
+    const r1ScoreMap = new Map<string, number>();
+    shortlistedCohort.forEach((c) => r1ScoreMap.set(c.rollNumber.toUpperCase(), c.round1Score));
 
+    list.sort((a, b) => {
+      if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+      if (b.solvedCount !== a.solvedCount) return b.solvedCount - a.solvedCount;
+      if (b.isSubmitted !== a.isSubmitted) return b.isSubmitted ? 1 : -1;
+      if (a.timeTakenMinutes !== b.timeTakenMinutes && a.timeTakenMinutes > 0 && b.timeTakenMinutes > 0) {
+        return a.timeTakenMinutes - b.timeTakenMinutes;
+      }
+      const r1A = r1ScoreMap.get(a.rollNumber.toUpperCase()) || 0;
+      const r1B = r1ScoreMap.get(b.rollNumber.toUpperCase()) || 0;
+      if (r1B !== r1A) return r1B - r1A;
+      return a.rollNumber.localeCompare(b.rollNumber);
+    });
 
+    return list.map((item, idx) => ({ ...item, rank: idx + 1 }));
+  }, [shortlistedCohort, leaderboard, uniqueRound2Stations]);
+
+  // Filtered leaderboard based on unified ranked contenders
+  const filteredLeaderboard = useMemo(() => {
+    return rankedContenders.filter((entry) => {
+      const q = searchQuery.trim().toLowerCase();
+      const matchSearch =
+        !q ||
+        entry.candidateName.toLowerCase().includes(q) ||
+        entry.rollNumber.toLowerCase().includes(q) ||
+        entry.candidateKey.toLowerCase().includes(q);
+      const matchLang = langFilter === 'ALL' || entry.dominantLanguage === langFilter;
+      return matchSearch && matchLang;
+    });
+  }, [rankedContenders, searchQuery, langFilter]);
+
+  // Leaderboard KPIs from unified contenders
+  const totalParticipants = rankedContenders.length;
+  const completedSubmissions = rankedContenders.filter((l) => l.isSubmitted).length;
   const averageScore = useMemo(() => {
-
-
-
-    if (leaderboard.length === 0) return 0;
-
-
-
-    const sum = leaderboard.reduce((acc, curr) => acc + curr.totalScore, 0);
-
-
-
-    return Math.round(sum / leaderboard.length);
-
-
-
-  }, [leaderboard]);
-
-
+    if (rankedContenders.length === 0) return 0;
+    const sum = rankedContenders.reduce((acc, curr) => acc + curr.totalScore, 0);
+    return Math.round(sum / rankedContenders.length);
+  }, [rankedContenders]);
 
   const highestScore = useMemo(() => {
-
-
-
-    if (leaderboard.length === 0) return 0;
-
-
-
-    return Math.max(...leaderboard.map((l) => l.totalScore));
-
-
-
-  }, [leaderboard]);
+    if (rankedContenders.length === 0) return 0;
+    return Math.max(...rankedContenders.map((l) => l.totalScore));
+  }, [rankedContenders]);
 
 
 
@@ -469,7 +564,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-      ['Rank', 'Roll Number', 'Candidate Name', 'Email', 'Score / 100', 'Solved (Out of 5)', 'Dominant Language', 'Time Taken (m)', 'Status'],
+      ['Rank', 'Roll Number', 'Candidate Name', 'Email', `Score / ${totalContestMarks || 50}`, 'Solved (Out of 5)', 'Dominant Language', 'Time Taken (m)', 'Status'],
 
 
 
@@ -559,6 +654,10 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
   const [problems, setProblems] = useState<Round2Problem[]>(() => getAllRound2Problems());
 
+  const totalContestMarks = useMemo(() => {
+    return problems.slice(0, 5).reduce((sum, p) => sum + (p.marks || 0), 0) || 50;
+  }, [problems]);
+
 
 
   const [activeQTab, setActiveQTab] = useState<number>(1);
@@ -571,7 +670,16 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
-
+  const handleResetToOfficial5 = () => {
+    if (!window.confirm('Reset all 5 questions to the official LeetCode specifications?')) return;
+    setProblems(OFFICIAL_5_LEETCODE_PROBLEMS);
+    saveRound2Problems(OFFICIAL_5_LEETCODE_PROBLEMS);
+    void saveRound2ProblemsToCloud(OFFICIAL_5_LEETCODE_PROBLEMS);
+    setActiveQTab(1);
+    setSaveSuccessMsg('Reset to official 5 LeetCode challenges and synced to cloud!');
+    playSound('success');
+    setTimeout(() => setSaveSuccessMsg(null), 4000);
+  };
 
   const handleLoadOfficial10Bank = () => {
 
@@ -1160,14 +1268,8 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-    setProblems([]);
-
-
-
-    saveRound2Problems([]);
-
-
-
+    setProblems(DEFAULT_ROUND2_PROBLEMS);
+    saveRound2Problems(DEFAULT_ROUND2_PROBLEMS);
     void saveRound2ProblemsToCloud(DEFAULT_ROUND2_PROBLEMS);
 
 
@@ -1376,7 +1478,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-              {leaderboard.length}
+              {rankedContenders.length}
 
 
 
@@ -1472,7 +1574,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-            <span>Define Coding Questions ({problems.length} in Pool)</span>
+            <span>Official Coding Challenges (5)</span>
 
 
 
@@ -1604,7 +1706,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-              {uniqueRound2Stations.length}
+              {workstationSlots.length}
 
 
 
@@ -1833,216 +1935,51 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
           {subTab === 'questions' && (
-
-
-
             <>
-
-
-
-              
-
-
-
               <button
                 type="button"
-                onClick={() => {
-                  handleClearAllQuestions();
-                  playSound('click');
-                }}
+                onClick={handleResetToOfficial5}
                 style={{
                   padding: '6px 14px',
                   borderRadius: '6px',
-                  background: '#10b981',
-                  border: 'none',
-                  color: '#ffffff',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-                title="Clear all questions from pool"
-              >
-                <Trash2 size={13} />
-                <span>Clear Pool</span>
-              </button>
-
-
-
-              <button
-
-
-
-                type="button"
-
-
-
-                onClick={handleAddNewQuestion}
-
-
-
-                style={{
-
-
-
-                  padding: '6px 12px',
-
-
-
-                  borderRadius: '6px',
-
-
-
                   background: 'transparent',
-
-
-
                   border: '1px solid #27272a',
-
-
-
-                  color: '#f4f4f5',
-
-
-
+                  color: '#a1a1aa',
                   fontSize: '12px',
-
-
-
                   fontWeight: 600,
-
-
-
                   cursor: 'pointer',
-
-
-
                   display: 'inline-flex',
-
-
-
                   alignItems: 'center',
-
-
-
                   gap: '6px'
-
-
-
                 }}
-
-
-
+                title="Reset all 5 questions to official LeetCode specifications"
               >
-
-
-
-                <Plus size={13} />
-
-
-
-                <span>+ Add Question</span>
-
-
-
+                <RotateCcw size={13} />
+                <span>Reset to 5 Defaults</span>
               </button>
-
-
-
-              
-
-
 
               <button
-
-
-
                 type="button"
-
-
-
                 disabled={isSavingProblems}
-
-
-
                 onClick={handleSaveAllQuestionsToCloud}
-
-
-
                 style={{
-
-
-
                   padding: '6px 14px',
-
-
-
                   borderRadius: '6px',
-
-
-
-                  background: '#10b981',
-
-
-
+                  background: '#f4f4f5',
                   color: '#09090b',
-
-
-
                   border: 'none',
-
-
-
                   fontSize: '12px',
-
-
-
                   fontWeight: 700,
-
-
-
                   cursor: isSavingProblems ? 'not-allowed' : 'pointer',
-
-
-
                   display: 'inline-flex',
-
-
-
                   alignItems: 'center',
-
-
-
                   gap: '6px'
-
-
-
                 }}
-
-
-
               >
-
-
-
                 <Save size={13} />
-
-
-
-                <span>{isSavingProblems ? 'Saving to Cloud...' : 'Save All Questions to Cloud'}</span>
-
-
-
+                <span>{isSavingProblems ? 'Saving to Cloud...' : 'Save Configuration to Cloud'}</span>
               </button>
-
-
-
             </>
-
-
-
           )}
 
 
@@ -2091,13 +2028,15 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#f4f4f5', marginTop: '4px' }}>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: '#f4f4f5', marginTop: '4px', display: 'flex', alignItems: 'baseline', gap: '6px' }}>
 
+                <span>{totalParticipants > 0 ? totalParticipants : shortlistedCohort.length}</span>
 
+                <span style={{ fontSize: '11px', color: '#71717a', fontWeight: 500 }}>
 
-                {totalParticipants}
+                  {totalParticipants > 0 ? 'Active' : `${shortlistedCohort.length} Shortlisted`}
 
-
+                </span>
 
               </div>
 
@@ -2175,7 +2114,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                <span style={{ fontSize: '12px', color: '#71717a', fontWeight: 500 }}>/ 100</span>
+                <span style={{ fontSize: '12px', color: '#71717a', fontWeight: 500 }}>/ {totalContestMarks}</span>
 
 
 
@@ -2211,7 +2150,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                <span style={{ fontSize: '12px', color: '#71717a', fontWeight: 500 }}>/ 100</span>
+                <span style={{ fontSize: '12px', color: '#71717a', fontWeight: 500 }}>/ {totalContestMarks}</span>
 
 
 
@@ -2480,45 +2419,83 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
             {filteredLeaderboard.length === 0 ? (
-
-
-
-              <div style={{ padding: '48px 24px', textAlign: 'center', color: '#a1a1aa' }}>
-
-
-
-                <Trophy size={28} color="#71717a" style={{ margin: '0 auto 8px auto' }} />
-
-
-
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#f4f4f5' }}>
-
-
-
-                  No Round 2 Submissions Yet
-
-
-
+              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ padding: '24px', textAlign: 'center', background: '#121214', border: '1px dashed #27272a', borderRadius: '8px' }}>
+                  <Trophy size={28} color="#71717a" style={{ margin: '0 auto 8px auto' }} />
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#f4f4f5' }}>
+                    No Round 2 Submissions Yet
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#71717a', marginTop: '4px', maxWidth: '640px', margin: '4px auto 0 auto', lineHeight: '1.5' }}>
+                    {shortlistedCohort && shortlistedCohort.length > 0
+                      ? `${shortlistedCohort.length} candidate(s) are shortlisted and provisioned with Round 2 keys. Once a candidate logs in at /codespark-exams?round=2 and begins compiling code, their live rankings, test pass telemetry, and final dossier will display here.`
+                      : 'When shortlisted candidates log in with their Round 2 key and compile code, their live rankings and dossier will appear here.'}
+                  </div>
                 </div>
 
-
-
-                <div style={{ fontSize: '12px', color: '#71717a', marginTop: '4px' }}>
-
-
-
-                  When shortlisted candidates log in with their Round 2 key and compile code, their live rankings and dossier will appear here.
-
-
-
-                </div>
-
-
-
+                {shortlistedCohort && shortlistedCohort.length > 0 && (
+                  <div style={{ background: '#121214', border: '1px solid #27272a', borderRadius: '8px', overflow: 'hidden' }}>
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #27272a', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#18181b', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <ShieldCheck size={15} color="#10b981" />
+                        <strong style={{ fontSize: '13px', color: '#f4f4f5' }}>
+                          Round 2 Shortlisted Candidates Ready to Attend ({shortlistedCohort.length})
+                        </strong>
+                      </div>
+                      <span style={{ fontSize: '11px', color: '#71717a' }}>
+                        Exam Arena URL: <code style={{ color: '#10b981', background: '#121214', padding: '2px 6px', borderRadius: '4px' }}>/codespark-exams?round=2</code>
+                      </span>
+                    </div>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
+                        <thead>
+                          <tr style={{ background: '#121214', borderBottom: '1px solid #27272a', color: '#71717a', fontSize: '11px', textTransform: 'uppercase' }}>
+                            <th style={{ padding: '10px 14px', width: '45px' }}>#</th>
+                            <th style={{ padding: '10px 14px' }}>Roll Number</th>
+                            <th style={{ padding: '10px 14px' }}>Candidate Name</th>
+                            <th style={{ padding: '10px 14px' }}>Email</th>
+                            <th style={{ padding: '10px 14px' }}>Round 2 Key</th>
+                            <th style={{ padding: '10px 14px' }}>Round 1 Score</th>
+                            <th style={{ padding: '10px 14px', textAlign: 'right' }}>Arena Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {shortlistedCohort.map((cand, idx) => (
+                            <tr key={cand.rollNumber} style={{ borderBottom: '1px solid #1f1f23' }}>
+                              <td style={{ padding: '10px 14px', color: '#71717a', fontFamily: 'monospace' }}>
+                                {String(idx + 1).padStart(2, '0')}
+                              </td>
+                              <td style={{ padding: '10px 14px' }}>
+                                <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#f4f4f5' }}>
+                                  {cand.rollNumber}
+                                </span>
+                              </td>
+                              <td style={{ padding: '10px 14px', color: '#e4e4e7', fontWeight: 600 }}>
+                                {cand.name}
+                              </td>
+                              <td style={{ padding: '10px 14px', color: '#a1a1aa', fontSize: '11.5px' }}>
+                                {cand.email}
+                              </td>
+                              <td style={{ padding: '10px 14px' }}>
+                                <code style={{ background: '#18181b', border: '1px solid #27272a', padding: '3px 8px', borderRadius: '4px', color: '#10b981', fontWeight: 700, fontSize: '11.5px' }}>
+                                  {cand.round2Key}
+                                </code>
+                              </td>
+                              <td style={{ padding: '10px 14px', color: '#a1a1aa' }}>
+                                {cand.round1Score} / {cand.round1MaxScore}
+                              </td>
+                              <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                                <span style={{ fontSize: '11px', fontWeight: 700, color: '#a1a1aa', background: '#18181b', border: '1px solid #27272a', padding: '3px 8px', borderRadius: '4px' }}>
+                                  STANDBY · READY
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
-
-
-
             ) : (
 
 
@@ -2931,7 +2908,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                              <span style={{ fontSize: '11px', color: '#71717a', fontWeight: 500 }}>/ 100</span>
+                              <span style={{ fontSize: '11px', color: '#71717a', fontWeight: 500 }}>/ {totalContestMarks || 50}</span>
 
 
 
@@ -3136,612 +3113,402 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
       {subTab === 'questions' && (
-
-
-
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-
-
-
           {saveSuccessMsg && (
-
-
-
             <div
-
-
-
               style={{
-
-
-
                 background: 'rgba(16, 185, 129, 0.12)',
-
-
-
                 border: '1px solid rgba(16, 185, 129, 0.3)',
-
-
-
                 borderRadius: '6px',
-
-
-
                 padding: '10px 14px',
-
-
-
                 fontSize: '12.5px',
-
-
-
                 color: '#10b981',
-
-
-
                 display: 'flex',
-
-
-
                 alignItems: 'center',
-
-
-
                 gap: '8px'
-
-
-
               }}
-
-
-
             >
-
-
-
               <CheckCircle2 size={16} />
-
-
-
               <span>{saveSuccessMsg}</span>
-
-
-
             </div>
-
-
-
           )}
 
-
-
-          {/* DIRECT ON-SCREEN QUICK-PASTE 10 QUESTIONS BOX */}
-          <div style={{ background: '#121214', border: '1px solid #3b82f6', borderRadius: '8px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <ListPlus size={16} color="#60a5fa" />
-                <strong style={{ fontSize: '13.5px', color: '#f4f4f5' }}>Import Coding Questions (Paste Text)</strong>
-                <span style={{ fontSize: '11px', color: '#60a5fa', background: 'rgba(59, 130, 246, 0.15)', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Fast Mode</span>
+          {/* Official 5 Questions Summary Strip */}
+          <div
+            style={{
+              background: '#121214',
+              border: '1px solid #27272a',
+              borderRadius: '8px',
+              padding: '14px 18px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                <Code2 size={15} color="#f4f4f5" />
+                <strong style={{ fontSize: '14px', color: '#f4f4f5', letterSpacing: '-0.01em' }}>
+                  Code Spark Round 2 · Official 5 DSA Challenges
+                </strong>
+                <span
+                  style={{
+                    fontSize: '10.5px',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    color: '#10b981',
+                    background: 'rgba(16, 185, 129, 0.1)',
+                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                    padding: '2px 8px',
+                    borderRadius: '4px'
+                  }}
+                >
+                  Direct 5 Mode · 10 Marks Each
+                </span>
               </div>
-              <span style={{ fontSize: '11.5px', color: '#71717a' }}>Paste your questions directly (one per line or numbered) — titles, boilerplates & test cases are auto-configured!</span>
+              <p style={{ margin: 0, fontSize: '11.5px', color: '#71717a' }}>
+                Zero pool randomization. All contestants receive these exact 5 challenges in order. Adjust marks, difficulty, time limits and constraints below.
+              </p>
             </div>
-            <textarea
-              value={quickPasteText}
-              onChange={(e) => setQuickPasteText(e.target.value)}
-              placeholder={"Paste your 10 questions here directly (Numbered 1., 2., 3. or one per line):\n\n1. Reverse a string: Write a program to reverse a given string.\n2. Maximum Subarray: Given an array, find the maximum contiguous subarray sum.\n3. Balanced Parentheses: Verify if brackets in an expression are balanced.\n4. Palindrome Check: Check if a string reads the same backwards and forwards.\n5. Binary Search: Find target integer in a sorted array.\n6. Fibonacci: Compute the N-th Fibonacci number.\n7. Two Sum: Return indices of two numbers that add up to target.\n8. Anagram Check: Determine if two strings are anagrams.\n9. Merge Sorted Arrays: Combine two sorted arrays into one.\n10. Count Set Bits: Count the number of 1s in binary representation."}
-              rows={4}
-              style={{
-                width: '100%',
-                background: '#09090b',
-                border: '1px solid #27272a',
-                borderRadius: '6px',
-                padding: '10px',
-                color: '#e4e4e7',
-                fontSize: '12px',
-                fontFamily: 'monospace',
-                lineHeight: 1.5,
-                outline: 'none',
-                resize: 'vertical'
-              }}
-            />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '11.5px', color: '#a1a1aa' }}>Ready to parse & save to cloud</span>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  background: '#18181b',
+                  border: '1px solid #27272a',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  textAlign: 'center'
+                }}
+              >
+                <div style={{ fontSize: '10px', textTransform: 'uppercase', color: '#71717a', fontWeight: 600 }}>
+                  Total Contest Marks
+                </div>
+                <div style={{ fontSize: '14px', fontWeight: 800, color: '#f4f4f5', fontFamily: 'monospace' }}>
+                  {problems.slice(0, 5).reduce((sum, p) => sum + (p.marks || 0), 0)} Marks
+                </div>
+              </div>
+
               <button
                 type="button"
-                onClick={() => handleQuickPasteSubmit()}
-                disabled={!quickPasteText.trim()}
+                disabled={isSavingProblems}
+                onClick={handleSaveAllQuestionsToCloud}
                 style={{
-                  padding: '7px 18px',
+                  padding: '8px 16px',
                   borderRadius: '6px',
-                  background: quickPasteText.trim() ? '#2563eb' : '#27272a',
+                  background: '#f4f4f5',
+                  color: '#09090b',
                   border: 'none',
-                  color: '#ffffff',
                   fontSize: '12px',
                   fontWeight: 700,
-                  cursor: quickPasteText.trim() ? 'pointer' : 'not-allowed',
+                  cursor: isSavingProblems ? 'not-allowed' : 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px'
                 }}
               >
-                <Check size={13} />
-                <span>Import & Set Active Pool Now</span>
+                <Save size={13} />
+                <span>{isSavingProblems ? 'Saving to Cloud...' : 'Save Configuration to Cloud'}</span>
               </button>
             </div>
           </div>
 
-          {/* Pool Allocation Notice */}
-
-
-
-          <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-
-
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-
-
-
-              <ListPlus size={14} color="#3b82f6" />
-
-
-
-              <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#f4f4f5' }}>
-
-
-
-                Question Pool: {problems.length} Questions Configured
-
-
-
-              </span>
-
-
-
-              <span style={{ fontSize: '11px', color: '#a1a1aa' }}>
-
-
-
-                (Each student receives {Math.min(problems.length, 5)} randomized questions upon entering Round 2)
-
-
-
-              </span>
-
-
-
-            </div>
-
-
-
-            <div style={{ display: 'flex', gap: '8px' }}>
-
-
-
-              <button
-
-
-
-                type="button"
-
-
-
-                onClick={() => handleDeleteQuestion(activeQTab)}
-
-
-
-                disabled={problems.length === 0}
-
-
-
-                style={{
-
-
-
-                  padding: '4px 10px',
-
-
-
-                  borderRadius: '4px',
-
-
-
-                  background: 'rgba(239, 68, 68, 0.1)',
-
-
-
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-
-
-
-                  color: '#ef4444',
-
-
-
-                  fontSize: '11.5px',
-
-
-
-                  fontWeight: 600,
-
-
-
-                  cursor: problems.length === 0 ? 'not-allowed' : 'pointer',
-
-
-
-                  display: 'inline-flex',
-
-
-
-                  alignItems: 'center',
-
-
-
-                  gap: '4px'
-
-
-
-                }}
-
-
-
-              >
-
-
-
-                <Trash2 size={12} />
-
-
-
-                <span>Delete Active Q{activeQTab}</span>
-
-
-
-              </button>
-
-
-
-            </div>
-
-
-
-          </div>
-
-
-
-          {/* Question Selector Tabs */}
-
-
-
-          <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #27272a', paddingBottom: '10px', overflowX: 'auto' }}>
-
-
-
-            {problems.map((prob) => {
-
-
-
+          {/* 5 Question Selector Tabs */}
+          <div
+            style={{
+              display: 'flex',
+              gap: '8px',
+              borderBottom: '1px solid #27272a',
+              paddingBottom: '10px',
+              overflowX: 'auto'
+            }}
+          >
+            {problems.slice(0, 5).map((prob) => {
               const isActive = prob.number === activeQTab;
-
-
-
               return (
-
-
-
                 <button
-
-
-
                   key={prob.number}
-
-
-
                   type="button"
-
-
-
                   onClick={() => {
-
-
-
                     setActiveQTab(prob.number);
-
-
-
                     playSound('click');
-
-
-
                   }}
-
-
-
                   style={{
-
-
-
-                    padding: '8px 16px',
-
-
-
+                    padding: '8px 14px',
                     borderRadius: '6px',
-
-
-
                     border: isActive ? '1px solid #f4f4f5' : '1px solid #27272a',
-
-
-
                     background: isActive ? '#27272a' : '#121214',
-
-
-
                     color: isActive ? '#ffffff' : '#a1a1aa',
-
-
-
-                    fontSize: '12.5px',
-
-
-
-                    fontWeight: isActive ? 700 : 600,
-
-
-
+                    fontSize: '12px',
+                    fontWeight: isActive ? 700 : 500,
                     cursor: 'pointer',
-
-
-
                     display: 'inline-flex',
-
-
-
                     alignItems: 'center',
-
-
-
-                    gap: '6px'
-
-
-
+                    gap: '8px',
+                    whiteSpace: 'nowrap'
                   }}
-
-
-
                 >
-
-
-
-                  <span>Question {prob.number}</span>
-
-
-
+                  <span>Q{prob.number}: {prob.title.length > 25 ? prob.title.slice(0, 25) + '...' : prob.title}</span>
                   <span
-
-
-
                     style={{
-
-
-
-                      fontSize: '10.5px',
-
-
-
+                      fontSize: '10px',
+                      fontWeight: 700,
                       color: isActive ? '#10b981' : '#71717a',
-
-
-
                       background: '#18181b',
-
-
-
                       padding: '2px 6px',
-
-
-
-                      borderRadius: '4px'
-
-
-
+                      borderRadius: '4px',
+                      fontFamily: 'monospace'
                     }}
-
-
-
                   >
-
-
-
-                    {prob.difficulty} • {prob.marks}p
-
-
-
+                    {prob.difficulty} · {prob.marks}p
                   </span>
-
-
-
                 </button>
-
-
-
               );
-
-
-
             })}
-
-
-
           </div>
-
-
 
           {/* Active Question Editor Form */}
-
-
-
           <div
-
-
-
             style={{
-
-
-
               background: '#121214',
-
-
-
               border: '1px solid #27272a',
-
-
-
               borderRadius: '8px',
-
-
-
               padding: '20px',
-
-
-
               display: 'flex',
-
-
-
               flexDirection: 'column',
-
-
-
               gap: '16px'
-
-
-
             }}
-
-
-
           >
+            {/* Row 1: Title, Marks, Difficulty, Time Limit */}
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Question Title
+                </label>
+                <input
+                  type="text"
+                  value={activeProblem.title}
+                  onChange={(e) => updateActiveProblemField('title', e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: '#18181b',
+                    border: '1px solid #27272a',
+                    borderRadius: '6px',
+                    padding: '8px 10px',
+                    color: '#f4f4f5',
+                    fontSize: '13px',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
 
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Marks Awarded *
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={activeProblem.marks}
+                  onChange={(e) => updateActiveProblemField('marks', Math.max(1, parseInt(e.target.value, 10) || 1))}
+                  style={{
+                    width: '100%',
+                    background: '#18181b',
+                    border: '1px solid #27272a',
+                    borderRadius: '6px',
+                    padding: '8px 10px',
+                    color: '#10b981',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    fontFamily: 'monospace',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
 
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Difficulty
+                </label>
+                <select
+                  value={activeProblem.difficulty}
+                  onChange={(e) => updateActiveProblemField('difficulty', e.target.value as any)}
+                  style={{
+                    width: '100%',
+                    background: '#18181b',
+                    border: '1px solid #27272a',
+                    borderRadius: '6px',
+                    padding: '8px 10px',
+                    color: '#f4f4f5',
+                    fontSize: '13px',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <option value="Easy">Easy</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Hard">Hard</option>
+                </select>
+              </div>
 
-            {/* Question Title */}
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Time Limit (ms)
+                </label>
+                <input
+                  type="number"
+                  min={500}
+                  max={10000}
+                  step={100}
+                  value={activeProblem.timeLimitMs || 2000}
+                  onChange={(e) => updateActiveProblemField('timeLimitMs', parseInt(e.target.value, 10) || 2000)}
+                  style={{
+                    width: '100%',
+                    background: '#18181b',
+                    border: '1px solid #27272a',
+                    borderRadius: '6px',
+                    padding: '8px 10px',
+                    color: '#f4f4f5',
+                    fontSize: '13px',
+                    fontFamily: 'monospace',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Row 2: Problem Statement */}
             <div>
               <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
-                Question Title
+                Problem Statement &amp; Context
               </label>
-              <input
-                type="text"
-                value={activeProblem.title}
-                onChange={(e) => updateActiveProblemField('title', e.target.value)}
+              <textarea
+                rows={4}
+                value={activeProblem.description}
+                onChange={(e) => updateActiveProblemField('description', e.target.value)}
+                style={{
+                  width: '100%',
+                  background: '#18181b',
+                  border: '1px solid #27272a',
+                  borderRadius: '6px',
+                  padding: '10px',
+                  color: '#f4f4f5',
+                  fontSize: '13px',
+                  fontFamily: 'Inter, sans-serif',
+                  outline: 'none',
+                  resize: 'vertical',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* Row 3: Input & Output Formats */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Input Format
+                </label>
+                <textarea
+                  rows={2}
+                  value={activeProblem.inputFormat || ''}
+                  onChange={(e) => updateActiveProblemField('inputFormat', e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: '#18181b',
+                    border: '1px solid #27272a',
+                    borderRadius: '6px',
+                    padding: '8px 10px',
+                    color: '#f4f4f5',
+                    fontSize: '12px',
+                    outline: 'none',
+                    resize: 'vertical',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Output Format
+                </label>
+                <textarea
+                  rows={2}
+                  value={activeProblem.outputFormat || ''}
+                  onChange={(e) => updateActiveProblemField('outputFormat', e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: '#18181b',
+                    border: '1px solid #27272a',
+                    borderRadius: '6px',
+                    padding: '8px 10px',
+                    color: '#f4f4f5',
+                    fontSize: '12px',
+                    outline: 'none',
+                    resize: 'vertical',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Row 4: Constraints */}
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
+                Constraints (One line per constraint)
+              </label>
+              <textarea
+                rows={3}
+                value={(activeProblem.constraints || []).join('\n')}
+                onChange={(e) => updateActiveProblemField('constraints', e.target.value.split('\n'))}
                 style={{
                   width: '100%',
                   background: '#18181b',
                   border: '1px solid #27272a',
                   borderRadius: '6px',
                   padding: '8px 10px',
-                  color: '#f4f4f5',
-                  fontSize: '13px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-
-
-
-            {/* Problem Description */}
-
-
-
-            <div>
-
-
-
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: '4px' }}>
-
-
-
-                Problem Statement &amp; Explanation
-
-
-
-              </label>
-
-
-
-              <textarea
-
-
-
-                rows={4}
-
-
-
-                value={activeProblem.description}
-
-
-
-                onChange={(e) => updateActiveProblemField('description', e.target.value)}
-
-
-
-                style={{
-
-
-
-                  width: '100%',
-
-
-
-                  background: '#18181b',
-
-
-
-                  border: '1px solid #27272a',
-
-
-
-                  borderRadius: '6px',
-
-
-
-                  padding: '10px',
-
-
-
-                  color: '#f4f4f5',
-
-
-
-                  fontSize: '13px',
-
-
-
-                  fontFamily: 'Inter, sans-serif',
-
-
-
+                  color: '#e4e4e7',
+                  fontSize: '12px',
+                  fontFamily: 'monospace',
                   outline: 'none',
-
-
-
-                  resize: 'vertical'
-
-
-
+                  resize: 'vertical',
+                  boxSizing: 'border-box'
                 }}
-
-
-
               />
-
-
-
             </div>
 
-
-
+            {/* Row 5: Test Cases Overview */}
+            <div
+              style={{
+                background: '#18181b',
+                border: '1px solid #27272a',
+                borderRadius: '6px',
+                padding: '12px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '8px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '12px', color: '#a1a1aa' }}>
+                  Sample Test Cases: <strong style={{ color: '#f4f4f5' }}>{activeProblem.sampleTestCases?.length || 0}</strong>
+                </span>
+                <span style={{ fontSize: '12px', color: '#a1a1aa' }}>
+                  Hidden Test Cases: <strong style={{ color: '#f4f4f5' }}>{activeProblem.hiddenTestCases?.length || 0}</strong>
+                </span>
+              </div>
+              <span style={{ fontSize: '11px', color: '#71717a' }}>
+                Boilerplates preloaded for Python, Java, C++, and C
+              </span>
+            </div>
           </div>
         </div>
       )}
@@ -3761,37 +3528,77 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
           {uniqueRound2Stations.length === 0 ? (
+            shortlistedCohort && shortlistedCohort.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '14px', gridColumn: '1 / -1' }}>
+                {shortlistedCohort.map((cand, idx) => (
+                  <div
+                    key={cand.rollNumber}
+                    style={{
+                      background: '#121214',
+                      border: '1px solid #27272a',
+                      borderRadius: '8px',
+                      padding: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #27272a', paddingBottom: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Monitor size={15} color="#71717a" />
+                        <strong style={{ fontSize: '13px', color: '#f4f4f5' }}>
+                          Workstation #{String(idx + 1).padStart(2, '0')}
+                        </strong>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: '10.5px',
+                          fontWeight: 700,
+                          color: '#a1a1aa',
+                          background: '#18181b',
+                          border: '1px solid #27272a',
+                          padding: '2px 8px',
+                          borderRadius: '4px'
+                        }}
+                      >
+                        STANDBY · AWAITING LOGIN
+                      </span>
+                    </div>
 
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#f4f4f5' }}>{cand.name}</div>
+                      <div style={{ fontSize: '11.5px', color: '#71717a', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>Roll: <strong style={{ color: '#e4e4e7' }}>{cand.rollNumber}</strong></span>
+                        <span>•</span>
+                        <span>R1 Score: <strong style={{ color: '#10b981' }}>{cand.round1Score}/{cand.round1MaxScore}</strong></span>
+                      </div>
+                    </div>
 
+                    <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 12px' }}>
+                      <div style={{ fontSize: '10px', textTransform: 'uppercase', color: '#71717a', fontWeight: 600, marginBottom: '4px' }}>
+                        Round 2 Access Key
+                      </div>
+                      <code style={{ fontSize: '12px', fontWeight: 700, color: '#10b981' }}>
+                        {cand.round2Key}
+                      </code>
+                    </div>
 
-            <div style={{ gridColumn: '1 / -1', padding: '48px 24px', textAlign: 'center', border: '1px dashed #27272a', borderRadius: '8px', background: '#121214' }}>
-
-
-
-              <Code2 size={28} color="#71717a" style={{ margin: '0 auto 8px auto' }} />
-
-
-
-              <div style={{ fontSize: '13px', fontWeight: 600, color: '#f4f4f5' }}>No active coding workstations</div>
-
-
-
-              <div style={{ fontSize: '12px', color: '#71717a', marginTop: '4px' }}>
-
-
-
-                When shortlisted candidates start Round 2 at /codespark-exams?round=2, their live telemetry and code stream will stream here.
-
-
-
+                    <div style={{ fontSize: '11px', color: '#71717a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Clock size={12} />
+                      <span>Live editor will stream here upon contestant login</span>
+                    </div>
+                  </div>
+                ))}
               </div>
-
-
-
-            </div>
-
-
-
+            ) : (
+              <div style={{ gridColumn: '1 / -1', padding: '48px 24px', textAlign: 'center', border: '1px dashed #27272a', borderRadius: '8px', background: '#121214' }}>
+                <Code2 size={28} color="#71717a" style={{ margin: '0 auto 8px auto' }} />
+                <div style={{ fontSize: '13px', fontWeight: 600, color: '#f4f4f5' }}>No active coding workstations</div>
+                <div style={{ fontSize: '12px', color: '#71717a', marginTop: '4px' }}>
+                  When shortlisted candidates start Round 2 at /codespark-exams?round=2, their live telemetry and code stream will stream here.
+                </div>
+              </div>
+            )
           ) : (
 
 
@@ -4288,7 +4095,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-                  Total Score: <strong style={{ color: '#f4f4f5' }}>{selectedDossier.totalScore} / 100</strong> • Language: {selectedDossier.dominantLanguage} • Solved: {selectedDossier.solvedCount}/5
+                  Total Score: <strong style={{ color: '#f4f4f5' }}>{selectedDossier.totalScore} / {totalContestMarks || 50}</strong> • Language: {selectedDossier.dominantLanguage} • Solved: {selectedDossier.solvedCount}/5
 
 
 
@@ -5320,449 +5127,10 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
 
-      {/* MODAL: IMPORT ROUND 2 CODING QUESTIONS */}
-
-
-
-      {showImportModal && (
-
-
-
-        <div
-
-
-
-          onClick={() => setShowImportModal(false)}
-
-
-
-          style={{
-
-
-
-            position: 'fixed',
-
-
-
-            inset: 0,
-
-
-
-            background: 'rgba(9, 9, 11, 0.85)',
-
-
-
-            backdropFilter: 'blur(6px)',
-
-
-
-            zIndex: 9999,
-
-
-
-            display: 'flex',
-
-
-
-            alignItems: 'center',
-
-
-
-            justifyContent: 'center',
-
-
-
-            padding: '24px'
-
-
-
-          }}
-
-
-
-        >
-
-
-
-          <div
-
-
-
-            onClick={(e) => e.stopPropagation()}
-
-
-
-            style={{
-
-
-
-              background: '#121214',
-
-
-
-              border: '1px solid #27272a',
-
-
-
-              borderRadius: '8px',
-
-
-
-              maxWidth: '680px',
-
-
-
-              width: '100%',
-
-
-
-              padding: '24px',
-
-
-
-              display: 'flex',
-
-
-
-              flexDirection: 'column',
-
-
-
-              gap: '16px',
-
-
-
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
-
-
-
-            }}
-
-
-
-          >
-
-
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-
-
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-
-
-
-                <Upload size={18} color="#3b82f6" />
-
-
-
-                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#f4f4f5' }}>
-
-
-
-                  Import Round 2 Coding Questions Pool
-
-
-
-                </h3>
-
-
-
-              </div>
-
-
-
-              <button
-
-
-
-                type="button"
-
-
-
-                onClick={() => setShowImportModal(false)}
-
-
-
-                style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer' }}
-
-
-
-              >
-
-
-
-                ✕
-
-
-
-              </button>
-
-
-
-            </div>
-
-
-
-            <p style={{ margin: 0, fontSize: '12.5px', color: '#a1a1aa', lineHeight: 1.5 }}>
-
-
-
-              Define the pool of coding problems (at least 10 questions recommended). When shortlisted students enter Round 2, each student will receive <strong>5 randomized questions</strong> from this pool.
-
-
-
-            </p>
-
-
-
-            {/* Prebuilt 10 bank removed */}
-
-
-
-            {/* Or Paste JSON */}
-
-
-
-            <div>
-
-
-
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#f4f4f5', marginBottom: '6px' }}>
-
-
-
-                Paste Your Questions Directly (Plain Text or Numbered List):
-
-
-
-              </label>
-
-
-
-              <textarea
-
-
-
-                value={importJsonText}
-
-
-
-                onChange={(e) => setImportJsonText(e.target.value)}
-
-
-
-                placeholder='Paste your 10 questions here directly!\n\n1. Reverse a string: Write a function to reverse a string.\n2. Maximum Subarray: Find max subarray sum.\n3. Balanced Parentheses: Check if bracket expression is balanced.\n4. Palindrome Check: Check if string is palindrome.\n5. Binary Search: Implement search on sorted array.\n6. Fibonacci: Compute N-th Fibonacci number.\n7. Two Sum: Find two numbers that add to target.\n8. Anagram: Check if two strings are anagrams.\n9. Merge Sorted Arrays: Merge two arrays.\n10. Count Set Bits: Count bits in integer.'
-
-
-
-                rows={7}
-
-
-
-                style={{
-
-
-
-                  width: '100%',
-
-
-
-                  background: '#09090b',
-
-
-
-                  border: '1px solid #27272a',
-
-
-
-                  borderRadius: '6px',
-
-
-
-                  padding: '10px',
-
-
-
-                  color: '#e4e4e7',
-
-
-
-                  fontSize: '12px',
-
-
-
-                  fontFamily: 'monospace',
-
-
-
-                  boxSizing: 'border-box',
-
-
-
-                  outline: 'none'
-
-
-
-                }}
-
-
-
-              />
-
-
-
-            </div>
-
-
-
-            {importError && (
-
-
-
-              <div style={{ color: '#ef4444', fontSize: '12px', background: 'rgba(239, 68, 68, 0.1)', padding: '8px 12px', borderRadius: '4px' }}>
-
-
-
-                {importError}
-
-
-
-              </div>
-
-
-
-            )}
-
-
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-
-
-
-              <button
-
-
-
-                type="button"
-
-
-
-                onClick={() => setShowImportModal(false)}
-
-
-
-                style={{ padding: '8px 14px', borderRadius: '6px', background: 'transparent', border: '1px solid #27272a', color: '#a1a1aa', fontSize: '12px', cursor: 'pointer' }}
-
-
-
-              >
-
-
-
-                Cancel
-
-
-
-              </button>
-
-
-
-              <button
-
-
-
-                type="button"
-
-
-
-                onClick={handleImportJson}
-
-
-
-                disabled={!importJsonText.trim()}
-
-
-
-                style={{
-
-
-
-                  padding: '8px 16px',
-
-
-
-                  borderRadius: '6px',
-
-
-
-                  background: importJsonText.trim() ? '#3b82f6' : '#27272a',
-
-
-
-                  border: 'none',
-
-
-
-                  color: '#ffffff',
-
-
-
-                  fontSize: '12px',
-
-
-
-                  fontWeight: 700,
-
-
-
-                  cursor: importJsonText.trim() ? 'pointer' : 'not-allowed'
-
-
-
-                }}
-
-
-
-              >
-
-
-
-                Import JSON & Sync to Cloud
-
-
-
-              </button>
-
-
-
-            </div>
-
-
-
           </div>
-
-
-
-        </div>
-
-
-
-      )}
-
-
-
-    </div>
-
-
 
   );
 
-
-
 };
 
-
-
 export default AdminRound2Hub;
-

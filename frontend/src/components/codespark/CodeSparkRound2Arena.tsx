@@ -24,7 +24,13 @@ import {
   FileCheck,
   XCircle,
   LogOut,
-  Brain} from 'lucide-react';
+  Brain,
+  FileText,
+  History,
+  Lock,
+  Unlock,
+  AlertTriangle
+} from 'lucide-react';
 import {
   Round2Problem,
   Round2QuestionReport,
@@ -37,11 +43,16 @@ import {
   saveStoredRound2Submission,
   pushRound2SubmissionToCloud,
   selectStudentRound2Problems,
-  pushRound2LiveCodeToCloud
+  pushRound2LiveCodeToCloud,
+  isRound2ArenaUnlocked,
+  setRound2ArenaUnlocked,
+  subscribeToRound2ArenaUnlocked
 } from '../../services/round2CodingService';
+import { cleanCandidateNameAndRoll } from '../../utils/candidateFormatter';
 import { playSound } from '../../utils/sounds';
 import { requestExamFullscreen, isCurrentlyFullscreen, exitExamFullscreen } from '../../services/timeSyncService';
 import { ThemeMode } from '../../types/dna';
+
 interface CodeSparkRound2ArenaProps {
   candidateProfile: {
     name: string;
@@ -55,26 +66,45 @@ interface CodeSparkRound2ArenaProps {
   onExit: () => void;
   theme?: ThemeMode;
 }
+
 const MONACO_LANG_MAP: Record<string, string> = {
   Python: 'python',
   'C++': 'cpp',
   C: 'c',
   Java: 'java'
 };
+
 export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
   candidateProfile,
   onExit,
   theme = 'dark'
 }) => {
-  // --- 2. Candidate Submission & Progress State |
+  const { name: candidateDisplayName, roll: cleanRoll } = useMemo(() => {
+    return cleanCandidateNameAndRoll(candidateProfile.name, candidateProfile.rollNumber || candidateProfile.email?.split('@')[0]);
+  }, [candidateProfile.name, candidateProfile.rollNumber, candidateProfile.email]);
+
   const candidateKey = candidateProfile.round2Key || candidateProfile.accessKey || 'GUEST';
-  const cleanRoll = candidateProfile.rollNumber || candidateProfile.email.split('@')[0] || 'CANDIDATE';
-  // --- 1. Problems State: Individualized 5 randomized questions from 10+ pool |
+
+  // --- 0. Round 2 Gatekeeper State (Direct from Supabase Cloud) ---
+  const [isArenaUnlocked, setIsArenaUnlocked] = useState<boolean>(() => isRound2ArenaUnlocked());
+  const [showProctorUnlockModal, setShowProctorUnlockModal] = useState<boolean>(false);
+  const [proctorPinInput, setProctorPinInput] = useState<string>('');
+  const [proctorError, setProctorError] = useState<string>('');
+
+  useEffect(() => {
+    const unsub = subscribeToRound2ArenaUnlocked((unlocked) => {
+      setIsArenaUnlocked(unlocked);
+    });
+    return unsub;
+  }, []);
+
+  // --- 1. Problems State (Gated from Cloud) ---
   const [problems, setProblems] = useState<Round2Problem[]>(() => {
     const all = getAllRound2Problems();
     return selectStudentRound2Problems(all, candidateKey);
   });
   const [loadingProblems, setLoadingProblems] = useState(true);
+
   useEffect(() => {
     let mounted = true;
     const loadProblems = async () => {
@@ -95,6 +125,8 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       mounted = false;
     };
   }, [candidateKey]);
+
+  // --- 2. Candidate Submission & Progress State ---
   const [submission, setSubmission] = useState<Round2CandidateSubmission>(() => {
     const existing = getStoredRound2Submission(candidateKey);
     if (existing) return existing;
@@ -109,33 +141,35 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       questionReports: {},
       currentQuestion: 1,
       totalScore: 0,
-      maxScore: 100,
+      maxScore: 50,
       isSubmitted: false,
       startedAt: Date.now(),
       dominantLanguage: 'Python'
     };
   });
-  // Current Active Question (1-indexed: 1 to 5)
+
+  // Current Active Question (1 to 5)
   const [currentQIndex, setCurrentQIndex] = useState<number>(submission.currentQuestion || 1);
   const currentProblem: Round2Problem = useMemo(() => {
     const found = problems.find((p) => p.number === currentQIndex);
     return found || problems[0] || ({} as Round2Problem);
   }, [problems, currentQIndex]);
+
   // Code buffer per question
   const [codeMap, setCodeMap] = useState<Record<number, string>>(() => {
     const map: Record<number, string> = {};
     for (let i = 1; i <= 5; i++) {
       const rep = submission.questionReports[i];
-      if (rep && rep.code) {
+      if (rep && rep.code && !rep.code.includes('nums: list[int]') && !rep.code.includes('postfix = 1\n        for i in range(n - 1, -1, -1):')) {
         map[i] = rep.code;
       } else {
-        // default starter code for Python if available
         const p = problems.find((prob) => prob.number === i);
         map[i] = p?.starterCode?.Python || '';
       }
     }
     return map;
   });
+
   // Language selection & Auto-detect
   const [explicitLanguageMap, setExplicitLanguageMap] = useState<Record<number, 'Auto' | 'Python' | 'C++' | 'C' | 'Java'>>({
     1: 'Auto',
@@ -144,29 +178,62 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     4: 'Auto',
     5: 'Auto'
   });
+
   const activeCode = codeMap[currentQIndex] ?? '';
   const currentExplicit = explicitLanguageMap[currentQIndex] || 'Auto';
-  // Detected language
+
   const detectedLang = useMemo(() => {
     return detectLanguageFromCode(activeCode);
   }, [activeCode]);
+
   const effectiveLang: 'C' | 'C++' | 'Python' | 'Java' = useMemo(() => {
     if (currentExplicit !== 'Auto') return currentExplicit;
     return detectedLang;
   }, [currentExplicit, detectedLang]);
-  // Compilation & Output State
+
+  // Sanitize code buffer: ensure no hardcoded legacy solution remains in editor
+  useEffect(() => {
+    if (currentProblem && currentProblem.starterCode) {
+      const current = codeMap[currentQIndex] || '';
+      if (!current || current.includes('nums: list[int]') || current.includes('postfix = 1\n        for i in range(n - 1, -1, -1):')) {
+        const cleanStarter = currentProblem.starterCode[effectiveLang] || currentProblem.starterCode.Python || '';
+        if (cleanStarter) {
+          setCodeMap((prev) => ({ ...prev, [currentQIndex]: cleanStarter }));
+        }
+      }
+    }
+  }, [currentProblem, effectiveLang, currentQIndex]);
+
+  // Compilation & Console State
   const [isCompiling, setIsCompiling] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [compileError, setCompileError] = useState<string | null>(null);
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customInputText, setCustomInputText] = useState('');
   const [activeReport, setActiveReport] = useState<Round2QuestionReport | null>(() => {
     return submission.questionReports[currentQIndex] || null;
   });
+
+  // HackerRank / LeetCode UI Tabs
+  const [activeLeftTab, setActiveLeftTab] = useState<'description' | 'submissions'>('description');
+  const [activeConsoleTab, setActiveConsoleTab] = useState<'testcase' | 'testresult'>('testcase');
+  const [selectedCaseIdx, setSelectedCaseIdx] = useState<number>(0);
+  const [isCustomCase, setIsCustomCase] = useState<boolean>(false);
+  const [editableCaseInputs, setEditableCaseInputs] = useState<Record<string, string>>({});
+  const [isConsoleExpanded, setIsConsoleExpanded] = useState<boolean>(true);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+
+  // Submissions history per question
+  const [submissionHistory, setSubmissionHistory] = useState<Record<number, Round2QuestionReport[]>>({});
+
   // Keep active report in sync when switching question tabs
   useEffect(() => {
     setActiveReport(submission.questionReports[currentQIndex] || null);
     setCompileError(null);
+    setSelectedCaseIdx(0);
+    setIsCustomCase(false);
   }, [currentQIndex, submission.questionReports]);
+
   // Sync submission to backend when changes occur
   const updateSubmissionState = useCallback(
     (newSub: Round2CandidateSubmission) => {
@@ -175,6 +242,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     },
     []
   );
+
   // Fullscreen state
   const [isFullscreen, setIsFullscreen] = useState(() => isCurrentlyFullscreen());
   useEffect(() => {
@@ -182,6 +250,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     document.addEventListener('fullscreenchange', handleFs);
     return () => document.removeEventListener('fullscreenchange', handleFs);
   }, []);
+
   const handleToggleFullscreen = async () => {
     if (isCurrentlyFullscreen()) {
       await exitExamFullscreen();
@@ -191,7 +260,115 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       setIsFullscreen(true);
     }
   };
-  // Editor ref
+
+  // --- Anti-Cheat System ---
+  const [tabViolations, setTabViolations] = useState<number>(() => {
+    try {
+      const saved = sessionStorage.getItem(`r2_strikes_${cleanRoll}`);
+      return saved ? parseInt(saved, 10) || 0 : 0;
+    } catch {
+      return 0;
+    }
+  });
+  const [isProctorLocked, setIsProctorLocked] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem(`r2_locked_${cleanRoll}`) === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [unlockInput, setUnlockInput] = useState<string>('');
+  const [unlockError, setUnlockError] = useState<string | null>(null);
+  const lastViolationTime = useRef<number>(0);
+
+  useEffect(() => {
+    const registerInfraction = () => {
+      const now = Date.now();
+      if (now - lastViolationTime.current > 700) {
+        lastViolationTime.current = now;
+        setTabViolations((prev) => {
+          const next = prev + 1;
+          try {
+            sessionStorage.setItem(`r2_strikes_${cleanRoll}`, String(next));
+          } catch {}
+          playSound('warning');
+          if (next >= 3) {
+            setIsProctorLocked(true);
+            try {
+              sessionStorage.setItem(`r2_locked_${cleanRoll}`, 'true');
+            } catch {}
+            playSound('error');
+          }
+          void pushRound2LiveCodeToCloud(candidateProfile, codeMap[currentQIndex] || '', effectiveLang, currentQIndex);
+          return next;
+        });
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        registerInfraction();
+      }
+    };
+
+    const handleBlur = () => {
+      registerInfraction();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, [cleanRoll, candidateProfile, codeMap, currentQIndex, effectiveLang]);
+
+  // Unlock lockdown handler
+  const VALID_PROCTOR_KEYS = new Set([
+    'AXENT-PROCTOR',
+    'UNLOCK2026',
+    'PROCTOR',
+    'ADMIN',
+    '1234',
+    'PROCTOR2026',
+    'AXENT2026'
+  ]);
+
+  const handleUnlockExam = () => {
+    const key = unlockInput.trim().toUpperCase();
+    if (VALID_PROCTOR_KEYS.has(key)) {
+      setIsProctorLocked(false);
+      setTabViolations(0);
+      setUnlockInput('');
+      setUnlockError(null);
+      try {
+        sessionStorage.removeItem(`r2_locked_${cleanRoll}`);
+        sessionStorage.setItem(`r2_strikes_${cleanRoll}`, '0');
+      } catch {}
+      playSound('success');
+      void pushRound2LiveCodeToCloud(candidateProfile, codeMap[currentQIndex] || '', effectiveLang, currentQIndex);
+    } else {
+      setUnlockError('Invalid Proctor Authorization Key. Contact your lab invigilator (Default: AXENT-PROCTOR).');
+      playSound('error');
+    }
+  };
+
+  // Contest Countdown Timer (60 min default)
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(3600);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRemainingSeconds((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const formattedTimer = useMemo(() => {
+    const m = Math.floor(remainingSeconds / 60);
+    const s = remainingSeconds % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }, [remainingSeconds]);
+
+  // Editor ref & font measurement
   const editorRef = useRef<any>(null);
   const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
@@ -204,32 +381,108 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       }
     }
   };
+
   const liveSyncTimer = useRef<any>(null);
   const handleCodeChange = (val: string | undefined) => {
     const code = val || '';
     setCodeMap((prev) => ({ ...prev, [currentQIndex]: code }));
+
     // Debounced live code push to candidate_stations in cloud
     if (liveSyncTimer.current) clearTimeout(liveSyncTimer.current);
     liveSyncTimer.current = setTimeout(() => {
       void pushRound2LiveCodeToCloud(candidateProfile, code, effectiveLang, currentQIndex);
     }, 1000);
   };
-  // --- 3. Compile & Test Execution |
-  const handleCompileAndRun = async () => {
+
+  // --- 3. RUN CODE (Sample Testcases) ---
+  const handleRunCode = async () => {
     if (!currentProblem || !currentProblem.id) return;
     setIsCompiling(true);
     setCompileError(null);
+    setActiveConsoleTab('testresult');
+    setIsConsoleExpanded(true);
     playSound('click');
+
     try {
       const qTimestamps = submission.questionTimestamps || {};
       const qStart = qTimestamps[currentQIndex]?.startedAt || Date.now();
       const timeTakenMs = Date.now() - qStart;
-      const report = await evaluateRound2Code(currentProblem, activeCode, effectiveLang, timeTakenMs, showCustomInput ? customInputText : undefined);
-      // Track question start and compiled timestamps
+
+      const activeCustomStdin = isCustomCase
+        ? customInputText
+        : (editableCaseInputs[`${currentQIndex}_${selectedCaseIdx}`] !== undefined
+            ? editableCaseInputs[`${currentQIndex}_${selectedCaseIdx}`]
+            : (showCustomInput ? customInputText : undefined));
+
+      const report = await evaluateRound2Code(
+        currentProblem,
+        activeCode,
+        effectiveLang,
+        timeTakenMs,
+        activeCustomStdin,
+        false // Run sample test cases only
+      );
+
       report.startedAt = qStart;
       report.startedAtFormatted = new Date(qStart).toLocaleTimeString();
       report.timeTakenSeconds = Math.max(1, Math.round((report.compiledAt - qStart) / 1000));
       setActiveReport(report);
+
+      // Record to question submission history
+      setSubmissionHistory((prev) => ({
+        ...prev,
+        [currentQIndex]: [report, ...(prev[currentQIndex] || [])]
+      }));
+
+      if (report.status === 'ACCEPTED') {
+        playSound('success');
+      } else {
+        playSound('warning');
+      }
+    } catch (err: any) {
+      console.error('Run code error:', err);
+      setCompileError(err?.message || 'Compiler execution failed. Please verify syntax and retry.');
+      playSound('error');
+    } finally {
+      setIsCompiling(false);
+    }
+  };
+
+  // --- 4. SUBMIT CODE (HackerRank & LeetCode Official Submission) ---
+  const handleSubmitCode = async () => {
+    if (!currentProblem || !currentProblem.id) return;
+    setIsSubmitting(true);
+    setCompileError(null);
+    setActiveConsoleTab('testresult');
+    setIsConsoleExpanded(true);
+    playSound('click');
+
+    try {
+      const qTimestamps = submission.questionTimestamps || {};
+      const qStart = qTimestamps[currentQIndex]?.startedAt || Date.now();
+      const timeTakenMs = Date.now() - qStart;
+
+      // Submit executes ALL test cases (visible sample + hidden test cases)
+      const report = await evaluateRound2Code(
+        currentProblem,
+        activeCode,
+        effectiveLang,
+        timeTakenMs,
+        undefined,
+        true // Submit against all test cases
+      );
+
+      report.startedAt = qStart;
+      report.startedAtFormatted = new Date(qStart).toLocaleTimeString();
+      report.timeTakenSeconds = Math.max(1, Math.round((report.compiledAt - qStart) / 1000));
+      setActiveReport(report);
+
+      // Update question submission history
+      setSubmissionHistory((prev) => ({
+        ...prev,
+        [currentQIndex]: [report, ...(prev[currentQIndex] || [])]
+      }));
+
       const updatedTimestamps = {
         ...qTimestamps,
         [currentQIndex]: {
@@ -239,22 +492,23 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
           compiledAtFormatted: report.compiledAtFormatted
         }
       };
-      // Recalculate candidate total score
+
       const updatedReports = {
         ...submission.questionReports,
         [currentQIndex]: report
       };
+
       let totalScore = 0;
       let totalMax = 0;
-      const langCounts: Record<string, number> = { Python: 0, 'C++': 0, C: 0 };
+      const langCounts: Record<string, number> = { Python: 0, 'C++': 0, C: 0, Java: 0 };
       Object.values(updatedReports).forEach((rep) => {
         totalScore += rep.score || 0;
-        totalMax += rep.maxScore || 20;
+        totalMax += rep.maxScore || 10;
         if (rep.language) {
           langCounts[rep.language] = (langCounts[rep.language] || 0) + 1;
         }
       });
-      // Find dominant language
+
       let dominant = 'Python';
       let maxCnt = -1;
       Object.entries(langCounts).forEach(([l, cnt]) => {
@@ -263,30 +517,35 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
           dominant = l;
         }
       });
+
       const updatedSub: Round2CandidateSubmission = {
         ...submission,
         questionReports: updatedReports,
         questionTimestamps: updatedTimestamps,
         currentQuestion: currentQIndex,
         totalScore,
-        maxScore: totalMax || 100,
+        maxScore: totalMax || 50,
         dominantLanguage: dominant
       };
+
       updateSubmissionState(updatedSub);
+      void pushRound2SubmissionToCloud(updatedSub);
+
       if (report.status === 'ACCEPTED') {
         playSound('success');
       } else {
         playSound('warning');
       }
     } catch (err: any) {
-      console.error('Compilation error:', err);
-      setCompileError(err?.message || 'Compiler execution failed. Please verify syntax and retry.');
+      console.error('Submit code error:', err);
+      setCompileError(err?.message || 'Submission evaluation failed.');
       playSound('error');
     } finally {
-      setIsCompiling(false);
+      setIsSubmitting(false);
     }
   };
-  // --- 4. Question Navigation |
+
+  // --- 5. Question Navigation ---
   const handleSelectQuestion = (qNum: number) => {
     if (qNum < 1 || qNum > 5) return;
     playSound('click');
@@ -294,7 +553,6 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     const prevTimestamps = submission.questionTimestamps || {};
     const updatedPrev = { ...prevTimestamps };
 
-    // Record transition timestamp on previous question
     if (updatedPrev[currentQIndex]) {
       updatedPrev[currentQIndex] = {
         ...updatedPrev[currentQIndex],
@@ -302,7 +560,6 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
         nextQuestionStartedAtFormatted: new Date(now).toLocaleTimeString()
       };
     }
-    // Initialize startedAt on target question if not yet set
     if (!updatedPrev[qNum]?.startedAt) {
       updatedPrev[qNum] = {
         ...(updatedPrev[qNum] || {}),
@@ -317,36 +574,60 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       questionTimestamps: updatedPrev
     }));
     setCurrentQIndex(qNum);
+    setSelectedCaseIdx(0);
   };
+
   const handleNextQuestion = () => {
     if (currentQIndex < (problems.length || 5)) {
       handleSelectQuestion(currentQIndex + 1);
     }
   };
+
   const handlePrevQuestion = () => {
     if (currentQIndex > 1) {
       handleSelectQuestion(currentQIndex - 1);
     }
   };
-  // --- 5. Template Reset |
+
+  // --- 6. Template Reset ---
   const handleResetToTemplate = () => {
     if (!currentProblem || !currentProblem.starterCode) return;
-    const targetLang = effectiveLang;
-    const starter = currentProblem.starterCode[targetLang] || '';
+    const starter = currentProblem.starterCode[effectiveLang] || '';
     if (starter) {
       setCodeMap((prev) => ({ ...prev, [currentQIndex]: starter }));
       playSound('click');
     }
   };
-  // --- 6. Final Submission Modal |
+
+  // --- 7. Copy to Clipboard ---
+  const handleCopyText = (text: string, idx: number) => {
+    navigator.clipboard.writeText(text);
+    setCopiedIndex(idx);
+    playSound('click');
+    setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  // --- 8. Final Submission Modal ---
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [isSubmittingFinal, setIsSubmittingFinal] = useState(false);
+
   const solvedCount = useMemo(() => {
     return Object.values(submission.questionReports).filter((r) => r.status === 'ACCEPTED').length;
   }, [submission.questionReports]);
+
+  const totalPassedTests = useMemo(() => {
+    return Object.values(submission.questionReports).reduce((sum, r) => sum + (r.passedTests || 0), 0);
+  }, [submission.questionReports]);
+
+  // Initial immediate live workstation push on arena mount
+  useEffect(() => {
+    void pushRound2LiveCodeToCloud(candidateProfile, codeMap[currentQIndex] || '', effectiveLang, currentQIndex);
+  }, []);
+
   const attemptedCount = useMemo(() => {
     return Object.keys(submission.questionReports).length;
   }, [submission.questionReports]);
+
   const handleConfirmFinalSubmit = async () => {
     setIsSubmittingFinal(true);
     playSound('click');
@@ -366,7 +647,8 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       setIsSubmittingFinal(false);
     }
   };
-  // --- 7. Submission Concluded Screen |
+
+  // --- 9. Submission Concluded Screen ---
   if (submission.isSubmitted) {
     return (
       <div
@@ -378,18 +660,17 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '24px',
-          fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+          padding: '24px'
         }}
       >
         <div
           style={{
-            maxWidth: '620px',
+            maxWidth: '600px',
             width: '100%',
             background: '#121214',
             border: '1px solid #27272a',
             borderRadius: '12px',
-            padding: '40px 32px',
+            padding: '36px',
             textAlign: 'center',
             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
           }}
@@ -431,9 +712,9 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
             Assessment Successfully Completed
           </h2>
           <p style={{ fontSize: '13px', color: '#a1a1aa', margin: '0 0 28px 0', lineHeight: 1.6 }}>
-            Candidate <strong>{submission.candidateName}</strong> ({submission.rollNumber}), your coding solutions and compiler reports have been encrypted and submitted to the institutional leaderboard.
+            Candidate <strong>{submission.candidateName}</strong> ({submission.rollNumber}), your code solutions and keystroke forensic telemetry have been verified and sealed to cloud.
           </p>
-          {/* Score & Metrics Cards */}
+
           <div
             style={{
               display: 'grid',
@@ -443,145 +724,26 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
               textAlign: 'left'
             }}
           >
-            <div
-              style={{
-                background: '#18181b',
-                border: '1px solid #27272a',
-                borderRadius: '8px',
-                padding: '16px'
-              }}
-            >
-              <div style={{ fontSize: '11px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>
-                Score
-              </div>
-              <div style={{ fontSize: '24px', fontWeight: 900, color: '#f4f4f5', marginTop: '4px' }}>
-                {submission.totalScore}{' '}
-                <span style={{ fontSize: '13px', color: '#71717a', fontWeight: 500 }}>/ 100</span>
-              </div>
-            </div>
-            <div
-              style={{
-                background: '#18181b',
-                border: '1px solid #27272a',
-                borderRadius: '8px',
-                padding: '16px'
-              }}
-            >
-              <div style={{ fontSize: '11px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>
-                Solved
-              </div>
+            <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '16px' }}>
+              <div style={{ fontSize: '11px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>Challenges Solved</div>
               <div style={{ fontSize: '24px', fontWeight: 900, color: '#10b981', marginTop: '4px' }}>
-                {solvedCount}{' '}
-                <span style={{ fontSize: '13px', color: '#71717a', fontWeight: 500 }}>/ 5</span>
+                {solvedCount} <span style={{ fontSize: '13px', color: '#71717a', fontWeight: 500 }}>/ 5</span>
               </div>
             </div>
-            <div
-              style={{
-                background: '#18181b',
-                border: '1px solid #27272a',
-                borderRadius: '8px',
-                padding: '16px'
-              }}
-            >
-              <div style={{ fontSize: '11px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>
-                Language
+            <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '16px' }}>
+              <div style={{ fontSize: '11px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>Test Cases Passed</div>
+              <div style={{ fontSize: '24px', fontWeight: 900, color: '#f4f4f5', marginTop: '4px' }}>
+                {totalPassedTests} <span style={{ fontSize: '13px', color: '#71717a', fontWeight: 500 }}>/ 25</span>
               </div>
+            </div>
+            <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '16px' }}>
+              <div style={{ fontSize: '11px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>Language</div>
               <div style={{ fontSize: '20px', fontWeight: 800, color: '#f4f4f5', marginTop: '6px' }}>
                 {submission.dominantLanguage || 'Python'}
               </div>
             </div>
           </div>
-          {/* Question Breakdown */}
-          <div
-            style={{
-              background: '#18181b',
-              border: '1px solid #27272a',
-              borderRadius: '8px',
-              padding: '16px',
-              marginBottom: '28px',
-              textAlign: 'left'
-            }}
-          >
-            <div style={{ fontSize: '12px', fontWeight: 700, color: '#a1a1aa', marginBottom: '12px' }}>
-              Problem Breakdown
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {[1, 2, 3, 4, 5].map((qNum) => {
-                const rep = submission.questionReports[qNum];
-                const prob = problems.find((p) => p.number === qNum);
-                const title = prob?.title || `Question ${qNum}`;
-                const status = rep ? rep.status : 'PENDING';
-                const score = rep ? rep.score : 0;
-                return (
-                  <div
-                    key={qNum}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      fontSize: '12.5px',
-                      padding: '6px 8px',
-                      borderRadius: '6px',
-                      background: '#121214',
-                      border: '1px solid #27272a'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontWeight: 700, color: '#71717a' }}>Q{qNum}.</span>
-                      <span style={{ color: '#f4f4f5' }}>{title}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      {rep && (
-                        <>
-                          <span style={{ fontSize: '11px', color: '#71717a', fontFamily: 'monospace' }}>
-                            {rep.executionTime || '35 ms'}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              background: '#18181b',
-                              border: '1px solid #27272a',
-                              color: '#10b981'
-                            }}
-                          >
-                            {rep.timeComplexity || 'O(N)'}
-                          </span>
-                        </>
-                      )}
-                      <span
-                        style={{
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          background:
-                            status === 'ACCEPTED'
-                              ? 'rgba(16, 185, 129, 0.15)'
-                              : status === 'PARTIAL'
-                              ? 'rgba(245, 158, 11, 0.15)'
-                              : 'rgba(239, 68, 68, 0.15)',
-                          color:
-                            status === 'ACCEPTED'
-                              ? '#10b981'
-                              : status === 'PARTIAL'
-                              ? '#f59e0b'
-                              : '#ef4444'
-                        }}
-                      >
-                        {status}
-                      </span>
-                      <span style={{ fontWeight: 800, color: '#f4f4f5', minWidth: '45px', textAlign: 'right' }}>
-                        {score} / 20
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+
           <button
             type="button"
             onClick={onExit}
@@ -608,36 +770,50 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       </div>
     );
   }
-  // --- 8. Main Student Coding Arena |
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100vh',
-        width: '100vw',
-        background: '#09090b',
-        color: '#f4f4f5',
-        overflow: 'hidden',
-        fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-      }}
-    >
-      {/* --- Top Bar: Candidate Dossier, Question Stepper & Controls --- */}
-      <header
+
+  // --- 9.5. Gatekeeper: Standby Hall (Round 2 Locked • Questions Concealed) ---
+  if (!isArenaUnlocked) {
+    const handleProctorUnlock = () => {
+      const pin = proctorPinInput.trim().toLowerCase();
+      if (pin === 'axent2026' || pin === 'proctor' || pin === 'admin') {
+        playSound('success');
+        setRound2ArenaUnlocked(true);
+        setShowProctorUnlockModal(false);
+        setProctorPinInput('');
+        setProctorError('');
+      } else {
+        playSound('warning');
+        setProctorError('Invalid Invigilator PIN. Contact the Chief Examination Proctor.');
+      }
+    };
+
+    return (
+      <div
         style={{
-          height: '52px',
-          background: '#121214',
-          borderBottom: '1px solid #27272a',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 16px',
-          zIndex: 10
+          flexDirection: 'column',
+          height: '100vh',
+          width: '100vw',
+          background: '#09090b',
+          color: '#f4f4f5',
+          overflow: 'hidden',
+          fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
         }}
       >
-        {/* Left: Branding & Candidate identity */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* Header */}
+        <header
+          style={{
+            height: '52px',
+            background: '#121214',
+            borderBottom: '1px solid #27272a',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0 24px',
+            flexShrink: 0
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div
               style={{
                 width: '28px',
@@ -654,111 +830,582 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
               <Code2 size={16} />
             </div>
             <div>
-              <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#f4f4f5', letterSpacing: '-0.01em' }}>
-                CodeSpark Round 2
+              <div style={{ fontSize: '13px', fontWeight: 800, color: '#f4f4f5', letterSpacing: '-0.01em' }}>
+                AXENT CODE SPARK 2026
               </div>
-              <div style={{ fontSize: '10px', color: '#71717a' }}>Algorithmic Code Sprint Arena</div>
+              <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Round 2 · Algorithmic Code Sprint Arena
+              </div>
             </div>
           </div>
-          <div style={{ width: '1px', height: '24px', background: '#27272a' }} />
-          {/* Candidate Pill */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span
               style={{
                 fontSize: '11px',
-                fontWeight: 600,
-                color: '#e4e4e7',
+                fontWeight: 700,
+                padding: '4px 10px',
+                borderRadius: '4px',
                 background: '#18181b',
                 border: '1px solid #27272a',
-                padding: '3px 8px',
-                borderRadius: '4px'
+                color: '#ca8a04',
+                fontFamily: 'monospace',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
               }}
             >
-              {candidateProfile.name} ({cleanRoll})
+              <Lock size={12} />
+              <span>ARENA LOCKED · STANDBY</span>
             </span>
-            <span
+            <button
+              type="button"
+              onClick={onExit}
               style={{
-                fontSize: '10.5px',
-                color: '#71717a',
-                fontFamily: 'monospace'
+                padding: '6px 12px',
+                background: '#18181b',
+                border: '1px solid #27272a',
+                borderRadius: '6px',
+                color: '#a1a1aa',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
               }}
             >
-              {candidateProfile.stationNumber || 'Station #01'}
-            </span>
+              <LogOut size={13} />
+              <span>Exit</span>
+            </button>
           </div>
-        </div>
-        {/* Center: 5-Question Stepper (Q1 to Q5) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          {[1, 2, 3, 4, 5].map((qNum) => {
-            const rep = submission.questionReports[qNum];
-            const isCurrent = qNum === currentQIndex;
-            const isSolved = rep?.status === 'ACCEPTED';
-            const isAttempted = rep && !isSolved;
-            return (
-              <button
-                key={qNum}
-                type="button"
-                onClick={() => handleSelectQuestion(qNum)}
+        </header>
+
+        {/* Standby Body */}
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px'
+          }}
+        >
+          <div
+            style={{
+              maxWidth: '560px',
+              width: '100%',
+              background: '#121214',
+              border: '1px solid #27272a',
+              borderRadius: '8px',
+              padding: '36px 32px',
+              textAlign: 'center'
+            }}
+          >
+            <div
+              style={{
+                width: '56px',
+                height: '56px',
+                borderRadius: '10px',
+                background: '#18181b',
+                border: '1px solid #27272a',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 20px',
+                color: '#e4e4e7'
+              }}
+            >
+              <Lock size={26} />
+            </div>
+
+            <div
+              style={{
+                display: 'inline-block',
+                fontSize: '10.5px',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                color: '#a1a1aa',
+                background: '#18181b',
+                border: '1px solid #27272a',
+                padding: '4px 10px',
+                borderRadius: '4px',
+                marginBottom: '14px'
+              }}
+            >
+              Round 2 Algorithmic Challenge Sealed
+            </div>
+
+            <h2
+              style={{
+                fontSize: '20px',
+                fontWeight: 800,
+                color: '#f4f4f5',
+                margin: '0 0 10px',
+                letterSpacing: '-0.02em'
+              }}
+            >
+              Awaiting Invigilator Launch
+            </h2>
+
+            <p
+              style={{
+                fontSize: '13px',
+                color: '#a1a1aa',
+                lineHeight: 1.6,
+                margin: '0 0 24px'
+              }}
+            >
+              The 5 algorithmic challenges and live test suites for Round 2 have not yet been opened. Questions will reveal automatically the moment the Chief Proctor unlocks the arena from the control room.
+            </p>
+
+            {/* Verified Candidate Badge */}
+            <div
+              style={{
+                background: '#18181b',
+                border: '1px solid #27272a',
+                borderRadius: '6px',
+                padding: '16px',
+                marginBottom: '24px',
+                textAlign: 'left'
+              }}
+            >
+              <div
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '5px 12px',
-                  borderRadius: '6px',
-                  border: isCurrent
-                    ? '1px solid #f4f4f5'
-                    : isSolved
-                    ? '1px solid rgba(16, 185, 129, 0.4)'
-                    : isAttempted
-                    ? '1px solid rgba(245, 158, 11, 0.4)'
-                    : '1px solid #27272a',
-                  background: isCurrent
-                    ? '#27272a'
-                    : isSolved
-                    ? 'rgba(16, 185, 129, 0.08)'
-                    : isAttempted
-                    ? 'rgba(245, 158, 11, 0.08)'
-                    : '#18181b',
-                  color: isCurrent
-                    ? '#ffffff'
-                    : isSolved
-                    ? '#10b981'
-                    : isAttempted
-                    ? '#f59e0b'
-                    : '#a1a1aa',
-                  fontSize: '11.5px',
-                  fontWeight: isCurrent ? 700 : 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
+                  fontSize: '10.5px',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  color: '#71717a',
+                  marginBottom: '10px'
                 }}
               >
-                <span>Q{qNum}</span>
-                {isSolved ? (
-                  <CheckCircle2 size={13} color="#10b981" />
-                ) : isAttempted ? (
-                  <AlertCircle size={13} color="#f59e0b" />
-                ) : (
-                  <span style={{ fontSize: '10px', color: '#71717a' }}>20p</span>
-                )}
+                Authenticated Contestant Credentials
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '12px' }}>
+                <div>
+                  <span style={{ color: '#71717a', display: 'block', fontSize: '10.5px' }}>Candidate Name</span>
+                  <strong style={{ color: '#f4f4f5' }}>{candidateDisplayName}</strong>
+                </div>
+                <div>
+                  <span style={{ color: '#71717a', display: 'block', fontSize: '10.5px' }}>Roll / USN</span>
+                  <strong style={{ color: '#f4f4f5', fontFamily: 'monospace' }}>{cleanRoll}</strong>
+                </div>
+                <div>
+                  <span style={{ color: '#71717a', display: 'block', fontSize: '10.5px' }}>Round 2 Key</span>
+                  <strong style={{ color: '#f4f4f5', fontFamily: 'monospace' }}>{candidateKey}</strong>
+                </div>
+                <div>
+                  <span style={{ color: '#71717a', display: 'block', fontSize: '10.5px' }}>Assigned Terminal</span>
+                  <strong style={{ color: '#f4f4f5' }}>{candidateProfile.stationNumber || 'Station #01'}</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setShowProctorUnlockModal(true)}
+                style={{
+                  width: '100%',
+                  padding: '11px',
+                  background: '#f4f4f5',
+                  color: '#09090b',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+              >
+                <Unlock size={14} />
+                <span>Invigilator On-Site Unlock</span>
               </button>
-            );
-          })}
+
+              <button
+                type="button"
+                onClick={onExit}
+                style={{
+                  width: '100%',
+                  padding: '9px',
+                  background: 'transparent',
+                  color: '#71717a',
+                  border: '1px solid #27272a',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <LogOut size={13} />
+                <span>Return to Portal</span>
+              </button>
+            </div>
+          </div>
         </div>
-        {/* Right: Score, Fullscreen & Submit Button */}
+
+        {/* Proctor On-Site Unlock Modal */}
+        {showProctorUnlockModal && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0, 0, 0, 0.75)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+              padding: '20px'
+            }}
+          >
+            <div
+              style={{
+                maxWidth: '400px',
+                width: '100%',
+                background: '#121214',
+                border: '1px solid #27272a',
+                borderRadius: '8px',
+                padding: '24px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '6px',
+                    background: '#18181b',
+                    border: '1px solid #27272a',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#f4f4f5'
+                  }}
+                >
+                  <Unlock size={16} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#f4f4f5' }}>
+                    Invigilator Master Unlock
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '11px', color: '#71717a' }}>
+                    Enter Proctor Authorization PIN to open this station
+                  </p>
+                </div>
+              </div>
+
+              {proctorError && (
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    borderRadius: '4px',
+                    color: '#ef4444',
+                    fontSize: '11.5px',
+                    marginBottom: '12px'
+                  }}
+                >
+                  {proctorError}
+                </div>
+              )}
+
+              <div style={{ marginBottom: '16px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '10.5px',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    color: '#71717a',
+                    marginBottom: '6px'
+                  }}
+                >
+                  Proctor PIN
+                </label>
+                <input
+                  type="password"
+                  value={proctorPinInput}
+                  onChange={(e) => setProctorPinInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleProctorUnlock()}
+                  placeholder="Enter PIN (e.g. axent2026)"
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    background: '#18181b',
+                    border: '1px solid #27272a',
+                    borderRadius: '6px',
+                    color: '#f4f4f5',
+                    fontSize: '14px',
+                    fontFamily: 'monospace',
+                    boxSizing: 'border-box',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowProctorUnlockModal(false);
+                    setProctorPinInput('');
+                    setProctorError('');
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '9px',
+                    background: '#18181b',
+                    border: '1px solid #27272a',
+                    borderRadius: '6px',
+                    color: '#a1a1aa',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleProctorUnlock}
+                  style={{
+                    flex: 1,
+                    padding: '9px',
+                    background: '#f4f4f5',
+                    color: '#09090b',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Authorize &amp; Unlock
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // --- 10. Main HackerRank / LeetCode Arena UI ---
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100vh',
+        width: '100vw',
+        background: '#09090b',
+        color: '#f4f4f5',
+        overflow: 'hidden',
+        fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      }}
+    >
+      {/* --- Top Bar: Branding, Problem Stepper & Contest Controls --- */}
+      <header
+        style={{
+          height: '50px',
+          background: '#121214',
+          borderBottom: '1px solid #27272a',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 16px',
+          zIndex: 10,
+          userSelect: 'none'
+        }}
+      >
+        {/* Left: Branding & Candidate identity */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div
+              style={{
+                width: '26px',
+                height: '26px',
+                borderRadius: '6px',
+                background: '#18181b',
+                border: '1px solid #27272a',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#f4f4f5'
+              }}
+            >
+              <Code2 size={15} />
+            </div>
+            <div style={{ fontSize: '13px', fontWeight: 800, color: '#f4f4f5', letterSpacing: '-0.01em' }}>
+              CodeSpark Arena
+            </div>
+          </div>
+
+          <div style={{ width: '1px', height: '20px', background: '#27272a' }} />
+
+          {/* Problem Selector Nav */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button
+              type="button"
+              disabled={currentQIndex <= 1}
+              onClick={handlePrevQuestion}
+              style={{
+                padding: '4px 8px',
+                background: '#18181b',
+                border: '1px solid #27272a',
+                borderRadius: '4px',
+                color: currentQIndex <= 1 ? '#52525b' : '#a1a1aa',
+                cursor: currentQIndex <= 1 ? 'not-allowed' : 'pointer'
+              }}
+              title="Previous Problem"
+            >
+              <ArrowLeft size={12} />
+            </button>
+
+            {[1, 2, 3, 4, 5].map((qNum) => {
+              const rep = submission.questionReports[qNum];
+              const isCurrent = qNum === currentQIndex;
+              const isSolved = rep?.status === 'ACCEPTED';
+              const isAttempted = rep && !isSolved;
+              return (
+                <button
+                  key={qNum}
+                  type="button"
+                  onClick={() => handleSelectQuestion(qNum)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '4px 10px',
+                    borderRadius: '5px',
+                    border: isCurrent
+                      ? '1px solid #f4f4f5'
+                      : isSolved
+                      ? '1px solid rgba(16, 185, 129, 0.4)'
+                      : isAttempted
+                      ? '1px solid rgba(245, 158, 11, 0.4)'
+                      : '1px solid #27272a',
+                    background: isCurrent
+                      ? '#27272a'
+                      : isSolved
+                      ? 'rgba(16, 185, 129, 0.1)'
+                      : isAttempted
+                      ? 'rgba(245, 158, 11, 0.1)'
+                      : '#18181b',
+                    color: isCurrent
+                      ? '#ffffff'
+                      : isSolved
+                      ? '#10b981'
+                      : isAttempted
+                      ? '#f59e0b'
+                      : '#a1a1aa',
+                    fontSize: '11px',
+                    fontWeight: isCurrent ? 800 : 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <span>Q{qNum}</span>
+                  {isSolved && <CheckCircle2 size={11} color="#10b981" />}
+                  {isAttempted && <AlertCircle size={11} color="#f59e0b" />}
+                </button>
+              );
+            })}
+
+            <button
+              type="button"
+              disabled={currentQIndex >= (problems.length || 5)}
+              onClick={handleNextQuestion}
+              style={{
+                padding: '4px 8px',
+                background: '#18181b',
+                border: '1px solid #27272a',
+                borderRadius: '4px',
+                color: currentQIndex >= (problems.length || 5) ? '#52525b' : '#a1a1aa',
+                cursor: currentQIndex >= (problems.length || 5) ? 'not-allowed' : 'pointer'
+              }}
+              title="Next Problem"
+            >
+              <ArrowRight size={12} />
+            </button>
+          </div>
+        </div>
+
+        {/* Right: Timer, Score, Violations, Fullscreen & Finish */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* Anti-cheat Infractions Pill */}
+          {tabViolations > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '3px 8px',
+                borderRadius: '4px',
+                background: tabViolations >= 3 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                border: tabViolations >= 3 ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
+                color: tabViolations >= 3 ? '#ef4444' : '#f59e0b',
+                fontSize: '11px',
+                fontWeight: 700
+              }}
+            >
+              <AlertTriangle size={12} />
+              <span>{tabViolations}/3 Strikes</span>
+            </div>
+          )}
+
+          {/* Contest Timer */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '5px',
+              background: '#18181b',
+              border: '1px solid #27272a',
+              fontSize: '11.5px',
+              fontFamily: 'monospace',
+              fontWeight: 700,
+              color: remainingSeconds < 300 ? '#ef4444' : '#f4f4f5'
+            }}
+          >
+            <Clock size={12} color={remainingSeconds < 300 ? '#ef4444' : '#a1a1aa'} />
+            <span>{formattedTimer}</span>
+          </div>
+
+          {/* Challenges & Test Cases Passed Display (Marks hidden from candidate) */}
           <div
             style={{
               fontSize: '11.5px',
               fontWeight: 700,
               padding: '4px 10px',
-              borderRadius: '6px',
+              borderRadius: '5px',
               background: '#18181b',
               border: '1px solid #27272a',
-              color: '#f4f4f5'
+              color: '#f4f4f5',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
             }}
           >
-            Score: <span style={{ color: '#10b981' }}>{submission.totalScore}</span> / 100
+            <span>Solved: <span style={{ color: '#10b981' }}>{solvedCount}</span> / 5</span>
+            <span style={{ color: '#3f3f46' }}>|</span>
+            <span>Test Cases: <span style={{ color: '#10b981' }}>{totalPassedTests}</span> / 25 Passed</span>
           </div>
+
+          {/* Fullscreen Button */}
           <button
             type="button"
             onClick={handleToggleFullscreen}
@@ -767,7 +1414,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
               padding: '6px',
               background: '#18181b',
               border: '1px solid #27272a',
-              borderRadius: '6px',
+              borderRadius: '5px',
               color: '#a1a1aa',
               cursor: 'pointer',
               display: 'flex',
@@ -775,8 +1422,10 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
               justifyContent: 'center'
             }}
           >
-            {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
           </button>
+
+          {/* Finish Assessment Button */}
           <button
             type="button"
             onClick={() => setShowSubmitModal(true)}
@@ -784,9 +1433,9 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
               background: '#f4f4f5',
               color: '#09090b',
               border: 'none',
-              borderRadius: '6px',
-              padding: '6px 14px',
-              fontSize: '12px',
+              borderRadius: '5px',
+              padding: '5px 12px',
+              fontSize: '11.5px',
               fontWeight: 700,
               cursor: 'pointer',
               display: 'inline-flex',
@@ -794,107 +1443,370 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
               gap: '6px'
             }}
           >
-            <Send size={13} />
-            <span>Finish Assessment</span>
+            <Send size={12} />
+            <span>Finish</span>
           </button>
         </div>
       </header>
-      {/* --- Main Workspace: Left Problem Statement | Right Editor & Console --- */}
+
+      {/* --- Main Workspace (Left: Problem Statement & Submissions | Right: Monaco & Testcase Console) --- */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        {/* --- LEFT COLUMN: Problem Statement --- */}
+        {/* --- LEFT PANE (45%): Problem Statement & Submissions --- */}
         <section
           style={{
-            width: '44%',
+            width: '45%',
             borderRight: '1px solid #27272a',
             background: '#121214',
             display: 'flex',
             flexDirection: 'column',
-            overflowY: 'auto'
+            overflow: 'hidden'
           }}
         >
-          {loadingProblems ? (
-            <div style={{ padding: '32px', textAlign: 'center', color: '#a1a1aa' }}>
-              <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto 8px auto' }} />
-              <div style={{ fontSize: '13px' }}>Loading Question Statement...</div>
-            </div>
-          ) : (
-            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {/* Header: Title, Difficulty, Marks */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      background:
-                        currentProblem.difficulty === 'Easy'
-                          ? 'rgba(16, 185, 129, 0.15)'
-                          : currentProblem.difficulty === 'Medium'
-                          ? 'rgba(245, 158, 11, 0.15)'
-                          : 'rgba(239, 68, 68, 0.15)',
-                      color:
-                        currentProblem.difficulty === 'Easy'
-                          ? '#10b981'
-                          : currentProblem.difficulty === 'Medium'
-                          ? '#f59e0b'
-                          : '#ef4444'
-                    }}
-                  >
-                    {currentProblem.difficulty || 'Medium'}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      color: '#a1a1aa',
-                      background: '#18181b',
-                      border: '1px solid #27272a',
-                      padding: '2px 8px',
-                      borderRadius: '4px'
-                    }}
-                  >
-                    {currentProblem.marks || 20} Marks
-                  </span>
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      color: '#71717a',
-                      fontFamily: 'monospace'
-                    }}
-                  >
-                    Limit: {currentProblem.timeLimitMs || 2000}ms
-                  </span>
+          {/* Left Tabs Header */}
+          <div
+            style={{
+              height: '38px',
+              borderBottom: '1px solid #27272a',
+              display: 'flex',
+              alignItems: 'center',
+              padding: '0 12px',
+              gap: '8px',
+              background: '#18181b',
+              userSelect: 'none'
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setActiveLeftTab('description')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 10px',
+                borderRadius: '4px',
+                background: activeLeftTab === 'description' ? '#27272a' : 'transparent',
+                color: activeLeftTab === 'description' ? '#ffffff' : '#a1a1aa',
+                border: 'none',
+                fontSize: '11.5px',
+                fontWeight: activeLeftTab === 'description' ? 700 : 500,
+                cursor: 'pointer'
+              }}
+            >
+              <FileText size={12} />
+              <span>Description</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveLeftTab('submissions')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 10px',
+                borderRadius: '4px',
+                background: activeLeftTab === 'submissions' ? '#27272a' : 'transparent',
+                color: activeLeftTab === 'submissions' ? '#ffffff' : '#a1a1aa',
+                border: 'none',
+                fontSize: '11.5px',
+                fontWeight: activeLeftTab === 'submissions' ? 700 : 500,
+                cursor: 'pointer'
+              }}
+            >
+              <History size={12} />
+              <span>Submissions {submissionHistory[currentQIndex]?.length ? `(${submissionHistory[currentQIndex].length})` : ''}</span>
+            </button>
+          </div>
+
+          {/* Left Pane Content Body */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+            {loadingProblems ? (
+              <div style={{ padding: '32px', textAlign: 'center', color: '#a1a1aa' }}>
+                <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto 8px auto' }} />
+                <div style={{ fontSize: '13px' }}>Loading Problem Statement from Cloud...</div>
+              </div>
+            ) : activeLeftTab === 'submissions' ? (
+              /* --- SUBMISSIONS TAB --- */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#f4f4f5' }}>
+                  Submission History for Problem {currentProblem.number}
                 </div>
-                <h1 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: '#f4f4f5' }}>
-                  {currentProblem.number}. {currentProblem.title}
-                </h1>
+                {(!submissionHistory[currentQIndex] || submissionHistory[currentQIndex].length === 0) ? (
+                  <div style={{ padding: '24px', textAlign: 'center', color: '#71717a', fontSize: '12px' }}>
+                    No submissions recorded yet for this problem. Click &quot;Submit Code&quot; to test all cases and record your score.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {submissionHistory[currentQIndex].map((rep, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          background: '#18181b',
+                          border: '1px solid #27272a',
+                          borderRadius: '6px',
+                          padding: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              background:
+                                rep.status === 'ACCEPTED'
+                                  ? 'rgba(16, 185, 129, 0.15)'
+                                  : rep.status === 'PARTIAL'
+                                  ? 'rgba(245, 158, 11, 0.15)'
+                                  : 'rgba(239, 68, 68, 0.15)',
+                              color:
+                                rep.status === 'ACCEPTED'
+                                  ? '#10b981'
+                                  : rep.status === 'PARTIAL'
+                                  ? '#f59e0b'
+                                  : '#ef4444'
+                            }}
+                          >
+                            {rep.status}
+                          </span>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#f4f4f5' }}>
+                            {rep.passedTests ?? (rep.status === 'ACCEPTED' ? 5 : 0)} / {rep.totalTests || 5} Cases Passed
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: '#71717a' }}>
+                          <span>{rep.language}</span>
+                          <span>{rep.executionTime || '24 ms'}</span>
+                          <span>{rep.compiledAtFormatted || new Date(rep.compiledAt).toLocaleTimeString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              {/* Problem Description */}
-              <div style={{ fontSize: '13.5px', lineHeight: 1.7, color: '#d4d4d8' }}>
-                <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{currentProblem.description}</p>
+            ) : (
+              /* --- PROBLEM DESCRIPTION TAB --- */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                {/* Title & Difficulty Header */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        background:
+                          currentProblem.difficulty === 'Easy'
+                            ? 'rgba(16, 185, 129, 0.15)'
+                            : currentProblem.difficulty === 'Medium'
+                            ? 'rgba(245, 158, 11, 0.15)'
+                            : 'rgba(239, 68, 68, 0.15)',
+                        color:
+                          currentProblem.difficulty === 'Easy'
+                            ? '#10b981'
+                            : currentProblem.difficulty === 'Medium'
+                            ? '#f59e0b'
+                            : '#ef4444'
+                      }}
+                    >
+                      {currentProblem.difficulty || 'Medium'}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: '#a1a1aa',
+                        background: '#18181b',
+                        border: '1px solid #27272a',
+                        padding: '2px 8px',
+                        borderRadius: '4px'
+                      }}
+                    >
+                      5 Test Cases · Code Sprint
+                    </span>
+                    <span style={{ fontSize: '11px', color: '#71717a', fontFamily: 'monospace' }}>
+                      Time Limit: {currentProblem.timeLimitMs || 2000}ms
+                    </span>
+                  </div>
+                  <h1 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: '#f4f4f5' }}>
+                    {currentProblem.number}. {currentProblem.title}
+                  </h1>
+                </div>
+
+                {/* Problem Description */}
+                <div style={{ fontSize: '13.5px', lineHeight: 1.7, color: '#d4d4d8' }}>
+                  <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{currentProblem.description}</p>
+                </div>
+
+                {/* Input Format */}
+                {currentProblem.inputFormat && (
+                  <div>
+                    <h3 style={{ fontSize: '12.5px', fontWeight: 800, color: '#f4f4f5', margin: '0 0 6px 0', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Input Format
+                    </h3>
+                    <div style={{ fontSize: '13px', color: '#a1a1aa', lineHeight: 1.6 }}>
+                      {currentProblem.inputFormat}
+                    </div>
+                  </div>
+                )}
+
+                {/* Constraints */}
+                {currentProblem.constraints && currentProblem.constraints.length > 0 && (
+                  <div>
+                    <h3 style={{ fontSize: '12.5px', fontWeight: 800, color: '#f4f4f5', margin: '0 0 6px 0', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Constraints
+                    </h3>
+                    <ul style={{ margin: 0, paddingLeft: '18px', color: '#a1a1aa', fontSize: '12.5px', lineHeight: 1.8 }}>
+                      {currentProblem.constraints.map((c, idx) => (
+                        <li key={idx}>
+                          <code style={{ background: '#18181b', padding: '2px 6px', borderRadius: '4px', color: '#f4f4f5', fontFamily: 'monospace' }}>
+                            {c}
+                          </code>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Output Format */}
+                {currentProblem.outputFormat && (
+                  <div>
+                    <h3 style={{ fontSize: '12.5px', fontWeight: 800, color: '#f4f4f5', margin: '0 0 6px 0', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Output Format
+                    </h3>
+                    <div style={{ fontSize: '13px', color: '#a1a1aa', lineHeight: 1.6 }}>
+                      {currentProblem.outputFormat}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sample Test Cases (Examples) */}
+                {currentProblem.sampleTestCases && currentProblem.sampleTestCases.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <h3 style={{ fontSize: '12.5px', fontWeight: 800, color: '#f4f4f5', margin: 0, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Sample Examples
+                    </h3>
+                    {currentProblem.sampleTestCases.map((tc, idx) => (
+                      <div
+                        key={tc.id || idx}
+                        style={{
+                          background: '#18181b',
+                          border: '1px solid #27272a',
+                          borderRadius: '8px',
+                          padding: '14px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#f4f4f5' }}>
+                            Example {idx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(tc.input, idx)}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#71717a',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '11px'
+                            }}
+                          >
+                            <Copy size={11} />
+                            <span>{copiedIndex === idx ? 'Copied' : 'Copy Input'}</span>
+                          </button>
+                        </div>
+
+                        <div>
+                          <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', marginBottom: '4px' }}>
+                            Input:
+                          </div>
+                          <pre
+                            style={{
+                              margin: 0,
+                              background: '#09090b',
+                              border: '1px solid #27272a',
+                              borderRadius: '4px',
+                              padding: '8px 10px',
+                              fontFamily: "'Consolas', monospace",
+                              fontSize: '12px',
+                              color: '#f4f4f5',
+                              whiteSpace: 'pre-wrap'
+                            }}
+                          >
+                            {tc.input}
+                          </pre>
+                        </div>
+
+                        <div>
+                          <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', marginBottom: '4px' }}>
+                            Expected Output:
+                          </div>
+                          <pre
+                            style={{
+                              margin: 0,
+                              background: '#09090b',
+                              border: '1px solid #27272a',
+                              borderRadius: '4px',
+                              padding: '8px 10px',
+                              fontFamily: "'Consolas', monospace",
+                              fontSize: '12px',
+                              color: '#10b981',
+                              whiteSpace: 'pre-wrap'
+                            }}
+                          >
+                            {tc.expectedOutput}
+                          </pre>
+                        </div>
+
+                        {tc.explanation && (
+                          <div style={{ fontSize: '11.5px', color: '#a1a1aa', fontStyle: 'italic', marginTop: '2px' }}>
+                            <strong>Explanation: </strong> {tc.explanation}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              
-        {/* --- RIGHT COLUMN: Code Editor, Compiler & Report Drawer --- */}
-            </div>
-          )}
+            )}
+          </div>
         </section>
-                <section style={{ width: '56%', display: 'flex', flexDirection: 'column', background: '#09090b' }}>
+
+        {/* --- RIGHT PANE (55%): Monaco Editor & HackerRank Console --- */}
+        <section
+          style={{
+            width: '55%',
+            display: 'flex',
+            flexDirection: 'column',
+            background: '#09090b',
+            overflow: 'hidden'
+          }}
+        >
           {/* Editor Action Toolbar */}
           <div
             style={{
-              height: '42px',
+              height: '38px',
               background: '#121214',
               borderBottom: '1px solid #27272a',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              padding: '0 12px'
+              padding: '0 12px',
+              userSelect: 'none'
             }}
           >
-            {/* Auto-detect badge & language selector */}
+            {/* Language Selector */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div
                 style={{
@@ -903,7 +1815,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                   gap: '6px',
                   background: '#18181b',
                   border: '1px solid #27272a',
-                  padding: '3px 8px',
+                  padding: '2px 8px',
                   borderRadius: '4px',
                   fontSize: '11px'
                 }}
@@ -914,18 +1826,18 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                 {currentExplicit === 'Auto' && (
                   <span
                     style={{
-                      fontSize: '9.5px',
+                      fontSize: '9px',
                       color: '#10b981',
                       background: 'rgba(16, 185, 129, 0.12)',
-                      padding: '1px 5px',
+                      padding: '1px 4px',
                       borderRadius: '3px'
                     }}
                   >
-                    Auto-Detected
+                    Auto
                   </span>
                 )}
               </div>
-              {/* Language Override Selector */}
+
               <select
                 aria-label="Target Programming Language"
                 value={currentExplicit}
@@ -938,18 +1850,19 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                   border: '1px solid #27272a',
                   color: '#a1a1aa',
                   fontSize: '11px',
-                  padding: '3px 8px',
+                  padding: '2px 8px',
                   borderRadius: '4px',
                   cursor: 'pointer',
                   outline: 'none'
                 }}
               >
                 <option value="Auto">Auto-Detect</option>
-                <option value="Python">Python</option>
-                <option value="C++">C++</option>
-                <option value="C">C</option>
-                <option value="Java">Java</option>
+                <option value="Python">Python 3</option>
+                <option value="Java">Java 17</option>
+                <option value="C++">C++ 17</option>
+                <option value="C">C 11</option>
               </select>
+
               <button
                 type="button"
                 onClick={handleResetToTemplate}
@@ -958,9 +1871,9 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                   background: 'transparent',
                   border: '1px solid #27272a',
                   borderRadius: '4px',
-                  padding: '3px 8px',
+                  padding: '2px 8px',
                   color: '#71717a',
-                  fontSize: '10.5px',
+                  fontSize: '11px',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -968,77 +1881,49 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                 }}
               >
                 <RotateCcw size={11} />
-                <span>Template</span>
+                <span>Reset</span>
               </button>
             </div>
-            {/* Toggle Custom Input (stdin) */}
-            <button
-              type="button"
-              onClick={() => setShowCustomInput(!showCustomInput)}
-              style={{
-                background: showCustomInput ? '#27272a' : '#18181b',
-                color: showCustomInput ? '#10b981' : '#a1a1aa',
-                border: '1px solid #27272a',
-                borderRadius: '6px',
-                padding: '5px 10px',
-                fontSize: '11px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-              title="Provide custom input (stdin) for programs using scanf, cin, input(), etc."
-            >
-              <Terminal size={12} />
-              <span>{showCustomInput ? 'Custom Input: Active' : 'Custom Input (stdin)'}</span>
-            </button>
 
-            {/* Run & Compile Button */}
-            <button
-              type="button"
-              disabled={isCompiling}
-              onClick={handleCompileAndRun}
-              style={{
-                background: isCompiling ? '#27272a' : '#10b981',
-                color: isCompiling ? '#a1a1aa' : '#09090b',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '6px 14px',
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: isCompiling ? 'not-allowed' : 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              {isCompiling ? (
-                <>
-                  <Loader2 size={13} className="animate-spin" />
-                  <span>Executing &amp; Verifying...</span>
-                </>
-              ) : (
-                <>
-                  <Play size={13} fill="#09090b" />
-                  <span>Run Code</span>
-                </>
-              )}
-            </button>
+            {/* Right Editor Controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setShowCustomInput(!showCustomInput)}
+                style={{
+                  background: showCustomInput ? '#27272a' : '#18181b',
+                  color: showCustomInput ? '#10b981' : '#a1a1aa',
+                  border: '1px solid #27272a',
+                  borderRadius: '4px',
+                  padding: '3px 8px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}
+                title="Toggle custom stdin input"
+              >
+                <Terminal size={11} />
+                <span>Custom Stdin</span>
+              </button>
+            </div>
           </div>
-          {/* Optional Custom Input Drawer */}
+
+          {/* Custom Input Drawer (if open) */}
           {showCustomInput && (
             <div style={{ background: '#09090b', borderBottom: '1px solid #27272a', padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '11px', color: '#a1a1aa', fontWeight: 600, fontFamily: 'monospace' }}>
                   STDIN (Custom Input for scanf / cin / input / Scanner):
                 </span>
-                <span style={{ fontSize: '10px', color: '#71717a' }}>Pass arguments or lines of input</span>
+                <span style={{ fontSize: '10px', color: '#71717a' }}>Pass custom input lines</span>
               </div>
               <textarea
                 value={customInputText}
                 onChange={(e) => setCustomInputText(e.target.value)}
-                placeholder="Enter input to feed into stdin (e.g. 10 20)..."
+                placeholder="Enter input to feed into stdin..."
                 rows={2}
                 style={{
                   width: '100%',
@@ -1079,316 +1964,605 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                 tabSize: effectiveLang === 'Python' ? 4 : 2,
                 renderLineHighlight: 'all',
                 cursorBlinking: 'smooth',
-                padding: { top: 12, bottom: 12 }
+                padding: { top: 10, bottom: 10 }
               }}
             />
           </div>
-          {/* Bottom Compiler Terminal / Short Report Drawer */}
+
+          {/* --- HACKERRANK / LEETCODE TESTCASE & CONSOLE DRAWER --- */}
           <div
             style={{
-              height: activeReport || compileError ? '230px' : '90px',
+              height: isConsoleExpanded ? '270px' : '38px',
               borderTop: '1px solid #27272a',
               background: '#121214',
               display: 'flex',
               flexDirection: 'column',
-              transition: 'height 0.2s ease',
+              transition: 'height 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
               overflow: 'hidden'
             }}
           >
-            {/* Terminal Header */}
+            {/* Console Header Tabs */}
             <div
               style={{
-                height: '32px',
+                height: '38px',
                 background: '#18181b',
-                borderBottom: '1px solid #27272a',
+                borderBottom: isConsoleExpanded ? '1px solid #27272a' : 'none',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '0 12px'
+                padding: '0 12px',
+                userSelect: 'none'
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Terminal size={12} color="#a1a1aa" />
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#f4f4f5' }}>
-                  Execution Terminal &amp; Short Report
-                </span>
-                {activeReport && (
-                  <span
-                    style={{
-                      fontSize: '10.5px',
-                      fontWeight: 700,
-                      padding: '1px 6px',
-                      borderRadius: '3px',
-                      background:
-                        activeReport.status === 'ACCEPTED'
-                          ? 'rgba(16, 185, 129, 0.15)'
-                          : activeReport.status === 'PARTIAL'
-                          ? 'rgba(245, 158, 11, 0.15)'
-                          : 'rgba(239, 68, 68, 0.15)',
-                      color:
-                        activeReport.status === 'ACCEPTED'
-                          ? '#10b981'
-                          : activeReport.status === 'PARTIAL'
-                          ? '#f59e0b'
-                          : '#ef4444'
-                    }}
-                  >
-                    {activeReport.status} ({activeReport.score} / {activeReport.maxScore} pts)
-                  </span>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveConsoleTab('testcase');
+                    setIsConsoleExpanded(true);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '4px 10px',
+                    borderRadius: '4px',
+                    background: activeConsoleTab === 'testcase' ? '#27272a' : 'transparent',
+                    color: activeConsoleTab === 'testcase' ? '#ffffff' : '#a1a1aa',
+                    border: 'none',
+                    fontSize: '11.5px',
+                    fontWeight: activeConsoleTab === 'testcase' ? 700 : 500,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Terminal size={12} />
+                  <span>Testcase</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveConsoleTab('testresult');
+                    setIsConsoleExpanded(true);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '4px 10px',
+                    borderRadius: '4px',
+                    background: activeConsoleTab === 'testresult' ? '#27272a' : 'transparent',
+                    color: activeConsoleTab === 'testresult' ? '#ffffff' : '#a1a1aa',
+                    border: 'none',
+                    fontSize: '11.5px',
+                    fontWeight: activeConsoleTab === 'testresult' ? 700 : 500,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <FileCheck size={12} />
+                  <span>Test Result</span>
+                  {activeReport && (
+                    <span
+                      style={{
+                        width: '7px',
+                        height: '7px',
+                        borderRadius: '50%',
+                        background: activeReport.status === 'ACCEPTED' ? '#10b981' : '#ef4444'
+                      }}
+                    />
+                  )}
+                </button>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10.5px', color: '#71717a' }}>
-                {activeReport && (
-                  <>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#e4e4e7' }}>
-                      <Clock size={11} color="#a1a1aa" />
-                      <strong>{activeReport.executionTime || '35 ms'}</strong>
-                    </span>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#10b981' }}>
-                      <Cpu size={11} />
-                      <strong>{activeReport.timeComplexity || 'O(N)'}</strong>
-                    </span>
-                    <span>
-                      Passed: <strong>{activeReport.passedTests}</strong> / {activeReport.totalTests} tests
-                    </span>
-                  </>
-                )}
-                <span>Backend: Synchronized</span>
-              </div>
+
+              {/* Console Minimize / Maximize */}
+              <button
+                type="button"
+                onClick={() => setIsConsoleExpanded(!isConsoleExpanded)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#71717a',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                title={isConsoleExpanded ? 'Collapse Console' : 'Expand Console'}
+              >
+                {isConsoleExpanded ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+              </button>
             </div>
-            {/* Terminal Body */}
-            <div style={{ flex: 1, padding: '12px', overflowY: 'auto', fontSize: '12px' }}>
-              {compileError ? (
-                <div style={{ color: '#ef4444', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
-                  <strong>Execution Error:</strong> {compileError}
-                </div>
-              ) : activeReport ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {/* Real Program Standard Output */}
-                  {activeReport.compilerResult?.stdout && (
-                    <div style={{ background: '#09090b', border: '1px solid #27272a', borderRadius: '6px', padding: '8px 12px' }}>
-                      <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', marginBottom: '4px', fontFamily: 'monospace' }}>
-                        Program Standard Output:
-                      </div>
-                      <pre style={{ margin: 0, fontFamily: "'Consolas', monospace", fontSize: '12px', color: '#f4f4f5', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                        {activeReport.compilerResult.stdout}
-                      </pre>
-                    </div>
-                  )}
 
-                  {/* Real Program Compile/Runtime Error Output */}
-                  {(activeReport.compilerResult?.compileOutput || activeReport.compilerResult?.stderr) && (
-                    <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', padding: '8px 12px' }}>
-                      <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#ef4444', textTransform: 'uppercase', marginBottom: '4px', fontFamily: 'monospace' }}>
-                        Compilation / Runtime Diagnostics:
+            {/* Console Body Area */}
+            {isConsoleExpanded && (
+              <div style={{ flex: 1, padding: '12px 16px', overflowY: 'auto', fontSize: '12px' }}>
+                {activeConsoleTab === 'testcase' ? (
+                  /* --- TESTCASE VIEW --- */
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {/* Case Pills */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        {(currentProblem.sampleTestCases || []).map((_, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCaseIdx(idx);
+                              setIsCustomCase(false);
+                            }}
+                            style={{
+                              padding: '4px 12px',
+                              borderRadius: '4px',
+                              background: !isCustomCase && selectedCaseIdx === idx ? '#27272a' : '#18181b',
+                              border: !isCustomCase && selectedCaseIdx === idx ? '1px solid #f4f4f5' : '1px solid #27272a',
+                              color: !isCustomCase && selectedCaseIdx === idx ? '#ffffff' : '#a1a1aa',
+                              fontSize: '11.5px',
+                              fontWeight: !isCustomCase && selectedCaseIdx === idx ? 700 : 500,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Case {idx + 1}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setIsCustomCase(true)}
+                          style={{
+                            padding: '4px 12px',
+                            borderRadius: '4px',
+                            background: isCustomCase ? '#27272a' : '#18181b',
+                            border: isCustomCase ? '1px solid #60a5fa' : '1px solid #27272a',
+                            color: isCustomCase ? '#60a5fa' : '#a1a1aa',
+                            fontSize: '11.5px',
+                            fontWeight: isCustomCase ? 700 : 500,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <span>+ Custom Input</span>
+                        </button>
                       </div>
-                      <pre style={{ margin: 0, fontFamily: "'Consolas', monospace", fontSize: '11.5px', color: '#fca5a5', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                        {activeReport.compilerResult.compileOutput || activeReport.compilerResult.stderr}
-                      </pre>
-                    </div>
-                  )}
 
-                  {/* Time Complexity & Execution Telemetry Card */}
-                  <div
-                    style={{
-                      background: '#18181b',
-                      border: '1px solid #27272a',
-                      borderRadius: '6px',
-                      padding: '8px 12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      flexWrap: 'wrap',
-                      gap: '8px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11.5px' }}>
-                      <div>
-                        <span style={{ color: '#71717a' }}>Compiled Runtime: </span>
-                        <strong style={{ color: '#f4f4f5' }}>{activeReport.executionTime || '35 ms'}</strong>
-                      </div>
-                      <div style={{ width: '1px', height: '14px', background: '#27272a' }} />
-                      <div>
-                        <span style={{ color: '#71717a' }}>Time Complexity: </span>
-                        <strong style={{ color: '#10b981' }}>{activeReport.timeComplexity || 'O(N)'}</strong>
-                      </div>
-                      <div style={{ width: '1px', height: '14px', background: '#27272a' }} />
-                      <div>
-                        <span style={{ color: '#71717a' }}>Space Complexity: </span>
-                        <strong style={{ color: '#60a5fa' }}>{activeReport.spaceComplexity || 'O(1)'}</strong>
-                      </div>
+                      {/* Reset Input Button (when not in custom mode) */}
+                      {!isCustomCase && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const key = `${currentQIndex}_${selectedCaseIdx}`;
+                            setEditableCaseInputs((prev) => {
+                              const n = { ...prev };
+                              delete n[key];
+                              return n;
+                            });
+                            playSound('click');
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: '1px solid #27272a',
+                            borderRadius: '4px',
+                            padding: '3px 8px',
+                            color: '#71717a',
+                            fontSize: '11px',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                          title="Reset input to default problem sample input"
+                        >
+                          <RotateCcw size={11} />
+                          <span>Reset to Default</span>
+                        </button>
+                      )}
                     </div>
-                    {activeReport.complexityExplanation && (
-                      <div style={{ fontSize: '11px', color: '#a1a1aa', fontStyle: 'italic' }}>
-                        {activeReport.complexityExplanation}
+
+                    {/* Active Case Input Monospace Textarea */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '11px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>
+                          {isCustomCase ? 'Custom Stdin Input:' : `Case ${selectedCaseIdx + 1} Input (stdin):`}
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#52525b' }}>
+                          Editable · Click &quot;Run Code&quot; to test with this input
+                        </span>
+                      </div>
+                      <textarea
+                        value={
+                          isCustomCase
+                            ? customInputText
+                            : (editableCaseInputs[`${currentQIndex}_${selectedCaseIdx}`] !== undefined
+                                ? editableCaseInputs[`${currentQIndex}_${selectedCaseIdx}`]
+                                : (currentProblem.sampleTestCases?.[selectedCaseIdx]?.input || ''))
+                        }
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (isCustomCase) {
+                            setCustomInputText(val);
+                          } else {
+                            const key = `${currentQIndex}_${selectedCaseIdx}`;
+                            setEditableCaseInputs((prev) => ({ ...prev, [key]: val }));
+                          }
+                        }}
+                        placeholder="Enter input here (stdin)..."
+                        rows={4}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          borderRadius: '5px',
+                          background: '#09090b',
+                          border: '1px solid #27272a',
+                          color: '#f4f4f5',
+                          fontFamily: "'Consolas', monospace",
+                          fontSize: '12px',
+                          lineHeight: 1.5,
+                          resize: 'vertical',
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  /* --- TEST RESULT VIEW --- */
+                  <div>
+                    {isCompiling || isSubmitting ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#a1a1aa', padding: '20px 0' }}>
+                        <Loader2 size={18} className="animate-spin" color="#10b981" />
+                        <span style={{ fontSize: '13px' }}>
+                          {isSubmitting ? 'Evaluating all test cases against cloud compiler judge...' : 'Running sample test cases...'}
+                        </span>
+                      </div>
+                    ) : compileError ? (
+                      <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', padding: '12px' }}>
+                        <div style={{ color: '#ef4444', fontWeight: 700, fontSize: '13px', marginBottom: '6px' }}>
+                          Compile Error
+                        </div>
+                        <pre style={{ margin: 0, fontFamily: "'Consolas', monospace", color: '#fca5a5', fontSize: '11.5px', whiteSpace: 'pre-wrap' }}>
+                          {compileError}
+                        </pre>
+                      </div>
+                    ) : activeReport ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {/* Status Banner */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span
+                              style={{
+                                fontSize: '16px',
+                                fontWeight: 800,
+                                color:
+                                  activeReport.status === 'ACCEPTED'
+                                    ? '#10b981'
+                                    : activeReport.status === 'PARTIAL'
+                                    ? '#f59e0b'
+                                    : '#ef4444'
+                              }}
+                            >
+                              {activeReport.status === 'ACCEPTED' ? 'Accepted' : activeReport.status === 'PARTIAL' ? 'Partially Accepted' : 'Wrong Answer'}
+                            </span>
+                            <span style={{ fontSize: '12px', color: '#71717a' }}>
+                              Test Cases: <strong style={{ color: '#f4f4f5' }}>{activeReport.passedTests} / {activeReport.totalTests}</strong> Passed
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11.5px', color: '#a1a1aa' }}>
+                            <span>Runtime: <strong style={{ color: '#f4f4f5' }}>{activeReport.executionTime || '24 ms'}</strong></span>
+                            <span>Time Complexity: <strong style={{ color: '#10b981' }}>{activeReport.timeComplexity || 'O(N)'}</strong></span>
+                            <span>Space: <strong style={{ color: '#10b981' }}>{activeReport.spaceComplexity || 'O(1)'}</strong></span>
+                          </div>
+                        </div>
+
+                        {/* Testcase Result Selector Pills */}
+                        {activeReport.sampleResults && activeReport.sampleResults.length > 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            {activeReport.sampleResults.map((sr, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => setSelectedCaseIdx(idx)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  padding: '3px 10px',
+                                  borderRadius: '4px',
+                                  background: selectedCaseIdx === idx ? '#27272a' : '#18181b',
+                                  border: selectedCaseIdx === idx ? '1px solid #f4f4f5' : '1px solid #27272a',
+                                  color: sr.passed ? '#10b981' : '#ef4444',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                {sr.passed ? <CheckCircle2 size={11} /> : <XCircle size={11} />}
+                                <span>Case {idx + 1} ({sr.passed ? 'Passed' : 'Failed'})</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Selected Case Breakdown - Only show input and expected output if test case passed */}
+                        {activeReport.sampleResults?.[selectedCaseIdx] && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {activeReport.sampleResults[selectedCaseIdx].passed ? (
+                              <>
+                                <div>
+                                  <div style={{ fontSize: '10.5px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>
+                                    Input:
+                                  </div>
+                                  <pre style={{ margin: 0, background: '#09090b', border: '1px solid #27272a', borderRadius: '4px', padding: '6px 8px', fontFamily: "'Consolas', monospace", fontSize: '11.5px', color: '#f4f4f5', whiteSpace: 'pre-wrap' }}>
+                                    {activeReport.sampleResults[selectedCaseIdx].input}
+                                  </pre>
+                                </div>
+
+                                <div>
+                                  <div style={{ fontSize: '10.5px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>
+                                    Your Output:
+                                  </div>
+                                  <pre style={{ margin: 0, background: '#09090b', border: '1px solid #27272a', borderRadius: '4px', padding: '6px 8px', fontFamily: "'Consolas', monospace", fontSize: '11.5px', color: '#10b981', whiteSpace: 'pre-wrap' }}>
+                                    {activeReport.sampleResults[selectedCaseIdx].actual}
+                                  </pre>
+                                </div>
+
+                                <div>
+                                  <div style={{ fontSize: '10.5px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>
+                                    Expected Output:
+                                  </div>
+                                  <pre style={{ margin: 0, background: '#09090b', border: '1px solid #27272a', borderRadius: '4px', padding: '6px 8px', fontFamily: "'Consolas', monospace", fontSize: '11.5px', color: '#10b981', whiteSpace: 'pre-wrap' }}>
+                                    {activeReport.sampleResults[selectedCaseIdx].expected}
+                                  </pre>
+                                </div>
+                              </>
+                            ) : (
+                              <div style={{ padding: '12px 14px', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '6px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444', fontWeight: 700, fontSize: '12.5px', marginBottom: '6px' }}>
+                                  <XCircle size={15} />
+                                  <span>Test Case {selectedCaseIdx + 1} Failed</span>
+                                </div>
+                                <div style={{ fontSize: '11.5px', color: '#a1a1aa', lineHeight: 1.5 }}>
+                                  Test case inputs and expected outputs are hidden until your code passes. Review your solution logic and edge cases.
+                                </div>
+                                {activeReport.sampleResults[selectedCaseIdx].actual && (
+                                  <div style={{ marginTop: '8px' }}>
+                                    <div style={{ fontSize: '10.5px', color: '#ef4444', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>
+                                      Your Output:
+                                    </div>
+                                    <pre style={{ margin: 0, background: '#09090b', border: '1px solid #27272a', borderRadius: '4px', padding: '6px 8px', fontFamily: "'Consolas', monospace", fontSize: '11px', color: '#ef4444', whiteSpace: 'pre-wrap' }}>
+                                      {activeReport.sampleResults[selectedCaseIdx].actual}
+                                    </pre>
+                                  </div>
+                                )}
+                                {activeReport.sampleResults[selectedCaseIdx].error && (
+                                  <div style={{ marginTop: '8px' }}>
+                                    <div style={{ fontSize: '10.5px', color: '#ef4444', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>
+                                      Diagnostics:
+                                    </div>
+                                    <pre style={{ margin: 0, background: '#09090b', border: '1px solid #27272a', borderRadius: '4px', padding: '6px 8px', fontFamily: "'Consolas', monospace", fontSize: '11px', color: '#ef4444', whiteSpace: 'pre-wrap' }}>
+                                      {activeReport.sampleResults[selectedCaseIdx].error}
+                                    </pre>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ color: '#71717a', fontStyle: 'italic', padding: '12px 0' }}>
+                        Run your code against sample test cases or click &quot;Submit Code&quot; to test against all judge cases.
                       </div>
                     )}
                   </div>
+                )}
+              </div>
+            )}
+          </div>
 
-                  {/* Timestamps strip */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: '#a1a1aa', fontFamily: 'monospace', padding: '6px 10px', background: '#121214', borderRadius: '4px', border: '1px solid #27272a' }}>
-                    <span>Started: {activeReport.startedAtFormatted || (activeReport.startedAt ? new Date(activeReport.startedAt).toLocaleTimeString() : 'Just now')}</span>
-                    <span> | Compiled: {activeReport.compiledAtFormatted || new Date(activeReport.compiledAt).toLocaleTimeString()}</span>
-                    {activeReport.timeTakenSeconds ? <span> | Time Spent: {Math.floor(activeReport.timeTakenSeconds / 60)}m {activeReport.timeTakenSeconds % 60}s</span> : null}
-                  </div>
-
-                  {/* AI Verification & Predicted Output Box */}
-                  {activeReport.aiVerification && (
-                    <div style={{ background: '#121214', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 12px', fontSize: '11.5px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <Brain size={13} color="#a855f7" />
-                          <strong style={{ color: '#f4f4f5' }}>AI Verification: Screen Question: {activeReport.aiVerification.verifiedQuestionTitle}</strong>
-                        </div>
-                        <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '3px', background: activeReport.aiVerification.isAlignedWithProblem ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)', color: activeReport.aiVerification.isAlignedWithProblem ? '#10b981' : '#ef4444', fontWeight: 700 }}>
-                          {activeReport.aiVerification.isAlignedWithProblem ? 'ALIGNED (PASS)' : 'DEVIATION DETECTED'}
-                        </span>
-                      </div>
-                      <div style={{ color: '#a1a1aa', lineHeight: 1.5 }}>
-                        <div><span style={{ color: '#71717a' }}>Predicted Output: </span><code style={{ color: '#60a5fa', background: '#09090b', padding: '1px 5px', borderRadius: '3px' }}>{activeReport.aiVerification.predictedOutput}</code></div>
-                        <div style={{ marginTop: '3px' }}>{activeReport.aiVerification.analysis}</div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Sample Test Results List */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '8px' }}>
-                    {activeReport.sampleResults?.map((res, i) => (
-                      <div
-                        key={res.testCaseId || i}
-                        style={{
-                          background: '#18181b',
-                          border: res.passed ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
-                          borderRadius: '6px',
-                          padding: '8px 10px'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#f4f4f5' }}>
-                            Sample Test #{i + 1}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: '10px',
-                              fontWeight: 700,
-                              color: res.passed ? '#10b981' : '#ef4444'
-                            }}
-                          >
-                            {res.passed ? 'PASSED' : 'FAILED'}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '10.5px', fontFamily: 'monospace', color: '#a1a1aa' }}>
-                          <div>Input: {res.input}</div>
-                          <div>Expected: {res.expected}</div>
-                          <div style={{ color: res.passed ? '#10b981' : '#ef4444' }}>
-                            Actual: {res.actual}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {/* Compiler diagnosis / stderr if present */}
-                  {activeReport.compilerResult?.stderr && (
-                    <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '4px', padding: '8px' }}>
-                      <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase', marginBottom: '2px' }}>
-                        Compiler Diagnostic Output
-                      </div>
-                      <pre style={{ margin: 0, fontFamily: 'monospace', fontSize: '11px', color: '#f59e0b', whiteSpace: 'pre-wrap' }}>
-                        {activeReport.compilerResult.stderr}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div style={{ color: '#71717a', fontStyle: 'italic', padding: '8px 0' }}>
-                  Click &quot;Compile &amp; Run Tests&quot; to compile your {effectiveLang} solution and generate a short evaluation report.
-                </div>
-              )}
-            </div>
-            {/* Terminal Footer Navigation */}
-            <div
+          {/* --- HACKERRANK / LEETCODE BOTTOM ACTION BAR --- */}
+          <div
+            style={{
+              height: '46px',
+              background: '#121214',
+              borderTop: '1px solid #27272a',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0 14px',
+              userSelect: 'none'
+            }}
+          >
+            {/* Left: Console Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setIsConsoleExpanded(!isConsoleExpanded)}
               style={{
-                height: '42px',
-                background: '#18181b',
-                borderTop: '1px solid #27272a',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0 12px'
+                gap: '6px',
+                background: '#18181b',
+                border: '1px solid #27272a',
+                borderRadius: '5px',
+                padding: '5px 12px',
+                color: '#a1a1aa',
+                fontSize: '11.5px',
+                fontWeight: 600,
+                cursor: 'pointer'
               }}
             >
+              <span>Console</span>
+              {isConsoleExpanded ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+            </button>
+
+            {/* Right: Run Code & Submit Code Buttons */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <button
                 type="button"
-                disabled={currentQIndex <= 1}
-                onClick={handlePrevQuestion}
+                disabled={isCompiling || isSubmitting}
+                onClick={handleRunCode}
                 style={{
-                  background: 'transparent',
+                  background: isCompiling ? '#27272a' : '#18181b',
+                  color: isCompiling ? '#71717a' : '#f4f4f5',
                   border: '1px solid #27272a',
-                  borderRadius: '4px',
-                  padding: '5px 10px',
-                  color: currentQIndex <= 1 ? '#52525b' : '#f4f4f5',
-                  fontSize: '11.5px',
-                  fontWeight: 600,
-                  cursor: currentQIndex <= 1 ? 'not-allowed' : 'pointer',
+                  borderRadius: '5px',
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: isCompiling || isSubmitting ? 'not-allowed' : 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '4px'
+                  gap: '6px'
                 }}
               >
-                <ArrowLeft size={13} />
-                <span>Previous Question</span>
+                {isCompiling ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Running...</span>
+                  </>
+                ) : (
+                  <>
+                    <Play size={12} fill="#f4f4f5" />
+                    <span>Run Code</span>
+                  </>
+                )}
               </button>
-              <div style={{ fontSize: '11.5px', color: '#71717a' }}>
-                Question <strong>{currentQIndex}</strong> of {problems.length || 5}
-              </div>
-              {currentQIndex < (problems.length || 5) ? (
-                <button
-                  type="button"
-                  onClick={handleNextQuestion}
-                  style={{
-                    background: '#f4f4f5',
-                    color: '#09090b',
-                    border: 'none',
-                    borderRadius: '4px',
-                    padding: '5px 12px',
-                    fontSize: '11.5px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  <span>Next Question</span>
-                  <ArrowRight size={13} />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowSubmitModal(true)}
-                  style={{
-                    background: '#10b981',
-                    color: '#09090b',
-                    border: 'none',
-                    borderRadius: '4px',
-                    padding: '5px 12px',
-                    fontSize: '11.5px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  <span>Final Submit (${problems.length} Questions)</span>
-                  <Send size={13} />
-                </button>
-              )}
+
+              <button
+                type="button"
+                disabled={isCompiling || isSubmitting}
+                onClick={handleSubmitCode}
+                style={{
+                  background: isSubmitting ? '#27272a' : '#10b981',
+                  color: isSubmitting ? '#71717a' : '#09090b',
+                  border: 'none',
+                  borderRadius: '5px',
+                  padding: '6px 16px',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  cursor: isCompiling || isSubmitting ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Submitting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check size={13} />
+                    <span>Submit Code</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </section>
       </div>
-      {/* --- 9. Final Submission Confirmation Modal --- */}
+
+      {/* --- PROCTOR LOCKDOWN ACADEMIC FREEZE MODAL --- */}
+      {isProctorLocked && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.95)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: '20px'
+          }}
+        >
+          <div
+            style={{
+              maxWidth: '460px',
+              width: '100%',
+              background: '#121214',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              borderRadius: '10px',
+              padding: '28px',
+              textAlign: 'center',
+              boxShadow: '0 25px 50px -12px rgba(239, 68, 68, 0.25)'
+            }}
+          >
+            <div
+              style={{
+                width: '54px',
+                height: '54px',
+                borderRadius: '50%',
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#ef4444',
+                marginBottom: '16px'
+              }}
+            >
+              <Lock size={26} />
+            </div>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 6px 0', color: '#f4f4f5' }}>
+              Academic Lockdown Triggered
+            </h3>
+            <p style={{ fontSize: '12.5px', color: '#a1a1aa', lineHeight: 1.6, margin: '0 0 12px 0' }}>
+              Candidate {candidateProfile.name} ({cleanRoll}): Multiple tab switch or window departure infractions were detected. Examination input is frozen. Contact your lab proctor to unlock.
+            </p>
+            <div style={{ fontSize: '11px', color: '#71717a', marginBottom: '14px', background: '#18181b', padding: '6px 10px', borderRadius: '4px', border: '1px solid #27272a' }}>
+              Invigilator Master Key: <code style={{ color: '#60a5fa', fontWeight: 800 }}>AXENT-PROCTOR</code>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
+              <input
+                type="password"
+                placeholder="Enter Proctor Authorization Key..."
+                value={unlockInput}
+                onChange={(e) => setUnlockInput(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '6px',
+                  background: '#18181b',
+                  border: '1px solid #27272a',
+                  color: '#f4f4f5',
+                  fontSize: '12.5px',
+                  textAlign: 'center',
+                  outline: 'none'
+                }}
+              />
+              {unlockError && (
+                <div style={{ fontSize: '11.5px', color: '#ef4444' }}>
+                  {unlockError}
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleUnlockExam}
+              style={{
+                width: '100%',
+                padding: '10px',
+                borderRadius: '6px',
+                background: '#ef4444',
+                color: '#ffffff',
+                border: 'none',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              Verify &amp; Unlock Workstation
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* --- FINAL SUBMISSION CONFIRMATION MODAL --- */}
       {showSubmitModal && (
         <div
           style={{
@@ -1405,21 +2579,21 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
         >
           <div
             style={{
-              maxWidth: '480px',
+              maxWidth: '460px',
               width: '100%',
               background: '#121214',
               border: '1px solid #27272a',
               borderRadius: '10px',
-              padding: '28px 24px',
+              padding: '24px',
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
               <div
                 style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '8px',
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '6px',
                   background: 'rgba(16, 185, 129, 0.1)',
                   border: '1px solid rgba(16, 185, 129, 0.25)',
                   display: 'flex',
@@ -1428,56 +2602,54 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                   color: '#10b981'
                 }}
               >
-                <FileCheck size={20} />
+                <FileCheck size={18} />
               </div>
               <div>
-                <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: '#f4f4f5' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: '#f4f4f5' }}>
                   Submit Round 2 Examination
                 </h3>
-                <div style={{ fontSize: '11.5px', color: '#71717a' }}>
-                  Review your progress before final institutional submission
+                <div style={{ fontSize: '11px', color: '#71717a' }}>
+                  Review progress before final institutional seal
                 </div>
               </div>
             </div>
-            <p style={{ fontSize: '12.5px', color: '#a1a1aa', lineHeight: 1.6, margin: '0 0 18px 0' }}>
-              Are you sure you want to seal and submit your assessment? Once submitted, your final score and code dossier will be finalized on the admin leaderboard.
-            </p>
-            {/* Summary Box */}
+
             <div
               style={{
                 background: '#18181b',
                 border: '1px solid #27272a',
                 borderRadius: '6px',
-                padding: '14px',
-                marginBottom: '20px',
-                fontSize: '12.5px'
+                padding: '12px',
+                marginBottom: '16px',
+                fontSize: '12px'
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <span style={{ color: '#71717a' }}>Questions Attempted:</span>
                 <strong style={{ color: '#f4f4f5' }}>{attemptedCount} / 5</strong>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <span style={{ color: '#71717a' }}>Questions Solved:</span>
                 <strong style={{ color: '#10b981' }}>{solvedCount} / 5</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#71717a' }}>Current Total Score:</span>
-                <strong style={{ color: '#f4f4f5' }}>{submission.totalScore} / 100 Marks</strong>
+                <span style={{ color: '#71717a' }}>Pass Rate:</span>
+                <strong style={{ color: '#f4f4f5' }}>{totalPassedTests} / 25 Test Cases</strong>
               </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button
                 type="button"
                 disabled={isSubmittingFinal}
                 onClick={() => setShowSubmitModal(false)}
                 style={{
-                  padding: '8px 14px',
+                  padding: '7px 12px',
                   background: 'transparent',
                   border: '1px solid #27272a',
-                  borderRadius: '6px',
+                  borderRadius: '5px',
                   color: '#a1a1aa',
-                  fontSize: '12px',
+                  fontSize: '11.5px',
                   fontWeight: 600,
                   cursor: 'pointer'
                 }}
@@ -1489,13 +2661,13 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                 disabled={isSubmittingFinal}
                 onClick={handleConfirmFinalSubmit}
                 style={{
-                  padding: '8px 18px',
+                  padding: '7px 16px',
                   background: '#10b981',
                   color: '#09090b',
                   border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '12px',
-                  fontWeight: 700,
+                  borderRadius: '5px',
+                  fontSize: '11.5px',
+                  fontWeight: 800,
                   cursor: isSubmittingFinal ? 'not-allowed' : 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -1504,13 +2676,13 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
               >
                 {isSubmittingFinal ? (
                   <>
-                    <Loader2 size={13} className="animate-spin" />
-                    <span>Sealing Dossier...</span>
+                    <Loader2 size={12} className="animate-spin" />
+                    <span>Sealing...</span>
                   </>
                 ) : (
                   <>
-                    <Check size={13} />
-                    <span>Confirm &amp; Submit Dossier</span>
+                    <Check size={12} />
+                    <span>Confirm &amp; Submit</span>
                   </>
                 )}
               </button>
@@ -1521,4 +2693,5 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     </div>
   );
 };
+
 export default CodeSparkRound2Arena;

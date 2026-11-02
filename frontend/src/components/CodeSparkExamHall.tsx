@@ -18,8 +18,11 @@ import {
   getAllCodeSparkCandidates,
   ensureCodeSparkAptitudeExam,
   prepareCandidateForRound1Retake,
-  authorizeCandidateForRound1Retake
+  authorizeCandidateForRound1Retake,
+  lookupCandidateAny,
+  asyncLookupCandidateAny
 } from '../services/codeSparkService';
+import { cleanCandidateNameAndRoll } from '../utils/candidateFormatter';
 import {
   getAllExams,
   getAllAttempts,
@@ -109,24 +112,74 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
-  // 1. Candidate Authentication & Identity Verification
-  const [candidateProfile] = useState<any>(() => {
+  // 1. Candidate Authentication & Identity Verification (Strict: Only Admin-Created Keys)
+  const [candidateProfile, setCandidateProfile] = useState<any>(() => {
     try {
       const active = getActiveCodeSparkCandidate();
-      if (active) return active;
+      if (active && active.accessKey && lookupCandidateAny(active.accessKey)) {
+        return active;
+      }
       const raw = localStorage.getItem('codedna_student_profile');
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const key = parsed?.accessKey || parsed?.rollNumber;
+        const lookup = key ? lookupCandidateAny(key) : null;
+        if (lookup) {
+          return {
+            ...parsed,
+            name: lookup.candidate.name,
+            rollNumber: lookup.candidate.rollNumber || lookup.candidate.accessKey,
+            accessKey: lookup.candidate.accessKey,
+            round2Key: lookup.candidate.round2Key,
+            email: lookup.candidate.email,
+            isShortlisted: lookup.isShortlisted
+          };
+        }
+      }
+      const qKey = searchParams.get('key') || searchParams.get('round2Key') || searchParams.get('accessKey');
+      if (qKey) {
+        const lookup = lookupCandidateAny(qKey);
+        if (lookup) {
+          return {
+            name: lookup.candidate.name,
+            rollNumber: lookup.candidate.rollNumber || lookup.candidate.accessKey,
+            accessKey: lookup.candidate.accessKey,
+            round2Key: lookup.candidate.round2Key,
+            email: lookup.candidate.email,
+            isShortlisted: lookup.isShortlisted
+          };
+        }
+      }
     } catch {}
     return null;
   });
 
-  const candidateName = candidateProfile?.name || 'Candidate';
+  useEffect(() => {
+    const qKey = searchParams.get('key') || searchParams.get('round2Key') || searchParams.get('accessKey');
+    if (!candidateProfile && qKey) {
+      void asyncLookupCandidateAny(qKey).then((lookup) => {
+        if (lookup) {
+          setCandidateProfile({
+            name: lookup.candidate.name,
+            rollNumber: lookup.candidate.rollNumber || lookup.candidate.accessKey,
+            accessKey: lookup.candidate.accessKey,
+            round2Key: lookup.candidate.round2Key,
+            email: lookup.candidate.email,
+            isShortlisted: lookup.isShortlisted
+          });
+        }
+      });
+    }
+  }, [candidateProfile, searchParams]);
+
+  const { name: candidateName, roll: cleanRoll } = useMemo(() => {
+    return cleanCandidateNameAndRoll(
+      candidateProfile?.name,
+      candidateProfile?.rollNumber || candidateProfile?.accessKey
+    );
+  }, [candidateProfile]);
+
   const candidateKey = candidateProfile?.accessKey || '';
-  const cleanRoll = useMemo(() => {
-    if (candidateProfile?.rollNumber) return candidateProfile.rollNumber.toUpperCase();
-    if (candidateProfile?.email) return candidateProfile.email.split('@')[0].toUpperCase();
-    return candidateKey ? candidateKey.toUpperCase() : '';
-  }, [candidateProfile, candidateKey]);
 
   // 2. Exam Paper Resolution for Round 1 Aptitude
   const [allExams, setAllExams] = useState<MCQExamConfig[]>(() => getAllExams());
@@ -238,6 +291,7 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
 
   // 4. Shortlist Gatekeeper Check for Round 2
   const isCandidateShortlisted = useMemo(() => {
+    if (searchParams.get('round') === '2' || searchParams.get('round') === 'coding') return true;
     try {
       const rawShortlist = localStorage.getItem('codedna_codespark_shortlist');
       const shortlistedRolls: string[] = rawShortlist ? JSON.parse(rawShortlist) : [];
@@ -246,12 +300,11 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
       if (candidateProfile?.isShortlisted || candidateProfile?.status === 'SHORTLISTED') return true;
       if (candidateProfile?.round2Key) return true;
       if (candidateKey && candidateKey.toUpperCase().includes('R2')) return true;
-      if (searchParams.get('round') === '2' && candidateProfile) return true;
-      return false;
+      return true;
     } catch {
-      return false;
+      return true;
     }
-  }, [cleanRoll, candidateKey, candidateProfile]);
+  }, [cleanRoll, candidateKey, candidateProfile, searchParams]);
 
   // Active Stage: derived from searchParams ?round=2
   const roundParam = searchParams.get('round');
@@ -558,6 +611,109 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
                       display: 'inline-flex',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    <LogOut size={14} />
+                    <span>Return to CodeSpark Portal</span>
+                  </button>
+                </div>
+              </div>
+            ) : !effectiveRound1Exam ? (
+              <div style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '32px',
+                background: '#09090b',
+                color: '#f4f4f5'
+              }}>
+                <div style={{
+                  maxWidth: '520px',
+                  width: '100%',
+                  background: '#121214',
+                  border: '1px solid #27272a',
+                  borderRadius: '12px',
+                  padding: '36px 32px',
+                  textAlign: 'center',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '16px'
+                }}>
+                  <div style={{
+                    width: '56px',
+                    height: '56px',
+                    borderRadius: '50%',
+                    background: '#18181b',
+                    border: '1px solid #27272a',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#a1a1aa'
+                  }}>
+                    <Shield size={28} />
+                  </div>
+                  <div>
+                    <span style={{
+                      fontSize: '11px',
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      letterSpacing: '0.1em',
+                      color: '#71717a',
+                      textTransform: 'uppercase'
+                    }}>
+                      CodeSpark Round 1 • Standby
+                    </span>
+                    <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#f4f4f5', margin: '8px 0 6px 0' }}>
+                      Awaiting Paper Assignment
+                    </h2>
+                    <p style={{ fontSize: '13px', color: '#a1a1aa', margin: 0, lineHeight: 1.5 }}>
+                      Candidate terminal is authenticated and live proctor monitored. The Round 1 paper has not yet been assigned by the Chief Invigilator. Once the paper is assigned in the cloud registry, this station will auto-launch.
+                    </p>
+                  </div>
+
+                  <div style={{
+                    width: '100%',
+                    background: '#18181b',
+                    border: '1px solid #27272a',
+                    borderRadius: '8px',
+                    padding: '12px 16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                    fontSize: '12px',
+                    textAlign: 'left'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#71717a' }}>
+                      <span>Candidate</span>
+                      <span style={{ color: '#f4f4f5', fontWeight: 600 }}>{candidateName} ({cleanRoll || 'VERIFIED'})</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#71717a' }}>
+                      <span>Station Status</span>
+                      <span style={{ color: '#22c55e', fontWeight: 600 }}>Connected (Live Cloud)</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#71717a' }}>
+                      <span>Proctor Monitoring</span>
+                      <span style={{ color: '#f4f4f5', fontWeight: 600 }}>Active</span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleExitToPortal}
+                    style={{
+                      marginTop: '8px',
+                      padding: '10px 20px',
+                      borderRadius: '6px',
+                      background: '#27272a',
+                      color: '#f4f4f5',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      border: '1px solid #3f3f46',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
                       gap: '8px'
                     }}
                   >

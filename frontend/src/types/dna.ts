@@ -44,6 +44,7 @@ export interface StudentInfo {
   sessionStartTime?: number; // Epoch milliseconds when session began
   examMode?: 'CODING' | 'MCQ';
   mcqExamId?: string;
+  accessKey?: string;
 }
 
 export interface CollegeLabInfo {

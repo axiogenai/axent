@@ -16,7 +16,8 @@ import {
   X,
   Download,
   Zap,
-  RefreshCw
+  RefreshCw,
+  Database
 } from 'lucide-react';
 import { triggerInstallPrompt } from './ui/PWAInstallPrompt';
 import { ThemeMode } from '../types/dna';
@@ -29,6 +30,7 @@ import {
 } from '../services/authService';
 import { ContinuousTabs } from './watermelon-ui';
 import { broadcastRemoteHardRefresh } from '../services/remoteControlService';
+import { wipeEntireDatabaseFromCloud } from '../services/mcqService';
 
 interface NavbarProps {
   theme: ThemeMode;
@@ -130,6 +132,23 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
+  const [isWipingDatabase, setIsWipingDatabase] = useState(false);
+  const handleWipeDatabase = async () => {
+    if (!window.confirm('⚠️ CRITICAL DATABASE WIPE ⚠️\n\nAre you sure you want to completely WIPE THE ENTIRE DATABASE?\n\nThis will permanently delete from cloud:\n• All exams & question banks\n• All student attempts, scores & answer sheets\n• All workstations & live sessions\n\nThis action cannot be undone. Click OK to wipe everything.')) {
+      return;
+    }
+    setIsWipingDatabase(true);
+    try {
+      await wipeEntireDatabaseFromCloud();
+      alert('DATABASE WIPED: All records have been cleared from cloud.');
+      window.location.reload();
+    } catch (err: any) {
+      alert('Failed to wipe database: ' + (err?.message || 'Error'));
+    } finally {
+      setIsWipingDatabase(false);
+    }
+  };
+
   const isPaperSetterRoute = location.pathname.startsWith('/paper-setter');
   const isMcqRoute = location.pathname.startsWith('/mcq');
 
@@ -138,36 +157,23 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   if (isLandingRoute) {
     activeNavItems = [
-      { path: '/code-spark', label: 'Code Spark (3 Nov)', icon: Zap, badge: 'CONTEST' },
-      { path: '/mcq', label: 'Exam Hall', icon: ListChecks }
+      { path: '/code-spark', label: 'Code Spark (3 Nov)', icon: Zap, badge: 'CONTEST' }
     ];
   } else if (isLoginRoute) {
     // Authority Gateway / Login — No student tabs!
     activeNavItems = [];
-  } else if (isAdminRoute) {
-    // Admin CCTV Surveillance — Always expose both Admin CCTV & Paper Setter Portal
-    activeNavItems = [
-      { path: '/admin', label: 'CCTV Live Proctoring', icon: ShieldAlert, badge: 'PROCTOR', badgeColor: 'danger' },
-      { path: '/paper-setter', label: 'Paper Setter Portal', icon: Layers }
-    ];
-  } else if (isPaperSetterRoute) {
-    if (isAdmin) {
-      activeNavItems = [
-        { path: '/admin', label: 'CCTV Live Proctoring', icon: ShieldAlert, badge: 'PROCTOR', badgeColor: 'danger' },
-        { path: '/paper-setter', label: 'Paper Setter Portal', icon: Layers }
-      ];
-    } else {
-      activeNavItems = [
-        { path: '/paper-setter', label: 'Paper Setter Portal', icon: Layers }
-      ];
-    }
+  } else if (isAdminRoute || isPaperSetterRoute) {
+    // Paper Setter is an integrated admin tab; clean header with no redundant center pills
+    activeNavItems = [];
   } else if (isMcqRoute || examMode === 'MCQ') {
     activeNavItems = [];
   } else {
     activeNavItems = [];
   }
 
-  const activeId = activeNavItems.find((item) => location.pathname.startsWith(item.path))?.path ?? location.pathname;
+  const activeId = location.search.includes('tab=paper_setter')
+    ? '/admin?tab=paper_setter'
+    : (activeNavItems.find((item) => item.path === '/admin')?.path ?? '/admin');
 
   return (
     <>
@@ -256,12 +262,12 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {/* Desktop Authority Links */}
           <div className="hidden md:flex items-center gap-2">
-            {/* If on Login route, show button to return to Candidate Examination */}
+            {/* If on Login route, show button to return to CodeSpark Candidate Examination */}
             {isLoginRoute && (
               <button
                 className="btn btn-ghost btn-sm"
-                onClick={() => navigate('/mcq')}
-                title="Candidate Examination Portal"
+                onClick={() => navigate('/code-spark')}
+                title="CodeSpark Candidate Portal"
                 style={{
                   height: '30px',
                   padding: '0 10px',
@@ -275,7 +281,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 }}
               >
                 <ExternalLink size={12} />
-                <span>Candidate Portal</span>
+                <span>CodeSpark Portal</span>
               </button>
             )}
 
@@ -327,11 +333,36 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
+            {/* Clear Database (Wipe Everything from Cloud & Local) */}
+            {isAdminRoute && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={handleWipeDatabase}
+                disabled={isWipingDatabase}
+                title="Permanently wipe all database records, attempts, questions, and workstations from cloud"
+                style={{
+                  height: '30px',
+                  padding: '0 10px',
+                  gap: '5px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  color: '#ef4444',
+                  cursor: isWipingDatabase ? 'not-allowed' : 'pointer'
+                }}
+              >
+                <Database size={12} className={isWipingDatabase ? 'animate-spin' : ''} />
+                <span>{isWipingDatabase ? 'Wiping...' : 'Clear Database'}</span>
+              </button>
+            )}
+
             {/* If in Admin, provide 1-click switch to Paper Setter */}
             {isAdminRoute && (
               <button
                 className="btn btn-ghost btn-sm"
-                onClick={() => navigate('/paper-setter')}
+                onClick={() => navigate('/admin?tab=paper_setter')}
                 title="Open Paper Setter & Examination Builder Portal"
                 style={{
                   height: '30px',
