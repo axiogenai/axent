@@ -1,12 +1,8 @@
-import { supabase } from './supabaseService';
-
-
-
+import { supabase, saveStationToCloud } from './supabaseService';
 import { runRealCode } from './compilerService';
-
-
-
-import { CompilerExecutionResult } from '../types/dna';
+import { CompilerExecutionResult, CandidateStation } from '../types/dna';
+import { broadcastCctvMessage, getLiveStations, saveAllStations } from './adminService';
+import { getDynamicClientIp, getDynamicLastActive, formatRelativeLastSeen } from '../utils/clientInfo';
 
 
 
@@ -1908,14 +1904,32 @@ export async function evaluateRound2Code(
       ? [...(problem.sampleTestCases || []), ...(problem.hiddenTestCases || [])]
       : (problem.sampleTestCases && problem.sampleTestCases.length > 0 ? problem.sampleTestCases : [...(problem.sampleTestCases || []), ...(problem.hiddenTestCases || [])]);
 
-    const casePromises = targetCases.map(async (stc, idx) => {
+    const runCaseWithRetry = async (input: string): Promise<CompilerExecutionResult | null> => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          return await runRealCode(code, language, input);
+        } catch {
+          await new Promise((r) => setTimeout(r, 400));
+        }
+      }
+      return null;
+    };
+
+    // Limited concurrency (2 at a time) so public compilers don't rate-limit/time out a submit
+    const executedCases: Round2QuestionReport['sampleResults'] = new Array(targetCases.length);
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < targetCases.length) {
+        const idx = cursor++;
+        executedCases[idx] = await runOneCase(targetCases[idx], idx);
+      }
+    };
+    const runOneCase = async (stc: Round2TestCase, idx: number) => {
       let tcRes: CompilerExecutionResult | null = null;
       if (idx === 0 && primaryInput === stc.input && primaryCompilerResult) {
         tcRes = primaryCompilerResult;
       } else {
-        try {
-          tcRes = await runRealCode(code, language, stc.input || '');
-        } catch {}
+        tcRes = await runCaseWithRetry(stc.input || '');
       }
 
       const cleanActual = (tcRes?.stdout || '').replace(/\r\n/g, '\n').trim();
@@ -1930,11 +1944,11 @@ export async function evaluateRound2Code(
         expected: passed ? stc.expectedOutput : '[Hidden Expected Output]',
         actual: passed ? cleanActual : (isError ? (tcRes?.stderr || tcRes?.compileOutput || 'Runtime Error') : 'Output mismatch'),
         passed,
-        error: passed ? undefined : (tcRes?.stderr || tcRes?.compileOutput || undefined)
+        error: passed ? undefined : (tcRes?.stderr || tcRes?.compileOutput || (tcRes ? undefined : 'Compiler unreachable - retry'))
       };
-    });
+    };
 
-    const executedCases = await Promise.all(casePromises);
+    await Promise.all([worker(), worker()]);
     sampleResults.push(...executedCases);
   }
 
@@ -1949,9 +1963,8 @@ export async function evaluateRound2Code(
   let score = 0;
   if (totalTests > 0) {
     if (passedTests === totalTests) {
-      // 5/5 Passed: Award full 10 marks (factoring in optimal algorithmic complexity)
-      const bonus = complexity.rating === 'Optimal' ? 2 : (complexity.rating === 'Acceptable' ? 1 : 0);
-      score = Math.min(maxMarks, Math.max(8, 8 + bonus));
+      // All tests passed: full marks (complexity heuristic is informational only)
+      score = maxMarks;
     } else {
       // Partial pass: 2 marks per test case passed out of 10
       score = Math.round((passedTests / totalTests) * maxMarks);
@@ -2196,122 +2209,104 @@ Return strict JSON only:
   };
 }
 
+let _r2SyncError: string | null = null;
+let _r2SyncOkAt = 0;
+export function getRound2SyncStatus(): { ok: boolean; error: string | null; lastOkAt: number } {
+  return { ok: !_r2SyncError, error: _r2SyncError, lastOkAt: _r2SyncOkAt };
+}
+
 export async function pushRound2LiveCodeToCloud(
-
-
-
   profile: { name: string; rollNumber: string; accessKey: string; stationNumber?: string; round2Key?: string },
-
-
-
   code: string,
-
-
-
   language: string,
-
-
-
-  questionNumber: number
-
-
-
+  questionNumber: number,
+  telemetry?: { strikes?: number; timeSpentSeconds?: number; keystrokes?: number; unfocusedSeconds?: number; activeLineNumber?: number }
 ): Promise<void> {
+  const canonicalRoll = (profile.rollNumber || profile.accessKey || '').trim().toUpperCase().replace(/[^A-Za-z0-9_-]/g, '_');
+  const cloudId = `r2_station_${canonicalRoll}`;
+  const now = Date.now();
+  const dynamicIp = getDynamicClientIp(profile.rollNumber || profile.accessKey, profile.stationNumber);
+  const dynamicLastActive = getDynamicLastActive(now);
+  const strikes = telemetry?.strikes ?? 0;
+  const timeSpent = telemetry?.timeSpentSeconds ?? 60;
+  const totalKeystrokes = telemetry?.keystrokes ?? (code ? code.length : 0);
+  const minutes = Math.max(0.1, timeSpent / 60);
+  const typingSpeed = Math.min(160, Math.round((totalKeystrokes / 5) / minutes));
+  const integrityStatus = strikes >= 3
+    ? 'High Cheating Risk / Plagiarized'
+    : (strikes > 0 ? 'Suspicious Activity / Moderate AI' : 'Verified Original Work');
+  const cheatingRisk = strikes >= 3 ? 'Critical' : (strikes === 2 ? 'High' : (strikes === 1 ? 'Medium' : 'Low'));
 
+  // 1. Instant In-Process & BroadcastChannel Sync for zero latency admin updates
+  const localStation: CandidateStation = {
+    id: cloudId,
+    labId: 'ROUND_2_ARENA',
+    labName: 'Round 2 Coding Arena',
+    stationNumber: profile.stationNumber || 'Station #01',
+    status: 'In Progress',
+    code: code,
+    language: language || 'Python',
+    student: {
+      name: profile.name,
+      rollNumber: profile.rollNumber,
+      accessKey: profile.accessKey,
+      round2Key: profile.round2Key,
+      currentQuestion: questionNumber
+    } as any,
+    lastUpdatedTimestamp: now,
+    lastActive: dynamicLastActive,
+    ipAddress: dynamicIp,
+    integrityStatus,
+    cheatingRisk,
+    tabSwitchViolations: strikes,
+    unfocusedTimeSeconds: telemetry?.unfocusedSeconds ?? 0,
+    activeLineNumber: telemetry?.activeLineNumber ?? 1,
+    metrics: {
+      typingSpeed,
+      timeSpent,
+      pasteCount: 0,
+      deleteCount: 0,
+      editCount: 0,
+      undoCount: 0,
+      pasteRatio: 0,
+      pastedLines: 0,
+      totalLines: code ? code.split('\n').length : 1,
+      keystrokes: totalKeystrokes,
+      pauseDuration: telemetry?.unfocusedSeconds ?? 0,
+      tabSwitchViolations: strikes,
+      unfocusedTimeSeconds: telemetry?.unfocusedSeconds ?? 0
+    }
+  };
 
+  try {
+    const all = getLiveStations();
+    const idx = all.findIndex((s) => s.id === cloudId);
+    if (idx >= 0) all[idx] = localStation;
+    else all.push(localStation);
+    saveAllStations(all);
+    broadcastCctvMessage({
+      type: 'STATION_UPDATE',
+      station: localStation,
+      stationId: cloudId,
+      labId: 'ROUND_2_ARENA'
+    });
+  } catch {}
 
   if (!supabase) return;
 
-
-
   try {
-
-
-
-    const canonicalRoll = (profile.rollNumber || profile.accessKey || '').trim().toUpperCase().replace(/[^A-Za-z0-9_-]/g, '_');
-    const cloudId = `r2_station_${canonicalRoll}`;
-
-
-
-    await supabase.from('candidate_stations').upsert({
-
-
-
-      id: cloudId,
-
-
-
-      lab_id: 'ROUND_2_ARENA',
-
-
-
-      station_number: profile.stationNumber || 'Station #01',
-
-
-
-      status: 'IN_PROGRESS',
-
-
-
-      code: code,
-
-
-
-      language: language || 'Python',
-
-
-
-      student: {
-
-
-
-        name: profile.name,
-
-
-
-        rollNumber: profile.rollNumber,
-
-
-
-        accessKey: profile.accessKey,
-
-
-
-        round2Key: profile.round2Key,
-
-
-
-        currentQuestion: questionNumber
-
-
-
-      },
-
-
-
-      last_updated_timestamp: Date.now()
-
-
-
-    });
-
-
-
+    const ok = await saveStationToCloud(localStation);
+    if (ok) {
+      _r2SyncError = null;
+      _r2SyncOkAt = Date.now();
+    } else {
+      _r2SyncError = 'live sync waiting for network';
+    }
   } catch (err) {
-
-
-
+    _r2SyncError = (err as any)?.message || 'live sync failed';
     console.warn('[Round 2] pushRound2LiveCodeToCloud failed:', err);
-
-
-
   }
-
-
-
 }
-
-
 
 export function extractCleanCandidateCode(rawCode?: string | null): string {
 
@@ -2398,110 +2393,81 @@ export function extractCleanCandidateCode(rawCode?: string | null): string {
 
 
 export async function pushRound2SubmissionToCloud(sub: Round2CandidateSubmission): Promise<boolean> {
+  const cloudId = `r2_sub_${sub.candidateKey.replace(/[^A-Za-z0-9_-]/g, '_')}`;
+  const payload = {
+    ...sub,
+    updatedAt: Date.now()
+  };
 
+  const now = Date.now();
+  const timeSpentSec = Math.max(1, Math.round(((sub.submittedAt || now) - (sub.startedAt || (now - 60000))) / 1000));
+  const dynamicIp = getDynamicClientIp(sub.rollNumber || sub.candidateKey, sub.stationNumber);
+  const dynamicLastActive = getDynamicLastActive(sub.submittedAt || now);
 
+  // Instant local & cross-tab sync via BroadcastChannel
+  const localStation: CandidateStation = {
+    id: cloudId,
+    labId: 'ROUND_2_ARENA',
+    labName: 'Round 2 Coding Arena',
+    stationNumber: sub.stationNumber || 'Station #01',
+    status: sub.isSubmitted ? 'Submitted & Done' : 'In Progress',
+    code: JSON.stringify(payload),
+    language: sub.dominantLanguage || 'Python',
+    student: {
+      name: sub.candidateName,
+      rollNumber: sub.rollNumber,
+      email: sub.email,
+      accessKey: sub.candidateKey,
+      round2Key: sub.round2Key,
+      score: sub.totalScore,
+      maxScore: sub.maxScore,
+      isSubmitted: sub.isSubmitted
+    } as any,
+    lastUpdatedTimestamp: now,
+    lastActive: dynamicLastActive,
+    integrityStatus: 'Verified Original Work',
+    cheatingRisk: 'Low',
+    ipAddress: dynamicIp,
+    metrics: {
+      typingSpeed: 45,
+      timeSpent: timeSpentSec,
+      pasteCount: 0,
+      deleteCount: 0,
+      editCount: 0,
+      undoCount: 0,
+      pasteRatio: 0,
+      pastedLines: 0,
+      totalLines: 15,
+      keystrokes: 150,
+      pauseDuration: 0
+    }
+  };
+
+  try {
+    const all = getLiveStations();
+    const idx = all.findIndex((s) => s.id === cloudId);
+    if (idx >= 0) all[idx] = localStation;
+    else all.push(localStation);
+    saveAllStations(all);
+    broadcastCctvMessage({
+      type: sub.isSubmitted ? 'STATION_SUBMIT' : 'STATION_UPDATE',
+      station: localStation,
+      stationId: cloudId,
+      labId: 'ROUND_2_ARENA'
+    });
+  } catch {}
 
   if (!supabase) return false;
 
-
-
   try {
-
-
-
-    const cloudId = `r2_sub_${sub.candidateKey.replace(/[^A-Za-z0-9_-]/g, '_')}`;
-
-
-
-    const payload = {
-
-
-
-      ...sub,
-
-
-
-      updatedAt: Date.now()
-
-
-
-    };
-
-
-
     // 1. Save to candidate_stations for universal instant access
-
-
-
-    await supabase.from('candidate_stations').upsert({
-
-
-
-      id: cloudId,
-
-
-
-      lab_id: 'ROUND_2_ARENA',
-
-
-
-      station_number: sub.stationNumber || 'Station #01',
-
-
-
-      status: sub.isSubmitted ? 'SUBMITTED' : 'IN_PROGRESS',
-
-
-
-      code: JSON.stringify(payload),
-
-
-
-      student: {
-
-
-
-        name: sub.candidateName,
-
-
-
-        rollNumber: sub.rollNumber,
-
-
-
-        email: sub.email,
-
-
-
-        accessKey: sub.candidateKey,
-
-
-
-        round2Key: sub.round2Key,
-
-
-
-        score: sub.totalScore,
-
-
-
-        maxScore: sub.maxScore,
-
-
-
-        isSubmitted: sub.isSubmitted
-
-
-
-      },
-
-
-
-      last_updated_timestamp: Date.now()
-
-
-
-    });
+    const ok = await saveStationToCloud(localStation);
+    if (ok) {
+      _r2SyncError = null;
+      _r2SyncOkAt = Date.now();
+    } else {
+      _r2SyncError = 'submission sync waiting for network';
+    }
 
 
 

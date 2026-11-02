@@ -168,6 +168,8 @@ import {
   parseQuestionsFromPlainText,
   clearRound2Leaderboard
 } from '../../services/round2CodingService';
+import { fetchStationsFromCloud } from '../../services/supabaseService';
+import { getLiveStations } from '../../services/adminService';
 
 
 
@@ -273,11 +275,27 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
   const [copiedCode, setCopiedCode] = useState(false);
+  const [cloudR2Stations, setCloudR2Stations] = useState<CandidateStation[]>([]);
+
+  // Combine props round2Stations with direct cloud polling and local stations for real-time live telemetry
+  const allAvailableR2Stations = useMemo(() => {
+    const map = new Map<string, CandidateStation>();
+    (round2Stations || []).forEach((s) => map.set(s.id, s));
+    cloudR2Stations.forEach((s) => map.set(s.id, s));
+    try {
+      getLiveStations().forEach((s) => {
+        if (s.id.startsWith('r2_') || (s.labId || '').toUpperCase() === 'ROUND_2_ARENA') {
+          map.set(s.id, s);
+        }
+      });
+    } catch {}
+    return Array.from(map.values());
+  }, [round2Stations, cloudR2Stations]);
 
   // Deduplicate round2Stations strictly by candidate roll / email so each student has exactly ONE card
   const uniqueRound2Stations = useMemo(() => {
     const byStudent = new Map<string, CandidateStation>();
-    for (const st of round2Stations) {
+    for (const st of allAvailableR2Stations) {
       const anySt = st as any;
       const key = (
         st.student?.rollNumber ||
@@ -299,7 +317,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
       }
     }
     return Array.from(byStudent.values());
-  }, [round2Stations]);
+  }, [allAvailableR2Stations]);
 
   // Unified Workstation Slots: Guarantees every shortlisted candidate has a dedicated station slot
   const workstationSlots = useMemo(() => {
@@ -321,12 +339,17 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
       const live = uniqueRound2Stations.find((st) => {
         const anySt = st as any;
         const sRoll = (st.student?.rollNumber || anySt.cleanRoll || '').trim().toUpperCase();
-        const sKey = (anySt.student?.accessKey || st.id || '').trim().toUpperCase();
+        const sKey = (anySt.student?.accessKey || anySt.student?.round2Key || st.id || '').trim().toUpperCase();
         const sEmail = ((st.student as any)?.email || anySt.student?.email || '').trim().toUpperCase();
+        const sName = (st.student?.name || anySt.student?.candidateName || '').trim().toLowerCase();
+        const candName = (cand.name || '').trim().toLowerCase();
         return (
-          sRoll === cleanRoll ||
-          sKey === cleanKey ||
-          (cand.email && sEmail === cand.email.toUpperCase())
+          (cleanRoll && sRoll === cleanRoll) ||
+          (cleanKey && sKey === cleanKey) ||
+          (cleanKey && sKey.includes(cleanKey)) ||
+          (cleanRoll && st.id && st.id.toUpperCase().includes(cleanRoll)) ||
+          (cand.email && sEmail === cand.email.toUpperCase()) ||
+          (candName && sName && (candName.includes(sName) || sName.includes(candName)))
         );
       });
 
@@ -366,11 +389,19 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
     } finally {
       setLoadingLeaderboard(false);
     }
+    try {
+      const liveCloud = await fetchStationsFromCloud('ROUND_2_ARENA');
+      if (liveCloud && Array.isArray(liveCloud)) {
+        setCloudR2Stations(liveCloud);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch live R2 stations from cloud:', err);
+    }
   };
 
   useEffect(() => {
     void loadLeaderboardData();
-    const interval = setInterval(loadLeaderboardData, 4500);
+    const interval = setInterval(loadLeaderboardData, 2500);
     return () => clearInterval(interval);
   }, []);
 
@@ -410,12 +441,17 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
       const liveStation = uniqueRound2Stations.find((st) => {
         const anySt = st as any;
         const sRoll = (st.student?.rollNumber || anySt.cleanRoll || '').trim().toUpperCase();
-        const sKey = (anySt.student?.accessKey || st.id || '').trim().toUpperCase();
+        const sKey = (anySt.student?.accessKey || anySt.student?.round2Key || st.id || '').trim().toUpperCase();
         const sEmail = ((st.student as any)?.email || anySt.student?.email || '').trim().toUpperCase();
+        const sName = (st.student?.name || anySt.student?.candidateName || '').trim().toLowerCase();
+        const candName = (cand.name || '').trim().toLowerCase();
         return (
-          sRoll === cleanRoll ||
-          sKey === cleanKey ||
-          (cand.email && sEmail === cand.email.toUpperCase())
+          (cleanRoll && sRoll === cleanRoll) ||
+          (cleanKey && sKey === cleanKey) ||
+          (cleanKey && sKey.includes(cleanKey)) ||
+          (cleanRoll && st.id && st.id.toUpperCase().includes(cleanRoll)) ||
+          (cand.email && sEmail === cand.email.toUpperCase()) ||
+          (candName && sName && (candName.includes(sName) || sName.includes(candName)))
         );
       });
 
@@ -505,7 +541,7 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
     list.sort((a, b) => {
       if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
       if (b.solvedCount !== a.solvedCount) return b.solvedCount - a.solvedCount;
-      if (b.isSubmitted !== a.isSubmitted) return b.isSubmitted ? 1 : -1;
+      if (b.isSubmitted !== a.isSubmitted) return b.isSubmitted ? -1 : 1;
       if (a.timeTakenMinutes !== b.timeTakenMinutes && a.timeTakenMinutes > 0 && b.timeTakenMinutes > 0) {
         return a.timeTakenMinutes - b.timeTakenMinutes;
       }
@@ -3520,336 +3556,151 @@ export const AdminRound2Hub: React.FC<AdminRound2HubProps> = ({
 
 
       {subTab === 'live_streams' && (
-
-
-
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '14px' }}>
-
-
-
-          {uniqueRound2Stations.length === 0 ? (
-            shortlistedCohort && shortlistedCohort.length > 0 ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '14px', gridColumn: '1 / -1' }}>
-                {shortlistedCohort.map((cand, idx) => (
-                  <div
-                    key={cand.rollNumber}
-                    style={{
-                      background: '#121214',
-                      border: '1px solid #27272a',
-                      borderRadius: '8px',
-                      padding: '16px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '12px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #27272a', paddingBottom: '10px' }}>
+          {workstationSlots.length === 0 ? (
+            <div style={{ gridColumn: '1 / -1', padding: '48px 24px', textAlign: 'center', border: '1px dashed #27272a', borderRadius: '8px', background: '#121214' }}>
+              <Code2 size={28} color="#71717a" style={{ margin: '0 auto 8px auto' }} />
+              <div style={{ fontSize: '13px', fontWeight: 600, color: '#f4f4f5' }}>No active coding workstations</div>
+              <div style={{ fontSize: '12px', color: '#71717a', marginTop: '4px' }}>
+                When shortlisted candidates start Round 2 at /codespark-exams?round=2, their live telemetry and code stream will stream here.
+              </div>
+            </div>
+          ) : (
+            workstationSlots.map((slot) => {
+              if (slot.isLive && slot.liveStation) {
+                const station = slot.liveStation;
+                return (
+                  <div key={slot.stationId} style={{ background: '#121214', border: '1px solid #27272a', borderRadius: '8px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Monitor size={15} color="#71717a" />
-                        <strong style={{ fontSize: '13px', color: '#f4f4f5' }}>
-                          Workstation #{String(idx + 1).padStart(2, '0')}
-                        </strong>
+                        <span style={{ fontSize: '13px', fontWeight: 800, color: '#f4f4f5' }}>{station.student?.name || slot.cand?.name || 'Candidate'}</span>
+                        <span style={{ fontSize: '11px', color: '#71717a', fontFamily: 'monospace' }}>({station.student?.rollNumber || slot.cand?.rollNumber || 'N/A'})</span>
                       </div>
-                      <span
-                        style={{
-                          fontSize: '10.5px',
-                          fontWeight: 700,
-                          color: '#a1a1aa',
-                          background: '#18181b',
-                          border: '1px solid #27272a',
-                          padding: '2px 8px',
-                          borderRadius: '4px'
-                        }}
-                      >
-                        STANDBY · AWAITING LOGIN
+                      <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', background: '#18181b', border: '1px solid #14532d', color: '#10b981' }}>
+                        {slot.stationNumber} • LIVE STREAMING
                       </span>
                     </div>
 
-                    <div>
-                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#f4f4f5' }}>{cand.name}</div>
-                      <div style={{ fontSize: '11.5px', color: '#71717a', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>Roll: <strong style={{ color: '#e4e4e7' }}>{cand.rollNumber}</strong></span>
-                        <span>•</span>
-                        <span>R1 Score: <strong style={{ color: '#10b981' }}>{cand.round1Score}/{cand.round1MaxScore}</strong></span>
+                    {/* Live Code Stream Panel */}
+                    <div style={{ borderRadius: '6px', border: '1px solid #27272a', background: '#09090b', padding: '10px', height: '140px', overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '4px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <Code2 size={11} color="#60a5fa" />
+                          <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#a1a1aa', letterSpacing: '0.05em' }}>LIVE CODE STREAM</span>
+                        </div>
+                        <span style={{ fontSize: '9px', color: '#71717a', fontFamily: 'monospace' }}>{station.language || 'Python'}</span>
+                      </div>
+                      <pre style={{ margin: 0, flex: 1, fontFamily: 'monospace', fontSize: '10.5px', color: '#e4e4e7', whiteSpace: 'pre-wrap', wordBreak: 'break-all', overflow: 'hidden' }}>
+                        {extractCleanCandidateCode(station.code)}
+                      </pre>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px' }}>
+                      <div style={{ fontSize: '11px', color: '#71717a', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <div>WPM: <strong style={{ color: '#f4f4f5' }}>{station.metrics?.typingSpeed || 0}</strong> • Keystrokes: <strong style={{ color: '#f4f4f5' }}>{station.metrics?.keystrokes || 0}</strong></div>
+                        <div style={{ fontSize: '10.5px', color: '#a1a1aa', fontFamily: 'monospace' }}>
+                          IP: <span style={{ color: '#38bdf8' }}>{station.ipAddress || 'Resolving...'}</span> • Active: <span style={{ color: '#a1a1aa' }}>{station.lastActive || 'Just now'}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => sendProctorLockCommand(station.id, !station.isLockedByProctor, station.labId)}
+                          style={{
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            border: station.isLockedByProctor ? '1px solid #10b981' : '1px solid #ef4444',
+                            background: 'transparent',
+                            color: station.isLockedByProctor ? '#10b981' : '#ef4444',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {station.isLockedByProctor ? 'Unlock Station' : 'Lock Station'}
+                        </button>
+                        {onInspectStation && (
+                          <button
+                            type="button"
+                            onClick={() => onInspectStation(station.id)}
+                            style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #27272a', background: '#18181b', color: '#f4f4f5', fontSize: '11px', cursor: 'pointer' }}
+                          >
+                            Inspect
+                          </button>
+                        )}
                       </div>
                     </div>
+                  </div>
+                );
+              }
 
-                    <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 12px' }}>
-                      <div style={{ fontSize: '10px', textTransform: 'uppercase', color: '#71717a', fontWeight: 600, marginBottom: '4px' }}>
-                        Round 2 Access Key
-                      </div>
-                      <code style={{ fontSize: '12px', fontWeight: 700, color: '#10b981' }}>
-                        {cand.round2Key}
-                      </code>
+              // Standby Slot for Candidate
+              const cand = slot.cand;
+              return (
+                <div
+                  key={slot.stationId}
+                  style={{
+                    background: '#121214',
+                    border: '1px solid #27272a',
+                    borderRadius: '8px',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #27272a', paddingBottom: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Monitor size={15} color="#71717a" />
+                      <strong style={{ fontSize: '13px', color: '#f4f4f5' }}>
+                        {slot.stationNumber}
+                      </strong>
                     </div>
-
-                    <div style={{ fontSize: '11px', color: '#71717a', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Clock size={12} />
-                      <span>Live editor will stream here upon contestant login</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ gridColumn: '1 / -1', padding: '48px 24px', textAlign: 'center', border: '1px dashed #27272a', borderRadius: '8px', background: '#121214' }}>
-                <Code2 size={28} color="#71717a" style={{ margin: '0 auto 8px auto' }} />
-                <div style={{ fontSize: '13px', fontWeight: 600, color: '#f4f4f5' }}>No active coding workstations</div>
-                <div style={{ fontSize: '12px', color: '#71717a', marginTop: '4px' }}>
-                  When shortlisted candidates start Round 2 at /codespark-exams?round=2, their live telemetry and code stream will stream here.
-                </div>
-              </div>
-            )
-          ) : (
-
-
-
-            uniqueRound2Stations.map((station) => (
-
-
-
-              <div key={station.id} style={{ background: '#121214', border: '1px solid #27272a', borderRadius: '8px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-
-
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-
-
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-
-
-
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#f4f4f5' }}>{station.student?.name || 'Candidate'}</span>
-
-
-
-                    <span style={{ fontSize: '11px', color: '#71717a', fontFamily: 'monospace' }}>({station.student?.rollNumber || 'N/A'})</span>
-
-
-
-                  </div>
-
-
-
-                  <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa' }}>
-
-
-
-                    {station.stationNumber} ({station.labId})
-
-
-
-                  </span>
-
-
-
-                </div>
-
-
-
-                {/* Live Code Stream Panel */}
-
-
-
-                <div style={{ borderRadius: '6px', border: '1px solid #27272a', background: '#09090b', padding: '10px', height: '140px', overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-
-
-
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '4px' }}>
-
-
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-
-
-
-                      <Code2 size={11} color="#60a5fa" />
-
-
-
-                      <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#a1a1aa', letterSpacing: '0.05em' }}>LIVE CODE STREAM</span>
-
-
-
-                    </div>
-
-
-
-                    <span style={{ fontSize: '9px', color: '#71717a', fontFamily: 'monospace' }}>{station.language || 'Python'}</span>
-
-
-
-                  </div>
-
-
-
-                  <pre style={{ margin: 0, flex: 1, fontFamily: 'monospace', fontSize: '10.5px', color: '#e4e4e7', whiteSpace: 'pre-wrap', wordBreak: 'break-all', overflow: 'hidden' }}>
-
-
-
-                    {extractCleanCandidateCode(station.code)}
-
-
-
-                  </pre>
-
-
-
-                </div>
-
-
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px' }}>
-
-
-
-                  <div style={{ fontSize: '11px', color: '#71717a' }}>
-
-
-
-                    WPM: {station.metrics?.typingSpeed || 0} • Keystrokes: {station.metrics?.keystrokes || 0}
-
-
-
-                  </div>
-
-
-
-                  <div style={{ display: 'flex', gap: '6px' }}>
-
-
-
-                    <button
-
-
-
-                      type="button"
-
-
-
-                      onClick={() => sendProctorLockCommand(station.id, !station.isLockedByProctor, station.labId)}
-
-
-
+                    <span
                       style={{
-
-
-
-                        padding: '4px 8px',
-
-
-
-                        borderRadius: '4px',
-
-
-
-                        border: station.isLockedByProctor ? '1px solid #10b981' : '1px solid #ef4444',
-
-
-
-                        background: 'transparent',
-
-
-
-                        color: station.isLockedByProctor ? '#10b981' : '#ef4444',
-
-
-
-                        fontSize: '11px',
-
-
-
-                        fontWeight: 600,
-
-
-
-                        cursor: 'pointer'
-
-
-
+                        fontSize: '10.5px',
+                        fontWeight: 700,
+                        color: '#a1a1aa',
+                        background: '#18181b',
+                        border: '1px solid #27272a',
+                        padding: '2px 8px',
+                        borderRadius: '4px'
                       }}
-
-
-
                     >
-
-
-
-                      {station.isLockedByProctor ? 'Unlock' : 'Lock'}
-
-
-
-                    </button>
-
-
-
-                    {onInspectStation && (
-
-
-
-                      <button
-
-
-
-                        type="button"
-
-
-
-                        onClick={() => onInspectStation(station.id)}
-
-
-
-                        style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #27272a', background: '#18181b', color: '#f4f4f5', fontSize: '11px', cursor: 'pointer' }}
-
-
-
-                      >
-
-
-
-                        Inspect
-
-
-
-                      </button>
-
-
-
-                    )}
-
-
-
+                      STANDBY · AWAITING LOGIN
+                    </span>
                   </div>
 
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#f4f4f5' }}>{cand?.name || 'Contestant'}</div>
+                    <div style={{ fontSize: '11.5px', color: '#71717a', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>Roll: <strong style={{ color: '#e4e4e7' }}>{cand?.rollNumber || 'N/A'}</strong></span>
+                      <span>•</span>
+                      <span>R1 Score: <strong style={{ color: '#10b981' }}>{cand?.round1Score ?? 0}/{cand?.round1MaxScore ?? 3}</strong></span>
+                    </div>
+                  </div>
 
+                  <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 12px' }}>
+                    <div style={{ fontSize: '10px', textTransform: 'uppercase', color: '#71717a', fontWeight: 600, marginBottom: '4px' }}>
+                      Round 2 Access Key
+                    </div>
+                    <code style={{ fontSize: '12px', fontWeight: 700, color: '#10b981' }}>
+                      {cand?.round2Key || 'AXENT-R2-XXXX'}
+                    </code>
+                  </div>
 
+                  <div style={{ fontSize: '11px', color: '#71717a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Clock size={12} />
+                    <span>Live editor will stream here upon contestant login</span>
+                  </div>
                 </div>
-
-
-
-              </div>
-
-
-
-            ))
-
-
-
+              );
+            })
           )}
-
-
-
         </div>
-
-
-
       )}
 
-
-
       {/* Section */}
-
-
 
       {selectedDossier && (
 

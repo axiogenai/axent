@@ -1931,7 +1931,67 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
 
         {/* 2-Column Main Body: Left 68% Detailed Questions, Right 32% Matrix & Telemetry */}
         <div className="mcq-results-layout">
-          {/* Left Column: Question-by-Question Review */}
+          {/* Left Column: Question-by-Question Review (or Contest Sealed Notice for CodeSpark) */}
+          {isTechFest ? (
+            <div
+              style={{
+                flex: 1,
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                padding: '32px 24px',
+                textAlign: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '14px',
+                minHeight: '260px'
+              }}
+            >
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '50%',
+                  background: 'rgba(34, 197, 94, 0.1)',
+                  border: '1px solid rgba(34, 197, 94, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <CheckCircle2 size={24} color="var(--success)" />
+              </div>
+              <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                Official Answers & Explanations Sealed
+              </h3>
+              <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '480px', lineHeight: 1.6 }}>
+                Under CodeSpark contest examination integrity regulations, official answer keys and academic explanations are protected and not disclosed to candidates. Your responses and score have been securely transmitted to the examination authority.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  try { if (document.fullscreenElement) void document.exitFullscreen().catch(() => {}); } catch {}
+                  if (onExit) onExit();
+                  else window.location.href = '/code-spark';
+                }}
+                style={{
+                  marginTop: '10px',
+                  padding: '10px 22px',
+                  borderRadius: '6px',
+                  background: 'var(--accent)',
+                  color: 'var(--accent-contrast)',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                Return to CodeSpark Portal
+              </button>
+            </div>
+          ) : (
           <div className="mcq-results-questions-col" style={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0, width: '100%', maxWidth: '100%' }}>
             {/* Question Review Header & Segmented Filter */}
             <div
@@ -2150,6 +2210,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
               );
             })}
           </div>
+          )}
 
           {/* Right Column: Question Navigator Matrix & Metadata Sidebar */}
           <div className="mcq-results-sidebar">
@@ -2318,9 +2379,10 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
 interface MCQExamScreenProps {
   examId: string;
   onBack?: () => void;
+  onExit?: () => void;
 }
 
-export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) => {
+export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack, onExit }) => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [allExamsList, setAllExamsList] = useState<MCQExamConfig[]>(() => getAllExams());
@@ -2349,6 +2411,14 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
   const [exam, setExam] = useState<MCQExamConfig | null>(() => {
     return getAllExams().find((e) => e.id === initialExamId) ?? null;
   });
+
+  const isTechFest = Boolean(
+    exam?.isCodeSpark ||
+    exam?.id === 'codespark-round1-aptitude' ||
+    (exam?.title && exam.title.toLowerCase().includes('spark')) ||
+    (typeof window !== 'undefined' && (window.location.pathname.includes('/codespark') || window.location.pathname.includes('/code-spark'))) ||
+    (typeof localStorage !== 'undefined' && Boolean(localStorage.getItem('codedna_codespark_active_candidate')))
+  );
 
   useEffect(() => {
     const refreshExams = () => {
@@ -3464,13 +3534,6 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       return;
     }
     setCurrentIdx(newIdx);
-    // Auto-minimize (exit fullscreen) when candidate navigates to the final question before submitting
-    if (newIdx === totalQ - 1 && totalQ > 0) {
-      void exitExamFullscreen();
-      try {
-        if (document.exitPointerLock) document.exitPointerLock();
-      } catch {}
-    }
     if (attempt) {
       try {
         localStorage.setItem(`codedna_mcq_current_idx_${attempt.id}`, String(newIdx));
@@ -3639,6 +3702,33 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
       }
       if (!(await persistAttemptToCloud(attempt.id))) {
         showAlert('Cloud Sync Notice', 'Your result was saved on this device, but cloud sync failed. Keep this device open and notify the invigilator before exiting.', 'warning');
+      }
+
+      // If this is CodeSpark / contest exam, redirect to /code-spark immediately without revealing answers
+      const isCodeSparkContest = Boolean(
+        isTechFest ||
+        exam?.isCodeSpark ||
+        exam?.id === 'codespark-round1-aptitude' ||
+        (exam?.title && exam.title.toLowerCase().includes('spark')) ||
+        (typeof window !== 'undefined' && (window.location.pathname.includes('/codespark') || window.location.pathname.includes('/code-spark'))) ||
+        (typeof localStorage !== 'undefined' && Boolean(localStorage.getItem('codedna_codespark_active_candidate'))) ||
+        student?.course === 'Code Spark 2026'
+      );
+
+      if (isCodeSparkContest) {
+        try {
+          if (document.fullscreenElement) {
+            void document.exitFullscreen().catch(() => {});
+          }
+        } catch {}
+        setTimeout(() => {
+          if (onExit) {
+            onExit();
+          } else {
+            window.location.href = '/code-spark';
+          }
+        }, 1200);
+        return;
       }
     } else {
       setSubmitted(false);
@@ -4962,8 +5052,6 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack }) 
 
             <button
               onClick={() => {
-                void exitExamFullscreen();
-                try { if (document.exitPointerLock) document.exitPointerLock(); } catch {}
                 setShowSubmitConfirm(true);
               }}
               style={{

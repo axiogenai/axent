@@ -44,12 +44,14 @@ import {
   pushRound2SubmissionToCloud,
   selectStudentRound2Problems,
   pushRound2LiveCodeToCloud,
+  getRound2SyncStatus,
   isRound2ArenaUnlocked,
-  setRound2ArenaUnlocked,
+  fetchRound2ArenaUnlockedFromDb,
   subscribeToRound2ArenaUnlocked
 } from '../../services/round2CodingService';
 import { cleanCandidateNameAndRoll } from '../../utils/candidateFormatter';
 import { playSound } from '../../utils/sounds';
+import { validateAndConsumeEmergencyKeyAsync } from '../../services/emergencyKeyService';
 import { requestExamFullscreen, isCurrentlyFullscreen, exitExamFullscreen } from '../../services/timeSyncService';
 import { ThemeMode } from '../../types/dna';
 
@@ -279,30 +281,62 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
   });
   const [unlockInput, setUnlockInput] = useState<string>('');
   const [unlockError, setUnlockError] = useState<string | null>(null);
+  const editorRef = useRef<any>(null);
   const lastViolationTime = useRef<number>(0);
+  const strikeCountRef = useRef<number>(tabViolations);
+  const lockedRef = useRef<boolean>(isProctorLocked);
+  const submittedRef = useRef<boolean>(false);
+  const liveRef = useRef<any>({});
+  // Grace period: ignore focus noise right after load / fullscreen change / unlock
+  const suppressStrikesUntil = useRef<number>(Date.now() + 8000);
+  lockedRef.current = isProctorLocked;
+  submittedRef.current = submission.isSubmitted;
+  liveRef.current = {
+    candidateProfile,
+    code: codeMap[currentQIndex] || '',
+    lang: effectiveLang,
+    q: currentQIndex,
+    strikes: tabViolations,
+    activeLineNumber: editorRef.current?.getPosition()?.lineNumber || 1
+  };
+
+  useEffect(() => {
+    const onFs = () => {
+      suppressStrikesUntil.current = Date.now() + 3000;
+    };
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
 
   useEffect(() => {
     const registerInfraction = () => {
       const now = Date.now();
-      if (now - lastViolationTime.current > 700) {
-        lastViolationTime.current = now;
-        setTabViolations((prev) => {
-          const next = prev + 1;
-          try {
-            sessionStorage.setItem(`r2_strikes_${cleanRoll}`, String(next));
-          } catch {}
-          playSound('warning');
-          if (next >= 3) {
-            setIsProctorLocked(true);
-            try {
-              sessionStorage.setItem(`r2_locked_${cleanRoll}`, 'true');
-            } catch {}
-            playSound('error');
-          }
-          void pushRound2LiveCodeToCloud(candidateProfile, codeMap[currentQIndex] || '', effectiveLang, currentQIndex);
-          return next;
-        });
+      if (submittedRef.current || lockedRef.current) return;
+      if (now < suppressStrikesUntil.current) return;
+      if (now - lastViolationTime.current < 1500) return;
+      lastViolationTime.current = now;
+
+      const next = strikeCountRef.current + 1;
+      strikeCountRef.current = next;
+      setTabViolations(next);
+      try {
+        sessionStorage.setItem(`r2_strikes_${cleanRoll}`, String(next));
+      } catch {}
+      playSound('warning');
+      if (next >= 3) {
+        lockedRef.current = true;
+        setIsProctorLocked(true);
+        try {
+          sessionStorage.setItem(`r2_locked_${cleanRoll}`, 'true');
+        } catch {}
+        playSound('error');
       }
+      const l = liveRef.current;
+      void pushRound2LiveCodeToCloud(l.candidateProfile, l.code, l.lang, l.q, {
+        strikes: next,
+        activeLineNumber: l.activeLineNumber || 1,
+        keystrokes: (l.code || '').length
+      });
     };
 
     const handleVisibilityChange = () => {
@@ -311,56 +345,99 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       }
     };
 
+    // Blur only counts if the page is STILL unfocused shortly after (ignores focus moving
+    // inside the page, OS popups, devtools flicker, iframe focus, etc.)
+    let blurTimer: any = null;
     const handleBlur = () => {
-      registerInfraction();
+      if (blurTimer) clearTimeout(blurTimer);
+      blurTimer = setTimeout(() => {
+        if (!document.hasFocus() || document.hidden) {
+          registerInfraction();
+        }
+      }, 400);
+    };
+    const handleFocus = () => {
+      if (blurTimer) clearTimeout(blurTimer);
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
     return () => {
+      if (blurTimer) clearTimeout(blurTimer);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
     };
-  }, [cleanRoll, candidateProfile, codeMap, currentQIndex, effectiveLang]);
+  }, [cleanRoll]);
 
-  // Unlock lockdown handler
-  const VALID_PROCTOR_KEYS = new Set([
-    'AXENT-PROCTOR',
-    'UNLOCK2026',
-    'PROCTOR',
-    'ADMIN',
-    '1234',
-    'PROCTOR2026',
-    'AXENT2026'
-  ]);
-
-  const handleUnlockExam = () => {
-    const key = unlockInput.trim().toUpperCase();
-    if (VALID_PROCTOR_KEYS.has(key)) {
-      setIsProctorLocked(false);
-      setTabViolations(0);
-      setUnlockInput('');
-      setUnlockError(null);
-      try {
-        sessionStorage.removeItem(`r2_locked_${cleanRoll}`);
-        sessionStorage.setItem(`r2_strikes_${cleanRoll}`, '0');
-      } catch {}
-      playSound('success');
-      void pushRound2LiveCodeToCloud(candidateProfile, codeMap[currentQIndex] || '', effectiveLang, currentQIndex);
-    } else {
-      setUnlockError('Invalid Proctor Authorization Key. Contact your lab invigilator (Default: AXENT-PROCTOR).');
-      playSound('error');
+  // Unlock lockdown: ONLY with a one-time key issued by the admin (Cheating Alerts / Test Stations)
+  const [isUnlocking, setIsUnlocking] = useState(false);
+  const handleUnlockExam = async () => {
+    const code = unlockInput.trim().toUpperCase();
+    if (!code) {
+      setUnlockError('Enter the one-time unlock key given by your invigilator.');
+      return;
+    }
+    setIsUnlocking(true);
+    try {
+      const cleanStationNum = ((candidateProfile as any).stationNumber || '01').replace(/[^0-9]/g, '') || '01';
+      const stationId = `${(candidateProfile as any).labId || 'LAB-01'}-WS-${cleanStationNum.padStart(2, '0')}`;
+      const result = await validateAndConsumeEmergencyKeyAsync(code, stationId, {
+        name: candidateProfile.name,
+        roll: cleanRoll,
+        labId: (candidateProfile as any).labId
+      });
+      if (result.valid) {
+        setIsProctorLocked(false);
+        lockedRef.current = false;
+        strikeCountRef.current = 0;
+        suppressStrikesUntil.current = Date.now() + 3000;
+        setTabViolations(0);
+        setUnlockInput('');
+        setUnlockError(null);
+        try {
+          sessionStorage.removeItem(`r2_locked_${cleanRoll}`);
+          sessionStorage.setItem(`r2_strikes_${cleanRoll}`, '0');
+        } catch {}
+        playSound('success');
+        void pushRound2LiveCodeToCloud(candidateProfile, codeMap[currentQIndex] || '', effectiveLang, currentQIndex, {
+          strikes: 0,
+          activeLineNumber: editorRef.current?.getPosition()?.lineNumber || 1,
+          keystrokes: (codeMap[currentQIndex] || '').length
+        });
+      } else {
+        setUnlockError(result.message || 'Invalid or already used unlock key.');
+        playSound('error');
+      }
+    } finally {
+      setIsUnlocking(false);
     }
   };
 
   // Contest Countdown Timer (60 min default)
-  const [remainingSeconds, setRemainingSeconds] = useState<number>(3600);
+  // Wall-clock based and persisted, so refresh / background-tab throttling can't reset or slow it
+  const timerKey = `r2_end_${cleanRoll}`;
+  const computeRemaining = () => {
+    try {
+      let end = parseInt(localStorage.getItem(timerKey) || '', 10);
+      if (!end || isNaN(end)) {
+        end = Date.now() + 3600 * 1000;
+        localStorage.setItem(timerKey, String(end));
+      }
+      return Math.max(0, Math.round((end - Date.now()) / 1000));
+    } catch {
+      return 3600;
+    }
+  };
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(computeRemaining);
   useEffect(() => {
     const interval = setInterval(() => {
-      setRemainingSeconds((prev) => (prev > 0 ? prev - 1 : 0));
+      setRemainingSeconds(computeRemaining());
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timerKey]);
 
   const formattedTimer = useMemo(() => {
     const m = Math.floor(remainingSeconds / 60);
@@ -368,8 +445,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   }, [remainingSeconds]);
 
-  // Editor ref & font measurement
-  const editorRef = useRef<any>(null);
+  // Editor mount & font measurement
   const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
     if (monaco && monaco.editor && typeof monaco.editor.remeasureFonts === 'function') {
@@ -390,7 +466,11 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     // Debounced live code push to candidate_stations in cloud
     if (liveSyncTimer.current) clearTimeout(liveSyncTimer.current);
     liveSyncTimer.current = setTimeout(() => {
-      void pushRound2LiveCodeToCloud(candidateProfile, code, effectiveLang, currentQIndex);
+      void pushRound2LiveCodeToCloud(candidateProfile, code, effectiveLang, currentQIndex, {
+        strikes: tabViolations,
+        activeLineNumber: editorRef.current?.getPosition()?.lineNumber || 1,
+        keystrokes: code.length
+      });
     }, 1000);
   };
 
@@ -427,6 +507,9 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       report.startedAtFormatted = new Date(qStart).toLocaleTimeString();
       report.timeTakenSeconds = Math.max(1, Math.round((report.compiledAt - qStart) / 1000));
       setActiveReport(report);
+      if (report.compilerResult?.statusDescription === 'Compiler Unreachable') {
+        setCompileError('Compiler servers are unreachable right now. Check the internet and press Run again.');
+      }
 
       // Record to question submission history
       setSubmissionHistory((prev) => ({
@@ -476,6 +559,12 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       report.startedAtFormatted = new Date(qStart).toLocaleTimeString();
       report.timeTakenSeconds = Math.max(1, Math.round((report.compiledAt - qStart) / 1000));
       setActiveReport(report);
+      if (report.compilerResult?.statusDescription === 'Compiler Unreachable') {
+        // Never record a score because of a network/compiler outage
+        setCompileError('Compiler servers are unreachable, so this submission was NOT recorded. Check the internet and press Submit again.');
+        playSound('error');
+        return;
+      }
 
       // Update question submission history
       setSubmissionHistory((prev) => ({
@@ -619,14 +708,71 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     return Object.values(submission.questionReports).reduce((sum, r) => sum + (r.passedTests || 0), 0);
   }, [submission.questionReports]);
 
+  // Heartbeat: keep admin Live Editor + Leaderboard live without waiting for Submit
+  const submissionRef = useRef(submission);
+  submissionRef.current = submission;
+  const [syncState, setSyncState] = useState<{ ok: boolean; error: string | null }>({ ok: true, error: null });
+  useEffect(() => {
+    if (!isArenaUnlocked) return;
+    const pushAll = () => {
+      const l = liveRef.current;
+      void pushRound2LiveCodeToCloud(l.candidateProfile, l.code, l.lang, l.q, {
+        strikes: l.strikes || 0,
+        activeLineNumber: l.activeLineNumber || 1,
+        keystrokes: (l.code || '').length
+      });
+    };
+    const pushSub = () => {
+      const sub = submissionRef.current;
+      if (sub.isSubmitted) return;
+      void pushRound2SubmissionToCloud({ ...sub, currentQuestion: liveRef.current.q });
+    };
+    pushAll();
+    pushSub();
+    const live = setInterval(pushAll, 3000);
+    const subT = setInterval(pushSub, 10000);
+    const status = setInterval(() => {
+      const st = getRound2SyncStatus();
+      setSyncState({ ok: st.ok, error: st.error });
+    }, 2000);
+    return () => {
+      clearInterval(live);
+      clearInterval(subT);
+      clearInterval(status);
+    };
+  }, [isArenaUnlocked]);
+
   // Initial immediate live workstation push on arena mount
   useEffect(() => {
-    void pushRound2LiveCodeToCloud(candidateProfile, codeMap[currentQIndex] || '', effectiveLang, currentQIndex);
+    void pushRound2LiveCodeToCloud(candidateProfile, codeMap[currentQIndex] || '', effectiveLang, currentQIndex, {
+      strikes: tabViolations,
+      activeLineNumber: 1,
+      keystrokes: (codeMap[currentQIndex] || '').length
+    });
   }, []);
 
   const attemptedCount = useMemo(() => {
     return Object.keys(submission.questionReports).length;
   }, [submission.questionReports]);
+
+  // After submission: leave to /code-spark first (so the fullscreen gate never flashes), then exit fullscreen
+  const finishAndLeave = useCallback(() => {
+    suppressStrikesUntil.current = Date.now() + 60000;
+    try {
+      onExit();
+    } finally {
+      setTimeout(() => {
+        void exitExamFullscreen();
+        setIsFullscreen(false);
+      }, 150);
+    }
+  }, [onExit]);
+
+  // Already-submitted candidate (reload / revisit): never show anything, just go back
+  useEffect(() => {
+    if (submission.isSubmitted) finishAndLeave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submission.isSubmitted]);
 
   const handleConfirmFinalSubmit = async () => {
     setIsSubmittingFinal(true);
@@ -641,6 +787,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
       await pushRound2SubmissionToCloud(finalSub);
       setShowSubmitModal(false);
       playSound('success');
+      finishAndLeave();
     } catch (err) {
       console.error('Final submission error:', err);
     } finally {
@@ -648,7 +795,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
     }
   };
 
-  // --- 9. Submission Concluded Screen ---
+  // --- 9. Submission Concluded Screen (no scores, answers or results shown) ---
   if (submission.isSubmitted) {
     return (
       <div
@@ -657,115 +804,16 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
           background: '#09090b',
           color: '#f4f4f5',
           display: 'flex',
-          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '24px'
+          padding: '24px',
+          textAlign: 'center'
         }}
       >
-        <div
-          style={{
-            maxWidth: '600px',
-            width: '100%',
-            background: '#121214',
-            border: '1px solid #27272a',
-            borderRadius: '12px',
-            padding: '36px',
-            textAlign: 'center',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
-          }}
-        >
-          <div
-            style={{
-              width: '64px',
-              height: '64px',
-              borderRadius: '12px',
-              background: 'rgba(16, 185, 129, 0.1)',
-              border: '1px solid rgba(16, 185, 129, 0.3)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#10b981',
-              marginBottom: '20px'
-            }}
-          >
-            <CheckCircle2 size={36} />
-          </div>
-          <span
-            style={{
-              display: 'inline-block',
-              fontSize: '11px',
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: '#10b981',
-              background: 'rgba(16, 185, 129, 0.12)',
-              border: '1px solid rgba(16, 185, 129, 0.25)',
-              padding: '4px 10px',
-              borderRadius: '999px',
-              marginBottom: '12px'
-            }}
-          >
-            Round 2 Dossier Sealed &amp; Submitted
-          </span>
-          <h2 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 8px 0', color: '#f4f4f5' }}>
-            Assessment Successfully Completed
-          </h2>
-          <p style={{ fontSize: '13px', color: '#a1a1aa', margin: '0 0 28px 0', lineHeight: 1.6 }}>
-            Candidate <strong>{submission.candidateName}</strong> ({submission.rollNumber}), your code solutions and keystroke forensic telemetry have been verified and sealed to cloud.
-          </p>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '12px',
-              marginBottom: '28px',
-              textAlign: 'left'
-            }}
-          >
-            <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '16px' }}>
-              <div style={{ fontSize: '11px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>Challenges Solved</div>
-              <div style={{ fontSize: '24px', fontWeight: 900, color: '#10b981', marginTop: '4px' }}>
-                {solvedCount} <span style={{ fontSize: '13px', color: '#71717a', fontWeight: 500 }}>/ 5</span>
-              </div>
-            </div>
-            <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '16px' }}>
-              <div style={{ fontSize: '11px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>Test Cases Passed</div>
-              <div style={{ fontSize: '24px', fontWeight: 900, color: '#f4f4f5', marginTop: '4px' }}>
-                {totalPassedTests} <span style={{ fontSize: '13px', color: '#71717a', fontWeight: 500 }}>/ 25</span>
-              </div>
-            </div>
-            <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '16px' }}>
-              <div style={{ fontSize: '11px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>Language</div>
-              <div style={{ fontSize: '20px', fontWeight: 800, color: '#f4f4f5', marginTop: '6px' }}>
-                {submission.dominantLanguage || 'Python'}
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onExit}
-            style={{
-              width: '100%',
-              padding: '12px 24px',
-              background: '#f4f4f5',
-              color: '#09090b',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '13px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px'
-            }}
-          >
-            <LogOut size={15} />
-            <span>Return to CodeSpark Portal</span>
-          </button>
+        <div>
+          <CheckCircle2 size={40} color="#10b981" />
+          <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '14px 0 6px' }}>Round 2 submitted</h2>
+          <p style={{ fontSize: '13px', color: '#a1a1aa', margin: 0 }}>Redirecting to CodeSpark portal…</p>
         </div>
       </div>
     );
@@ -773,17 +821,18 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
 
   // --- 9.5. Gatekeeper: Standby Hall (Round 2 Locked • Questions Concealed) ---
   if (!isArenaUnlocked) {
-    const handleProctorUnlock = () => {
-      const pin = proctorPinInput.trim().toLowerCase();
-      if (pin === 'axent2026' || pin === 'proctor' || pin === 'admin') {
+    const handleProctorUnlock = async () => {
+      // No client-side PIN: the arena opens only when the admin unlocks it in the cloud
+      const open = await fetchRound2ArenaUnlockedFromDb().catch(() => false);
+      if (open) {
         playSound('success');
-        setRound2ArenaUnlocked(true);
+        setIsArenaUnlocked(true);
         setShowProctorUnlockModal(false);
         setProctorPinInput('');
         setProctorError('');
       } else {
         playSound('warning');
-        setProctorError('Invalid Invigilator PIN. Contact the Chief Examination Proctor.');
+        setProctorError('Round 2 is still locked. Wait for the admin to open the arena.');
       }
     };
 
@@ -1138,7 +1187,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                   value={proctorPinInput}
                   onChange={(e) => setProctorPinInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleProctorUnlock()}
-                  placeholder="Enter PIN (e.g. axent2026)"
+                  placeholder="Enter PIN"
                   autoFocus
                   style={{
                     width: '100%',
@@ -1384,6 +1433,21 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
             <Clock size={12} color={remainingSeconds < 300 ? '#ef4444' : '#a1a1aa'} />
             <span>{formattedTimer}</span>
           </div>
+
+          <span
+            title={syncState.error || 'Live sync to invigilator is working'}
+            style={{
+              fontSize: '10.5px',
+              fontWeight: 700,
+              padding: '3px 8px',
+              borderRadius: '5px',
+              background: '#18181b',
+              border: `1px solid ${syncState.ok ? '#14532d' : '#7f1d1d'}`,
+              color: syncState.ok ? '#10b981' : '#ef4444'
+            }}
+          >
+            {syncState.ok ? '● Live' : `● Sync failed${syncState.error ? `: ${syncState.error.slice(0, 40)}` : ''}`}
+          </span>
 
           {/* Challenges & Test Cases Passed Display (Marks hidden from candidate) */}
           <div
@@ -2289,8 +2353,33 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                             {activeReport.sampleResults[selectedCaseIdx].passed ? (
                               <>
                                 <div>
-                                  <div style={{ fontSize: '10.5px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>
-                                    Input:
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                    <span style={{ fontSize: '10.5px', color: '#71717a', textTransform: 'uppercase', fontWeight: 700 }}>
+                                      Input:
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveConsoleTab('testcase');
+                                        playSound('click');
+                                      }}
+                                      style={{
+                                        background: 'transparent',
+                                        border: '1px solid #3f3f46',
+                                        borderRadius: '4px',
+                                        padding: '2px 8px',
+                                        color: '#38bdf8',
+                                        fontSize: '11px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                      }}
+                                    >
+                                      <Terminal size={10} />
+                                      <span>Edit Input in Testcase Tab</span>
+                                    </button>
                                   </div>
                                   <pre style={{ margin: 0, background: '#09090b', border: '1px solid #27272a', borderRadius: '4px', padding: '6px 8px', fontFamily: "'Consolas', monospace", fontSize: '11.5px', color: '#f4f4f5', whiteSpace: 'pre-wrap' }}>
                                     {activeReport.sampleResults[selectedCaseIdx].input}
@@ -2513,7 +2602,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
               Candidate {candidateProfile.name} ({cleanRoll}): Multiple tab switch or window departure infractions were detected. Examination input is frozen. Contact your lab proctor to unlock.
             </p>
             <div style={{ fontSize: '11px', color: '#71717a', marginBottom: '14px', background: '#18181b', padding: '6px 10px', borderRadius: '4px', border: '1px solid #27272a' }}>
-              Invigilator Master Key: <code style={{ color: '#60a5fa', fontWeight: 800 }}>AXENT-PROCTOR</code>
+              Ask your invigilator for a one-time unlock key
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
@@ -2544,6 +2633,7 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
             <button
               type="button"
               onClick={handleUnlockExam}
+              disabled={isUnlocking}
               style={{
                 width: '100%',
                 padding: '10px',
@@ -2553,10 +2643,11 @@ export const CodeSparkRound2Arena: React.FC<CodeSparkRound2ArenaProps> = ({
                 border: 'none',
                 fontSize: '12.5px',
                 fontWeight: 700,
-                cursor: 'pointer'
+                cursor: isUnlocking ? 'not-allowed' : 'pointer',
+                opacity: isUnlocking ? 0.7 : 1
               }}
             >
-              Verify &amp; Unlock Workstation
+              {isUnlocking ? 'Verifying Key…' : 'Verify & Unlock Workstation'}
             </button>
           </div>
         </div>

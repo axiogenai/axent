@@ -5356,30 +5356,14 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Key size={16} color="#60a5fa" />
                 <span style={{ fontSize: '13px', fontWeight: 800, color: '#f4f4f5' }}>
-                  CodeSpark Access Keys &amp; Proctor Master Credentials
+                  CodeSpark Access Keys
                 </span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '11px', color: '#a1a1aa' }}>Proctor Master Key:</span>
-                <code style={{ fontSize: '12px', fontWeight: 800, color: '#60a5fa', background: '#18181b', padding: '3px 8px', borderRadius: '4px', border: '1px solid #27272a' }}>
-                  AXENT-PROCTOR
-                </code>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText('AXENT-PROCTOR');
-                    playSound('click');
-                  }}
-                  style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '4px', padding: '3px 8px', color: '#a1a1aa', fontSize: '11px', cursor: 'pointer' }}
-                >
-                  Copy Key
-                </button>
               </div>
             </div>
             <div style={{ fontSize: '11.5px', color: '#a1a1aa', lineHeight: '1.6' }}>
               • <strong>Round 1 (MCQ):</strong> Candidates navigate to <code style={{ color: '#10b981' }}>/code-spark</code> and enter their <strong>AXENT Key</strong> (or Roll Number).<br />
               • <strong>Round 2 (Coding):</strong> Shortlisted candidates access <code style={{ color: '#10b981' }}>/codespark-exams?round=2</code> using their provisioned <strong>Round 2 Email Key</strong> (<span style={{ fontFamily: 'monospace', color: '#60a5fa' }}>AXENT-R2-XXXX</span>).<br />
-              • <strong>Lockdown Release:</strong> If a student triggers Academic Lockdown, enter <code style={{ color: '#60a5fa' }}>AXENT-PROCTOR</code> on their workstation to unlock instantly.
+              • <strong>Lockdown Release:</strong> If a student triggers Academic Lockdown, issue a one-time unlock key from Cheating Alerts / Test Stations and give it to the student.
             </div>
           </div>
 

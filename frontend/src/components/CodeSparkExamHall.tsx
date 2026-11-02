@@ -727,6 +727,7 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
                 <MCQExamScreen
                   examId={effectiveRound1Exam?.id || ''}
                   onBack={handleExitToPortal}
+                  onExit={handleExitToPortal}
                 />
               </ErrorBoundary>
             )}
@@ -737,14 +738,15 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
             {isCandidateShortlisted ? (
               <ErrorBoundary fallbackTitle="CodeSpark Coding Arena Error">
                 <CodeSparkRound2Arena
-                  candidateProfile={
-                    candidateProfile || {
-                      name: candidateName,
-                      rollNumber: cleanRoll,
-                      accessKey: candidateKey,
-                      email: candidateProfile?.email || ''
-                    }
-                  }
+                  candidateProfile={{
+                    name: candidateName,
+                    rollNumber: cleanRoll,
+                    accessKey: candidateKey,
+                    round2Key: candidateProfile?.round2Key || (candidateKey.includes('R2') ? candidateKey : undefined),
+                    email: candidateProfile?.email || '',
+                    stationNumber: candidateProfile?.stationNumber,
+                    department: candidateProfile?.department
+                  }}
                   onExit={handleExitToPortal}
                   theme={theme}
                 />

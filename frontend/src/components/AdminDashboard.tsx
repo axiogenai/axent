@@ -196,6 +196,9 @@ interface AdminDashboardProps {
   initialTab?: string;
 }
 
+const isR2Row = (st: any): boolean =>
+  String(st?.id || '').startsWith('r2_') || String(st?.labId || st?.lab_id || '').toUpperCase() === 'ROUND_2_ARENA';
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   theme = 'dark',
   onSelectReportForStudent,
@@ -303,11 +306,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         s.student.rollNumber = cleanRoll;
       }
 
-      const canonKey = cleanRoll
+      const canonKey = (isR2Row(s) ? 'r2:' : '') + (cleanRoll
         ? `roll-${cleanRoll.toUpperCase()}`
         : cleanName
         ? `name-${cleanName.toLowerCase()}`
-        : s.id;
+        : s.id);
 
       const existing = deduped.get(canonKey);
       if (!existing || (s.lastUpdatedTimestamp || 0) >= (existing.lastUpdatedTimestamp || 0)) {
@@ -335,19 +338,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             cs.student.name = cleanName;
             cs.student.rollNumber = cleanRoll;
           }
-          const canonKey = cleanRoll
+          const canonKey = (isR2Row(cs) ? 'r2:' : '') + (cleanRoll
             ? `roll-${cleanRoll.toUpperCase()}`
             : cleanName
             ? `name-${cleanName.toLowerCase()}`
-            : cs.id;
-          mergeMap.set(canonKey, cs);
+            : cs.id);
+          // keep the NEWEST row per candidate (cloud list is newest-first, so never overwrite)
+          const prevCs = mergeMap.get(canonKey);
+          if (!prevCs || (cs.lastUpdatedTimestamp || 0) > (prevCs.lastUpdatedTimestamp || 0)) {
+            mergeMap.set(canonKey, cs);
+          }
         });
         cleanList.forEach((s) => {
-          const canonKey = s.student?.rollNumber
+          const canonKey = (isR2Row(s) ? 'r2:' : '') + (s.student?.rollNumber
             ? `roll-${s.student.rollNumber.toUpperCase()}`
             : s.student?.name
             ? `name-${s.student.name.toLowerCase()}`
-            : s.id;
+            : s.id);
           const existing = mergeMap.get(canonKey);
           if (!existing || (s.lastUpdatedTimestamp || 0) >= (existing.lastUpdatedTimestamp || 0)) {
             mergeMap.set(canonKey, s);

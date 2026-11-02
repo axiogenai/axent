@@ -267,12 +267,17 @@ async function executeWithWandbox(
 
     const data = await res.json();
     const statusNum = parseInt(data.status || '0', 10);
-    const compileErr = data.compiler_error || data.compiler_output || null;
+    const rawCompileMsg: string = (data.compiler_error || data.compiler_output || '').trim();
     const programErr = data.program_error || null;
-    const isError = statusNum !== 0 || Boolean(compileErr && compileErr.trim());
+    const programOut: string = data.program_output || '';
+    // Compiler warnings alone must NOT fail a run. Only treat the compiler message as a
+    // compile error when the build actually failed (non-zero status and the program never ran).
+    const buildFailed = statusNum !== 0 && !programOut && !programErr && rawCompileMsg !== '';
+    const compileErr = buildFailed ? rawCompileMsg : null;
+    const isError = statusNum !== 0;
 
     return {
-      stdout: data.program_output || (isError ? '' : 'Program finished with no output.'),
+      stdout: programOut || (isError ? '' : 'Program finished with no output.'),
       stderr: programErr,
       compileOutput: compileErr,
       exitCode: statusNum,
@@ -386,6 +391,38 @@ function executeInBrowserSandbox(
   };
 }
 
+const PROXY_LANGS = new Set(['Python', 'C++', 'C', 'Java']);
+
+/**
+ * Same-origin serverless runner (/api/run). Avoids browser CORS / rate-limit problems.
+ */
+async function executeWithProxy(
+  sourceCode: string,
+  language: string,
+  stdin = '',
+  timeoutMs = 25000
+): Promise<CompilerExecutionResult> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch('/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ language, code: sourceCode, stdin }),
+      signal: controller.signal
+    });
+    const ct = res.headers.get('content-type') || '';
+    if (!res.ok || !ct.includes('application/json')) {
+      throw new Error(`Proxy HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    if (typeof data?.isError !== 'boolean') throw new Error('Proxy bad response');
+    return data as CompilerExecutionResult;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Execute real code via Multi-Tier Failover Engine:
  *  Tier 1: Custom/Intranet Judge0 Server (if configured for campus lab)
@@ -398,13 +435,28 @@ export async function runRealCode(
   language: string,
   stdin = ''
 ): Promise<CompilerExecutionResult> {
+  // Support modern type annotations (e.g. list[int], dict[str, int]) across all Python environments
+  let normalizedCode = sourceCode;
+  if (language === 'Python' && !sourceCode.includes('from __future__ import annotations')) {
+    normalizedCode = `from __future__ import annotations\nimport sys\nimport typing\nfrom typing import *\n${sourceCode}`;
+  }
+
   // Check Tier 1: Custom / Campus Intranet Judge0 URL
   const customUrl = getCustomJudge0Url();
   if (customUrl) {
     try {
-      return await executeWithJudge0(sourceCode, language, stdin, customUrl, 5000);
+      return await executeWithJudge0(normalizedCode, language, stdin, customUrl, 5000);
     } catch (err) {
       console.warn('[Compiler Tier 1: Intranet Judge0] Failed, falling back to public cluster:', err);
+    }
+  }
+
+  // Primary: same-origin serverless runner (most reliable on the exam day)
+  if (PROXY_LANGS.has(language)) {
+    try {
+      return await executeWithProxy(normalizedCode, language, stdin);
+    } catch (proxyErr) {
+      console.warn('[Compiler Proxy /api/run] unavailable, trying direct engines:', proxyErr);
     }
   }
 
@@ -412,7 +464,7 @@ export async function runRealCode(
   const hasWandbox = Boolean(WANDBOX_COMPILERS[language]);
   if (hasWandbox) {
     try {
-      return await executeWithWandbox(sourceCode, language, stdin, 5000);
+      return await executeWithWandbox(normalizedCode, language, stdin, 5000);
     } catch (wandboxErr) {
       console.warn('[Compiler Fast-Path: Wandbox] Failed or timed out, trying Judge0 Cloud:', wandboxErr);
     }
@@ -420,12 +472,27 @@ export async function runRealCode(
 
   // Tier 2: Public Judge0 Cloud CE
   try {
-    return await executeWithJudge0(sourceCode, language, stdin, undefined, 5000);
+    return await executeWithJudge0(normalizedCode, language, stdin, undefined, 5000);
   } catch (tier2Err) {
     console.warn('[Compiler Tier 2: Judge0 Cloud CE] Failed or timed out, cascading to sandbox:', tier2Err);
   }
 
-  // Tier 4: Client-side In-Browser Sandbox or Offline Pre-Flight
+  // Graded languages must never get a fake "passed" result: report that the compiler is unreachable
+  if (PROXY_LANGS.has(language)) {
+    return {
+      stdout: '',
+      stderr: 'Compiler servers are unreachable right now. Check the internet connection and press Run again.',
+      compileOutput: null,
+      exitCode: 1,
+      time: '0.00s',
+      memory: 0,
+      statusDescription: 'Compiler Unreachable',
+      isError: true,
+      engineUsed: 'none'
+    };
+  }
+
+  // Tier 4: Client-side In-Browser Sandbox (JavaScript / TypeScript only)
   return executeInBrowserSandbox(sourceCode, language, stdin);
 }
 
