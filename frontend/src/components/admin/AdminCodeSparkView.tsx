@@ -593,55 +593,68 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
   // Filter attempts for Code Spark Round 1
 
   const aptitudeCandidates = useMemo(() => {
+    const list: any[] = [];
+    const seenRolls = new Set<string>();
 
-    return allAttempts
+    allAttempts.forEach((att) => {
+      const max = att.maxScore || currentAssignedExam?.totalMarks || 1;
+      const score = att.score ?? 0;
+      const pct = Math.round((score / max) * 100);
+      const roll = (att.studentRoll || '').toUpperCase();
+      if (roll) seenRolls.add(roll);
 
-      .map((att) => {
+      const cand = registeredCandidates.find(
+        (c) =>
+          (c.rollNumber && c.rollNumber.toUpperCase() === roll) ||
+          c.accessKey.toUpperCase() === roll ||
+          c.email.toUpperCase() === (att.studentEmail || '').toUpperCase()
+      );
 
-        const max = att.maxScore || currentAssignedExam?.totalMarks || 1;
+      const isShortlisted = shortlistedRolls.includes(roll) || Boolean(cand?.isShortlisted);
 
-        const score = att.score ?? 0;
+      list.push({
+        ...att,
+        candidateRecord: cand,
+        score,
+        totalMarks: max,
+        scorePct: pct,
+        isShortlisted,
+        round2Key: cand?.round2Key
+      });
+    });
 
+    // Also include any registered candidate with recorded score who might not be in allAttempts
+    registeredCandidates.forEach((cand) => {
+      const roll = (cand.rollNumber || cand.accessKey || '').toUpperCase();
+      const key = cand.accessKey.toUpperCase();
+      if (
+        (cand.round1Score !== undefined || cand.status === 'ROUND1_COMPLETED') &&
+        !seenRolls.has(roll) &&
+        !seenRolls.has(key)
+      ) {
+        seenRolls.add(roll);
+        const max = cand.round1MaxScore || currentAssignedExam?.totalMarks || 10;
+        const score = cand.round1Score ?? 0;
         const pct = Math.round((score / max) * 100);
-
-        const roll = (att.studentRoll || '').toUpperCase();
-
-        const cand = registeredCandidates.find(
-
-          (c) =>
-
-            (c.rollNumber && c.rollNumber.toUpperCase() === roll) ||
-
-            c.accessKey.toUpperCase() === roll ||
-
-            c.email.toUpperCase() === (att.studentEmail || '').toUpperCase()
-
-        );
-
-        const isShortlisted = shortlistedRolls.includes(roll) || Boolean(cand?.isShortlisted);
-
-        return {
-
-          ...att,
-
-          candidateRecord: cand,
-
+        const isShortlisted = shortlistedRolls.includes(roll) || Boolean(cand.isShortlisted);
+        list.push({
+          id: `cand-att-${cand.accessKey}`,
+          studentName: cand.name,
+          studentRoll: cand.rollNumber || cand.accessKey,
+          studentEmail: cand.email,
+          studentDept: cand.department || 'Axent Candidate',
           score,
-
           totalMarks: max,
-
           scorePct: pct,
-
+          status: 'SUBMITTED',
+          candidateRecord: cand,
           isShortlisted,
+          round2Key: cand.round2Key
+        });
+      }
+    });
 
-          round2Key: cand?.round2Key
-
-        };
-
-      })
-
-      .sort((a, b) => b.score - a.score);
-
+    return list.sort((a, b) => b.score - a.score);
   }, [allAttempts, shortlistedRolls, registeredCandidates, currentAssignedExam]);
 
   // Shortlisted cohort prepared with credentials for Round 2 Arena (deduplicated & canonical)
@@ -697,25 +710,18 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
   // AI Paper Generation handler
-
-  const handlePaperGenerated = (result: AIPaperGenerationResult) => {
+  const handlePaperGenerated = async (result: AIPaperGenerationResult) => {
 
     try {
 
       const exam = result.exam;
-
       exam.isCodeSpark = true;
-
+      exam.status = 'PUBLISHED';
       saveExam(exam);
-
-      void saveActiveCodeSparkPaper(exam.id);
-
+      await saveActiveCodeSparkPaper(exam.id);
       localStorage.setItem('codedna_codespark_round1_exam_id', exam.id);
-
       setAssignedExamId(exam.id);
-
       setAllExams(getAllExams());
-
       setShowAIPaperModal(false);
 
       playSound('success');
@@ -738,7 +744,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-    const handleGoogleFormQuestionsImported = (importedQuestions: MCQQuestion[]) => {
+  const handleGoogleFormQuestionsImported = async (importedQuestions: MCQQuestion[]) => {
 
     try {
 
@@ -804,16 +810,13 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
+      updatedExam.isCodeSpark = true;
+      updatedExam.status = 'PUBLISHED';
       saveExam(updatedExam);
-
-        void saveActiveCodeSparkPaper(updatedExam.id);
-
+      await saveActiveCodeSparkPaper(updatedExam.id);
       localStorage.setItem('codedna_codespark_round1_exam_id', updatedExam.id);
-
       setAssignedExamId(updatedExam.id);
-
       setAllExams(getAllExams());
-
       setShowGoogleFormModal(false);
 
       playSound('success');
@@ -1810,7 +1813,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-  const handleAssignPaper = (examId: string) => {
+  const handleAssignPaper = async (examId: string) => {
 
     if (!examId) return;
 
@@ -1825,28 +1828,18 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
       const target = allExams.find((e) => e.id === examId);
-
       if (target) {
-
         const updatedExam: MCQExamConfig = {
-
           ...target,
-
           isCodeSpark: true,
-
+          status: 'PUBLISHED',
           updatedAt: Date.now()
-
         };
-
         saveExam(updatedExam);
-
-        void saveActiveCodeSparkPaper(updatedExam.id);
-
+        await saveActiveCodeSparkPaper(updatedExam.id);
         setAllExams(getAllExams());
-
+        setAssignedExamId(updatedExam.id);
       }
-
-
 
       playSound('success');
 

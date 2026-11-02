@@ -137,6 +137,7 @@ export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
       let assignedLabId = '';
       let assignedLabName = '';
       let isPrivate = false;
+      let isCodeSpark = false;
       let cleanInstr = row.instructions || '';
 
       // Extract AXENT_META payload from instructions if present
@@ -152,6 +153,7 @@ export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
           if (parsed.assignedLabId) assignedLabId = parsed.assignedLabId;
           if (parsed.assignedLabName) assignedLabName = parsed.assignedLabName;
           if (parsed.isPrivate !== undefined) isPrivate = Boolean(parsed.isPrivate);
+          if (parsed.isCodeSpark !== undefined) isCodeSpark = Boolean(parsed.isCodeSpark);
         } catch {}
         cleanInstr = cleanInstr.replace(/<!--AXENT_META:[\s\S]*?-->/g, '').trim();
       }
@@ -167,6 +169,9 @@ export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
       }
       if (row.is_private !== undefined) {
         isPrivate = Boolean(row.is_private);
+      }
+      if (row.is_codespark !== undefined) {
+        isCodeSpark = Boolean(row.is_codespark);
       }
 
       return {
@@ -196,6 +201,7 @@ export async function fetchExamsFromCloud(): Promise<MCQExamConfig[] | null> {
         assignedLabId: assignedLabId || undefined,
         assignedLabName: assignedLabName || undefined,
         isPrivate,
+        isCodeSpark: Boolean(isCodeSpark || row.is_codespark || (row.title && row.title.toLowerCase().includes('codespark')) || row.id === 'codespark-round1-aptitude'),
         maxAttempts: Number(row.max_attempts) || 1,
         status: row.status,
         createdAt: Number(row.created_at),
@@ -218,7 +224,8 @@ async function writeExamToCloud(e: MCQExamConfig): Promise<boolean> {
       whatsappGroupLink: e.whatsappGroupLink || '',
       assignedLabId: e.assignedLabId || '',
       assignedLabName: e.assignedLabName || '',
-      isPrivate: Boolean(e.isPrivate)
+      isPrivate: Boolean(e.isPrivate),
+      isCodeSpark: Boolean(e.isCodeSpark)
     })}-->`;
 
     const cleanInstructions = (e.instructions || '').replace(/<!--AXENT_META:[\s\S]*?-->/g, '').trim();
@@ -380,6 +387,29 @@ export async function fetchAttemptsFromCloud(): Promise<MCQAttempt[] | null> {
 
 async function writeAttemptToCloud(a: MCQAttempt): Promise<boolean> {
   try {
+    // 1. Ensure parent exam exists in mcq_exams so foreign key constraint never fails!
+    try {
+      const { data: exCheck } = await supabase.from('mcq_exams').select('id').eq('id', a.examId).maybeSingle();
+      if (!exCheck) {
+        await supabase.from('mcq_exams').upsert({
+          id: a.examId,
+          title: a.examTitle || 'CodeSpark Examination',
+          description: 'Auto-provisioned examination header for attempt synchronization',
+          instructions: '',
+          subject: 'CodeSpark',
+          topic: 'Assessment',
+          status: 'PUBLISHED',
+          duration_minutes: 30,
+          total_marks: a.maxScore || 10,
+          question_count: Array.isArray(a.assignedQuestions) ? a.assignedQuestions.length : 10,
+          created_at: a.startTime || Date.now(),
+          updated_at: Date.now()
+        });
+      }
+    } catch (exErr) {
+      console.warn('[Supabase] Parent exam verification notice:', exErr);
+    }
+
     const row = {
       id: a.id,
       exam_id: a.examId,
@@ -821,7 +851,7 @@ export async function deleteStationFromCloud(stationId: string): Promise<boolean
 
 export async function clearSubmittedStationsFromCloud(labId?: string): Promise<boolean> {
   try {
-    let query = supabase.from('candidate_stations').delete().eq('status', 'Submitted & Done');
+    let query = supabase.from('candidate_stations').delete().eq('status', 'Submitted & Done').neq('id', 'codespark_system_config').neq('lab_id', 'CODESPARK_ROSTER');
     if (labId && labId !== 'all') {
       query = query.eq('lab_id', labId);
     }
@@ -844,7 +874,10 @@ export async function clearAllStationsFromCloud(labId?: string): Promise<boolean
       console.warn('[Supabase] Failed to list stations for clearing:', selErr);
     }
     if (records && records.length > 0) {
-      const ids = records.map(r => r.id);
+      // NEVER delete codespark_system_config or candidate roster records
+      const ids = records
+        .map(r => r.id)
+        .filter(id => id !== 'codespark_system_config' && !id.startsWith('cand_') && !id.startsWith('codespark_cand_'));
       for (let i = 0; i < ids.length; i += 50) {
         const batch = ids.slice(i, i + 50);
         await supabase.from('candidate_stations').delete().in('id', batch);
@@ -868,7 +901,10 @@ export async function clearAllAttemptsFromCloud(labId?: string): Promise<boolean
       console.warn('[Supabase] Failed to list attempts for clearing:', selErr);
     }
     if (records && records.length > 0) {
-      const ids = records.map(r => r.id);
+      // NEVER delete codespark_system_config or candidate roster records
+      const ids = records
+        .map(r => r.id)
+        .filter(id => id !== 'codespark_system_config' && !id.startsWith('cand_') && !id.startsWith('codespark_cand_'));
       for (let i = 0; i < ids.length; i += 50) {
         const batch = ids.slice(i, i + 50);
         await supabase.from('mcq_attempts').delete().in('id', batch);

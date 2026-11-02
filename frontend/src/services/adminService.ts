@@ -662,7 +662,11 @@ export function cleanCorruptedStations(): void {
       if (Array.isArray(parsed)) {
         // Keep valid stations with an id and real student details (never phantom / empty test rows)
         const cleaned = parsed.filter(
-          (s) => s && s.id && s.student && s.student.name && s.student.name.trim() !== '' && s.student.name !== 'Candidate' && s.student.name !== 'Candidate (N/A)'
+          (s) => s && s.id && (
+            s.id === 'codespark_system_config' ||
+            s.id.startsWith('cand_') ||
+            (s.student && s.student.name && s.student.name.trim() !== '' && s.student.name !== 'Candidate' && s.student.name !== 'Candidate (N/A)')
+          )
         );
         if (cleaned.length !== parsed.length) {
           localStorage.setItem(STATIONS_KEY, JSON.stringify(cleaned));
@@ -685,12 +689,56 @@ function reconcileAttemptsIntoStations(stations: CandidateStation[]): CandidateS
     }
   });
 
-  // Reconcile real MCQ candidate attempts
+  // Reconcile real MCQ candidate attempts & CodeSpark candidate submissions
   try {
+    let attempts: any[] = [];
     const rawAttempts = localStorage.getItem('codedna_mcq_attempts');
     if (rawAttempts) {
-      const attempts = JSON.parse(rawAttempts);
-      if (Array.isArray(attempts)) {
+      const parsed = JSON.parse(rawAttempts);
+      if (Array.isArray(parsed)) attempts = parsed;
+    }
+
+    // Also include CodeSpark registered candidates with completed marks
+    try {
+      const rawCand = localStorage.getItem('codedna_codespark_candidates');
+      if (rawCand) {
+        const candidates = JSON.parse(rawCand);
+        if (Array.isArray(candidates)) {
+          for (const c of candidates) {
+            if (c && (c.round1Score !== undefined || c.status === 'ROUND1_COMPLETED')) {
+              const candRoll = (c.rollNumber || c.accessKey || '').trim().toUpperCase();
+              const candKey = (c.accessKey || '').trim().toUpperCase();
+              const alreadyHas = attempts.some(
+                (a) => (a.studentRoll || '').trim().toUpperCase() === candRoll ||
+                       (a.studentRoll || '').trim().toUpperCase() === candKey
+              );
+              if (!alreadyHas) {
+                attempts.push({
+                  id: `codespark-attempt-${c.accessKey}`,
+                  examId: c.assignedExamId || 'codespark-round1-aptitude',
+                  examTitle: 'CodeSpark Round 1 Examination',
+                  studentName: c.name,
+                  studentRoll: c.rollNumber || c.accessKey,
+                  studentDept: c.department || 'Axent Candidate',
+                  studentSem: '1',
+                  studentDiv: 'A',
+                  startTime: c.registeredAt || Date.now(),
+                  submitTime: c.lastActiveAt || Date.now(),
+                  status: 'SUBMITTED',
+                  score: c.round1Score ?? 0,
+                  maxScore: c.round1MaxScore ?? 10,
+                  percentageScore: Math.round(((c.round1Score ?? 0) / (c.round1MaxScore || 10)) * 100),
+                  tabSwitchCount: 0,
+                  unfocusedSeconds: 0
+                });
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+
+    if (attempts.length > 0) {
         for (const a of attempts) {
           if (!a || !a.id || !a.studentName) continue;
           const cleanRoll = String(a.studentRoll || '01').replace(/[^0-9]/g, '') || '01';
@@ -845,8 +893,7 @@ function reconcileAttemptsIntoStations(stations: CandidateStation[]): CandidateS
           }
         }
       }
-    }
-  } catch {}
+    } catch {}
 
   return Array.from(stationMap.values());
 }

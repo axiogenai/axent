@@ -52,6 +52,7 @@ import {
   cleanupExamLabWhenOver,
   syncFromSupabase
 } from '../services/mcqService';
+import { syncCandidatesFromCloud } from '../services/codeSparkService';
 import { fetchStationsFromCloud, subscribeToCloudStations } from '../services/supabaseService';
 import { InstituteLabManagerModal } from './InstituteLabManagerModal';
 import { SupabaseMigrationModal } from './SupabaseMigrationModal';
@@ -436,7 +437,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   useEffect(() => {
     loadData();
-    void syncFromSupabase().then(() => loadData());
+    void Promise.all([syncFromSupabase(), syncCandidatesFromCloud()]).then(() => loadData());
 
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const debouncedLoad = () => {

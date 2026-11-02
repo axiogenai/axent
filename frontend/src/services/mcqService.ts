@@ -666,20 +666,23 @@ export function getDeletedExamIds(): Set<string> {
 
 
 export function recordExamDeleted(id: string): void {
-
   try {
-
     const set = getDeletedExamIds();
-
     set.add(id);
-
     localStorage.setItem(DELETED_EXAMS_KEY, JSON.stringify(Array.from(set)));
-
   } catch {}
-
 }
 
-
+export function unmarkExamDeleted(id: string): void {
+  try {
+    const raw = localStorage.getItem(DELETED_EXAMS_KEY);
+    if (raw) {
+      const parsed: string[] = JSON.parse(raw);
+      const filtered = parsed.filter((x) => x !== id);
+      localStorage.setItem(DELETED_EXAMS_KEY, JSON.stringify(filtered));
+    }
+  } catch {}
+}
 
 export function getAllExams(): MCQExamConfig[] {
   const deletedIds = getDeletedExamIds();
@@ -690,6 +693,7 @@ export function getAllExams(): MCQExamConfig[] {
   const list = (loaded || [])
     .filter((e): e is MCQExamConfig => 
       Boolean(e && typeof e === 'object' && e.id) &&
+      e.id !== 'codespark_system_config' &&
       !deletedIds.has(e.id) &&
       !String(e.id || '').startsWith('exam-aptitude-') && 
       !String(e.id || '').startsWith('exam-ise-') &&
@@ -765,41 +769,26 @@ export function createExam(partial: Omit<MCQExamConfig, 'id' | 'createdAt' | 'up
 
 
   const exam: MCQExamConfig = {
-
     ...partial,
-
     assignedLabId,
-
     assignedLabName,
-
     id: uuid(),
-
     createdAt: Date.now(),
-
     updatedAt: Date.now(),
-
   };
 
+  unmarkExamDeleted(exam.id);
   const all = getAllExams();
-
   all.push(exam);
-
   save(MCQ_STORAGE_KEYS.EXAMS, all);
-
-  saveExamToCloud(exam);
-
+  void saveExamToCloud(exam);
   notifyExamsChanged();
-
   notifyMcqDataChanged();
-
   return exam;
-
 }
 
-
-
 export function saveExam(exam: MCQExamConfig): MCQExamConfig {
-
+  unmarkExamDeleted(exam.id);
   let assignedLabId = exam.assignedLabId;
 
   let assignedLabName = exam.assignedLabName;
@@ -2709,8 +2698,15 @@ export async function syncFromSupabase(): Promise<void> {
 
 
 
-      // Filter out deleted IDs from cloud results
+      // Clear any false local deletions for exams that exist in cloud
+      cloudE.forEach((e) => {
+        if (e && e.id && deletedIds.has(e.id)) {
+          unmarkExamDeleted(e.id);
+          deletedIds.delete(e.id);
+        }
+      });
 
+      // Filter out deleted IDs from cloud results
       const activeCloudExams = cloudE.filter((e) => !deletedIds.has(e.id));
 
       const localExams = load<MCQExamConfig[]>(MCQ_STORAGE_KEYS.EXAMS, []);
@@ -2721,32 +2717,15 @@ export async function syncFromSupabase(): Promise<void> {
 
 
 
-      // Supabase is authoritative across devices. A local exam is only uploaded if freshly created (< 5 mins).
-
-      // If older and missing from cloud, it was deleted on another device or by admin, so purge locally.
-
-      const fiveMinsAgo = Date.now() - 5 * 60 * 1000;
-
+      // Intelligently merge: any valid local exam that is not yet in Supabase should be UPLOADED to Supabase,
+      // NEVER PURGED! This guarantees that any paper created on the admin dashboard persists permanently.
       localExams.forEach((e) => {
-
-        if (!deletedIds.has(e.id) && !mergedExamMap.has(e.id)) {
-
-          const isFreshDraft = (e.createdAt || 0) > fiveMinsAgo && e.status === 'DRAFT';
-
-          if (isFreshDraft) {
-
+        if (e && e.id && e.id !== 'codespark_system_config' && !deletedIds.has(e.id)) {
+          if (!mergedExamMap.has(e.id)) {
             mergedExamMap.set(e.id, e);
-
             void saveExamToCloud(e);
-
-          } else {
-
-            recordExamDeleted(e.id);
-
           }
-
         }
-
       });
 
       save(MCQ_STORAGE_KEYS.EXAMS, Array.from(mergedExamMap.values()));

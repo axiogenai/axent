@@ -18,8 +18,10 @@ import {
   CodeSparkCandidate,
   getAllCodeSparkCandidates,
   importCodeSparkCandidates,
+  importCodeSparkCandidatesDirect,
   parseCandidateImportText,
   saveCodeSparkCandidates,
+  deleteCodeSparkCandidateComplete,
   onCodeSparkCandidatesChanged,
   syncCandidatesFromCloud
 } from '../../services/codeSparkService';
@@ -43,6 +45,7 @@ export const CodeSparkCandidateImportModal: React.FC<CodeSparkCandidateImportMod
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [activeSubTab, setActiveSubTab] = useState<'roster' | 'import'>('roster');
+  const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -71,9 +74,9 @@ export const CodeSparkCandidateImportModal: React.FC<CodeSparkCandidateImportMod
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const handleImport = (e: React.FormEvent) => {
+  const handleImport = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim()) return;
+    if (!inputText.trim() || isImporting) return;
 
     const parsed = parseCandidateImportText(inputText);
     if (parsed.length === 0) {
@@ -85,15 +88,25 @@ export const CodeSparkCandidateImportModal: React.FC<CodeSparkCandidateImportMod
       return;
     }
 
-    const created = importCodeSparkCandidates(parsed, effectiveExamId);
-    setInputText('');
-    setActiveSubTab('roster');
-    playSound('success');
-    setNotification({
-      message: `Issued AXENT keys for ${created.length} candidate(s).`,
-      type: 'success'
-    });
-    setTimeout(() => setNotification(null), 4000);
+    setIsImporting(true);
+    try {
+      const created = await importCodeSparkCandidatesDirect(parsed, effectiveExamId);
+      setInputText('');
+      setActiveSubTab('roster');
+      playSound('success');
+      setNotification({
+        message: `Issued and securely saved ${created.length} AXENT key(s) directly to Supabase Cloud!`,
+        type: 'success'
+      });
+    } catch {
+      setNotification({
+        message: 'Failed to save candidates to Supabase. Check internet connection.',
+        type: 'error'
+      });
+    } finally {
+      setIsImporting(false);
+      setTimeout(() => setNotification(null), 4000);
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -116,6 +129,7 @@ export const CodeSparkCandidateImportModal: React.FC<CodeSparkCandidateImportMod
   const handleDeleteCandidate = (key: string) => {
     const remaining = candidates.filter((c) => c.accessKey !== key);
     saveCodeSparkCandidates(remaining);
+    void deleteCodeSparkCandidateComplete(key);
     playSound('click');
   };
 

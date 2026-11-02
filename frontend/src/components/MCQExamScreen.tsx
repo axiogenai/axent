@@ -33,7 +33,7 @@ import {
 import katex from 'katex';
 import { ErrorBoundary } from './ErrorBoundary';
 import { getCurrentAuthorityRole, isAuthorityAdmin } from '../services/authService';
-import { lookupCandidateAny, asyncLookupCandidateAny } from '../services/codeSparkService';
+import { lookupCandidateAny, asyncLookupCandidateAny, updateCodeSparkCandidateScore } from '../services/codeSparkService';
 import { cleanCandidateNameAndRoll } from '../utils/candidateFormatter';
 
 // ── Timer hook ────────────────────────────────────────────────────────────────
@@ -1614,6 +1614,142 @@ const WhatsAppHoldResultsView: React.FC<WhatsAppHoldResultsViewProps> = ({ attem
   );
 };
 
+// ── CodeSpark / TechFest Secure Submission Receipt (Zero Score Leakage) ────────
+interface CodeSparkSubmittedViewProps {
+  attempt: MCQAttempt;
+  exam: MCQExamConfig;
+  onExit?: () => void;
+}
+
+const CodeSparkSubmittedView: React.FC<CodeSparkSubmittedViewProps> = ({ attempt, exam, onExit }) => {
+  const submitTimeStr = new Date(attempt.submitTime || Date.now()).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#09090b',
+        color: '#f4f4f5',
+        padding: '24px',
+        fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      }}
+    >
+      <div
+        style={{
+          maxWidth: '560px',
+          width: '100%',
+          background: '#121214',
+          border: '1px solid #27272a',
+          borderRadius: '12px',
+          padding: '36px 30px',
+          textAlign: 'center',
+          boxShadow: '0 20px 40px rgba(0,0,0,0.6)'
+        }}
+      >
+        {/* Status Badge */}
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '6px 14px',
+            borderRadius: '9999px',
+            background: 'rgba(34, 197, 94, 0.12)',
+            border: '1px solid rgba(34, 197, 94, 0.3)',
+            color: '#4ade80',
+            fontSize: '12px',
+            fontWeight: 700,
+            letterSpacing: '0.05em',
+            textTransform: 'uppercase',
+            marginBottom: '20px'
+          }}
+        >
+          <CheckCircle2 size={16} /> Attempt Submitted & Sealed
+        </div>
+
+        {/* Heading */}
+        <h1
+          style={{
+            fontSize: '22px',
+            fontWeight: 800,
+            color: '#ffffff',
+            letterSpacing: '-0.02em',
+            margin: '0 0 12px',
+            textTransform: 'uppercase'
+          }}
+        >
+          Hold Tight! Results Will Be Declared Soon
+        </h1>
+
+        {/* Explanatory Text */}
+        <p style={{ fontSize: '14px', color: '#a1a1aa', lineHeight: 1.6, margin: '0 0 28px' }}>
+          Your examination responses have been encrypted and securely locked in the Axent Examination Ledger. Official evaluation and shortlist announcements will be declared by the examination committee.
+        </p>
+
+        {/* Metadata Card */}
+        <div
+          style={{
+            background: '#18181b',
+            border: '1px solid #27272a',
+            borderRadius: '8px',
+            padding: '16px 20px',
+            textAlign: 'left',
+            marginBottom: '28px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            fontSize: '13px'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #27272a', paddingBottom: '8px' }}>
+            <span style={{ color: '#71717a' }}>Candidate Name</span>
+            <span style={{ color: '#f4f4f5', fontWeight: 600 }}>{attempt.studentName}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #27272a', paddingBottom: '8px' }}>
+            <span style={{ color: '#71717a' }}>Candidate Roll / Access Key</span>
+            <span style={{ color: '#f4f4f5', fontFamily: 'monospace', fontWeight: 700 }}>{attempt.studentRoll}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #27272a', paddingBottom: '8px' }}>
+            <span style={{ color: '#71717a' }}>Examination</span>
+            <span style={{ color: '#f4f4f5', fontWeight: 600 }}>{exam.title || 'CodeSpark Round 1 Examination'}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: '#71717a' }}>Submission Timestamp</span>
+            <span style={{ color: '#a1a1aa', fontFamily: 'monospace' }}>{submitTimeStr}</span>
+          </div>
+        </div>
+
+        {/* Primary Action Button */}
+        <button
+          onClick={onExit || (() => { window.location.href = '/code-spark'; })}
+          style={{
+            width: '100%',
+            padding: '12px 24px',
+            background: '#ffffff',
+            color: '#09090b',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            transition: 'opacity 0.15s ease'
+          }}
+        >
+          Exit to Candidate Portal
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // ── Results View (Full-Width Technical Transcript & Analytical Review) ────────
 interface ResultsViewProps {
   attempt: MCQAttempt;
@@ -1637,7 +1773,17 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
     attempt.studentSem === 'Tech Fest'
   );
 
-  // STRICT INSTITUTIONAL GUARD:
+  // STRICT INSTITUTIONAL GUARD: Withhold scores and answer transcripts from candidates
+  if (isTechFest || exam?.isCodeSpark || attempt.studentDept === 'Axent Candidate' || attempt.studentSem === 'Tech Fest') {
+    return (
+      <CodeSparkSubmittedView
+        attempt={attempt}
+        exam={exam}
+        onExit={onExit || (() => { window.location.href = '/code-spark'; })}
+      />
+    );
+  }
+
   // If exam is configured for WhatsApp Group Release, hold results unless exam timed out or instant release is allowed
   const isWhatsAppRelease =
     attempt.status !== 'TIMED_OUT' && (
@@ -3704,31 +3850,13 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack, on
         showAlert('Cloud Sync Notice', 'Your result was saved on this device, but cloud sync failed. Keep this device open and notify the invigilator before exiting.', 'warning');
       }
 
-      // If this is CodeSpark / contest exam, redirect to /code-spark immediately without revealing answers
-      const isCodeSparkContest = Boolean(
-        isTechFest ||
-        exam?.isCodeSpark ||
-        exam?.id === 'codespark-round1-aptitude' ||
-        (exam?.title && exam.title.toLowerCase().includes('spark')) ||
-        (typeof window !== 'undefined' && (window.location.pathname.includes('/codespark') || window.location.pathname.includes('/code-spark'))) ||
-        (typeof localStorage !== 'undefined' && Boolean(localStorage.getItem('codedna_codespark_active_candidate'))) ||
-        student?.course === 'Code Spark 2026'
-      );
-
-      if (isCodeSparkContest) {
-        try {
-          if (document.fullscreenElement) {
-            void document.exitFullscreen().catch(() => {});
-          }
-        } catch {}
-        setTimeout(() => {
-          if (onExit) {
-            onExit();
-          } else {
-            window.location.href = '/code-spark';
-          }
-        }, 1200);
-        return;
+      const candidateKey = student?.rollNumber || attempt?.studentRoll || '';
+      if (candidateKey) {
+        void updateCodeSparkCandidateScore(candidateKey, result.score, result.maxScore);
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('codedna_exam_submitted'));
+        localStorage.setItem('codedna_codespark_exam_submitted', 'true');
       }
     } else {
       setSubmitted(false);
@@ -3823,6 +3951,28 @@ export const MCQExamScreen: React.FC<MCQExamScreenProps> = ({ examId, onBack, on
   const resolvedExam = exam || (attempt ? allExamsList.find((e) => e.id === attempt.examId) : null) || fallbackExamConfig;
 
   if (isConcludedOrSubmitted) {
+    const isCodeSparkCandidate = Boolean(
+      isTechFest ||
+      resolvedExam?.isCodeSpark ||
+      resolvedExam?.id === 'codespark-round1-aptitude' ||
+      (resolvedExam?.title && resolvedExam.title.toLowerCase().includes('spark')) ||
+      (typeof window !== 'undefined' && (window.location.pathname.includes('/codespark') || window.location.pathname.includes('/code-spark'))) ||
+      (typeof localStorage !== 'undefined' && Boolean(localStorage.getItem('codedna_codespark_active_candidate'))) ||
+      student?.course === 'Code Spark 2026' ||
+      attempt?.studentDept === 'Axent Candidate' ||
+      attempt?.studentSem === 'Tech Fest'
+    );
+
+    if (isCodeSparkCandidate && attempt && resolvedExam) {
+      return (
+        <CodeSparkSubmittedView
+          attempt={attempt}
+          exam={resolvedExam}
+          onExit={handleExitToCatalog}
+        />
+      );
+    }
+
     if (effectiveGradeResult && resolvedExam && attempt) {
       const isHoldResults =
         attempt.status !== 'TIMED_OUT' && (

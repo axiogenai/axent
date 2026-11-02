@@ -283,6 +283,37 @@ export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): P
       console.warn('[CodeSpark] mcq_exams upsert warning:', meErr);
     }
 
+    // 3. Save each candidate as an individual record in candidate_stations (triple redundancy)
+    try {
+      const stationRows = finalCandidates.map((c) => ({
+        id: `cand_${normalizeCodeSparkKey(c.accessKey)}`,
+        lab_id: 'CODESPARK_ROSTER',
+        station_number: normalizeCodeSparkKey(c.accessKey),
+        status: c.status || 'REGISTERED',
+        student: {
+          name: c.name,
+          email: c.email,
+          rollNumber: c.rollNumber || c.accessKey,
+          accessKey: c.accessKey,
+          department: c.department || 'Axent Candidate',
+          assignedExamId: c.assignedExamId || assignedId || null,
+          round2Key: c.round2Key || null,
+          isShortlisted: Boolean(c.isShortlisted),
+          round1Score: c.round1Score ?? null,
+          round1MaxScore: c.round1MaxScore ?? null,
+          registeredAt: c.registeredAt || Date.now()
+        },
+        last_updated_timestamp: Date.now()
+      }));
+
+      for (let i = 0; i < stationRows.length; i += 50) {
+        const batch = stationRows.slice(i, i + 50);
+        await supabase.from('candidate_stations').upsert(batch);
+      }
+    } catch (candErr) {
+      console.warn('[CodeSpark] candidate_stations individual upsert warning:', candErr);
+    }
+
     return true;
   } catch (err) {
     console.warn('[CodeSpark Cloud] pushCandidatesToCloud failed:', err);
@@ -336,6 +367,37 @@ export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
       } catch (e) {
         console.warn('[CodeSpark] mcq_exams read error:', e);
       }
+    }
+
+    // 3. Also check individual candidate records in candidate_stations with lab_id = 'CODESPARK_ROSTER'
+    try {
+      const { data: rosterRows } = await supabase
+        .from('candidate_stations')
+        .select('student')
+        .eq('lab_id', 'CODESPARK_ROSTER');
+
+      if (rosterRows && rosterRows.length > 0) {
+        const extraCands: CodeSparkCandidate[] = rosterRows
+          .map((r: any) => r.student as CodeSparkCandidate)
+          .filter((c) => Boolean(c && c.accessKey));
+        if (extraCands.length > 0) {
+          if (!config) {
+            config = {
+              activeExamId: localStorage.getItem('codedna_codespark_round1_exam_id') || null,
+              shortlistMode: 'cutoff',
+              shortlistValue: 12,
+              manualShortlistRolls: [],
+              isConcluded: false,
+              candidates: extraCands,
+              updatedAt: Date.now()
+            };
+          } else {
+            config.candidates = deduplicateCandidates([...(config.candidates || []), ...extraCands]);
+          }
+        }
+      }
+    } catch (rErr) {
+      console.warn('[CodeSpark] CODESPARK_ROSTER read notice:', rErr);
     }
 
     if (config) {
@@ -514,12 +576,13 @@ export async function saveActiveCodeSparkPaper(
     for (const ex of all) {
       if (ex.id === examId) {
         ex.isCodeSpark = true;
+        ex.status = 'PUBLISHED';
         saveExam(ex);
-        void saveExamToCloud(ex);
+        await saveExamToCloud(ex);
       } else if (ex.isCodeSpark) {
         ex.isCodeSpark = false;
         saveExam(ex);
-        void saveExamToCloud(ex);
+        await saveExamToCloud(ex);
       }
     }
 
@@ -1566,6 +1629,108 @@ export function importCodeSparkCandidates(
   return created;
 }
 
+export async function importCodeSparkCandidatesDirect(
+  items: CandidateImportItem[],
+  assignedExamId?: string
+): Promise<CodeSparkCandidate[]> {
+  // 1. Fetch latest candidates from cloud first
+  const existing = await syncCandidatesFromCloud();
+  const created: CodeSparkCandidate[] = [];
+
+  const usedKeys = new Set<string>();
+  existing.forEach((c) => {
+    if (c.accessKey) usedKeys.add(c.accessKey.trim().toUpperCase());
+  });
+
+  const getNextKey = (): string => {
+    let key = '';
+    do {
+      const pin = Math.floor(1000 + Math.random() * 9000);
+      key = `AXENT-${pin}`;
+    } while (usedKeys.has(key));
+    usedKeys.add(key);
+    return key;
+  };
+
+  const updatedRoster = [...existing];
+
+  for (const item of items) {
+    const cleanEmail = item.email.trim().toLowerCase();
+    const cleanName = item.name.trim();
+
+    const matchIdx = updatedRoster.findIndex(
+      (c) =>
+        (c.email && c.email.toLowerCase() === cleanEmail) ||
+        (c.name && c.name.toLowerCase() === cleanName.toLowerCase() && cleanEmail.includes(c.name.toLowerCase()))
+    );
+
+    if (matchIdx !== -1) {
+      const curr = updatedRoster[matchIdx];
+      const updated: CodeSparkCandidate = {
+        ...curr,
+        name: cleanName || curr.name,
+        email: cleanEmail || curr.email,
+        rollNumber: item.rollNumber || curr.rollNumber,
+        department: item.department || curr.department || 'Axent Candidate',
+        assignedExamId: assignedExamId || curr.assignedExamId
+      };
+      updatedRoster[matchIdx] = updated;
+      created.push(updated);
+    } else {
+      const accessKey = getNextKey();
+      const newCand: CodeSparkCandidate = {
+        accessKey,
+        name: cleanName,
+        email: cleanEmail,
+        rollNumber: item.rollNumber || cleanEmail.split('@')[0].toUpperCase(),
+        department: item.department || 'Axent Candidate',
+        assignedExamId,
+        status: 'REGISTERED',
+        registeredAt: Date.now(),
+        isShortlisted: false,
+        allowRound1Retake: false
+      };
+      updatedRoster.push(newCand);
+      created.push(newCand);
+    }
+  }
+
+  // Save directly and await cloud persistence!
+  saveCodeSparkCandidates(updatedRoster);
+  await pushCandidatesToCloud(updatedRoster);
+  return created;
+}
+
+export async function updateCodeSparkCandidateScore(
+  keyOrRoll: string,
+  score: number,
+  maxScore: number
+): Promise<boolean> {
+  const norm = normalizeCodeSparkKey(keyOrRoll);
+  const cleanRoll = keyOrRoll.trim().toUpperCase();
+  const all = getAllCodeSparkCandidates();
+  let found = false;
+  for (const c of all) {
+    if (
+      normalizeCodeSparkKey(c.accessKey) === norm ||
+      (c.rollNumber && c.rollNumber.trim().toUpperCase() === cleanRoll)
+    ) {
+      c.round1Score = score;
+      c.round1MaxScore = maxScore;
+      c.status = 'ROUND1_COMPLETED';
+      c.lastActiveAt = Date.now();
+      found = true;
+      break;
+    }
+  }
+  if (found) {
+    saveCodeSparkCandidates(all);
+    await pushCandidatesToCloud(all);
+    return true;
+  }
+  return false;
+}
+
 export function deleteCodeSparkCandidate(accessKey: string): void {
   const all = getAllCodeSparkCandidates();
   const remaining = all.filter((c) => c.accessKey.toUpperCase() !== accessKey.trim().toUpperCase());
@@ -1594,6 +1759,12 @@ export async function deleteCodeSparkCandidateComplete(accessKeyOrRoll: string):
     await deleteAttemptByRollOrKeyFromCloud(clean);
   } catch {}
 
+  try {
+    if (supabase) {
+      await supabase.from('candidate_stations').delete().eq('id', `cand_${normalizeCodeSparkKey(clean)}`);
+    }
+  } catch {}
+
   await pushCandidatesToCloud(remaining);
 }
 
@@ -1611,6 +1782,8 @@ export async function resetCodeSparkSystemInCloud(): Promise<boolean> {
   if (!supabase) return false;
   try {
     await supabase.from('candidate_stations').delete().eq('id', CODESPARK_SYSTEM_CONFIG_ID);
+    await supabase.from('candidate_stations').delete().eq('lab_id', 'CODESPARK_ROSTER');
+    await supabase.from('mcq_exams').delete().eq('id', CODESPARK_SYSTEM_CONFIG_ID);
     return true;
   } catch (err) {
     console.warn('[CodeSpark Cloud] resetCodeSparkSystemInCloud failed:', err);

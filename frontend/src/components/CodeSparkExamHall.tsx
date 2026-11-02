@@ -82,6 +82,21 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
 
   // 0. Fullscreen Proctoring State & Global Auto-Enforcement
   const [isFullscreen, setIsFullscreen] = useState(() => isCurrentlyFullscreen());
+  const [isExamSubmittedLocally, setIsExamSubmittedLocally] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('codedna_codespark_exam_submitted') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const handleExamSubmitted = () => {
+      setIsExamSubmittedLocally(true);
+    };
+    window.addEventListener('codedna_exam_submitted', handleExamSubmitted);
+    return () => window.removeEventListener('codedna_exam_submitted', handleExamSubmitted);
+  }, []);
 
   useEffect(() => {
     const handleFsChange = () => {
@@ -343,7 +358,7 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
       }}
     >
       {/* ── Strict Fullscreen Gate Overlay (when candidate is in windowed mode) ── */}
-      {!isFullscreen && (
+      {!isFullscreen && !isExamSubmittedLocally && (
         <div
           onClick={async () => {
             const ok = await requestExamFullscreen();

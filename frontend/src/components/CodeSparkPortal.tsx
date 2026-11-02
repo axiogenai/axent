@@ -621,11 +621,11 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
         playSound('warning');
         if (!isRound1ConcludedGlobally()) {
           setKeyError(
-            `Round 1 attempt logged (Score: ${priorAttempt.score ?? 0}/${priorAttempt.maxScore || safeExam.totalMarks}). Testing is currently ongoing across all competition terminals. The Chief Proctor will conclude Round 1 and announce the finalists once all candidates finish. Shortlisted candidates will receive their Round 2 key via email.`
+            `Round 1 examination attempt has been submitted and sealed. Testing is currently ongoing across campus laboratories. Results and shortlists will be declared by the examination committee once all laboratory sittings finish.`
           );
         } else {
           setKeyError(
-            `Round 1 assessment has concluded across all laboratories (Score: ${priorAttempt.score ?? 0}/${priorAttempt.maxScore || safeExam.totalMarks}). Minimum qualifying cutoff was not met.`
+            `Round 1 assessment has concluded across all laboratories. Candidate responses are sealed in the institutional ledger.`
           );
         }
         return;
