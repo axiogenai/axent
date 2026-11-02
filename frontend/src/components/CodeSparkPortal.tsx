@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Key,
@@ -1875,30 +1875,6 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                   </button>
                 </div>
               </div>
-
-              {/* Candidate Attempt Status & Round 2 Access Card */}
-              {candidateAttempt && (
-                <div className="mt-2">
-                  {!isRound1Concluded ? (
-                    <div className="p-4 bg-zinc-100 border-2 border-black flex flex-col gap-2.5 text-xs font-mono shadow-[3px_3px_0px_#000]">
-                      <div className="flex items-center justify-between">
-                        <div className="text-[10px] text-zinc-500 uppercase font-black tracking-wider">
-                          Round 1 Examination Record
-                        </div>
-                        <span className="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black uppercase">
-                          Tech Fest Arena Active
-                        </span>
-                      </div>
-                      <div className="text-sm font-black text-black">
-                        Score Logged: {candidateAttempt.score ?? 0}{dynamicTotalMarks > 0 ? ` / ${dynamicTotalMarks} Marks` : ' Marks'} ({round1Pct}%)
-                      </div>
-                      <p className="text-[11.5px] text-zinc-600 leading-relaxed border-t border-zinc-300 pt-2 mt-1">
-                        Examinations are ongoing across campus laboratories (Lab A, Lab B &amp; overflow sessions). The Chief Proctor will conclude Round 1 and calculate the combined institutional shortlist once all laboratory sittings finish. Shortlisted candidates will receive their Round 2 key via email.
-                      </p>
-                    </div>
-                  ) : null}
-                </div>
-              )}
             </div>
           </div>
         </div>
