@@ -160,7 +160,7 @@ export function deduplicateCandidates(candidates: CodeSparkCandidate[]): CodeSpa
       existing.rollNumber = cleanRoll || existing.rollNumber;
       existing.department = c.department || existing.department;
       if (c.status && c.status !== 'REGISTERED') existing.status = c.status;
-      if (c.round1Score !== undefined) existing.round1Score = c.round1Score;
+      if (typeof c.round1Score === 'number') existing.round1Score = c.round1Score;
       if (c.round1MaxScore !== undefined) existing.round1MaxScore = c.round1MaxScore;
       if (c.isShortlisted !== undefined) existing.isShortlisted = c.isShortlisted || existing.isShortlisted;
       if (c.round2Key && c.round2Key.trim()) {
@@ -829,8 +829,26 @@ export function isCandidateInShortlistStorage(identifier: string): boolean {
   return rolls.includes(clean);
 }
 
+export const hasRound1Score = (c: any): boolean =>
+  typeof c?.round1Score === 'number' && Number.isFinite(c.round1Score);
+
 export function generateRound2KeyForCandidate(cand: CodeSparkCandidate): string {
-  const num = Math.floor(1000 + Math.random() * 9000);
+  // Round 2 key digits must never collide with ANY Round 1 / Round 2 key digits, otherwise a
+  // student typing digits could be routed to another candidate.
+  const used = new Set<string>();
+  try {
+    for (const c of getAllCodeSparkCandidates()) {
+      if (c === cand || c.accessKey === cand.accessKey) continue;
+      for (const k of [c.accessKey, c.round2Key]) {
+        if (k) used.add(k.toUpperCase().replace(/\s+/g, '').replace(/^AXENT-?R2-?|^AXENT-?|^R2-?/i, ''));
+      }
+    }
+  } catch {}
+  let num = 0;
+  for (let i = 0; i < 200; i++) {
+    num = Math.floor(1000 + Math.random() * 9000);
+    if (!used.has(String(num))) break;
+  }
   return `AXENT-R2-${num}`;
 }
 
@@ -1060,12 +1078,10 @@ export async function concludeRound1AndShortlistUnified(options: { mode: 'cutoff
 
     const matchedAttempts = allAttempts.filter((att) => {
       const attRoll = (att.studentRoll || '').trim().toUpperCase();
-      const attName = (att.studentName || '').trim().toUpperCase();
       return (
         (cRoll && attRoll === cRoll) ||
         (cKey && attRoll === cKey) ||
-        (cEmail && attRoll === cEmail.split('@')[0]) ||
-        (attName && attName === cand.name.trim().toUpperCase())
+        (cEmail && attRoll === cEmail.split('@')[0])
       );
     });
 
@@ -1131,7 +1147,8 @@ export async function concludeRound1AndShortlistUnified(options: { mode: 'cutoff
     const isQual = qualifyingSet.has(candKey) || (candRoll && qualifyingSet.has(candRoll));
 
     const scoreItem = candidateScores.find((cs) => cs.candidate.accessKey === cand.accessKey);
-    if (scoreItem) {
+    // Only candidates who actually attempted get a Round 1 score recorded
+    if (scoreItem && scoreItem.attemptsCount > 0) {
       cand.round1Score = scoreItem.bestScore;
       cand.round1MaxScore = scoreItem.maxScore;
     }

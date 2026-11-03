@@ -705,7 +705,7 @@ function reconcileAttemptsIntoStations(stations: CandidateStation[]): CandidateS
         const candidates = JSON.parse(rawCand);
         if (Array.isArray(candidates)) {
           for (const c of candidates) {
-            if (c && (c.round1Score !== undefined || c.status === 'ROUND1_COMPLETED')) {
+            if (c && (typeof c.round1Score === 'number' || c.status === 'ROUND1_COMPLETED')) {
               const candRoll = (c.rollNumber || c.accessKey || '').trim().toUpperCase();
               const candKey = (c.accessKey || '').trim().toUpperCase();
               const alreadyHas = attempts.some(

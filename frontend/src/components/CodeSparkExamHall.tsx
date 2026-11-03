@@ -320,7 +320,7 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
       (round1Attempt.status === 'SUBMITTED' || round1Attempt.status === 'TIMED_OUT' || round1Attempt.score !== undefined)) ||
     (candidateProfile?.status as string) === 'ROUND1_COMPLETED' ||
     (candidateProfile?.status as string) === 'SUBMITTED' ||
-    (candidateProfile as any)?.round1Score !== undefined ||
+    typeof (candidateProfile as any)?.round1Score === 'number' ||
     (candidateKey && (lookupCandidateAny(candidateKey)?.candidate?.status as string) === 'ROUND1_COMPLETED')
   );
 
@@ -565,104 +565,28 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
                     </div>
                   </div>
 
-                  {/* Crucial Shortlisting Notice or Round 2 Qualified Action */}
-                  {isCandidateShortlisted ? (
-                    <div
-                      style={{
-                        background: 'rgba(16, 185, 129, 0.08)',
-                        border: '1px solid rgba(16, 185, 129, 0.3)',
-                        borderRadius: '6px',
-                        padding: '16px',
-                        textAlign: 'left',
-                        marginBottom: '16px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '12px'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <CheckCircle2 size={18} style={{ color: '#10b981', flexShrink: 0 }} />
-                        <strong style={{ fontSize: '13px', color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                          Qualified for Round 2: Algorithmic Coding Sprint Arena
-                        </strong>
-                      </div>
-                      <p style={{ margin: 0, fontSize: '12.5px', color: '#e4e4e7', lineHeight: 1.5 }}>
-                        Congratulations! You have qualified for the Round 2 Algorithmic Coding Sprint based on institutional cutoff.
-                      </p>
-                      <div style={{ background: '#18181b', padding: '10px 14px', borderRadius: '4px', border: '1px solid #27272a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '12px', color: '#a1a1aa' }}>Your Round 2 Access Key:</span>
-                        <strong style={{ fontSize: '14px', color: '#ffffff', letterSpacing: '0.08em', fontFamily: 'monospace' }}>
-                          {candidateProfile?.round2Key || ('AXENT-R2-' + (candidateKey.replace(/^AXENT-|^R2-?/i, '') || 'QUALIFIED'))}
-                        </strong>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          playSound('success');
-                          const effR2 = candidateProfile?.round2Key || ('AXENT-R2-' + (candidateKey.replace(/^AXENT-|^R2-?/i, '') || ''));
-                          const codingProfile = {
-                            name: candidateName,
-                            email: candidateProfile?.email || '',
-                            rollNumber: cleanRoll,
-                            department: candidateProfile?.department || 'Axent Candidate',
-                            course: 'Code Spark 2026',
-                            examType: 'Code Sprint',
-                            assignmentTitle: 'Code Spark 2026: Algorithmic Code Sprint Arena',
-                            examMode: 'CODING',
-                            accessKey: effR2,
-                            round2Key: effR2,
-                            isShortlisted: true,
-                            sessionStartTime: Date.now()
-                          };
-                          try {
-                            localStorage.setItem('codedna_student_profile', JSON.stringify(codingProfile));
-                            localStorage.setItem('codedna_active_exam_mode', 'CODING');
-                          } catch {}
-                          navigate('/codespark-exams?round=2');
-                        }}
-                        style={{
-                          padding: '12px 20px',
-                          borderRadius: '4px',
-                          background: '#10b981',
-                          color: '#09090b',
-                          fontSize: '13px',
-                          fontWeight: 800,
-                          border: 'none',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '8px'
-                        }}
-                      >
-                        <span>Enter Round 2 Coding Sprint Arena Now</span>
-                        <ArrowRight size={14} />
-                      </button>
+                  {/* Neutral notice: students are never told about shortlisting or Round 2 keys here */}
+                  <div
+                    style={{
+                      background: 'rgba(59, 130, 246, 0.08)',
+                      border: '1px solid rgba(59, 130, 246, 0.25)',
+                      borderRadius: '6px',
+                      padding: '14px 16px',
+                      textAlign: 'left',
+                      marginBottom: '16px',
+                      display: 'flex',
+                      gap: '12px',
+                      alignItems: 'flex-start'
+                    }}
+                  >
+                    <Shield size={18} style={{ color: '#60a5fa', flexShrink: 0, marginTop: '2px' }} />
+                    <div style={{ fontSize: '12.5px', color: '#cbd5e1', lineHeight: 1.5 }}>
+                      <strong style={{ color: '#ffffff', display: 'block', marginBottom: '2px' }}>
+                        Submission recorded
+                      </strong>
+                      Please leave your seat quietly. Further announcements will be made by the organisers.
                     </div>
-                  ) : (
-                    <div
-                      style={{
-                        background: 'rgba(59, 130, 246, 0.08)',
-                        border: '1px solid rgba(59, 130, 246, 0.25)',
-                        borderRadius: '6px',
-                        padding: '14px 16px',
-                        textAlign: 'left',
-                        marginBottom: '16px',
-                        display: 'flex',
-                        gap: '12px',
-                        alignItems: 'flex-start'
-                      }}
-                    >
-                      <Shield size={18} style={{ color: '#60a5fa', flexShrink: 0, marginTop: '2px' }} />
-                      <div style={{ fontSize: '12.5px', color: '#cbd5e1', lineHeight: 1.5 }}>
-                        <strong style={{ color: '#ffffff', display: 'block', marginBottom: '2px' }}>
-                          Round 2 Shortlisting Notice:
-                        </strong>
-                        Round 2 (Algorithmic Coding Sprint Arena) is strictly gated. Only shortlisted candidates based on institutional cutoff will receive their <strong>new Round 2 access code via email</strong>. Please monitor your registered email address for official results.
-                      </div>
-                    </div>
-                  )}
-
+                  </div>
                   {/* Lab Overflow Notice & Batch 2 Sitting Action */}
                   <div
                     style={{

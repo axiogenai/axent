@@ -652,7 +652,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       const roll = (cand.rollNumber || cand.accessKey || '').toUpperCase();
       const key = cand.accessKey.toUpperCase();
       if (
-        (cand.round1Score !== undefined || cand.status === 'ROUND1_COMPLETED') &&
+        (typeof cand.round1Score === 'number' || cand.status === 'ROUND1_COMPLETED') &&
         !seenRolls.has(roll) &&
         !seenRolls.has(key)
       ) {
@@ -1449,8 +1449,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           (s.student?.rollNumber || '').trim().toUpperCase() === cleanRoll ||
           (candRollUpper && (s.student?.rollNumber || '').trim().toUpperCase() === candRollUpper) ||
           (candEmailLower && (s.student?.email || '').trim().toLowerCase() === candEmailLower) ||
-          (s.student?.name || '').trim().toLowerCase() === candidate.name.trim().toLowerCase() ||
-          s.id === id
+          false
       );
 
       const isSubmitted =

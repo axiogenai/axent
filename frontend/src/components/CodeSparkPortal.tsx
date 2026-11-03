@@ -442,12 +442,13 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       cand.isShortlisted ||
       cand.status === 'SHORTLISTED' ||
       Boolean(cand.round2Key) ||
-      rawInput.includes('R2') ||
       isCandidateInShortlistStorage(cand.rollNumber || cand.accessKey)
     );
-
-    // 1. If candidate is shortlisted, IMMEDIATELY launch Round 2 Coding Sprint Arena!
-    if (isCandidateShortlisted) {
+    // The student must type their REAL admin-issued Round 2 key (digits compared, never derived)
+    const keyDigitsOf = (k: string) => k.toUpperCase().replace(/\s+/g, '').replace(/^AXENT-?R2-?|^AXENT-?|^R2-?/i, '');
+    const typedIsR2Key = Boolean(cand.round2Key) && keyDigitsOf(rawInput) === keyDigitsOf(cand.round2Key || '');
+    // 1. Shortlisted AND typed their own Round 2 key -> Round 2 Coding Sprint Arena
+    if (isCandidateShortlisted && typedIsR2Key) {
       const derivedRoll = cand.rollNumber || cand.email.split('@')[0].toUpperCase();
       const r2Key = cand.round2Key || (cand.accessKey.startsWith('AXENT-R2-') ? cand.accessKey : `AXENT-R2-${cand.accessKey.replace(/^AXENT-|^R2-/, '')}`);
       const codingProfile = {
@@ -478,9 +479,15 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       return;
     }
 
+    // Round 1 key typed after Round 1 is over: never reveal shortlist status or the Round 2 key
+    if (isCandidateShortlisted && !typedIsR2Key) {
+      playSound('warning');
+      setKeyError('Round 1 has concluded. Enter the Round 2 key given to you by the organisers.');
+      return;
+    }
     // 2. Candidate is NOT shortlisted:
     // If user attempted to enter Round 2 or explicitly entered R2 code:
-    if (anyLookup.targetRound === 'round2' || rawInput.includes('R2')) {
+    if (anyLookup.targetRound === 'round2') {
       playSound('warning');
       setKeyError('Access Denied: Round 2 is restricted to shortlisted candidates only. Check your registered email.');
       return;
@@ -496,7 +503,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     if (isRound1Over) {
       playSound('warning');
       setKeyError(
-        'Round 1 examination has concluded and results are sealed. This candidate seat was not shortlisted for Round 2.'
+        'Round 1 has concluded. Round 2 needs a Round 2 key issued by the organisers.'
       );
       return;
     }
@@ -527,7 +534,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       priorSubmittedAttempt ||
       (cand.status as string) === 'ROUND1_COMPLETED' ||
       (cand.status as string) === 'SUBMITTED' ||
-      (cand.round1Score !== undefined && cand.round1Score !== null)
+      (typeof cand.round1Score === 'number')
     );
 
     // Check active exam paper
@@ -1815,7 +1822,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                   const isSubmitted = Boolean(
                     (activeCandidate.status as string) === 'ROUND1_COMPLETED' ||
                     (activeCandidate.status as string) === 'SUBMITTED' ||
-                    (activeCandidate.round1Score !== undefined && activeCandidate.round1Score !== null)
+                    (typeof activeCandidate.round1Score === 'number')
                   );
                   const effectiveR2Key = activeCandidate.round2Key || (activeCandidate.accessKey?.startsWith('AXENT-R2-') ? activeCandidate.accessKey : `AXENT-R2-${activeCandidate.accessKey?.replace(/^AXENT-|^R2-/, '')}`);
 
@@ -1828,12 +1835,8 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                         <div>
                           <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Candidate Identified</div>
                           <strong className="text-sm font-black text-black">{activeCandidate.name}</strong>
-                          <span className="text-zinc-500 ml-2 font-mono text-xs">({activeCandidate.email})</span>
-                          {isShortlisted && (
-                            <div className="text-emerald-700 font-bold text-[11px] mt-0.5">
-                              Round 2 Access Key: <span className="font-mono bg-emerald-50 px-1.5 py-0.5 border border-emerald-300 rounded">{effectiveR2Key}</span>
-                            </div>
-                          )}
+                          
+                          
                         </div>
                       </div>
                       <span className={`text-[10px] font-black uppercase px-2 py-1 shrink-0 text-center ${
@@ -1843,7 +1846,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                           ? 'bg-amber-100 text-amber-800 border border-amber-300'
                           : 'bg-green-100 text-green-800 border border-green-300'
                       }`}>
-                        {isShortlisted ? 'ROUND 2 QUALIFIED' : isSubmitted ? 'ATTEMPT COMPLETED' : 'READY FOR EXAM'}
+                        {isRound1Concluded ? 'KEY VERIFIED' : isSubmitted ? 'ATTEMPT COMPLETED' : 'READY FOR EXAM'}
                       </span>
                     </div>
                   );
@@ -1868,10 +1871,10 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                     const isSubmitted = activeCandidate && Boolean(
                       (activeCandidate.status as string) === 'ROUND1_COMPLETED' ||
                       (activeCandidate.status as string) === 'SUBMITTED' ||
-                      (activeCandidate.round1Score !== undefined && activeCandidate.round1Score !== null)
+                      (typeof activeCandidate.round1Score === 'number')
                     );
-                    const buttonText = isShortlisted
-                      ? 'ENTER ROUND 2 CODING SPRINT NOW'
+                    const buttonText = isRound1Concluded
+                      ? 'ENTER ROUND 2 CODING SPRINT'
                       : isSubmitted
                       ? 'EXAM ATTEMPTED ALREADY'
                       : 'START EXAMINATION NOW';
