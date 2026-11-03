@@ -117,10 +117,15 @@ async function writeDeleteQuestionFromCloud(id: string): Promise<boolean> {
 export async function clearAllQuestionsFromCloud(): Promise<boolean> {
   try {
     const client = supabaseAdmin || supabase;
-    const { data } = await client.from('mcq_questions').select('id');
-    if (data && data.length > 0) {
-      const ids = data.map(d => d.id);
-      await client.from('mcq_questions').delete().in('id', ids);
+    // 1. Direct bulk delete all questions
+    const { error: bulkErr } = await client.from('mcq_questions').delete().neq('id', '___NEVER_MATCH___');
+    if (bulkErr) {
+      console.warn('[Supabase] Bulk questions delete warning, attempting ID scan:', bulkErr.message);
+      const { data } = await client.from('mcq_questions').select('id');
+      if (data && data.length > 0) {
+        const ids = data.map(d => d.id);
+        await client.from('mcq_questions').delete().in('id', ids);
+      }
     }
     return true;
   } catch (err) {

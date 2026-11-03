@@ -222,34 +222,8 @@ function save(key: string, value: unknown): void {
 
       inMemoryAttempts = value as MCQAttempt[];
 
-      // High-Scale (1000+ candidates): Store max 80 attempts in localStorage, and strip heavy snapshots for submitted ones
-
-      const pruned = (value as MCQAttempt[]).slice(-80).map((a) => {
-
-        if (a.status !== 'IN_PROGRESS' && a.assignedQuestions && a.assignedQuestions.length > 5) {
-
-          return {
-
-            ...a,
-
-            assignedQuestions: a.assignedQuestions.map((q) => ({
-
-              questionId: q.questionId,
-
-              
-
-              snapshot: { questionId: q.questionId, text: '', options: [] } as any
-
-            }))
-
-          };
-
-        }
-
-        return a;
-
-      });
-
+      // High-Scale (1000+ candidates): Store max 80 attempts in localStorage
+      const pruned = (value as MCQAttempt[]).slice(-80);
       localStorage.setItem(key, JSON.stringify(pruned));
 
     } else {
@@ -385,10 +359,51 @@ if (typeof window !== 'undefined') {
 export const DEMO_3Q_QUESTIONS: MCQQuestion[] = [];
 export const DEMO_3Q_EXAM: MCQExamConfig | null = null;
 
+export const DELETED_QUESTIONS_KEY = 'codedna_mcq_deleted_questions';
+
+export function getDeletedQuestionIds(): Set<string> {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(DELETED_QUESTIONS_KEY) : null;
+    const parsed: string[] = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function recordQuestionDeleted(id: string): void {
+  try {
+    if (!id || typeof window === 'undefined') return;
+    const set = getDeletedQuestionIds();
+    set.add(id);
+    localStorage.setItem(DELETED_QUESTIONS_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
+export function recordQuestionsDeleted(ids: string[]): void {
+  try {
+    if (!Array.isArray(ids) || ids.length === 0 || typeof window === 'undefined') return;
+    const set = getDeletedQuestionIds();
+    ids.forEach((id) => id && set.add(id));
+    localStorage.setItem(DELETED_QUESTIONS_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
+export function unmarkQuestionDeleted(id: string): void {
+  try {
+    if (!id || typeof window === 'undefined') return;
+    const set = getDeletedQuestionIds();
+    set.delete(id);
+    localStorage.setItem(DELETED_QUESTIONS_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
 export function getAllQuestions(): MCQQuestion[] {
+  const deletedIds = getDeletedQuestionIds();
   const loaded = load<MCQQuestion[]>(MCQ_STORAGE_KEYS.QUESTIONS, []);
   return (loaded || []).filter((q): q is MCQQuestion => 
     Boolean(q && typeof q === 'object' && q.id) && 
+    !deletedIds.has(q.id) &&
     !String(q.id || '').startsWith('seed-') &&
     !String(q.id || '').startsWith('demo-')
   );
@@ -403,7 +418,7 @@ export function getQuestionById(id: string): MCQQuestion | undefined {
 
 
 export function saveQuestion(q: MCQQuestion): MCQQuestion {
-
+  unmarkQuestionDeleted(q.id);
   const all = getAllQuestions();
 
   const idx = all.findIndex((x) => x.id === q.id);
@@ -449,6 +464,7 @@ export function createQuestion(
     updatedAt: Date.now(),
 
   };
+  unmarkQuestionDeleted(q.id);
 
   const all = getAllQuestions();
 
@@ -465,6 +481,7 @@ export function createQuestion(
 
 
 export function deleteQuestion(id: string): void {
+  recordQuestionDeleted(id);
 
   const all = getAllQuestions().filter((q) => q.id !== id);
 
@@ -479,6 +496,9 @@ export function deleteQuestion(id: string): void {
 
 
 export function clearAllQuestions(): void {
+  const current = load<MCQQuestion[]>(MCQ_STORAGE_KEYS.QUESTIONS, []);
+  const allIds = current.map((q) => q.id).filter(Boolean);
+  recordQuestionsDeleted(allIds);
 
   save(MCQ_STORAGE_KEYS.QUESTIONS, []);
 
@@ -1720,62 +1740,50 @@ export function startAttempt(
 
 
 
+  // Ensure all questions and options have stable string IDs
+  questions.forEach((q) => {
+    if (Array.isArray(q.options)) {
+      q.options.forEach((opt, idx) => {
+        if (!opt.id) {
+          opt.id = `${q.id}-opt-${idx}`;
+        }
+      });
+    }
+  });
+
   // Build option ID map
-
   const optionIdsByQuestion: Record<string, string[]> = {};
-
   for (const q of questions) {
-
-    optionIdsByQuestion[q.id] = q.options.map((o) => o.id);
-
+    optionIdsByQuestion[q.id] = (q.options || []).map((o) => o.id);
   }
 
-
-
   // Generate shuffled assignment
-
   const { orderedQuestionIds, optionOrderMap } = generateAttemptAssignment(
-
     questions.map((q) => q.id),
-
     optionIdsByQuestion,
-
     exam.shuffleQuestions,
-
     exam.shuffleOptions
-
   );
 
-
-
   // Build assigned questions with sanitized snapshots (correct answers strictly withheld from client state during active test)
-
   const assignedQuestions: MCQAssignedQuestion[] = orderedQuestionIds.map((qid, order) => {
-
     const q = questions.find((x) => x.id === qid);
-
     const qOptions = Array.isArray(q?.options) ? q.options : [];
+    const correctOpt = qOptions.find((o) => Boolean(o?.isCorrect)) || (q?.options as any)?.find((o: any) => Boolean(o?.isCorrect));
+    const correctOptionId = correctOpt?.id || '';
+    const correctOptionText = correctOpt?.text ? String(correctOpt.text).trim() : '';
 
     const snapshot: MCQQuestionSnapshot = {
-
       questionId: q?.id || qid,
-
       text: typeof q?.text === 'string' ? q.text : String(q?.text ?? ''),
-
       options: qOptions.map((o) => ({
-
-        id: o?.id || uuid(),
-
+        id: o.id || `${qid}-opt`,
         text: typeof o?.text === 'string'
-
           ? o.text.replace(/^(?:\([A-Da-d0-9]\)|[A-Da-d0-9][\.\)\:\-]|Option\s*[A-D][:.-]?)\s*/i, '').trim()
-
           : String(o?.text ?? '').trim()
-
       })),
-
-      correctOptionId: qOptions.find((o) => Boolean(o?.isCorrect))?.id || (q?.options as any)?.find((o: any) => Boolean(o?.isCorrect))?.id || '',
-
+      correctOptionId,
+      correctOptionText,
       marks: Number.isFinite(q?.marks) ? (q?.marks as number) : 1,
 
       // Respect the exam-level policy; per-question penalties are ignored when
@@ -2107,20 +2115,40 @@ export function gradeAttempt(attempt: MCQAttempt): MCQGradeResult {
 
 
     // Authoritative lookup: Resolve true correct answer directly from question bank
-
     const bankQ = qId ? getQuestionById(qId) : undefined;
 
     const authoritativeCorrectId =
       snapshot.correctOptionId ||
-      bankQ?.options?.find((o) => o?.isCorrect)?.id ||
-      options.find((o: any) => o?.isCorrect)?.id ||
+      bankQ?.options?.find((o) => Boolean(o?.isCorrect))?.id ||
+      options.find((o: any) => Boolean(o?.isCorrect))?.id ||
       '';
 
     const authoritativeExplanation = bankQ?.explanation || snapshot.explanation || '';
 
+    // Identify selected option
+    const selectedOption = options.find((o: any) => o?.id === selectedOptionId);
+    const selectedText = selectedOption?.text ? String(selectedOption.text).trim().toLowerCase() : '';
 
+    // Identify correct option text
+    const bankCorrectOpt = bankQ?.options?.find((o) => Boolean(o?.isCorrect));
+    const snapshotCorrectOpt = options.find((o: any) => o?.id === authoritativeCorrectId || Boolean(o?.isCorrect));
+    const correctText = (
+      bankCorrectOpt?.text ||
+      snapshotCorrectOpt?.text ||
+      snapshot.correctOptionText ||
+      ''
+    ).trim().toLowerCase();
 
-    const isCorrect = !isUnanswered && selectedOptionId === authoritativeCorrectId;
+    let isCorrect = false;
+    if (!isUnanswered) {
+      if (authoritativeCorrectId && selectedOptionId === authoritativeCorrectId) {
+        isCorrect = true;
+      } else if (selectedText && correctText && selectedText === correctText) {
+        isCorrect = true;
+      } else if (selectedOption && (selectedOption as any).isCorrect) {
+        isCorrect = true;
+      }
+    }
 
 
 
@@ -2153,10 +2181,6 @@ export function gradeAttempt(attempt: MCQAttempt): MCQGradeResult {
 
 
     score += marksAwarded;
-
-
-
-    const selectedOption = options.find((o) => o?.id === selectedOptionId);
 
     const correctOption = options.find((o) => o?.id === authoritativeCorrectId);
 
@@ -2653,22 +2677,29 @@ export async function syncFromSupabase(): Promise<void> {
 
 
 
-        // 1. Reconcile Questions: Merge Supabase cloud with local question bank
+    // 1. Reconcile Questions: Merge Supabase cloud with local question bank
     if (cloudQ !== null) {
-      const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
-      const localQ = load<MCQQuestion[]>(MCQ_STORAGE_KEYS.QUESTIONS, []);
+      const deletedQIds = getDeletedQuestionIds();
+      // If a cloud question was deleted locally, ensure it is deleted from cloud
+      for (const q of cloudQ) {
+        if (deletedQIds.has(q.id)) {
+          void deleteQuestionFromCloud(q.id);
+        }
+      }
+      const activeCloudQ = cloudQ.filter((q) => !deletedQIds.has(q.id));
+      const localQ = load<MCQQuestion[]>(MCQ_STORAGE_KEYS.QUESTIONS, []).filter((q) => !deletedQIds.has(q.id));
       const mergedQMap = new Map<string, MCQQuestion>();
-      cloudQ.forEach((q) => mergedQMap.set(q.id, q));
-      // Retain local questions if they were freshly created or drafted in the last 2 hours
+      activeCloudQ.forEach((q) => mergedQMap.set(q.id, q));
       localQ.forEach((q) => {
-        if (!mergedQMap.has(q.id)) {
-          if (q.status === 'DRAFT' || (q.createdAt || 0) > twoHoursAgo) {
+        if (q && q.id && !deletedQIds.has(q.id)) {
+          if (!mergedQMap.has(q.id)) {
             mergedQMap.set(q.id, q);
             void saveQuestionToCloud(q);
           }
         }
       });
       save(MCQ_STORAGE_KEYS.QUESTIONS, Array.from(mergedQMap.values()));
+      notifyMcqDataChanged();
     }
 
 
@@ -2812,28 +2843,44 @@ export async function wipeEntireDatabaseFromCloud(): Promise<boolean> {
 
   const client = supabaseAdmin || supabase;
   try {
-    // 1. Delete all attempts by IDs
-    const { data: attempts } = await client.from('mcq_attempts').select('id');
-    if (attempts && attempts.length > 0) {
-      await client.from('mcq_attempts').delete().in('id', attempts.map(a => a.id));
+    // 1. Direct bulk deletion across all Supabase tables
+    await Promise.allSettled([
+      client.from('mcq_attempts').delete().neq('id', '___NEVER_MATCH___'),
+      client.from('candidate_stations').delete().neq('id', '___NEVER_MATCH___'),
+      client.from('code_submissions').delete().neq('id', '___NEVER_MATCH___'),
+      client.from('mcq_questions').delete().neq('id', '___NEVER_MATCH___'),
+      client.from('mcq_exams').delete().neq('id', 'codespark_system_config'),
+      client.from('college_labs').delete().neq('id', '___NEVER_MATCH___')
+    ]);
+
+    // 2. Secondary ID-scan fallback for complete cloud eradication
+    const [attRes, stRes, subRes, qRes, exRes] = await Promise.allSettled([
+      client.from('mcq_attempts').select('id'),
+      client.from('candidate_stations').select('id'),
+      client.from('code_submissions').select('id'),
+      client.from('mcq_questions').select('id'),
+      client.from('mcq_exams').select('id')
+    ]);
+    if (attRes.status === 'fulfilled' && attRes.value.data?.length) {
+      await client.from('mcq_attempts').delete().in('id', attRes.value.data.map(d => d.id));
     }
-    // 2. Delete all stations by IDs
-    const { data: stations } = await client.from('candidate_stations').select('id');
-    if (stations && stations.length > 0) {
-      await client.from('candidate_stations').delete().in('id', stations.map(s => s.id));
+    if (stRes.status === 'fulfilled' && stRes.value.data?.length) {
+      await client.from('candidate_stations').delete().in('id', stRes.value.data.map(d => d.id));
     }
-    // 3. Delete all code submissions by IDs
-    const { data: submissions } = await client.from('code_submissions').select('id');
-    if (submissions && submissions.length > 0) {
-      await client.from('code_submissions').delete().in('id', submissions.map(s => s.id));
+    if (subRes.status === 'fulfilled' && subRes.value.data?.length) {
+      await client.from('code_submissions').delete().in('id', subRes.value.data.map(d => d.id));
     }
-    // 4. Delete questions
-    const { data: questions } = await client.from('mcq_questions').select('id');
-    if (questions && questions.length > 0) {
-      await client.from('mcq_questions').delete().in('id', questions.map(q => q.id));
+    if (qRes.status === 'fulfilled' && qRes.value.data?.length) {
+      await client.from('mcq_questions').delete().in('id', qRes.value.data.map(d => d.id));
+    }
+    if (exRes.status === 'fulfilled' && exRes.value.data?.length) {
+      const examIds = exRes.value.data.map(d => d.id).filter(id => id !== 'codespark_system_config');
+      if (examIds.length > 0) {
+        await client.from('mcq_exams').delete().in('id', examIds);
+      }
     }
 
-    // 5. Reset CodeSpark system config in cloud
+    // 3. Reset CodeSpark system config in cloud
     const emptyConfig = {
       activeExamId: null,
       shortlistMode: 'cutoff',
@@ -2899,6 +2946,7 @@ export async function wipeEntireDatabaseFromCloud(): Promise<boolean> {
           localStorage.removeItem(key);
         }
       }
+      localStorage.setItem('codedna_codespark_wiped_at', String(Date.now()));
     } catch {}
   }
 

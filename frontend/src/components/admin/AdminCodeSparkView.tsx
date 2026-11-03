@@ -476,6 +476,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
   useEffect(() => {
     const sync = () => {
       setAllExams(getAllExams());
+      setAllAttempts(getAllAttempts());
       setAssignedExamId(localStorage.getItem('codedna_codespark_round1_exam_id') || '');
       setShortlistedRolls(getShortlistedRolls());
       setRegisteredCandidates(getAllCodeSparkCandidates());
@@ -1375,7 +1376,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
         cand.rollNumber || (cand.email ? cand.email.split('@')[0] : accessKey)
       );
 
-      const dedupeKey = cleanRoll ? `roll-${cleanRoll.toUpperCase()}` : `key-${accessKey}`;
+      const dedupeKey = cand.accessKey ? `key-${cand.accessKey.trim().toUpperCase()}` : (cleanRoll ? `roll-${cleanRoll.toUpperCase()}` : `cand-${cand.name}`);
       if (!candMap.has(dedupeKey)) {
         candMap.set(dedupeKey, {
           id: `AXNT-SPARK-WS-${String(candMap.size + 1).padStart(2, '0')}`,
@@ -1402,14 +1403,81 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
     candMap.forEach(({ id, defaultStationNumber, candidate, cleanRoll }) => {
-
       const candKeyUpper = (candidate.accessKey || '').trim().toUpperCase();
-
       const candEmailLower = (candidate.email || '').trim().toLowerCase();
-
       const candRollUpper = (candidate.rollNumber || '').trim().toUpperCase();
 
-
+      // If candidate is freshly registered, they are strictly on STANDBY awaiting exam hall check-in.
+      if (candidate.status === 'REGISTERED') {
+        const totalQ = currentAssignedExam?.questionCount || mcqQuestions.length || 3;
+        const isLocked = Boolean(lockedStations[id]);
+        const stationObj: CandidateStation & { isStandby?: boolean } = {
+          id,
+          labId: 'LAB-SPARK-01',
+          labName: 'CodeSpark Enclave 01',
+          stationNumber: defaultStationNumber,
+          ipAddress: `10.26.3.${10 + stationIndex}`,
+          candidate: candidate,
+          accessKey: candKeyUpper,
+          student: {
+            name: candidate.name,
+            rollNumber: candidate.rollNumber || cleanRoll,
+            semester: 'Final',
+            examType: 'Aptitude',
+            assignmentTitle: 'Code Spark 2026: General Aptitude & Reasoning',
+            course: 'Code Spark 2026',
+            department: candidate.department || 'Axent Enclave',
+            examMode: 'MCQ'
+          },
+          language: 'MCQ',
+          examMode: 'MCQ',
+          code: '// Round 1 Cognitive Aptitude MCQ Telemetry',
+          screenImageData: undefined,
+          status: 'In Progress',
+          isStandby: true,
+          isLockedByProctor: isLocked,
+          metrics: {
+            typingSpeed: 0,
+            timeSpent: 0,
+            pasteCount: 0,
+            deleteCount: 0,
+            editCount: 0,
+            undoCount: 0,
+            pasteRatio: 0,
+            pastedLines: 0,
+            totalLines: 0,
+            keystrokes: 0,
+            pauseDuration: 0,
+            tabSwitchViolations: 0,
+            unfocusedTimeSeconds: 0
+          },
+          marks: {
+            totalMarks: 0,
+            maxMarks: totalQ,
+            executionMarks: 0,
+            logicMarks: 0,
+            vivaMarks: 0,
+            integrityMarks: 10
+          },
+          mcqProgress: {
+            examId: currentAssignedExam?.id || 'codespark-round1-aptitude',
+            examTitle: currentAssignedExam?.title || 'Code Spark 2026: General Aptitude & Reasoning',
+            currentQuestionIndex: 0,
+            totalQuestions: totalQ,
+            answeredCount: 0,
+            tabSwitches: 0,
+            score: undefined,
+            maxScore: examTotalMarks
+          },
+          integrityStatus: 'Verified Original Work',
+          cheatingRisk: 'Low',
+          lastActive: 'Standby',
+          lastUpdatedTimestamp: Date.now()
+        };
+        result.push(stationObj);
+        stationIndex++;
+        return;
+      }
 
       // Find matching attempt strictly for this exam session
 

@@ -285,6 +285,29 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
+            {/* Direct Admin Login / CCTV Switch */}
+            {!isAdminRoute && !isPaperSetterRoute && !isLoginRoute && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => navigate(isAdmin ? '/admin' : '/login/admin')}
+                title={isAdmin ? "Open Chief Proctor CCTV Live Surveillance" : "Institutional Admin & Proctor Sign In"}
+                style={{
+                  height: '30px',
+                  padding: '0 10px',
+                  gap: '5px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-surface)',
+                  color: 'var(--text-primary)'
+                }}
+              >
+                <ShieldAlert size={12} color="var(--accent)" />
+                <span>{isAdmin ? 'Admin CCTV' : 'Admin Login'}</span>
+              </button>
+            )}
+
             {/* If in Paper Setter AND user has Admin privileges, provide 1-click switch back to Admin CCTV */}
             {isPaperSetterRoute && isAdmin && (
               <button
@@ -540,30 +563,28 @@ export const Navbar: React.FC<NavbarProps> = ({
               <ExternalLink size={14} className="text-[var(--text-muted)]" />
             </button>
 
-            {/* Admin CCTV Portal */}
-            {(isAdmin || isAdminRoute || isPaperSetterRoute) && (
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  navigate('/admin');
-                }}
-                className={`w-full flex items-center justify-between p-3.5 rounded-lg border text-sm font-semibold text-left transition-colors ${
-                  isAdminRoute
-                    ? 'border-red-500/40 bg-red-500/10 text-red-500'
-                    : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-primary)]'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <ShieldAlert size={16} className={isAdminRoute ? 'text-red-500' : 'text-[var(--accent)]'} />
-                  <span>Admin CCTV Live Proctoring</span>
-                </div>
-                {isAdminRoute && (
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">
-                    Active
-                  </span>
-                )}
-              </button>
-            )}
+            {/* Admin CCTV Portal or Admin Login */}
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                navigate(isAdmin ? '/admin' : '/login/admin');
+              }}
+              className={`w-full flex items-center justify-between p-3.5 rounded-lg border text-sm font-semibold text-left transition-colors ${
+                isAdminRoute
+                  ? 'border-red-500/40 bg-red-500/10 text-red-500'
+                  : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-primary)]'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <ShieldAlert size={16} className={isAdminRoute ? 'text-red-500' : 'text-[var(--accent)]'} />
+                <span>{isAdmin ? 'Admin CCTV Live Proctoring' : 'Admin & Proctor Login'}</span>
+              </div>
+              {isAdminRoute && (
+                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">
+                  Active
+                </span>
+              )}
+            </button>
 
             {/* Paper Setter Portal */}
             {(isAdmin || isAdminRoute || isPaperSetterRoute) && (

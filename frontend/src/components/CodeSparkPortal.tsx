@@ -418,15 +418,18 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       return;
     }
 
-    let anyLookup = lookupCandidateAny(rawInput);
-    if (!anyLookup && isRound1Concluded && !rawInput.includes('R2')) {
-      anyLookup = lookupCandidateAny('AXENT-R2-' + rawInput);
+    let anyLookup = await asyncLookupCandidateAny(rawInput);
+    if (!anyLookup && rawInput.includes('R2')) {
+      anyLookup = await asyncLookupCandidateAny(rawInput.replace(/R2-?/i, ''));
+    }
+    if (!anyLookup && !rawInput.includes('R2')) {
+      anyLookup = await asyncLookupCandidateAny('AXENT-R2-' + rawInput.replace(/^AXENT-?/i, ''));
     }
     if (!anyLookup) {
-      anyLookup = await asyncLookupCandidateAny(rawInput);
+      anyLookup = lookupCandidateAny(rawInput);
     }
     if (!anyLookup && isRound1Concluded && !rawInput.includes('R2')) {
-      anyLookup = await asyncLookupCandidateAny('AXENT-R2-' + rawInput);
+      anyLookup = lookupCandidateAny('AXENT-R2-' + rawInput);
     }
 
     if (!anyLookup) {
@@ -447,8 +450,16 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     // The student must type their REAL admin-issued Round 2 key (digits compared, never derived)
     const keyDigitsOf = (k: string) => k.toUpperCase().replace(/\s+/g, '').replace(/^AXENT-?R2-?|^AXENT-?|^R2-?/i, '');
     const typedIsR2Key = Boolean(cand.round2Key) && keyDigitsOf(rawInput) === keyDigitsOf(cand.round2Key || '');
-    // 1. Shortlisted AND typed their own Round 2 key -> Round 2 Coding Sprint Arena
-    if (isCandidateShortlisted && typedIsR2Key) {
+
+    // Check if Round 1 has concluded globally:
+    const isRound1Over = Boolean(
+      isRound1Concluded ||
+      isRound1ConcludedGlobally() ||
+      (shortlistedRolls && shortlistedRolls.length > 0)
+    );
+
+    // 1. Shortlisted -> Round 2 Coding Sprint Arena
+    if (isCandidateShortlisted && (isRound1Over || rawInput.toUpperCase().includes('R2') || typedIsR2Key)) {
       const derivedRoll = cand.rollNumber || cand.email.split('@')[0].toUpperCase();
       const r2Key = cand.round2Key || (cand.accessKey.startsWith('AXENT-R2-') ? cand.accessKey : `AXENT-R2-${cand.accessKey.replace(/^AXENT-|^R2-/, '')}`);
       const codingProfile = {
@@ -479,31 +490,18 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       return;
     }
 
-    // Round 1 key typed after Round 1 is over: never reveal shortlist status or the Round 2 key
-    if (isCandidateShortlisted && !typedIsR2Key) {
-      playSound('warning');
-      setKeyError('Round 1 has concluded. Enter the Round 2 key given to you by the organisers.');
-      return;
-    }
     // 2. Candidate is NOT shortlisted:
     // If user attempted to enter Round 2 or explicitly entered R2 code:
-    if (anyLookup.targetRound === 'round2') {
+    if (anyLookup.targetRound === 'round2' || rawInput.toUpperCase().includes('R2')) {
       playSound('warning');
       setKeyError('Access Denied: Round 2 is restricted to shortlisted candidates only. Check your registered email.');
       return;
     }
 
-    // If Round 1 has concluded globally:
-    const isRound1Over = Boolean(
-      isRound1Concluded ||
-      isRound1ConcludedGlobally() ||
-      (shortlistedRolls && shortlistedRolls.length > 0)
-    );
-
     if (isRound1Over) {
       playSound('warning');
       setKeyError(
-        'Round 1 has concluded. Round 2 needs a Round 2 key issued by the organisers.'
+        'Round 1 has concluded. Round 2 is restricted to shortlisted candidates only.'
       );
       return;
     }

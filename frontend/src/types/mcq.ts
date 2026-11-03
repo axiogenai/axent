@@ -41,6 +41,7 @@ export interface MCQQuestionSnapshot {
   text: string;
   options: Array<{ id: string; text: string }>;  // isCorrect OMITTED for student
   correctOptionId: string;   // Stored server-side, not shown to student
+  correctOptionText?: string; // Fallback text ground truth for grading
   marks: number;
   negativeMarks: number;
   explanation: string;

@@ -272,320 +272,6 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole, theme
   const isPasswordValid = newPassword.length >= 8;
   const doPasswordsMatch = newPassword.length > 0 && newPassword === confirmPassword;
 
-  if (!isDedicatedPortal) {
-    return (
-      <div
-        className="authority-login-container"
-        style={{
-          minHeight: 'calc(100vh - 52px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '40px 16px',
-          background: 'var(--bg-main)'
-        }}
-      >
-        <div
-          className="card-elevated authority-portal-card"
-          style={{
-            maxWidth: '680px',
-            width: '100%',
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md)',
-            boxShadow: 'var(--shadow-md)',
-            overflow: 'hidden'
-          }}
-        >
-          {/* Header */}
-          <div
-            style={{
-              padding: 'clamp(20px, 4vw, 28px) clamp(16px, 4vw, 32px) 20px',
-              borderBottom: '1px solid var(--border)',
-              background: 'var(--bg-surface)'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', height: '28px' }}>
-                <img
-                  src="/axent-lightmode.png"
-                  alt="Axent"
-                  className="axent-theme-logo-light"
-                  style={{
-                    height: '28px',
-                    width: 'auto',
-                    objectFit: 'contain'
-                  }}
-                />
-                <img
-                  src="/axent-logo.png"
-                  alt="Axent"
-                  className="axent-theme-logo-dark"
-                  style={{
-                    height: '28px',
-                    width: 'auto',
-                    objectFit: 'contain'
-                  }}
-                />
-              </div>
-              <div>
-                <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)' }}>
-                  Axent Assessment Authority
-                </span>
-                <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-                  Institutional Gateways
-                </h1>
-              </div>
-            </div>
-            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Select your designated academic access portal to authenticate and enter.
-            </p>
-          </div>
-
-          {/* Separate Gateway Portals Grid */}
-          <div style={{ padding: 'clamp(16px, 4vw, 28px) clamp(16px, 4vw, 32px)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '20px' }}>
-            {/* 1. Paper Setter Gateway Card */}
-            <div
-              style={{
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--bg-surface)',
-                padding: '24px 20px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                gap: '16px'
-              }}
-            >
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                  <div
-                    style={{
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: 'var(--radius-xs)',
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--text-primary)'
-                    }}
-                  >
-                    <Layers size={18} />
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)' }}>
-                      FACULTY PORTAL
-                    </span>
-                    <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                      Paper Setter Gateway
-                    </h2>
-                  </div>
-                </div>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
-                  For university faculty, question authors, and academic examiners. Author problem statements, configure test rubrics, and publish assessments.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  playSound('click');
-                  navigate('/login/paper-setter');
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  width: '100%',
-                  padding: '10px 14px',
-                  borderRadius: 'var(--radius-xs)',
-                  border: '1px solid var(--accent)',
-                  background: 'var(--accent)',
-                  color: 'var(--accent-contrast)',
-                  fontSize: '12.5px',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                <span>Enter Paper Setter Gateway</span>
-                <ArrowRight size={14} />
-              </button>
-            </div>
-
-            {/* 2. Chief Proctor & Admin Gateway Card */}
-            <div
-              style={{
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--bg-surface)',
-                padding: '24px 20px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                gap: '16px'
-              }}
-            >
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                  <div
-                    style={{
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: 'var(--radius-xs)',
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--text-primary)'
-                    }}
-                  >
-                    <ShieldAlert size={18} />
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '9.5px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)' }}>
-                      ADMINISTRATION & PROCTORING
-                    </span>
-                    <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                      Chief Proctor & Admin
-                    </h2>
-                  </div>
-                </div>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
-                  For Chief Proctors, Exam Superintendents, and invigilators. Real-time CCTV surveillance, live proctoring telemetry, and cryptographic exam audit logs.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  playSound('click');
-                  navigate('/login/admin');
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  width: '100%',
-                  padding: '10px 14px',
-                  borderRadius: 'var(--radius-xs)',
-                  border: '1px solid var(--accent)',
-                  background: 'var(--accent)',
-                  color: 'var(--accent-contrast)',
-                  fontSize: '12.5px',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                <span>Enter Chief Proctor Gateway</span>
-                <ArrowRight size={14} />
-              </button>
-            </div>
-
-            {/* 3. Magic Link Invitation Dispatcher Portal */}
-            <div
-              style={{
-                gridColumn: '1 / -1',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--bg-main)',
-                padding: '16px 20px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '16px'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div
-                  style={{
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: 'var(--radius-xs)',
-                    background: 'var(--bg-surface)',
-                    border: '1px solid var(--border)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--accent)'
-                  }}
-                >
-                  <Send size={15} />
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Staff Onboarding & Magic Link Dispatcher
-                  </h3>
-                  <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                    Dedicated invitation portal to dispatch passwordless onboarding tokens to faculty and examiners.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  playSound('click');
-                  navigate('/invite');
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 14px',
-                  borderRadius: 'var(--radius-xs)',
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg-elevated)',
-                  color: 'var(--text-primary)',
-                  fontSize: '11.5px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  flexShrink: 0
-                }}
-              >
-                <span>Open Invite Portal</span>
-                <ArrowRight size={12} />
-              </button>
-            </div>
-          </div>
-
-          {/* Footer student link */}
-          <div
-            style={{
-              padding: '14px clamp(16px, 4vw, 32px)',
-              borderTop: '1px solid var(--border)',
-              background: 'var(--bg-surface)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => navigate('/mcq')}
-              style={{
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                fontSize: '12px',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              <GraduationCap size={14} color="var(--accent)" />
-              <span>Are you a student taking an exam? <strong>Go to Candidate Portal</strong></span>
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div
       className="authority-login-container"
@@ -710,6 +396,72 @@ export const AuthorityLogin: React.FC<AuthorityLoginProps> = ({ fixedRole, theme
 
         {/* ── Form Body Container ── */}
         <div style={{ padding: '22px clamp(20px, 5vw, 26px)', boxSizing: 'border-box' }}>
+          {/* Institutional Role Selector Toggle */}
+          <div
+            style={{
+              display: 'flex',
+              gap: '6px',
+              padding: '4px',
+              background: 'var(--bg-main)',
+              borderRadius: '8px',
+              border: '1px solid var(--border)',
+              marginBottom: '18px'
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                playSound('click');
+                setRole('admin');
+              }}
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                padding: '8px 10px',
+                fontSize: '11.5px',
+                fontWeight: 700,
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                background: role === 'admin' ? 'var(--accent)' : 'transparent',
+                color: role === 'admin' ? 'var(--accent-contrast)' : 'var(--text-muted)',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <ShieldAlert size={13} />
+              <span>Chief Proctor & Admin</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                playSound('click');
+                setRole('paper_setter');
+              }}
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                padding: '8px 10px',
+                fontSize: '11.5px',
+                fontWeight: 700,
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                background: role === 'paper_setter' ? 'var(--accent)' : 'transparent',
+                color: role === 'paper_setter' ? 'var(--accent-contrast)' : 'var(--text-muted)',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Layers size={13} />
+              <span>Paper Setter</span>
+            </button>
+          </div>
+
           {/* Feedback Alerts */}
           {errorMessage && (
             <div
