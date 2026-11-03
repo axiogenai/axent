@@ -2699,14 +2699,6 @@ export async function syncFromSupabase(): Promise<void> {
 
 
 
-      // Clear any false local deletions for exams that exist in cloud
-      cloudE.forEach((e) => {
-        if (e && e.id && deletedIds.has(e.id)) {
-          unmarkExamDeleted(e.id);
-          deletedIds.delete(e.id);
-        }
-      });
-
       // Filter out deleted IDs from cloud results
       const activeCloudExams = cloudE.filter((e) => !deletedIds.has(e.id));
 

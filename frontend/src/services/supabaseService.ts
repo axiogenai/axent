@@ -106,7 +106,8 @@ async function writeQuestionToCloud(q: MCQQuestion): Promise<boolean> {
 
 async function writeDeleteQuestionFromCloud(id: string): Promise<boolean> {
   try {
-    const { error } = await supabase.from('mcq_questions').delete().eq('id', id);
+    const client = supabaseAdmin || supabase;
+    const { error } = await client.from('mcq_questions').delete().eq('id', id);
     return !error;
   } catch {
     return false;
@@ -115,14 +116,15 @@ async function writeDeleteQuestionFromCloud(id: string): Promise<boolean> {
 
 export async function clearAllQuestionsFromCloud(): Promise<boolean> {
   try {
-    const { error } = await supabase.from('mcq_questions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    if (error) {
-      console.warn('[Supabase] Failed to clear questions from cloud:', error.message);
-      return false;
+    const client = supabaseAdmin || supabase;
+    const { data } = await client.from('mcq_questions').select('id');
+    if (data && data.length > 0) {
+      const ids = data.map(d => d.id);
+      await client.from('mcq_questions').delete().in('id', ids);
     }
     return true;
   } catch (err) {
-    console.warn('[Supabase] Error clearing questions from cloud:', err);
+    console.warn('[Supabase] Failed to clear questions from cloud:', err);
     return false;
   }
 }
@@ -284,10 +286,14 @@ async function writeExamToCloud(e: MCQExamConfig): Promise<boolean> {
 
 async function writeDeleteExamFromCloud(id: string): Promise<boolean> {
   try {
+    const client = supabaseAdmin || supabase;
     try {
-      await supabase.from('mcq_attempts').delete().eq('exam_id', id);
+      const { data: atts } = await client.from('mcq_attempts').select('id').eq('exam_id', id);
+      if (atts && atts.length > 0) {
+        await client.from('mcq_attempts').delete().in('id', atts.map(a => a.id));
+      }
     } catch {}
-    const { error } = await supabase.from('mcq_exams').delete().eq('id', id);
+    const { error } = await client.from('mcq_exams').delete().eq('id', id);
     if (error) {
       console.warn('[Supabase] Delete exam from cloud warning:', error.message);
       return false;
@@ -327,7 +333,8 @@ export function deleteQuestionFromCloud(id: string): Promise<boolean> {
 export async function deleteQuestionsByIdsFromCloud(questionIds: string[]): Promise<boolean> {
   if (!questionIds || questionIds.length === 0) return true;
   try {
-    const { error } = await supabase.from('mcq_questions').delete().in('id', questionIds);
+    const client = supabaseAdmin || supabase;
+    const { error } = await client.from('mcq_questions').delete().in('id', questionIds);
     if (error) {
       console.warn('[Supabase] Failed to bulk delete questions from cloud:', error.message);
       return false;
@@ -394,25 +401,14 @@ export async function fetchAttemptsFromCloud(): Promise<MCQAttempt[] | null> {
 }
 
 async function writeAttemptToCloud(a: MCQAttempt): Promise<boolean> {
+  const client = supabaseAdmin || supabase;
   try {
-    // 1. Ensure parent exam exists in mcq_exams so foreign key constraint never fails!
+    // 1. Check if parent exam exists in mcq_exams. If deleted, do NOT resurrect phantom exam!
     try {
-      const { data: exCheck } = await supabase.from('mcq_exams').select('id').eq('id', a.examId).maybeSingle();
+      const { data: exCheck } = await client.from('mcq_exams').select('id').eq('id', a.examId).maybeSingle();
       if (!exCheck) {
-        await supabase.from('mcq_exams').upsert({
-          id: a.examId,
-          title: a.examTitle || 'CodeSpark Examination',
-          description: 'Auto-provisioned examination header for attempt synchronization',
-          instructions: '',
-          subject: 'CodeSpark',
-          topic: 'Assessment',
-          status: 'PUBLISHED',
-          duration_minutes: 30,
-          total_marks: a.maxScore || 10,
-          question_count: Array.isArray(a.assignedQuestions) ? a.assignedQuestions.length : 10,
-          created_at: a.startTime || Date.now(),
-          updated_at: Date.now()
-        });
+        // Exam was deleted by administrator. Do not recreate phantom exam.
+        return false;
       }
     } catch (exErr) {
       console.warn('[Supabase] Parent exam verification notice:', exErr);
@@ -451,7 +447,7 @@ async function writeAttemptToCloud(a: MCQAttempt): Promise<boolean> {
     // the missing fields so a schema upgrade is not required just to save an attempt.
     const payload: Record<string, unknown> = { ...row };
     for (let retry = 0; retry < 4; retry++) {
-      const { error } = await supabase.from('mcq_attempts').upsert(payload);
+      const { error } = await client.from('mcq_attempts').upsert(payload);
       if (!error) return true;
       const missingOptionalColumn = ['assigned_lab_id', 'assigned_lab_name', 'student_div', 'last_activity_at'].find((column) =>
         Object.prototype.hasOwnProperty.call(payload, column) && error.message.toLowerCase().includes(column)
@@ -1068,8 +1064,9 @@ export async function deleteCollegeLabFromCloud(labId: string): Promise<boolean>
   if (!labId) return true;
   try {
     const clean = labId.trim();
-    const { error: err1 } = await supabase.from('college_labs').delete().eq('lab_id', clean);
-    const { error: err2 } = await supabase.from('college_labs').delete().ilike('lab_id', clean);
+    const client = supabaseAdmin || supabase;
+    const { error: err1 } = await client.from('college_labs').delete().eq('lab_id', clean);
+    const { error: err2 } = await client.from('college_labs').delete().ilike('lab_id', clean);
     return !err1 || !err2;
   } catch {
     return false;
@@ -1078,8 +1075,12 @@ export async function deleteCollegeLabFromCloud(labId: string): Promise<boolean>
 
 export async function clearAllCollegeLabsFromCloud(): Promise<boolean> {
   try {
-    const { error } = await supabase.from('college_labs').delete().neq('lab_id', '');
-    return !error;
+    const client = supabaseAdmin || supabase;
+    const { data } = await client.from('college_labs').select('lab_id');
+    if (data && data.length > 0) {
+      await client.from('college_labs').delete().in('lab_id', data.map(d => d.lab_id));
+    }
+    return true;
   } catch (err) {
     console.warn('[Supabase] Failed to clear all college labs from cloud:', err);
     return false;
