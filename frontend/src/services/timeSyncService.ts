@@ -10,8 +10,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://jswcwixeoilxuhbzojee.supabase.co';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impzd2N3aXhlb2lseHVoYnpvamVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5NTU0OTMsImV4cCI6MjEwNzUzMTQ5M30.A73oIpxR0FdrK5GOb6zeEh-xH0NY3RuJoQY5hngOrew';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://htfjwfwleyljbkftmthd.supabase.co';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh0Zmp3ZndsZXlsamJrZnRtdGhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2ODA0ODcsImV4cCI6MjEwOTI1NjQ4N30.SAh7Smo5rttVT18MjN0m9qwRSFD5FAvPrrGzV7gJUi0';
 
 // In-memory synchronized clock offset (estimatedServerNow - localNow) in ms
 let cachedOffset: number = 0;

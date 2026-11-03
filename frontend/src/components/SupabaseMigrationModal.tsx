@@ -38,7 +38,7 @@ export const SupabaseMigrationModal: React.FC<SupabaseMigrationModalProps> = ({ 
 
   const sqlSchema = `-- ============================================================================
 -- CodeDNA Production Supabase Schema
--- Run this in your Supabase SQL Editor: https://supabase.com/dashboard/project/jswcwixeoilxuhbzojee/sql
+-- Run this in your Supabase SQL Editor: https://supabase.com/dashboard/project/htfjwfwleyljbkftmthd/sql
 -- ============================================================================
 
 -- 1. MCQ Questions Table
@@ -513,7 +513,7 @@ CREATE POLICY "Allow public read-write for code_submissions" ON public.code_subm
               </button>
 
               <a
-                href="https://supabase.com/dashboard/project/jswcwixeoilxuhbzojee/sql"
+                href="https://supabase.com/dashboard/project/htfjwfwleyljbkftmthd/sql"
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
