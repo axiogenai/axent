@@ -8,6 +8,7 @@ import { AdminCheatingAlertsView } from './admin/AdminCheatingAlertsView';
 import { AdminAuditLedgerView } from './admin/AdminAuditLedgerView';
 import { AdminInstitutionsView } from './admin/AdminInstitutionsView';
 import { AdminSettingsView } from './admin/AdminSettingsView';
+import { PaperSetterPortal } from './PaperSetterPortal';
 import {
   CandidateStation,
   AnalysisReport,
@@ -51,6 +52,7 @@ import {
   syncFromSupabase
 } from '../services/mcqService';
 import { fetchStationsFromCloud, subscribeToCloudStations } from '../services/supabaseService';
+import { getCurrentAuthorityRole } from '../services/authService';
 import { InstituteLabManagerModal } from './InstituteLabManagerModal';
 import { SupabaseMigrationModal } from './SupabaseMigrationModal';
 import { SubscriptionBillingModal } from './saas/SubscriptionBillingModal';
@@ -229,7 +231,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [activeSidebarItem, setActiveSidebarItem] = useState<string>(tabFromUrl || initialTab || 'control_room');
+  const userRole = getCurrentAuthorityRole();
+  const isPaperSetterOnly = userRole === 'paper_setter';
+  const defaultTab = isPaperSetterOnly ? 'paper_setter' : 'control_room';
+  const [activeSidebarItem, setActiveSidebarItem] = useState<string>(tabFromUrl || initialTab || defaultTab);
 
   useEffect(() => {
     if (tabFromUrl && tabFromUrl !== activeSidebarItem) {
@@ -571,18 +576,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     playSound('click');
   };
 
-  const sidebarNavItems = [
-    { id: 'control_room', label: 'Control Room', icon: Home },
-    { id: 'live_proctoring', label: 'Live Proctoring', icon: Video },
-    { id: 'candidates', label: 'Candidates', icon: Users, badge: activeCount > 0 ? activeCount : undefined },
-    { id: 'examinations', label: 'Examinations', icon: FileText },
-    { id: 'test_stations', label: 'Test Stations', icon: Monitor },
-    { id: 'reports', label: 'Reports', icon: BarChart2 },
-    { id: 'cheating_alerts', label: 'Cheating Alerts', icon: AlertTriangle, badge: cheatingCount, badgeColor: cheatingCount > 0 ? 'danger' : undefined },
-    { id: 'audit_ledger', label: 'Audit Ledger', icon: Layers },
-    { id: 'institutions', label: 'Institutions', icon: Building },
-    { id: 'settings', label: 'Settings', icon: Settings }
+  const allNavItems = [
+    { id: 'control_room', label: 'Control Room', icon: Home, roles: ['admin', 'super_admin'] },
+    { id: 'paper_setter', label: 'Paper Setter Portal', icon: BookOpen, roles: ['admin', 'super_admin', 'paper_setter'] },
+    { id: 'live_proctoring', label: 'Live Proctoring', icon: Video, roles: ['admin', 'super_admin'] },
+    { id: 'candidates', label: 'Candidates', icon: Users, badge: activeCount > 0 ? activeCount : undefined, roles: ['admin', 'super_admin'] },
+    { id: 'examinations', label: 'Examinations', icon: FileText, roles: ['admin', 'super_admin', 'paper_setter'] },
+    { id: 'test_stations', label: 'Test Stations', icon: Monitor, roles: ['admin', 'super_admin'] },
+    { id: 'reports', label: 'Reports', icon: BarChart2, roles: ['admin', 'super_admin', 'paper_setter'] },
+    { id: 'cheating_alerts', label: 'Cheating Alerts', icon: AlertTriangle, badge: cheatingCount, badgeColor: cheatingCount > 0 ? 'danger' : undefined, roles: ['admin', 'super_admin'] },
+    { id: 'audit_ledger', label: 'Audit Ledger', icon: Layers, roles: ['admin', 'super_admin'] },
+    { id: 'institutions', label: 'Institutions', icon: Building, roles: ['admin', 'super_admin'] },
+    { id: 'settings', label: 'Settings', icon: Settings, roles: ['admin', 'super_admin'] }
   ];
+
+  const sidebarNavItems = allNavItems.filter((item) =>
+    !isPaperSetterOnly || item.roles.includes('paper_setter')
+  );
 
   const handleLockStation = (stationId: string) => {
     const target = stations.find((s) => s.id === stationId);
@@ -792,6 +802,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           minHeight: '100%'
         }}
       >
+        {activeSidebarItem === 'paper_setter' && (
+          <div style={{ width: '100%' }}>
+            <PaperSetterPortal embedded={true} />
+          </div>
+        )}
+
         {activeSidebarItem === 'examinations' && (
           <div style={{ width: '100%' }}>
             <AdminMCQTicketIssuer />

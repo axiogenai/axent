@@ -28,7 +28,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
       const roleAllowed = requiredRole === 'super_admin'
         ? trustedRole === 'super_admin'
         : (requiredRole === 'admin'
-          ? (trustedRole === 'admin' || trustedRole === 'super_admin')
+          ? (trustedRole === 'admin' || trustedRole === 'super_admin' || trustedRole === 'paper_setter')
           : (trustedRole === 'paper_setter' || trustedRole === 'admin' || trustedRole === 'super_admin'));
       setIsAuthenticated(roleAllowed);
     });
@@ -45,7 +45,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
       const roleAllowed = requiredRole === 'super_admin'
         ? trustedRole === 'super_admin'
         : (requiredRole === 'admin'
-          ? (trustedRole === 'admin' || trustedRole === 'super_admin')
+          ? (trustedRole === 'admin' || trustedRole === 'super_admin' || trustedRole === 'paper_setter')
           : (trustedRole === 'paper_setter' || trustedRole === 'admin' || trustedRole === 'super_admin'));
       setIsAuthenticated(roleAllowed);
     });
@@ -80,11 +80,6 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
 
   // If unauthenticated or unauthorized, redirect safely
   if (!isAuthenticated) {
-    const activeRole = getCurrentAuthorityRole();
-    // If a paper_setter user is logged in but attempts to access admin route, redirect back to /paper-setter
-    if (activeRole === 'paper_setter' && requiredRole === 'admin') {
-      return <Navigate to="/paper-setter" replace />;
-    }
     const targetUrl = requiredRole === 'admin'
       ? `/login/admin?redirect=${encodeURIComponent(location.pathname)}`
       : `/login/paper-setter?redirect=${encodeURIComponent(location.pathname)}`;

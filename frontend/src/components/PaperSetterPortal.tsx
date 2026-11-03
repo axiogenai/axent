@@ -37,7 +37,11 @@ import { AIPaperGenerationResult } from '../services/groqService';
 
 type PaperSetterTab = 'exams' | 'bank' | 'results';
 
-export const PaperSetterPortal: React.FC = () => {
+export interface PaperSetterPortalProps {
+  embedded?: boolean;
+}
+
+export const PaperSetterPortal: React.FC<PaperSetterPortalProps> = ({ embedded = false }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<PaperSetterTab>('exams');
   const [exams, setExams] = useState<MCQExamConfig[]>(() => getAllExams());
@@ -136,13 +140,14 @@ export const PaperSetterPortal: React.FC = () => {
     <div
       className="paper-setter-portal-layout"
       style={{
-        minHeight: 'calc(100vh - 52px)',
-        background: 'var(--bg-main)',
+        minHeight: embedded ? 'auto' : 'calc(100vh - 52px)',
+        background: embedded ? 'transparent' : 'var(--bg-main)',
         display: 'flex',
         flexDirection: 'column',
         gap: '16px',
-        padding: 'clamp(14px, 2.5vw, 24px)',
-        boxSizing: 'border-box'
+        padding: embedded ? '0' : 'clamp(14px, 2.5vw, 24px)',
+        boxSizing: 'border-box',
+        width: '100%'
       }}
     >
       {/* ── 1. TOP FACULTY KPI METRICS RIBBON (Watermelon Stat Cards) ── */}

@@ -123,23 +123,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   } else if (isLoginRoute) {
     // Authority Gateway / Login — No student tabs!
     activeNavItems = [];
-  } else if (isAdminRoute) {
-    // Admin CCTV Surveillance — Always expose both Admin CCTV & Paper Setter Portal
-    activeNavItems = [
-      { path: '/admin', label: 'CCTV Live Proctoring', icon: ShieldAlert, badge: 'PROCTOR', badgeColor: 'danger' },
-      { path: '/paper-setter', label: 'Paper Setter Portal', icon: Layers }
-    ];
-  } else if (isPaperSetterRoute) {
-    if (isAdmin) {
-      activeNavItems = [
-        { path: '/admin', label: 'CCTV Live Proctoring', icon: ShieldAlert, badge: 'PROCTOR', badgeColor: 'danger' },
-        { path: '/paper-setter', label: 'Paper Setter Portal', icon: Layers }
-      ];
-    } else {
-      activeNavItems = [
-        { path: '/paper-setter', label: 'Paper Setter Portal', icon: Layers }
-      ];
-    }
+  } else if (isAdminRoute || isPaperSetterRoute) {
+    // Admin is the unified command center: the left sidebar handles all navigation including Paper Setter Portal!
+    activeNavItems = [];
   } else if (isMcqRoute || examMode === 'MCQ') {
     activeNavItems = [];
   } else {
@@ -255,52 +241,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <ExternalLink size={12} />
                 <span>Candidate Portal</span>
-              </button>
-            )}
-
-            {/* If in Paper Setter AND user has Admin privileges, provide 1-click switch back to Admin CCTV */}
-            {isPaperSetterRoute && isAdmin && (
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => navigate('/admin')}
-                title="Switch to Chief Proctor CCTV Live Surveillance"
-                style={{
-                  height: '30px',
-                  padding: '0 10px',
-                  gap: '5px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid rgba(239, 68, 68, 0.4)',
-                  background: 'rgba(239, 68, 68, 0.08)',
-                  color: '#ef4444'
-                }}
-              >
-                <ShieldAlert size={13} color="#ef4444" />
-                <span>Admin CCTV</span>
-              </button>
-            )}
-
-            {/* If in Admin, provide 1-click switch to Paper Setter */}
-            {isAdminRoute && (
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => navigate('/paper-setter')}
-                title="Open Paper Setter & Examination Builder Portal"
-                style={{
-                  height: '30px',
-                  padding: '0 10px',
-                  gap: '5px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg-surface)',
-                  color: 'var(--text-secondary)'
-                }}
-              >
-                <Layers size={13} />
-                <span>Paper Setter</span>
               </button>
             )}
 

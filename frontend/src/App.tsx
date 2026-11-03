@@ -500,11 +500,7 @@ export const App: React.FC = () => {
           />
           <Route
             path="/paper-setter"
-            element={
-              <ProtectedRoute requiredRole="paper_setter">
-                <PaperSetterPortal />
-              </ProtectedRoute>
-            }
+            element={<Navigate to="/admin?tab=paper_setter" replace />}
           />
           <Route
             path="/admin"
