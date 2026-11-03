@@ -830,12 +830,6 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     return 0;
   }, [candidateAttempt, assignedCodeSparkExam, activeCandidate]);
 
-  const round1Pct = useMemo(() => {
-    if (!candidateAttempt || candidateAttempt.score === undefined) return 0;
-    if (dynamicTotalMarks <= 0) return 100;
-    return Math.round(((candidateAttempt.score ?? 0) / dynamicTotalMarks) * 100);
-  }, [candidateAttempt, dynamicTotalMarks]);
-
   // Dynamic qualification for Round 2: Exclusively for shortlisted candidates with email keys
   const isRound2Unlocked = useMemo(() => {
     if (proctorBypassRound2) return true;
@@ -1754,7 +1748,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                     </strong>
                   ) : isRound1Completed ? (
                     <strong className="text-zinc-700 font-bold">
-                      ROUND 1 COMPLETE ({round1Pct}%)
+                      ROUND 1 SUBMITTED &amp; SEALED
                     </strong>
                   ) : (
                     <strong className={isRound1Concluded ? "text-[#ea1a1c] font-black" : "text-zinc-500"}>{isRound1Concluded ? "ACTIVE NOW (CODING)" : "GATE-LOCKED"}</strong>

@@ -212,42 +212,9 @@ export function saveCodeSparkCandidates(candidates: CodeSparkCandidate[]): void 
 
 export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): Promise<boolean> {
   try {
-    if (!supabase) return false;
+    const client = supabaseAdmin || supabase;
+    if (!client) return false;
     const deduped = deduplicateCandidates(candidates);
-
-    let currentConfig: Partial<CodeSparkSystemConfig> = {};
-
-    // 1. Try reading existing config from candidate_stations (100% public read-write for anon and authenticated)
-    try {
-      const { data: stationRec } = await supabase
-        .from('candidate_stations')
-        .select('code, student')
-        .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-        .maybeSingle();
-
-      if (stationRec) {
-        if (stationRec.student && typeof stationRec.student === 'object' && Object.keys(stationRec.student).length > 0) {
-          currentConfig = stationRec.student as Partial<CodeSparkSystemConfig>;
-        } else if (stationRec.code) {
-          currentConfig = JSON.parse(stationRec.code);
-        }
-      }
-    } catch {}
-
-    // 2. Fallback read from mcq_exams if needed
-    if (!currentConfig.activeExamId) {
-      try {
-        const { data: existing } = await supabase
-          .from('mcq_exams')
-          .select('instructions')
-          .eq('id', CODESPARK_SYSTEM_CONFIG_ID)
-          .maybeSingle();
-
-        if (existing?.instructions) {
-          currentConfig = JSON.parse(existing.instructions);
-        }
-      } catch {}
-    }
 
     const assignedId = typeof window !== 'undefined'
       ? localStorage.getItem('codedna_codespark_round1_exam_id')
@@ -279,9 +246,9 @@ export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): P
     });
 
     const payload: CodeSparkSystemConfig = {
-      activeExamId: assignedId || currentConfig.activeExamId || null,
-      shortlistMode: currentConfig.shortlistMode || 'cutoff',
-      shortlistValue: currentConfig.shortlistValue || 12,
+      activeExamId: assignedId || null,
+      shortlistMode: 'cutoff',
+      shortlistValue: 12,
       manualShortlistRolls: localShortlist,
       isConcluded: isConcluded,
       candidates: finalCandidates,
@@ -289,11 +256,31 @@ export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): P
       updatedAt: Date.now()
     };
 
-    // 1. Save to candidate_stations (universally accessible by all phones and stations)
-    try {
-      await supabase
-        .from('candidate_stations')
-        .upsert({
+    const stationRows = finalCandidates.map((c) => ({
+      id: `cand_${normalizeCodeSparkKey(c.accessKey)}`,
+      lab_id: 'CODESPARK_ROSTER',
+      station_number: normalizeCodeSparkKey(c.accessKey),
+      status: c.status || 'REGISTERED',
+      student: {
+        name: c.name,
+        email: c.email,
+        rollNumber: c.rollNumber || c.accessKey,
+        accessKey: c.accessKey,
+        department: c.department || 'Axent Candidate',
+        assignedExamId: c.assignedExamId || assignedId || null,
+        round2Key: c.round2Key || null,
+        isShortlisted: Boolean(c.isShortlisted),
+        round1Score: c.round1Score ?? null,
+        round1MaxScore: c.round1MaxScore ?? null,
+        registeredAt: c.registeredAt || Date.now()
+      },
+      last_updated_timestamp: Date.now()
+    }));
+
+    // Parallel fire: candidate_stations config, mcq_exams config, and station rows
+    const promises: Promise<any>[] = [
+      Promise.resolve(
+        client.from('candidate_stations').upsert({
           id: CODESPARK_SYSTEM_CONFIG_ID,
           lab_id: 'SYSTEM_CONFIG',
           station_number: 'CONFIG',
@@ -301,16 +288,10 @@ export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): P
           code: JSON.stringify(payload),
           student: payload,
           last_updated_timestamp: Date.now()
-        });
-    } catch (csErr) {
-      console.warn('[CodeSpark] candidate_stations upsert warning:', csErr);
-    }
-
-    // 2. Also save to mcq_exams with status: 'PUBLISHED'
-    try {
-      await supabase
-        .from('mcq_exams')
-        .upsert({
+        })
+      ),
+      Promise.resolve(
+        client.from('mcq_exams').upsert({
           id: CODESPARK_SYSTEM_CONFIG_ID,
           title: 'CodeSpark System Configuration & Roster',
           description: 'Cloud configuration for CodeSpark Active Paper, Shortlist Criteria, and Registered Candidates',
@@ -323,65 +304,15 @@ export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): P
           question_count: 0,
           created_at: Date.now(),
           updated_at: Date.now()
-        });
-    } catch (meErr) {
-      console.warn('[CodeSpark] mcq_exams upsert warning:', meErr);
+        })
+      )
+    ];
+
+    if (stationRows.length > 0) {
+      promises.push(Promise.resolve(client.from('candidate_stations').upsert(stationRows)));
     }
 
-    // 3. Save each candidate as an individual record in candidate_stations (triple redundancy)
-    try {
-      const stationRows = finalCandidates.map((c) => ({
-        id: `cand_${normalizeCodeSparkKey(c.accessKey)}`,
-        lab_id: 'CODESPARK_ROSTER',
-        station_number: normalizeCodeSparkKey(c.accessKey),
-        status: c.status || 'REGISTERED',
-        student: {
-          name: c.name,
-          email: c.email,
-          rollNumber: c.rollNumber || c.accessKey,
-          accessKey: c.accessKey,
-          department: c.department || 'Axent Candidate',
-          assignedExamId: c.assignedExamId || assignedId || null,
-          round2Key: c.round2Key || null,
-          isShortlisted: Boolean(c.isShortlisted),
-          round1Score: c.round1Score ?? null,
-          round1MaxScore: c.round1MaxScore ?? null,
-          registeredAt: c.registeredAt || Date.now()
-        },
-        last_updated_timestamp: Date.now()
-      }));
-
-      for (let i = 0; i < stationRows.length; i += 50) {
-        const batch = stationRows.slice(i, i + 50);
-        await supabase.from('candidate_stations').upsert(batch);
-      }
-
-      // 4. Prune any removed candidates from candidate_stations
-      try {
-        const client = supabaseAdmin || supabase;
-        const validIds = new Set(stationRows.map((r) => r.id));
-        const { data: currentRoster } = await client
-          .from('candidate_stations')
-          .select('id')
-          .eq('lab_id', 'CODESPARK_ROSTER');
-
-        if (currentRoster && currentRoster.length > 0) {
-          const removedIds = currentRoster
-            .map((r: any) => r.id)
-            .filter((id: string) => !validIds.has(id));
-          if (removedIds.length > 0) {
-            for (let i = 0; i < removedIds.length; i += 50) {
-              await client.from('candidate_stations').delete().in('id', removedIds.slice(i, i + 50));
-            }
-          }
-        }
-      } catch (cleanErr) {
-        console.warn('[CodeSpark] Orphan roster cleanup notice:', cleanErr);
-      }
-    } catch (candErr) {
-      console.warn('[CodeSpark] candidate_stations individual upsert warning:', candErr);
-    }
-
+    await Promise.allSettled(promises);
     return true;
   } catch (err) {
     console.warn('[CodeSpark Cloud] pushCandidatesToCloud failed:', err);
@@ -1724,8 +1655,8 @@ export async function importCodeSparkCandidatesDirect(
   items: CandidateImportItem[],
   assignedExamId?: string
 ): Promise<CodeSparkCandidate[]> {
-  // 1. Fetch latest candidates from cloud first
-  const existing = await syncCandidatesFromCloud();
+  // Use current local roster immediately for 0ms latency
+  const existing = getAllCodeSparkCandidates();
   const created: CodeSparkCandidate[] = [];
 
   const usedKeys = new Set<string>();
@@ -1786,7 +1717,7 @@ export async function importCodeSparkCandidatesDirect(
     }
   }
 
-  // Save directly and await cloud persistence!
+  // Ensure un-marked from deleted
   if (typeof window !== 'undefined') {
     localStorage.removeItem('codedna_codespark_wiped_at');
   }
@@ -1796,8 +1727,8 @@ export async function importCodeSparkCandidatesDirect(
     if (c.email) unmarkCandidateKeyDeleted(c.email);
   }
 
+  // Save to local storage & trigger background cloud sync
   saveCodeSparkCandidates(updatedRoster);
-  await pushCandidatesToCloud(updatedRoster);
   return created;
 }
 

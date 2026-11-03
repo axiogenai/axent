@@ -1774,12 +1774,13 @@ const ResultsView: React.FC<ResultsViewProps> = ({ attempt, exam, grade, showExp
   );
 
   // STRICT INSTITUTIONAL GUARD: Withhold scores and answer transcripts from candidates
-  if (isTechFest || exam?.isCodeSpark || attempt.studentDept === 'Axent Candidate' || attempt.studentSem === 'Tech Fest') {
+  const isAdminReviewer = isAuthorityAdmin();
+  if (!isAdminReviewer || isTechFest || exam?.isCodeSpark || attempt.studentDept === 'Axent Candidate' || attempt.studentSem === 'Tech Fest') {
     return (
       <CodeSparkSubmittedView
         attempt={attempt}
         exam={exam}
-        onExit={onExit || (() => { window.location.href = '/code-spark'; })}
+        onExit={onExit || (() => { window.location.href = isTechFest ? '/code-spark' : '/'; })}
       />
     );
   }

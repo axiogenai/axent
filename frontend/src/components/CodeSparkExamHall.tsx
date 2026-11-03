@@ -300,10 +300,6 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
       (round1Attempt.status === 'SUBMITTED' || round1Attempt.status === 'TIMED_OUT' || round1Attempt.score !== undefined)
   );
 
-  const round1Score = round1Attempt?.score ?? 0;
-  const round1MaxScore = round1Attempt?.maxScore || round1Exam?.totalMarks || 1;
-  const round1Pct = Math.round((round1Score / (round1MaxScore || 1)) * 100);
-
   // 4. Shortlist Gatekeeper Check for Round 2
   const isCandidateShortlisted = useMemo(() => {
     if (searchParams.get('round') === '2' || searchParams.get('round') === 'coding') return true;
@@ -532,8 +528,8 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
                       <span style={{ color: '#f4f4f5' }}>{effectiveRound1Exam?.title || 'CodeSpark Round 1 Aptitude'}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-                      <span style={{ color: '#71717a' }}>Assessment Score:</span>
-                      <strong style={{ color: '#10b981' }}>{round1Score} / {round1MaxScore} ({round1Pct}%)</strong>
+                      <span style={{ color: '#71717a' }}>Assessment Status:</span>
+                      <span style={{ color: '#10b981', fontWeight: 600 }}>Sealed &amp; Encrypted in Institutional Ledger</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
                       <span style={{ color: '#71717a' }}>Session Status:</span>

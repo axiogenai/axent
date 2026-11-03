@@ -91,16 +91,17 @@ export const CodeSparkCandidateImportModal: React.FC<CodeSparkCandidateImportMod
     setIsImporting(true);
     try {
       const created = await importCodeSparkCandidatesDirect(parsed, effectiveExamId);
+      setCandidates(getAllCodeSparkCandidates());
       setInputText('');
       setActiveSubTab('roster');
       playSound('success');
       setNotification({
-        message: `Issued and securely saved ${created.length} AXENT key(s) directly to Supabase Cloud!`,
+        message: `Issued and securely provisioned ${created.length} AXENT key(s) directly to cloud roster!`,
         type: 'success'
       });
     } catch {
       setNotification({
-        message: 'Failed to save candidates to Supabase. Check internet connection.',
+        message: 'Failed to issue candidate keys. Please check formatting.',
         type: 'error'
       });
     } finally {
@@ -316,10 +317,11 @@ export const CodeSparkCandidateImportModal: React.FC<CodeSparkCandidateImportMod
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-zinc-100 hover:bg-white text-black font-semibold text-xs rounded transition-colors flex items-center gap-1.5"
+                  disabled={isImporting}
+                  className="px-4 py-2 bg-zinc-100 hover:bg-white text-black font-semibold text-xs rounded transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                 >
                   <Key size={13} />
-                  <span>Generate AXENT Keys</span>
+                  <span>{isImporting ? 'Generating...' : 'Generate AXENT Keys'}</span>
                 </button>
               </div>
             </form>
