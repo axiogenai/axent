@@ -67,21 +67,26 @@ export async function fetchQuestionsFromCloud(): Promise<MCQQuestion[] | null> {
 
 async function writeQuestionToCloud(q: MCQQuestion): Promise<boolean> {
   try {
+    const diffUpper = String(q.difficulty || 'MEDIUM').toUpperCase().trim();
+    const validDifficulty = ['EASY', 'MEDIUM', 'HARD'].includes(diffUpper) ? diffUpper : 'MEDIUM';
+    const statusUpper = String(q.status || 'DRAFT').toUpperCase().trim();
+    const validStatus = ['DRAFT', 'PUBLISHED', 'ARCHIVED'].includes(statusUpper) ? statusUpper : 'DRAFT';
+
     const row = {
       id: q.id,
       text: q.text,
-      options: q.options,
-      subject: q.subject,
-      topic: q.topic,
-      difficulty: q.difficulty,
-      marks: q.marks,
-      negative_marks: q.negativeMarks,
-      explanation: q.explanation,
-      status: q.status,
-      tags: q.tags,
-      created_at: q.createdAt,
-      updated_at: q.updatedAt,
-      created_by: q.createdBy,
+      options: q.options || [],
+      subject: q.subject || 'General',
+      topic: q.topic || 'General',
+      difficulty: validDifficulty,
+      marks: Number(q.marks) || 1,
+      negative_marks: Number(q.negativeMarks) || 0,
+      explanation: q.explanation || '',
+      status: validStatus,
+      tags: q.tags || [],
+      created_at: Number(q.createdAt) || Date.now(),
+      updated_at: Number(q.updatedAt) || Date.now(),
+      created_by: q.createdBy || 'faculty',
       bank_group: q.bankGroup || '',
     };
     const { error } = await supabase.from('mcq_questions').upsert(row);
@@ -853,7 +858,19 @@ export async function clearAllAttemptsFromCloud(labId?: string): Promise<boolean
   try {
     let query = supabase.from('mcq_attempts').delete();
     if (labId && labId !== 'all') {
-      query = query.eq('assigned_lab_id', labId);
+      try {
+        const { data: exams } = await supabase.from('mcq_exams').select('id, instructions');
+        const labExamIds = (exams || [])
+          .filter((e: any) => (e.instructions || '').includes(labId))
+          .map((e: any) => e.id);
+        if (labExamIds.length > 0) {
+          query = query.in('exam_id', labExamIds);
+        } else {
+          query = query.neq('id', '');
+        }
+      } catch {
+        query = query.neq('id', '');
+      }
     } else {
       query = query.neq('id', '');
     }
@@ -869,7 +886,19 @@ export async function clearSubmittedAttemptsFromCloud(labId?: string): Promise<b
   try {
     let query = supabase.from('mcq_attempts').delete().in('status', ['SUBMITTED', 'DISQUALIFIED', 'ABANDONED']);
     if (labId && labId !== 'all') {
-      query = query.eq('assigned_lab_id', labId);
+      try {
+        const { data: exams } = await supabase.from('mcq_exams').select('id, instructions');
+        const labExamIds = (exams || [])
+          .filter((e: any) => (e.instructions || '').includes(labId))
+          .map((e: any) => e.id);
+        if (labExamIds.length > 0) {
+          query = query.in('exam_id', labExamIds);
+        } else {
+          query = query.neq('id', '');
+        }
+      } catch {
+        query = query.neq('id', '');
+      }
     }
     const { error } = await query;
     return !error;
