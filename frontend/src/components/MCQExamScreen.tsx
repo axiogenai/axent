@@ -626,6 +626,22 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ exam, allExams, onS
       playSound('warning');
       return;
     }
+    // Cloud check: a submission made on ANY device closes the exam for this key
+    try {
+      const { fetchAttemptsFromCloud } = await import('../services/supabaseService');
+      const cloudList = await fetchAttemptsFromCloud();
+      const cloudHit = Array.isArray(cloudList) && cloudList.some(
+        (a: any) =>
+          (a.status === 'SUBMITTED' || a.status === 'TIMED_OUT' || a.status === 'DISQUALIFIED') &&
+          String(a.studentRoll || '').trim().toLowerCase() === normalizedRoll &&
+          (!exam.id || a.examId === exam.id)
+      );
+      if (cloudHit && !isRetake && Math.max(1, exam.maxAttempts || 1) <= 1) {
+        setErrors([`Candidate "${cleanName}" (${cleanRoll}) has already completed and submitted this examination. Re-taking is not permitted.`]);
+        playSound('warning');
+        return;
+      }
+    } catch {}
 
     setErrors([]);
 

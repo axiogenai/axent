@@ -308,7 +308,31 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
     return candidateAttempts[candidateAttempts.length - 1] || null;
   }, [candidateAttempts, isBatch2OrRetake]);
 
+  // Server-side truth: a submitted attempt in the cloud closes the exam even on a fresh device / cleared storage
+  const [cloudSubmitted, setCloudSubmitted] = useState(false);
+  useEffect(() => {
+    if (!cleanRoll) return;
+    let alive = true;
+    void import('../services/supabaseService')
+      .then((m) => m.fetchAttemptsFromCloud())
+      .then((list: any[] | null) => {
+        if (!alive || !Array.isArray(list)) return;
+        const hit = list.some(
+          (a) =>
+            (a.status === 'SUBMITTED' || a.status === 'TIMED_OUT' || a.status === 'DISQUALIFIED') &&
+            String(a.studentRoll || '').trim().toUpperCase() === String(cleanRoll).toUpperCase() &&
+            (!effectiveRound1Exam?.id || a.examId === effectiveRound1Exam.id)
+        );
+        if (hit) setCloudSubmitted(true);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [cleanRoll, effectiveRound1Exam?.id]);
+
   const isRound1Submitted = Boolean(
+    cloudSubmitted ||
     (round1Attempt &&
       (round1Attempt.status === 'SUBMITTED' || round1Attempt.status === 'TIMED_OUT' || round1Attempt.score !== undefined)) ||
     (candidateProfile?.status as string) === 'ROUND1_COMPLETED' ||
@@ -344,6 +368,23 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
     if (roundParam === '2' || roundParam === 'coding') return 'round2';
     return 'round1';
   }, [roundParam]);
+
+  // Once Round 1 is submitted the exam can never be reopened: clear the session and go back to the portal
+  useEffect(() => {
+    if (activeStage !== 'round1' || !isRound1Submitted) return;
+    const t = setTimeout(() => {
+      try {
+        localStorage.removeItem('codedna_student_profile');
+        localStorage.removeItem('codedna_active_exam_mode');
+      } catch {}
+      navigate('/code-spark', { replace: true });
+      setTimeout(() => {
+        void exitExamFullscreen();
+      }, 150);
+    }, 4000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStage, isRound1Submitted]);
 
   const handleExitToPortal = () => {
     playSound('click');
