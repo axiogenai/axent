@@ -544,10 +544,7 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     }
 
     if (isAlreadySubmitted) {
-      const isRetakeAllowed =
-        isCandidateAuthorizedForRound1Retake(cand.rollNumber || cand.accessKey) ||
-        isCandidateAuthorizedForRound1Retake(cand.email) ||
-        isLabOverflowRetakeEnabledGlobally();
+      const isRetakeAllowed = false; // 2nd attempts / Batch 2 are disabled: one key, one attempt
 
       if (isRetakeAllowed && targetExam) {
         prepareCandidateForRound1Retake(derivedRoll, targetExam.id);
@@ -653,58 +650,6 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
     navigate(`/codespark-exams?examId=${safeExam.id}&round=1&autoStart=true`);
   };
 
-  const handleLaunchBatch2 = async () => {
-    playSound('click');
-    let targetExam = getCodeSparkActiveExam();
-    if (!targetExam) {
-      targetExam = await asyncGetCodeSparkActiveExam();
-    }
-    if (!targetExam) {
-      playSound('warning');
-      setKeyError(
-        'The CodeSpark examination is not yet scheduled or paper has not been assigned by the proctor. Please wait for the event administrator to launch the session.'
-      );
-      return;
-    }
-    const safeExam: MCQExamConfig = targetExam;
-    const cand = activeCandidate || (keyDigits.trim() ? (lookupCandidateByKey(`AXENT-${keyDigits.trim()}`) || lookupCandidateAny(keyDigits.trim())?.candidate) : null);
-    if (!cand) {
-      playSound('warning');
-      setKeyError('Please enter your 4-digit key before starting Batch 2.');
-      return;
-    }
-    const derivedRoll = cand.rollNumber || cand.email.split('@')[0].toUpperCase();
-    authorizeCandidateForRound1Retake(cand.accessKey, true);
-    prepareCandidateForRound1Retake(derivedRoll, safeExam.id);
-
-    const profile = {
-      name: cand.name.trim(),
-      email: cand.email.trim().toLowerCase(),
-      rollNumber: derivedRoll,
-      department: cand.department || 'Axent Candidate',
-      course: 'Code Spark 2026',
-      examType: 'Aptitude',
-      assignmentTitle: safeExam.title,
-      examMode: 'MCQ',
-      mcqExamId: safeExam.id,
-      accessKey: cand.accessKey,
-      sessionStartTime: Date.now(),
-      batch: 2,
-      isRetake: true
-    };
-    try {
-      localStorage.setItem('codedna_student_profile', JSON.stringify(profile));
-      localStorage.setItem('codedna_active_exam_mode', 'MCQ');
-      localStorage.setItem('codedna_codespark_round1_exam_id', safeExam.id);
-      setActiveCodeSparkCandidate(cand);
-    } catch {}
-
-    playSound('success');
-    try {
-      await requestExamFullscreen();
-    } catch {}
-    navigate(`/codespark-exams?examId=${safeExam.id}&round=1&batch=2&retake=true&autoStart=true`);
-  };
 
   const cleanRoll = useMemo(() => {
     if (activeCandidate?.rollNumber) return activeCandidate.rollNumber.toUpperCase();

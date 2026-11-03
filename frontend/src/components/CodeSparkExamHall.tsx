@@ -276,14 +276,7 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
   }, []);
 
   const isBatch2OrRetake = useMemo(() => {
-    const qBatch = searchParams.get('batch');
-    const qRetake = searchParams.get('retake');
-    if (qBatch === '2' || qRetake === 'true') return true;
-    try {
-      const activeBatch = localStorage.getItem('codedna_codespark_active_batch');
-      if (activeBatch === '2') return true;
-    } catch {}
-    return false;
+    return false; // Batch 2 / retake attempts are disabled
   }, [searchParams]);
 
   const candidateAttempts = useMemo(() => {
@@ -357,18 +350,6 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
     navigate('/code-spark', { replace: true });
   };
 
-  const handleLaunchBatch2Retake = () => {
-    playSound('click');
-    if (!effectiveRound1Exam) {
-      navigate('/codespark');
-      return;
-    }
-    if (cleanRoll) {
-      authorizeCandidateForRound1Retake(cleanRoll, true);
-      prepareCandidateForRound1Retake(cleanRoll, effectiveRound1Exam.id);
-    }
-    navigate(`/codespark-exams?examId=${effectiveRound1Exam.id}&round=1&batch=2&retake=true&autoStart=true`);
-  };
 
   return (
     <div
