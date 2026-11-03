@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Users,
   Search,
@@ -43,33 +43,50 @@ export const AdminCandidatesView: React.FC<AdminCandidatesViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'submitted' | 'flagged'>('all');
 
-  const activeCount = stations.filter((s) => s.status !== 'Submitted & Done').length;
-  const submittedCount = stations.filter((s) => s.status === 'Submitted & Done').length;
-  const flaggedCount = stations.filter(
+  // Strict candidate deduplication (ensures each candidate is represented exactly once)
+  const uniqueStations = useMemo(() => {
+    const deduped = new Map<string, CandidateStation>();
+    stations.forEach((s) => {
+      const roll = s.student?.rollNumber ? String(s.student.rollNumber).trim().toLowerCase() : '';
+      const name = s.student?.name ? String(s.student.name).trim().toLowerCase() : '';
+      const key = roll || name || s.id;
+      const existing = deduped.get(key);
+      if (!existing || (s.lastUpdatedTimestamp || 0) >= (existing.lastUpdatedTimestamp || 0)) {
+        deduped.set(key, s);
+      }
+    });
+    return Array.from(deduped.values());
+  }, [stations]);
+
+  const activeCount = uniqueStations.filter((s) => s.status !== 'Submitted & Done').length;
+  const submittedCount = uniqueStations.filter((s) => s.status === 'Submitted & Done').length;
+  const flaggedCount = uniqueStations.filter(
     (s) => s.cheatingRisk === 'High' || s.cheatingRisk === 'Critical' || (s.metrics?.pasteRatio || 0) >= 50
   ).length;
 
-  const filteredCandidates = stations.filter((s) => {
-    if (selectedLabId !== 'all' && s.labId !== selectedLabId) return false;
+  const filteredCandidates = useMemo(() => {
+    return uniqueStations.filter((s) => {
+      if (selectedLabId !== 'all' && s.labId !== selectedLabId) return false;
 
-    if (statusFilter === 'active' && s.status === 'Submitted & Done') return false;
-    if (statusFilter === 'submitted' && s.status !== 'Submitted & Done') return false;
-    if (statusFilter === 'flagged') {
-      const isFlagged =
-        s.cheatingRisk === 'High' || s.cheatingRisk === 'Critical' || (s.metrics?.pasteRatio || 0) >= 50;
-      if (!isFlagged) return false;
-    }
+      if (statusFilter === 'active' && s.status === 'Submitted & Done') return false;
+      if (statusFilter === 'submitted' && s.status !== 'Submitted & Done') return false;
+      if (statusFilter === 'flagged') {
+        const isFlagged =
+          s.cheatingRisk === 'High' || s.cheatingRisk === 'Critical' || (s.metrics?.pasteRatio || 0) >= 50;
+        if (!isFlagged) return false;
+      }
 
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      (s.student?.name || '').toLowerCase().includes(q) ||
-      (s.student?.rollNumber || '').toLowerCase().includes(q) ||
-      s.stationNumber.toLowerCase().includes(q) ||
-      (s.student?.department || '').toLowerCase().includes(q) ||
-      (s.student?.assignmentTitle || s.mcqProgress?.examTitle || '').toLowerCase().includes(q)
-    );
-  });
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        (s.student?.name || '').toLowerCase().includes(q) ||
+        (s.student?.rollNumber || '').toLowerCase().includes(q) ||
+        s.stationNumber.toLowerCase().includes(q) ||
+        (s.student?.department || '').toLowerCase().includes(q) ||
+        (s.student?.assignmentTitle || s.mcqProgress?.examTitle || '').toLowerCase().includes(q)
+      );
+    });
+  }, [uniqueStations, selectedLabId, statusFilter, searchQuery]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>

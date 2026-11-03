@@ -26,6 +26,7 @@ import {
   AuthorityRole
 } from '../services/authService';
 import { ContinuousTabs } from './watermelon-ui';
+import { TenantSwitcher } from './saas/TenantSwitcher';
 
 interface NavbarProps {
   theme: ThemeMode;
@@ -329,6 +330,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
           </div>
+
+          {/* Multi-Tenant Campus Switcher */}
+          <TenantSwitcher />
 
           {/* Standalone Install App Trigger */}
           <button

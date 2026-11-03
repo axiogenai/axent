@@ -1,12 +1,13 @@
 import { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase, isSupabaseConnected } from './supabaseService';
 
-export type AuthorityRole = 'admin' | 'paper_setter';
+export type AuthorityRole = 'super_admin' | 'admin' | 'paper_setter';
 
 export interface AuthorityUser {
   id: string;
   email: string;
   role: AuthorityRole;
+  orgId?: string;
   fullName?: string;
 }
 
@@ -51,7 +52,7 @@ export async function getAuthUser(): Promise<User | null> {
 export function getStoredAuthorityRole(): AuthorityRole {
   if (typeof window === 'undefined') return 'paper_setter';
   const role = sessionStorage.getItem(LOCAL_ROLE_KEY) || localStorage.getItem(LOCAL_ROLE_KEY);
-  if (role === 'admin' || role === 'paper_setter') return role;
+  if (role === 'super_admin' || role === 'admin' || role === 'paper_setter') return role;
   return 'paper_setter';
 }
 
@@ -60,7 +61,7 @@ export function getCurrentAuthorityRole(): AuthorityRole | null {
   try {
     // 1. Check direct authority role storage first
     const storedRole = sessionStorage.getItem(LOCAL_ROLE_KEY) || localStorage.getItem(LOCAL_ROLE_KEY);
-    if (storedRole === 'admin' || storedRole === 'paper_setter') {
+    if (storedRole === 'super_admin' || storedRole === 'admin' || storedRole === 'paper_setter') {
       return storedRole as AuthorityRole;
     }
     // 2. Check cached authority session
@@ -68,12 +69,16 @@ export function getCurrentAuthorityRole(): AuthorityRole | null {
     if (raw) {
       const session = JSON.parse(raw);
       const metaRole = session?.user?.app_metadata?.role || session?.user?.user_metadata?.role;
-      if (metaRole === 'admin' || metaRole === 'paper_setter') {
+      if (metaRole === 'super_admin' || metaRole === 'admin' || metaRole === 'paper_setter') {
         return metaRole as AuthorityRole;
       }
     }
   } catch {}
   return null;
+}
+
+export function isSuperAdmin(): boolean {
+  return getCurrentAuthorityRole() === 'super_admin';
 }
 
 export function isAuthorityAdmin(): boolean {

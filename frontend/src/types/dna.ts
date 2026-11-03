@@ -54,6 +54,7 @@ export interface CollegeLabInfo {
   block: string;
   totalStations: number;
   invigilatorName: string;
+  orgId?: string;
 }
 
 export interface CodeMetrics {
@@ -215,6 +216,7 @@ export interface CandidateStation {
   lastUpdatedTimestamp?: number;
   examMode?: 'CODING' | 'MCQ';
   mcqProgress?: MCQStationProgress;
+  orgId?: string;
 }
 
 export interface MCQStationProgress {

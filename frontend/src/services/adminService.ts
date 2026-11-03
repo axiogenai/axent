@@ -722,10 +722,11 @@ function reconcileAttemptsIntoStations(stations: CandidateStation[]): CandidateS
           let existingStation = stationMap.get(stationId);
           if (!existingStation) {
             for (const [, s] of stationMap.entries()) {
-              if (
-                String(s.labId || '').toUpperCase().trim() === String(labId).toUpperCase().trim() &&
-                String(s.student?.rollNumber || '').trim().toLowerCase() === String(a.studentRoll || '').trim().toLowerCase()
-              ) {
+              const sRoll = String(s.student?.rollNumber || '').trim().toLowerCase();
+              const aRoll = String(a.studentRoll || '').trim().toLowerCase();
+              const sName = String(s.student?.name || '').trim().toLowerCase();
+              const aName = String(a.studentName || '').trim().toLowerCase();
+              if ((sRoll && aRoll && sRoll === aRoll) || (sName && aName && sName === aName)) {
                 existingStation = s;
                 break;
               }

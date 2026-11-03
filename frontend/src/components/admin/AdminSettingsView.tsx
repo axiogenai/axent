@@ -17,7 +17,8 @@ import {
   Check,
   Save,
   Radio,
-  FileText
+  FileText,
+  CreditCard
 } from 'lucide-react';
 import { playSound } from '../../utils/sounds';
 
@@ -25,12 +26,14 @@ interface AdminSettingsViewProps {
   onTriggerResetRoom: () => void;
   onClearSubmitted: () => void;
   onOpenSupabaseModal: () => void;
+  onOpenSubscriptionModal?: () => void;
 }
 
 export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   onTriggerResetRoom,
   onClearSubmitted,
   onOpenSupabaseModal,
+  onOpenSubscriptionModal,
 }) => {
 
   const [faceRigor, setFaceRigor] = useState<'standard' | 'strict' | 'relaxed'>('standard');
@@ -356,6 +359,57 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
           <span>Configure Cloud Sync</span>
         </button>
       </div>
+
+      {/* ── SECTION 3.5: SAAS SUBSCRIPTION & QUOTAS ── */}
+      {onOpenSubscriptionModal && (
+        <div
+          style={{
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border)',
+            borderRadius: '10px',
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <CreditCard size={18} color="var(--text-primary)" />
+            </div>
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                SaaS Subscription & Resource Quotas
+              </div>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                Monitor active plan limits, student capacity, monthly examination quotas, and billing
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onOpenSubscriptionModal}
+            className="btn btn-secondary btn-sm"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <CreditCard size={12} />
+            <span>Manage Subscription & Quotas</span>
+          </button>
+        </div>
+      )}
 
       {/* ── SECTION 4: DANGER ZONE ── */}
       <div

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Monitor,
   Search,
@@ -48,20 +48,33 @@ export const AdminTestStationsView: React.FC<AdminTestStationsViewProps> = ({
   const inUseCount = stations.filter((s) => s.status !== 'Submitted & Done').length;
   const lockedCount = stations.filter((s) => s.isLockedByProctor).length;
 
-  const filteredStations = stations.filter((s) => {
-    if (selectedLabId !== 'all' && s.labId !== selectedLabId) return false;
-    if (filterMode === 'in_use' && s.status === 'Submitted & Done') return false;
-    if (filterMode === 'locked' && !s.isLockedByProctor) return false;
+  const filteredStations = useMemo(() => {
+    const deduped = new Map<string, CandidateStation>();
+    stations.forEach((s) => {
+      if (selectedLabId !== 'all' && s.labId !== selectedLabId) return;
+      if (filterMode === 'in_use' && s.status === 'Submitted & Done') return;
+      if (filterMode === 'locked' && !s.isLockedByProctor) return;
 
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      s.stationNumber.toLowerCase().includes(q) ||
-      (s.ipAddress || '').toLowerCase().includes(q) ||
-      (s.student?.name || '').toLowerCase().includes(q) ||
-      (s.student?.rollNumber || '').toLowerCase().includes(q)
-    );
-  });
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matches =
+          s.stationNumber.toLowerCase().includes(q) ||
+          (s.ipAddress || '').toLowerCase().includes(q) ||
+          (s.student?.name || '').toLowerCase().includes(q) ||
+          (s.student?.rollNumber || '').toLowerCase().includes(q);
+        if (!matches) return;
+      }
+
+      const roll = s.student?.rollNumber ? String(s.student.rollNumber).trim().toLowerCase() : '';
+      const name = s.student?.name ? String(s.student.name).trim().toLowerCase() : '';
+      const key = roll || name || s.id;
+      const existing = deduped.get(key);
+      if (!existing || (s.lastUpdatedTimestamp || 0) >= (existing.lastUpdatedTimestamp || 0)) {
+        deduped.set(key, s);
+      }
+    });
+    return Array.from(deduped.values());
+  }, [stations, selectedLabId, filterMode, searchQuery]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>

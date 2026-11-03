@@ -25,9 +25,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
 
       const activeRole = getCurrentAuthorityRole();
       const trustedRole = activeRole || session.user.app_metadata?.role || session.user.user_metadata?.role || 'paper_setter';
-      const roleAllowed = requiredRole === 'admin'
-        ? trustedRole === 'admin'
-        : trustedRole === 'paper_setter' || trustedRole === 'admin';
+      const roleAllowed = requiredRole === 'super_admin'
+        ? trustedRole === 'super_admin'
+        : (requiredRole === 'admin'
+          ? (trustedRole === 'admin' || trustedRole === 'super_admin')
+          : (trustedRole === 'paper_setter' || trustedRole === 'admin' || trustedRole === 'super_admin'));
       setIsAuthenticated(roleAllowed);
     });
 
@@ -40,9 +42,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
       }
       const activeRole = getCurrentAuthorityRole();
       const trustedRole = activeRole || session?.user?.app_metadata?.role || session?.user?.user_metadata?.role || 'paper_setter';
-      const roleAllowed = requiredRole === 'admin'
-        ? trustedRole === 'admin'
-        : trustedRole === 'paper_setter' || trustedRole === 'admin';
+      const roleAllowed = requiredRole === 'super_admin'
+        ? trustedRole === 'super_admin'
+        : (requiredRole === 'admin'
+          ? (trustedRole === 'admin' || trustedRole === 'super_admin')
+          : (trustedRole === 'paper_setter' || trustedRole === 'admin' || trustedRole === 'super_admin'));
       setIsAuthenticated(roleAllowed);
     });
 

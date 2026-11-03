@@ -53,6 +53,7 @@ import {
 import { fetchStationsFromCloud, subscribeToCloudStations } from '../services/supabaseService';
 import { InstituteLabManagerModal } from './InstituteLabManagerModal';
 import { SupabaseMigrationModal } from './SupabaseMigrationModal';
+import { SubscriptionBillingModal } from './saas/SubscriptionBillingModal';
 import { ConfirmationModal } from './ConfirmationModal';
 import { issueStudentEmergencyKey, getStudentBoundKey } from '../services/emergencyKeyService';
 import {
@@ -214,9 +215,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [lastRefreshed, setLastRefreshed] = useState<string>('Just now');
   const isCurrentLabLocked = isLabLocked(selectedLabId);
 
-  // Modals for Lab Setup and Supabase Cloud DB
+  // Modals for Lab Setup, Supabase Cloud DB, and SaaS Subscription Billing
   const [showLabManager, setShowLabManager] = useState(false);
   const [showSupabaseModal, setShowSupabaseModal] = useState(false);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showResetRoomConfirm, setShowResetRoomConfirm] = useState(false);
   const [showClearSubmittedConfirm, setShowClearSubmittedConfirm] = useState(false);
 
@@ -276,9 +278,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
     setLastRefreshed(new Date().toLocaleTimeString());
 
-    // Asynchronous non-blocking cloud merge
+    // Asynchronous non-blocking cloud merge with strict candidate deduplication
     fetchStationsFromCloud(selectedLabId === 'all' ? undefined : selectedLabId).then((cloudStations) => {
       if (cloudStations) {
+        // Step 1: Combine by station ID with timestamp precedence
         const stationMap = new Map<string, CandidateStation>();
         cloudStations.forEach((cs) => stationMap.set(cs.id, cs));
         list.forEach((s) => {
@@ -287,7 +290,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             stationMap.set(s.id, s);
           }
         });
-        const merged = Array.from(stationMap.values());
+
+        // Step 2: Strict candidate deduplication (prevents duplicate station cards for the same student)
+        const dedupedByCandidate = new Map<string, CandidateStation>();
+        stationMap.forEach((s) => {
+          const roll = s.student?.rollNumber ? String(s.student.rollNumber).trim().toLowerCase() : '';
+          const name = s.student?.name ? String(s.student.name).trim().toLowerCase() : '';
+          const dedupKey = roll || name || s.id;
+          const existing = dedupedByCandidate.get(dedupKey);
+          if (!existing || (s.lastUpdatedTimestamp || 0) >= (existing.lastUpdatedTimestamp || 0)) {
+            dedupedByCandidate.set(dedupKey, s);
+          }
+        });
+
+        const merged = Array.from(dedupedByCandidate.values());
         setStations(merged);
         saveAllStations(merged);
       }
@@ -888,6 +904,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             onTriggerResetRoom={() => setShowResetRoomConfirm(true)}
             onClearSubmitted={() => setShowClearSubmittedConfirm(true)}
             onOpenSupabaseModal={() => setShowSupabaseModal(true)}
+            onOpenSubscriptionModal={() => setShowSubscriptionModal(true)}
           />
         )}
 
@@ -3421,6 +3438,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <SupabaseMigrationModal
           isOpen={showSupabaseModal}
           onClose={() => setShowSupabaseModal(false)}
+        />
+      )}
+
+      {/* SaaS Subscription & Quotas Billing Modal */}
+      {showSubscriptionModal && (
+        <SubscriptionBillingModal
+          isOpen={showSubscriptionModal}
+          onClose={() => setShowSubscriptionModal(false)}
         />
       )}
 

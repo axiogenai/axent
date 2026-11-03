@@ -16,6 +16,16 @@ export function isSupabaseConnected(): boolean {
   return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 }
 
+export function getCurrentTenantOrgId(): string {
+  if (typeof window === 'undefined') return 'default_org';
+  try {
+    const org = localStorage.getItem('axent_active_org_id') || sessionStorage.getItem('axent_active_org_id');
+    return (org && org.trim()) ? org.trim() : 'default_org';
+  } catch {
+    return 'default_org';
+  }
+}
+
 let mcqChannelCounter = 0;
 
 export function subscribeToMcqCloudChanges(onChange: () => void): () => void {

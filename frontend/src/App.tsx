@@ -10,6 +10,8 @@ import { PaperSetterPortal } from './components/PaperSetterPortal';
 import { AuthorityLogin, PaperSetterLogin, AdminLogin } from './components/auth/AuthorityLogin';
 import { AuthorityInvitePortal } from './components/auth/AuthorityInvitePortal';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { OrganizationRegistration } from './components/saas/OrganizationRegistration';
+import { PlatformSuperAdminDashboard } from './components/saas/PlatformSuperAdminDashboard';
 import { LandingPage } from './components/LandingPage';
 import { LaunchFilmPlayer } from './components/LaunchFilmPlayer';
 import { SEOUpdater } from './components/SEOUpdater';
@@ -524,6 +526,25 @@ export const App: React.FC = () => {
                     navigate('/report');
                   }}
                 />
+              </ProtectedRoute>
+            }
+          />
+          {/* Multi-Tenant SaaS Routes */}
+          <Route path="/register-org" element={<OrganizationRegistration />} />
+          <Route path="/onboarding" element={<OrganizationRegistration />} />
+          <Route
+            path="/super-admin"
+            element={
+              <ProtectedRoute requiredRole="super_admin">
+                <PlatformSuperAdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/platform-admin"
+            element={
+              <ProtectedRoute requiredRole="super_admin">
+                <PlatformSuperAdminDashboard />
               </ProtectedRoute>
             }
           />

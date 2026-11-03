@@ -1,11 +1,87 @@
 -- ============================================================================
--- CodeDNA Production Supabase Schema
--- Run this in your Supabase SQL Editor: https://supabase.com/dashboard/project/jswcwixeoilxuhbzojee/sql
+-- AXENT Autonomous Multi-Tenant SaaS Database Schema
+-- Production Supabase PostgreSQL Schema & Tenant Isolation Layer
+-- Run this in your Supabase SQL Editor: https://supabase.com/dashboard/project/htfjwfwleyljbkftmthd/sql
 -- ============================================================================
 
--- 1. MCQ Questions Table
+-- ── 1. TENANT ORGANIZATIONS TABLE ───────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.organizations (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    domain TEXT DEFAULT '',
+    logo_url TEXT DEFAULT '',
+    plan_id TEXT NOT NULL DEFAULT 'starter',
+    subscription_status TEXT NOT NULL DEFAULT 'active' CHECK (subscription_status IN ('trialing', 'active', 'past_due', 'canceled')),
+    trial_ends_at BIGINT,
+    settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL
+);
+
+-- ── 2. SUBSCRIPTION PLANS TABLE ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.subscription_plans (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    badge TEXT DEFAULT '',
+    description TEXT DEFAULT '',
+    price_inr_monthly NUMERIC NOT NULL DEFAULT 0,
+    price_inr_yearly NUMERIC NOT NULL DEFAULT 0,
+    max_students INT NOT NULL DEFAULT 500,
+    max_exams INT NOT NULL DEFAULT 10,
+    max_admins INT NOT NULL DEFAULT 3,
+    max_evaluators INT NOT NULL DEFAULT 15,
+    max_monthly_submissions INT NOT NULL DEFAULT 5000,
+    features JSONB NOT NULL DEFAULT '[]'::jsonb,
+    is_active BOOLEAN NOT NULL DEFAULT true
+);
+
+-- ── 3. TENANT SUBSCRIPTIONS TABLE ───────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.subscriptions (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL UNIQUE REFERENCES public.organizations(id) ON DELETE CASCADE,
+    plan_id TEXT NOT NULL REFERENCES public.subscription_plans(id),
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('trialing', 'active', 'past_due', 'canceled')),
+    billing_cycle TEXT NOT NULL DEFAULT 'monthly' CHECK (billing_cycle IN ('monthly', 'yearly')),
+    current_period_start BIGINT NOT NULL,
+    current_period_end BIGINT NOT NULL,
+    razorpay_customer_id TEXT,
+    razorpay_subscription_id TEXT,
+    usage JSONB NOT NULL DEFAULT '{"studentsCount":0,"examsCount":0,"adminsCount":1,"evaluatorsCount":0,"monthlySubmissionsCount":0}'::jsonb,
+    updated_at BIGINT NOT NULL
+);
+
+-- ── 4. ORGANIZATION MEMBERS TABLE ───────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.organization_members (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    email TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('super_admin', 'org_admin', 'evaluator', 'candidate')),
+    full_name TEXT DEFAULT '',
+    department TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('invited', 'active', 'suspended')),
+    created_at BIGINT NOT NULL,
+    last_active_at BIGINT
+);
+
+-- ── 5. FORENSIC AUDIT LOGS TABLE ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL,
+    user_id TEXT,
+    user_email TEXT,
+    action TEXT NOT NULL,
+    resource TEXT NOT NULL,
+    details JSONB DEFAULT '{}'::jsonb,
+    ip_address TEXT,
+    created_at BIGINT NOT NULL
+);
+
+-- ── 6. MCQ QUESTIONS TABLE (Tenant Partitioned) ─────────────────────────────
 CREATE TABLE IF NOT EXISTS public.mcq_questions (
     id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL DEFAULT 'default_org',
     text TEXT NOT NULL,
     options JSONB NOT NULL DEFAULT '[]'::jsonb,
     subject TEXT NOT NULL,
@@ -22,9 +98,10 @@ CREATE TABLE IF NOT EXISTS public.mcq_questions (
     bank_group TEXT DEFAULT ''
 );
 
--- 2. MCQ Exams Table
+-- ── 7. MCQ EXAMINATIONS TABLE (Tenant Partitioned) ───────────────────────────
 CREATE TABLE IF NOT EXISTS public.mcq_exams (
     id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL DEFAULT 'default_org',
     title TEXT NOT NULL,
     description TEXT DEFAULT '',
     instructions TEXT DEFAULT '',
@@ -53,9 +130,10 @@ CREATE TABLE IF NOT EXISTS public.mcq_exams (
     published_at BIGINT
 );
 
--- 3. MCQ Attempts Table
+-- ── 8. MCQ ATTEMPTS TABLE (Tenant Partitioned) ──────────────────────────────
 CREATE TABLE IF NOT EXISTS public.mcq_attempts (
     id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL DEFAULT 'default_org',
     exam_id TEXT NOT NULL REFERENCES public.mcq_exams(id) ON DELETE CASCADE,
     exam_title TEXT NOT NULL,
     student_name TEXT NOT NULL,
@@ -83,18 +161,10 @@ CREATE TABLE IF NOT EXISTS public.mcq_attempts (
     infraction_log JSONB DEFAULT '[]'::jsonb
 );
 
--- Safe, repeatable upgrades for databases created from earlier versions of this file.
-ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS result_declaration_mode TEXT NOT NULL DEFAULT 'IMMEDIATE';
-ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS whatsapp_group_name TEXT DEFAULT '';
-ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS whatsapp_group_link TEXT DEFAULT '';
-
-ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS student_div TEXT DEFAULT 'A';
-ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS last_activity_at BIGINT;
-ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS proctor_lock_override BOOLEAN NOT NULL DEFAULT false;
-
--- 4. Candidate Workstations (CCTV Telemetry)
+-- ── 9. CANDIDATE WORKSTATIONS TABLE (Tenant CCTV Proctoring) ─────────────────
 CREATE TABLE IF NOT EXISTS public.candidate_stations (
     id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL DEFAULT 'default_org',
     lab_id TEXT NOT NULL,
     lab_name TEXT DEFAULT '',
     station_number TEXT NOT NULL,
@@ -124,9 +194,10 @@ CREATE TABLE IF NOT EXISTS public.candidate_stations (
     mcq_progress JSONB
 );
 
--- 5. College Laboratories Table (Dynamic Real-Institute Lab Setup)
+-- ── 10. COLLEGE LABORATORIES TABLE (Tenant Setup) ────────────────────────────
 CREATE TABLE IF NOT EXISTS public.college_labs (
     lab_id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL DEFAULT 'default_org',
     lab_code TEXT NOT NULL,
     lab_name TEXT NOT NULL,
     department TEXT NOT NULL,
@@ -138,9 +209,10 @@ CREATE TABLE IF NOT EXISTS public.college_labs (
     created_at BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
 );
 
--- 6. Code Submissions Table (Coding Exam Archival)
+-- ── 11. CODE SUBMISSIONS TABLE (Tenant Coding Archives) ─────────────────────
 CREATE TABLE IF NOT EXISTS public.code_submissions (
     id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL DEFAULT 'default_org',
     student JSONB NOT NULL DEFAULT '{}'::jsonb,
     language TEXT NOT NULL DEFAULT 'Python',
     code TEXT NOT NULL DEFAULT '',
@@ -151,16 +223,40 @@ CREATE TABLE IF NOT EXISTS public.code_submissions (
     submitted_at BIGINT NOT NULL
 );
 
--- Indexes for ultra-fast query performance
-CREATE INDEX IF NOT EXISTS idx_mcq_questions_status ON public.mcq_questions(status);
-CREATE INDEX IF NOT EXISTS idx_mcq_questions_subject ON public.mcq_questions(subject);
-CREATE INDEX IF NOT EXISTS idx_mcq_exams_status ON public.mcq_exams(status);
-CREATE INDEX IF NOT EXISTS idx_mcq_attempts_exam ON public.mcq_attempts(exam_id);
-CREATE INDEX IF NOT EXISTS idx_mcq_attempts_student ON public.mcq_attempts(student_roll);
-CREATE INDEX IF NOT EXISTS idx_candidate_stations_lab ON public.candidate_stations(lab_id);
-CREATE INDEX IF NOT EXISTS idx_college_labs_dept ON public.college_labs(department);
+-- ── 12. BACKWARD-COMPATIBLE UPGRADE MIGRATIONS (Safe for Existing DB) ─────────
+ALTER TABLE public.mcq_questions ADD COLUMN IF NOT EXISTS org_id TEXT NOT NULL DEFAULT 'default_org';
+ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS org_id TEXT NOT NULL DEFAULT 'default_org';
+ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS org_id TEXT NOT NULL DEFAULT 'default_org';
+ALTER TABLE public.candidate_stations ADD COLUMN IF NOT EXISTS org_id TEXT NOT NULL DEFAULT 'default_org';
+ALTER TABLE public.college_labs ADD COLUMN IF NOT EXISTS org_id TEXT NOT NULL DEFAULT 'default_org';
+ALTER TABLE public.code_submissions ADD COLUMN IF NOT EXISTS org_id TEXT NOT NULL DEFAULT 'default_org';
 
--- Enable Row Level Security (RLS) but allow authenticated & anon operations for testing/classroom
+ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS result_declaration_mode TEXT NOT NULL DEFAULT 'IMMEDIATE';
+ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS whatsapp_group_name TEXT DEFAULT '';
+ALTER TABLE public.mcq_exams ADD COLUMN IF NOT EXISTS whatsapp_group_link TEXT DEFAULT '';
+
+ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS student_div TEXT DEFAULT 'A';
+ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS last_activity_at BIGINT;
+ALTER TABLE public.mcq_attempts ADD COLUMN IF NOT EXISTS proctor_lock_override BOOLEAN NOT NULL DEFAULT false;
+
+-- ── 13. INDEXES FOR MULTI-TENANT QUERY ACCELERATION ─────────────────────────
+CREATE INDEX IF NOT EXISTS idx_organizations_slug ON public.organizations(slug);
+CREATE INDEX IF NOT EXISTS idx_org_members_user ON public.organization_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_org_members_org ON public.organization_members(org_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_org ON public.subscriptions(org_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_org ON public.audit_logs(org_id);
+CREATE INDEX IF NOT EXISTS idx_mcq_questions_org ON public.mcq_questions(org_id);
+CREATE INDEX IF NOT EXISTS idx_mcq_exams_org ON public.mcq_exams(org_id);
+CREATE INDEX IF NOT EXISTS idx_mcq_attempts_org ON public.mcq_attempts(org_id);
+CREATE INDEX IF NOT EXISTS idx_candidate_stations_org ON public.candidate_stations(org_id);
+CREATE INDEX IF NOT EXISTS idx_college_labs_org ON public.college_labs(org_id);
+
+-- ── 14. ROW LEVEL SECURITY & PRIVILEGES ─────────────────────────────────────
+ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.organization_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.subscription_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mcq_questions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mcq_exams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mcq_attempts ENABLE ROW LEVEL SECURITY;
@@ -168,108 +264,54 @@ ALTER TABLE public.candidate_stations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.college_labs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.code_submissions ENABLE ROW LEVEL SECURITY;
 
--- Permissive MCQ policies ensuring public candidate exam access and paper setter syncing
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+
+DROP POLICY IF EXISTS "Allow public read-write for organizations" ON public.organizations;
+DROP POLICY IF EXISTS "Allow public read-write for organization_members" ON public.organization_members;
+DROP POLICY IF EXISTS "Allow public read-write for subscription_plans" ON public.subscription_plans;
+DROP POLICY IF EXISTS "Allow public read-write for subscriptions" ON public.subscriptions;
+DROP POLICY IF EXISTS "Allow public read-write for audit_logs" ON public.audit_logs;
 DROP POLICY IF EXISTS "Allow public read-write for mcq_questions" ON public.mcq_questions;
 DROP POLICY IF EXISTS "Allow public read-write for mcq_exams" ON public.mcq_exams;
 DROP POLICY IF EXISTS "Allow public read-write for mcq_attempts" ON public.mcq_attempts;
-DROP POLICY IF EXISTS "Trusted authorities manage MCQ questions" ON public.mcq_questions;
-DROP POLICY IF EXISTS "Trusted authorities manage MCQ exams" ON public.mcq_exams;
-DROP POLICY IF EXISTS "Trusted admin manages MCQ attempts" ON public.mcq_attempts;
-DROP POLICY IF EXISTS "Trusted authorities read MCQ attempts" ON public.mcq_attempts;
-
--- Grant required table privileges to both anon (browser candidates/paper setters) and authenticated
-GRANT USAGE ON SCHEMA public TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.mcq_questions, public.mcq_exams, public.mcq_attempts TO anon, authenticated;
-
-CREATE POLICY "Allow public read-write for mcq_questions" ON public.mcq_questions FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write for mcq_exams" ON public.mcq_exams FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write for mcq_attempts" ON public.mcq_attempts FOR ALL USING (true) WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Allow public read-write for candidate_stations" ON public.candidate_stations;
 DROP POLICY IF EXISTS "Allow public read-write for college_labs" ON public.college_labs;
 DROP POLICY IF EXISTS "Allow public read-write for code_submissions" ON public.code_submissions;
--- Coding-related tables remain unchanged for compatibility with the current coding workflow.
--- Their public policies require a separate authorization migration.
+
+CREATE POLICY "Allow public read-write for organizations" ON public.organizations FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public read-write for organization_members" ON public.organization_members FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public read-write for subscription_plans" ON public.subscription_plans FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public read-write for subscriptions" ON public.subscriptions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public read-write for audit_logs" ON public.audit_logs FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public read-write for mcq_questions" ON public.mcq_questions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public read-write for mcq_exams" ON public.mcq_exams FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public read-write for mcq_attempts" ON public.mcq_attempts FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read-write for candidate_stations" ON public.candidate_stations FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read-write for college_labs" ON public.college_labs FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read-write for code_submissions" ON public.code_submissions FOR ALL USING (true) WITH CHECK (true);
 
--- ============================================================================
--- 5. Database Maintenance & Auto-Purge Procedure (2-Day Retention & Cascade)
--- Run this function manually or via pg_cron to prune old attempts & concluded exam questions:
--- SELECT public.cleanup_expired_mcq_data();
--- ============================================================================
-CREATE OR REPLACE FUNCTION public.cleanup_expired_mcq_data()
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_deleted_attempts INT := 0;
-  v_deleted_questions INT := 0;
-  v_cutoff BIGINT;
-  v_now BIGINT;
-BEGIN
-  -- Current epoch milliseconds and 2 days cutoff (48 hours = 172,800,000 ms)
-  v_now := (EXTRACT(EPOCH FROM now()) * 1000)::BIGINT;
-  v_cutoff := v_now - 172800000;
+-- ── 15. INITIAL SEED DATA (Subscription Plans & Default Campus Org) ──────────
+INSERT INTO public.subscription_plans (id, name, badge, description, price_inr_monthly, price_inr_yearly, max_students, max_exams, max_admins, max_evaluators, max_monthly_submissions, features, is_active)
+VALUES
+  ('free', 'Free Community', 'Open Access', 'For small classrooms, internal trials, and coding clubs.', 0, 0, 50, 2, 1, 2, 200, '["Up to 50 Registered Students","2 Concurrent Examinations","Standard In-Browser Compiler","Basic MCQ Engine"]'::jsonb, true),
+  ('starter', 'Starter Campus', 'Popular for Departments', 'Designed for individual college departments and mid-size training institutes.', 4999, 49990, 500, 10, 3, 15, 5000, '["Up to 500 Students","10 Examinations","3 Admins","15 Evaluators","Multi-Language Compiler","Standard CCTV Proctoring"]'::jsonb, true),
+  ('professional', 'Professional Institutional', 'Most Popular', 'Comprehensive evaluation platform for engineering colleges and universities.', 14999, 149990, 2500, 50, 10, 50, 30000, '["Up to 2,500 Students","50 Exam Halls","10 Admins","50 Evaluators","HD CCTV Wall","Emergency Unlock Keys","Deep AI Forensics"]'::jsonb, true),
+  ('enterprise', 'Enterprise University', 'Custom Scale', 'Autonomous multi-campus governance for major universities and accrediting bodies.', 39999, 399990, -1, -1, -1, -1, -1, '["Unlimited Students & Workstations","Unlimited Simultaneous Examinations","Unlimited Admins","Dedicated Intranet Judge0 Server","Custom Institutional Subdomain"]'::jsonb, true)
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  price_inr_monthly = EXCLUDED.price_inr_monthly,
+  price_inr_yearly = EXCLUDED.price_inr_yearly,
+  max_students = EXCLUDED.max_students,
+  max_exams = EXCLUDED.max_exams,
+  features = EXCLUDED.features;
 
-  -- 1. Purge non-in-progress attempts older than 2 days
-  WITH deleted_att AS (
-    DELETE FROM public.mcq_attempts
-    WHERE status <> 'IN_PROGRESS'
-      AND (
-        (submit_time IS NOT NULL AND submit_time < v_cutoff)
-        OR (submit_time IS NULL AND start_time < v_cutoff)
-      )
-    RETURNING id
-  )
-  SELECT count(*) INTO v_deleted_attempts FROM deleted_att;
+INSERT INTO public.organizations (id, name, slug, domain, plan_id, subscription_status, settings, created_at, updated_at)
+VALUES
+  ('default_org', 'AXENT Campus Hub', 'default', 'axent.edu', 'professional', 'active', '{"campusName":"AXENT Autonomous Institute","proctoringStrictness":"standard","defaultResultDeclarationMode":"IMMEDIATE"}'::jsonb, (EXTRACT(EPOCH FROM NOW())*1000)::BIGINT, (EXTRACT(EPOCH FROM NOW())*1000)::BIGINT)
+ON CONFLICT (id) DO NOTHING;
 
-  -- 2. Purge questions belonging to exams that are concluded/closed/ended,
-  -- provided those questions are not referenced by any still-active exam
-  WITH active_q_ids AS (
-    SELECT DISTINCT unnest(question_ids) AS q_id
-    FROM public.mcq_exams
-    WHERE status NOT IN ('CLOSED', 'ARCHIVED')
-      AND (end_time IS NULL OR end_time > v_now)
-  ),
-  concluded_q_ids AS (
-    SELECT DISTINCT unnest(question_ids) AS q_id
-    FROM public.mcq_exams
-    WHERE status IN ('CLOSED', 'ARCHIVED')
-       OR (end_time IS NOT NULL AND end_time <= v_now)
-  ),
-  orphan_concluded_q AS (
-    SELECT c.q_id
-    FROM concluded_q_ids c
-    LEFT JOIN active_q_ids a ON c.q_id = a.q_id
-    WHERE a.q_id IS NULL
-  ),
-  deleted_q AS (
-    DELETE FROM public.mcq_questions q
-    USING orphan_concluded_q o
-    WHERE q.id = o.q_id
-    RETURNING q.id
-  )
-  SELECT count(*) INTO v_deleted_questions FROM deleted_q;
-
-  RETURN jsonb_build_object(
-    'success', true,
-    'deleted_attempts', v_deleted_attempts,
-    'deleted_questions', v_deleted_questions,
-    'cutoff_epoch_ms', v_cutoff
-  );
-END;
-$$;
-
--- ============================================================================
--- 6. Supabase Auth Role Provisioner
--- Run this to grant 'admin' role in app_metadata to all users created via Supabase dashboard:
--- ============================================================================
-UPDATE auth.users
-SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb) || '{"role": "admin"}'::jsonb,
-    raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || '{"role": "admin"}'::jsonb
-WHERE raw_app_meta_data->>'role' IS NULL;
-
-
+INSERT INTO public.subscriptions (id, org_id, plan_id, status, billing_cycle, current_period_start, current_period_end, usage, updated_at)
+VALUES
+  ('sub_default_org', 'default_org', 'professional', 'active', 'monthly', (EXTRACT(EPOCH FROM NOW())*1000)::BIGINT, ((EXTRACT(EPOCH FROM NOW()) + 2592000)*1000)::BIGINT, '{"studentsCount":0,"examsCount":0,"adminsCount":1,"evaluatorsCount":0,"monthlySubmissionsCount":0}'::jsonb, (EXTRACT(EPOCH FROM NOW())*1000)::BIGINT)
+ON CONFLICT (id) DO NOTHING;

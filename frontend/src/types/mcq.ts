@@ -32,7 +32,8 @@ export interface MCQQuestion {
   createdAt: number;          // Epoch ms
   updatedAt: number;
   createdBy: string;          // Admin username / id
-  bankGroup?: string;         // Optional question bank group
+  bankGroup?: string;
+  orgId?: string;         // Optional question bank group
 }
 
 // ── Immutable snapshot embedded in an attempt ─────────────────────────────────
@@ -89,8 +90,9 @@ export interface MCQExamConfig {
   createdBy: string;
   publishedAt?: number;
   assignedLabId?: string;     // Dedicated Lab ID auto-created for this paper (e.g. "LAB-01", "LAB-02")
-  assignedLabName?: string;   // Dedicated Lab Name (e.g. "Exam: Operating Systems Mid-Term")
-  proctorPin?: string;        // Dedicated invigilator emergency PIN to unlock terminals frozen during this paper
+  assignedLabName?: string;
+  proctorPin?: string;
+  orgId?: string;
 }
 
 export type MCQResultDeclarationMode = 'IMMEDIATE' | 'WHATSAPP_GROUP';
