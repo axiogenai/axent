@@ -33,7 +33,27 @@ export default async function handler(req, res) {
     // 3. Delete all code submissions
     await fetch(`${supabaseUrl}/rest/v1/code_submissions?id=not.is.null`, { method: 'DELETE', headers });
 
-    // 4. Optionally wipe exams and questions if full wipe requested
+    // 4. Reset codespark_system_config with empty candidates
+    const emptyConfig = {
+      activeExamId: null,
+      shortlistMode: 'cutoff',
+      shortlistValue: 12,
+      manualShortlistRolls: [],
+      isConcluded: false,
+      candidates: [],
+      isRound2ArenaOpen: false,
+      updatedAt: Date.now()
+    };
+    await fetch(`${supabaseUrl}/rest/v1/mcq_exams?id=eq.codespark_system_config`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({
+        instructions: JSON.stringify(emptyConfig),
+        updated_at: Date.now()
+      })
+    });
+
+    // 5. Optionally wipe exams and questions if full wipe requested
     const full = req.query?.full === 'true' || req.body?.full === true;
     if (full) {
       await fetch(`${supabaseUrl}/rest/v1/mcq_questions?id=not.is.null`, { method: 'DELETE', headers });

@@ -6,18 +6,6 @@ import 'katex/dist/katex.min.css';
 import App from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
-// Unconditional purge: No domain data in localStorage. Everything is cloud-first.
-try {
-  const keysToRemove: string[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (k && k !== 'codedna_theme' && (k.startsWith('codedna_') || k.startsWith('codespark_') || k.startsWith('mcq_') || k.startsWith('spark_') || k.startsWith('axent_'))) {
-      keysToRemove.push(k);
-    }
-  }
-  keysToRemove.forEach((k) => localStorage.removeItem(k));
-  sessionStorage.clear();
-} catch {}
 
 const rootElement = document.getElementById('root');
 if (rootElement) {

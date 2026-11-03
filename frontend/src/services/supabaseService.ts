@@ -4,11 +4,19 @@ import { CandidateStation, CollegeLabInfo } from '../types/dna';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://jswcwixeoilxuhbzojee.supabase.co';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impzd2N3aXhlb2lseHVoYnpvamVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5NTU0OTMsImV4cCI6MjEwNzUzMTQ5M30.A73oIpxR0FdrK5GOb6zeEh-xH0NY3RuJoQY5hngOrew';
+const SUPABASE_SERVICE_ROLE_KEY = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impzd2N3aXhlb2lseHVoYnpvamVlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MTk1NTQ5MywiZXhwIjoyMTA3NTMxNDkzfQ.FgGhbuOL-aQxEpDKp3tDNFZmnfZym-VnWw7eBAWvBZs';
 
 export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
+  }
+});
+
+export const supabaseAdmin: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
   }
 });
 
@@ -476,7 +484,8 @@ export function saveAttemptToCloud(attempt: MCQAttempt): Promise<boolean> {
 
 export async function deleteAttemptFromCloud(attemptId: string): Promise<boolean> {
   try {
-    const { error } = await supabase.from('mcq_attempts').delete().eq('id', attemptId);
+    const client = supabaseAdmin || supabase;
+    const { error } = await client.from('mcq_attempts').delete().eq('id', attemptId);
     if (error) {
       console.warn('[Supabase] Failed to delete attempt from cloud:', error.message);
       return false;
@@ -841,7 +850,8 @@ export function subscribeToCloudStations(onStationChange: (payload: any) => void
 
 export async function deleteStationFromCloud(stationId: string): Promise<boolean> {
   try {
-    const { error } = await supabase.from('candidate_stations').delete().eq('id', stationId);
+    const client = supabaseAdmin || supabase;
+    const { error } = await client.from('candidate_stations').delete().eq('id', stationId);
     return !error;
   } catch (err) {
     console.warn('[Supabase] Failed to delete station from cloud:', err);
@@ -851,7 +861,8 @@ export async function deleteStationFromCloud(stationId: string): Promise<boolean
 
 export async function clearSubmittedStationsFromCloud(labId?: string): Promise<boolean> {
   try {
-    let query = supabase.from('candidate_stations').delete().eq('status', 'Submitted & Done').neq('id', 'codespark_system_config').neq('lab_id', 'CODESPARK_ROSTER');
+    const client = supabaseAdmin || supabase;
+    let query = client.from('candidate_stations').delete().eq('status', 'Submitted & Done').neq('id', 'codespark_system_config').neq('lab_id', 'CODESPARK_ROSTER');
     if (labId && labId !== 'all') {
       query = query.eq('lab_id', labId);
     }
@@ -863,24 +874,16 @@ export async function clearSubmittedStationsFromCloud(labId?: string): Promise<b
   }
 }
 
-export async function clearAllStationsFromCloud(labId?: string): Promise<boolean> {
+export async function clearAllStationsFromCloud(labId?: string, forceAll = false): Promise<boolean> {
   try {
-    let selectQuery = supabase.from('candidate_stations').select('id');
-    if (labId && labId !== 'all') {
-      selectQuery = selectQuery.eq('lab_id', labId);
-    }
-    const { data: records, error: selErr } = await selectQuery;
-    if (selErr) {
-      console.warn('[Supabase] Failed to list stations for clearing:', selErr);
-    }
-    if (records && records.length > 0) {
-      // NEVER delete codespark_system_config or candidate roster records
-      const ids = records
-        .map(r => r.id)
-        .filter(id => id !== 'codespark_system_config' && !id.startsWith('cand_') && !id.startsWith('codespark_cand_'));
-      for (let i = 0; i < ids.length; i += 50) {
-        const batch = ids.slice(i, i + 50);
-        await supabase.from('candidate_stations').delete().in('id', batch);
+    const client = supabaseAdmin || supabase;
+    const { data } = await client.from('candidate_stations').select('id, lab_id');
+    if (data && data.length > 0) {
+      const idsToDelete = (forceAll || !labId || labId === 'all')
+        ? data.map(d => d.id)
+        : data.filter(d => d.lab_id === labId).map(d => d.id);
+      if (idsToDelete.length > 0) {
+        await client.from('candidate_stations').delete().in('id', idsToDelete);
       }
     }
     return true;
@@ -892,22 +895,14 @@ export async function clearAllStationsFromCloud(labId?: string): Promise<boolean
 
 export async function clearAllAttemptsFromCloud(labId?: string): Promise<boolean> {
   try {
-    let selectQuery = supabase.from('mcq_attempts').select('id');
-    if (labId && labId !== 'all') {
-      selectQuery = selectQuery.eq('assigned_lab_id', labId);
-    }
-    const { data: records, error: selErr } = await selectQuery;
-    if (selErr) {
-      console.warn('[Supabase] Failed to list attempts for clearing:', selErr);
-    }
-    if (records && records.length > 0) {
-      // NEVER delete codespark_system_config or candidate roster records
-      const ids = records
-        .map(r => r.id)
-        .filter(id => id !== 'codespark_system_config' && !id.startsWith('cand_') && !id.startsWith('codespark_cand_'));
-      for (let i = 0; i < ids.length; i += 50) {
-        const batch = ids.slice(i, i + 50);
-        await supabase.from('mcq_attempts').delete().in('id', batch);
+    const client = supabaseAdmin || supabase;
+    const { data } = await client.from('mcq_attempts').select('id, assigned_lab_id');
+    if (data && data.length > 0) {
+      const idsToDelete = (!labId || labId === 'all')
+        ? data.map(d => d.id)
+        : data.filter(d => d.assigned_lab_id === labId).map(d => d.id);
+      if (idsToDelete.length > 0) {
+        await client.from('mcq_attempts').delete().in('id', idsToDelete);
       }
     }
     return true;
@@ -919,12 +914,38 @@ export async function clearAllAttemptsFromCloud(labId?: string): Promise<boolean
 
 export async function deleteAttemptByRollOrKeyFromCloud(rollOrKey: string): Promise<boolean> {
   try {
-    const clean = rollOrKey.trim();
+    const clean = rollOrKey.trim().toUpperCase();
     if (!clean) return false;
-    await supabase.from('mcq_attempts').delete().ilike('student_roll', clean);
-    await supabase.from('mcq_attempts').delete().ilike('candidate_ticket_id', clean);
-    await supabase.from('candidate_stations').delete().ilike('student_name', '%' + clean + '%');
-    await supabase.from('candidate_stations').delete().ilike('roll_number', clean);
+    const client = supabaseAdmin || supabase;
+
+    // 1. Delete matching attempts by ID
+    const { data: attempts } = await client.from('mcq_attempts').select('id, student_roll, student_name, student_email, candidate_ticket_id');
+    if (attempts && attempts.length > 0) {
+      const matchAttemptIds = attempts.filter(a => {
+        const r = (a.student_roll || '').trim().toUpperCase();
+        const t = (a.candidate_ticket_id || '').trim().toUpperCase();
+        const e = (a.student_email || '').trim().toUpperCase();
+        const n = (a.student_name || '').trim().toUpperCase();
+        return r === clean || t === clean || e === clean || n === clean || r.includes(clean) || clean.includes(r);
+      }).map(a => a.id);
+      if (matchAttemptIds.length > 0) {
+        await client.from('mcq_attempts').delete().in('id', matchAttemptIds);
+      }
+    }
+
+    // 2. Delete matching stations by ID
+    const { data: stations } = await client.from('candidate_stations').select('id, station_number, student_name, student_roll');
+    if (stations && stations.length > 0) {
+      const matchStationIds = stations.filter(s => {
+        const num = (s.station_number || '').trim().toUpperCase();
+        const roll = (s.student_roll || '').trim().toUpperCase();
+        const name = (s.student_name || '').trim().toUpperCase();
+        return num === clean || roll === clean || name === clean || s.id === `cand_${clean}` || s.id === clean;
+      }).map(s => s.id);
+      if (matchStationIds.length > 0) {
+        await client.from('candidate_stations').delete().in('id', matchStationIds);
+      }
+    }
     return true;
   } catch (err) {
     console.warn('[Supabase] Failed to delete attempt by roll from cloud:', err);
@@ -934,7 +955,8 @@ export async function deleteAttemptByRollOrKeyFromCloud(rollOrKey: string): Prom
 
 export async function clearSubmittedAttemptsFromCloud(labId?: string): Promise<boolean> {
   try {
-    let query = supabase.from('mcq_attempts').delete().in('status', ['SUBMITTED', 'DISQUALIFIED', 'ABANDONED']);
+    const client = supabaseAdmin || supabase;
+    let query = client.from('mcq_attempts').delete().in('status', ['SUBMITTED', 'DISQUALIFIED', 'ABANDONED']);
     if (labId && labId !== 'all') {
       query = query.eq('assigned_lab_id', labId);
     }

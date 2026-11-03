@@ -59,6 +59,18 @@ const RootNavigator: React.FC = () => {
   return <Navigate to={isMcq() ? '/mcq' : '/workspace'} replace />;
 };
 
+// One-time cleanup of legacy test attempt cache to prevent stale resurrection
+try {
+  const CLEAN_MIGRATION_VERSION = 'v1.0.5_clean_wipe_20261103';
+  if (typeof window !== 'undefined' && localStorage.getItem('axent_migration_version') !== CLEAN_MIGRATION_VERSION) {
+    localStorage.removeItem('codedna_mcq_attempts');
+    localStorage.removeItem('codedna_codespark_candidates');
+    localStorage.removeItem('codedna_codespark_deleted_keys');
+    localStorage.setItem('codedna_codespark_wiped_at', String(Date.now()));
+    localStorage.setItem('axent_migration_version', CLEAN_MIGRATION_VERSION);
+  }
+} catch {}
+
 export const App: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();

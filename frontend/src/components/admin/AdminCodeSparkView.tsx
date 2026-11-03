@@ -485,7 +485,7 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       syncFromSupabase(),
       syncCandidatesFromCloud()
     ]).then(([_, syncedCandidates]) => {
-      if (syncedCandidates && syncedCandidates.length > 0) {
+      if (Array.isArray(syncedCandidates)) {
         setRegisteredCandidates(syncedCandidates);
       }
       sync();
@@ -841,24 +841,50 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
   // Delete / Purge single candidate station & attempt
   const handleDeleteCandidateStation = async (station: any) => {
-    const candName = station.student?.name || 'Candidate';
-    const candRoll = station.student?.rollNumber || station.cleanRoll || station.id;
-    if (!window.confirm(`Purge and delete workstation & submission for ${candName} (${candRoll})? This cannot be undone.`)) {
+    const candName = station.student?.name || station.candidate?.name || 'Candidate';
+    const candKey = station.candidate?.accessKey || station.accessKey || station.student?.accessKey || station.student?.rollNumber || station.cleanRoll || station.id;
+    const candRoll = station.candidate?.rollNumber || station.student?.rollNumber || station.cleanRoll;
+    const candEmail = station.candidate?.email || station.student?.email;
+
+    if (!window.confirm(`Purge and delete workstation & submission for ${candName} (${candKey})? This cannot be undone.`)) {
       return;
     }
     playSound('click');
     try {
-      await deleteCodeSparkCandidateComplete(candRoll);
+      if (candKey) await deleteCodeSparkCandidateComplete(candKey);
+      if (candRoll && candRoll !== candKey) await deleteCodeSparkCandidateComplete(candRoll);
+      if (candEmail) await deleteCodeSparkCandidateComplete(candEmail);
       if (station.id) {
         await deleteStationFromCloud(station.id);
       }
-      try {
-        const { clearAllAttemptsLocally } = await import('../../services/mcqService');
-        // Filter in-memory attempts
-        setAllAttempts((prev: any[]) => prev.filter(a => (a.studentRoll || a.student_roll || '').toUpperCase() !== candRoll.toUpperCase() && (a.candidateRollNumber || '').toUpperCase() !== candRoll.toUpperCase() && a.id !== station.id));
-      } catch {}
-      setRegisteredCandidates((prev: any[]) => prev.filter(c => (c.rollNumber || '').toUpperCase() !== candRoll.toUpperCase() && (c.accessKey || '').toUpperCase() !== candRoll.toUpperCase()));
-      setShortlistedRolls((prev: string[]) => prev.filter(r => r.toUpperCase() !== candRoll.toUpperCase()));
+
+      setRegisteredCandidates((prev: any[]) => {
+        const remaining = prev.filter(c => {
+          const k = (c.accessKey || '').toUpperCase();
+          const r = (c.rollNumber || '').toUpperCase();
+          const e = (c.email || '').toLowerCase();
+          if (candKey && k === candKey.toUpperCase()) return false;
+          if (candRoll && (r === candRoll.toUpperCase() || k === candRoll.toUpperCase())) return false;
+          if (candEmail && e === candEmail.toLowerCase()) return false;
+          return true;
+        });
+        saveCodeSparkCandidates(remaining);
+        return remaining;
+      });
+
+      setAllAttempts((prev: any[]) => prev.filter(a => {
+        const r = (a.studentRoll || a.student_roll || '').toUpperCase();
+        if (candKey && r === candKey.toUpperCase()) return false;
+        if (candRoll && r === candRoll.toUpperCase()) return false;
+        if (a.id === station.id) return false;
+        return true;
+      }));
+
+      setShortlistedRolls((prev: string[]) => prev.filter(r => {
+        const u = r.toUpperCase();
+        return u !== candKey.toUpperCase() && (!candRoll || u !== candRoll.toUpperCase());
+      }));
+
       playSound('success');
       setPurgeNotice(`Successfully purged workstation & attempt for ${candName}.`);
       setTimeout(() => setPurgeNotice(null), 4000);
@@ -871,83 +897,67 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
   };
 
   // Cloud & Local Full Data Purge (Nuclear Reset)
-
   const handlePurgeCloudData = async () => {
-
     if (!window.confirm('PURGE ALL DATA: This will permanently wipe all candidate stations, test attempts, candidate keys, and shortlist data from both Supabase and your browser cache. The arena will be 100% clean and ready for real contestants. Proceed?')) {
-
       return;
-
     }
 
     playSound('click');
-
     setPurgeNotice('Wiping entire cloud database and local cache...');
 
     try {
-
+      await resetCodeSparkSystemInCloud();
       await wipeEntireDatabaseFromCloud();
       await clearAllAttemptsFromEverywhere();
       clearAllAttemptsLocally();
-      await resetCodeSparkSystemInCloud();
-      await clearAllStationsFromCloud();
+      await clearAllStationsFromCloud('all', true);
+      await clearAllAttemptsFromCloud('all');
 
-      await clearAllAttemptsFromCloud();
-
-      localStorage.removeItem('codedna_mcq_attempts');
-
-      localStorage.removeItem('codedna_mcq_questions');
-
-      localStorage.removeItem('codedna_mcq_exams');
-
-      localStorage.removeItem('codedna_college_stations');
-
-      localStorage.removeItem('codedna_live_stations');
-
-      localStorage.removeItem('codedna_codespark_active_batch');
-
-      localStorage.removeItem('codedna_codespark_candidates');
-
-      localStorage.removeItem('codedna_codespark_round1_shortlist');
-
-      localStorage.removeItem('codedna_codespark_round1_concluded');
-
-      localStorage.removeItem('codedna_codespark_round1_exam_id');
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('codedna_codespark_wiped_at', String(Date.now()));
+        const keysToRemove = [
+          'codedna_mcq_attempts',
+          'codedna_mcq_questions',
+          'codedna_college_stations',
+          'codedna_live_stations',
+          'codedna_codespark_active_batch',
+          'codedna_codespark_candidates',
+          'codedna_codespark_round1_shortlist',
+          'codedna_codespark_round1_concluded',
+          'codedna_codespark_round1_exam_id',
+          'codedna_codespark_active_exam_id',
+          'codedna_codespark_used_keys',
+          'codedna_codespark_active_candidate',
+          'codedna_codespark_deleted_keys',
+          'codedna_student_profile',
+          'codedna_shortlist',
+          'codedna_codespark_shortlist'
+        ];
+        keysToRemove.forEach(k => {
+          localStorage.removeItem(k);
+          sessionStorage.removeItem(k);
+        });
+      }
 
       clearAllQuestions();
-
-      await clearAllQuestionsFromCloud();
-
       saveAllStations([]);
-
       saveCodeSparkCandidates([]);
 
       setAllAttempts([]);
-
       setRegisteredCandidates([]);
-
       setShortlistedRolls([]);
 
       playSound('success');
-
-      setPurgeNotice('Purge complete: 0 workstations, 0 test attempts, 0 phantom candidates. System is 100% clean.');
-
+      setPurgeNotice('Purge complete: 0 workstations, 0 test attempts, 0 candidate keys. System is 100% clean.');
       setTimeout(() => setPurgeNotice(null), 5000);
 
       window.dispatchEvent(new Event('codedna_codespark_candidates_updated'));
-
       window.dispatchEvent(new Event('codedna_cctv_broadcast'));
-
       window.dispatchEvent(new Event('storage'));
-
     } catch (err: any) {
-
       setPurgeNotice(`Purge finished: ${err.message || 'Complete'}`);
-
       setTimeout(() => setPurgeNotice(null), 5000);
-
     }
-
   };
 
 
@@ -1506,33 +1516,21 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       const stationObj: CandidateStation & { isStandby?: boolean } = {
 
         id: liveStation?.id || id,
-
         labId: 'LAB-SPARK-01',
-
         labName: 'CodeSpark Enclave 01',
-
         stationNumber: liveStation?.stationNumber || defaultStationNumber,
-
         ipAddress: liveStation?.ipAddress || `10.26.3.${10 + stationIndex}`,
-
+        candidate: candidate,
+        accessKey: candKeyUpper,
         student: {
-
           name: candidate.name,
-
           rollNumber: candidate.rollNumber || cleanRoll,
-
           semester: 'Final',
-
           examType: 'Aptitude',
-
           assignmentTitle: 'Code Spark 2026: General Aptitude & Reasoning',
-
           course: 'Code Spark 2026',
-
           department: candidate.department || 'Axent Enclave',
-
           examMode: 'MCQ'
-
         },
 
         language: 'MCQ',

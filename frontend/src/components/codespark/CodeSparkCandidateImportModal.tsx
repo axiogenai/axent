@@ -126,11 +126,25 @@ export const CodeSparkCandidateImportModal: React.FC<CodeSparkCandidateImportMod
     e.target.value = '';
   };
 
-  const handleDeleteCandidate = (key: string) => {
-    const remaining = candidates.filter((c) => c.accessKey !== key);
-    saveCodeSparkCandidates(remaining);
-    void deleteCodeSparkCandidateComplete(key);
+  const handleDeleteCandidate = async (key: string) => {
     playSound('click');
+    const remaining = candidates.filter((c) => c.accessKey !== key);
+    setCandidates(remaining);
+    saveCodeSparkCandidates(remaining);
+    await deleteCodeSparkCandidateComplete(key);
+    window.dispatchEvent(new Event('codedna_codespark_candidates_updated'));
+    window.dispatchEvent(new Event('storage'));
+  };
+
+  const handleClearAllCandidates = async () => {
+    if (!window.confirm('Delete all provisioned candidate keys and clear roster from database and local storage?')) return;
+    playSound('click');
+    setCandidates([]);
+    saveCodeSparkCandidates([]);
+    const { resetCodeSparkSystemInCloud } = await import('../../services/codeSparkService');
+    await resetCodeSparkSystemInCloud();
+    window.dispatchEvent(new Event('codedna_codespark_candidates_updated'));
+    window.dispatchEvent(new Event('storage'));
   };
 
   const handleExportCSV = () => {
@@ -232,14 +246,25 @@ export const CodeSparkCandidateImportModal: React.FC<CodeSparkCandidateImportMod
               <span>Upload CSV</span>
             </button>
             {candidates.length > 0 && (
-              <button
-                type="button"
-                onClick={handleExportCSV}
-                className="px-2.5 py-1.5 rounded text-xs text-zinc-300 hover:text-zinc-100 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 flex items-center gap-1.5 transition-colors"
-              >
-                <Download size={12} />
-                <span>Export CSV</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  className="px-2.5 py-1.5 rounded text-xs text-zinc-300 hover:text-zinc-100 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 flex items-center gap-1.5 transition-colors"
+                >
+                  <Download size={12} />
+                  <span>Export CSV</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearAllCandidates}
+                  className="px-2.5 py-1.5 rounded text-xs text-red-400 hover:text-red-200 bg-red-950/40 hover:bg-red-900/50 border border-red-900/60 flex items-center gap-1.5 transition-colors"
+                  title="Clear all provisioned keys and reset roster"
+                >
+                  <Trash2 size={12} />
+                  <span>Clear Roster</span>
+                </button>
+              </>
             )}
           </div>
         </div>

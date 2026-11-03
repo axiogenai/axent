@@ -43,6 +43,7 @@ export interface StudentInfo {
   examDurationMinutes?: number; // e.g. 90, 60, 45, 120, 180 (0 for unlimited)
   sessionStartTime?: number; // Epoch milliseconds when session began
   examMode?: 'CODING' | 'MCQ';
+  email?: string;
   mcqExamId?: string;
   accessKey?: string;
 }
@@ -216,6 +217,11 @@ export interface CandidateStation {
   lastUpdatedTimestamp?: number;
   examMode?: 'CODING' | 'MCQ';
   mcqProgress?: MCQStationProgress;
+  candidate?: any;
+  accessKey?: string;
+  email?: string;
+  cleanRoll?: string;
+  isStandby?: boolean;
 }
 
 export interface MCQStationProgress {

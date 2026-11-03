@@ -66,7 +66,8 @@ import {
 
   clearAllAttemptsFromCloud,
   clearAllCollegeLabsFromCloud,
-  supabase
+  supabase,
+  supabaseAdmin
 } from './supabaseService';
 
 import { getSynchronizedNow } from './timeSyncService';
@@ -2742,18 +2743,21 @@ export async function syncFromSupabase(): Promise<void> {
       const recentCloudAttempts = cloudA.filter(
         (a) => a.status === 'IN_PROGRESS' || (a.submitTime || a.startTime || 0) >= cutoff
       );
-      // Supabase is authoritative. If Supabase is empty or an attempt was purged in cloud,
-      // purge it locally too! Only retain an in-progress attempt currently active on this specific device.
+      // Supabase is authoritative. If an attempt is not in cloud (purged/deleted),
+      // purge it locally too! Only retain an in-progress attempt currently active on this specific machine.
       const cloudAttemptIds = new Set(recentCloudAttempts.map((a) => a.id));
       const localAttempts = getAllAttempts();
       const activeLocalId = typeof window !== 'undefined' ? localStorage.getItem(MCQ_STORAGE_KEYS.ACTIVE_ATTEMPT) : null;
       const activeSessionId = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('codedna_mcq_session_attempt') : null;
+      const wipedAt = typeof window !== 'undefined' ? Number(localStorage.getItem('codedna_codespark_wiped_at') || 0) : 0;
       
       const reconciled = [...recentCloudAttempts];
       for (const loc of localAttempts) {
         if (!cloudAttemptIds.has(loc.id)) {
-          // Never purge an in-progress attempt currently active on this machine!
-          if (loc.status === 'IN_PROGRESS' || loc.id === activeLocalId || loc.id === activeSessionId || (loc.startTime && (Date.now() - loc.startTime) < 24 * 3600 * 1000)) {
+          // If database was wiped after attempt started, discard it
+          if (wipedAt > 0 && (loc.startTime || 0) <= wipedAt) continue;
+          // Retain ONLY if actively taking exam on this local tab right now
+          if (loc.status === 'IN_PROGRESS' && (loc.id === activeLocalId || loc.id === activeSessionId)) {
             reconciled.push(loc);
             void saveAttemptToCloud(loc);
           }
@@ -2818,15 +2822,57 @@ export async function wipeEntireDatabaseFromCloud(): Promise<boolean> {
     });
   } catch {}
 
+  const client = supabaseAdmin || supabase;
   try {
+    // 1. Delete all attempts by IDs
+    const { data: attempts } = await client.from('mcq_attempts').select('id');
+    if (attempts && attempts.length > 0) {
+      await client.from('mcq_attempts').delete().in('id', attempts.map(a => a.id));
+    }
+    // 2. Delete all stations by IDs
+    const { data: stations } = await client.from('candidate_stations').select('id');
+    if (stations && stations.length > 0) {
+      await client.from('candidate_stations').delete().in('id', stations.map(s => s.id));
+    }
+    // 3. Delete all code submissions by IDs
+    const { data: submissions } = await client.from('code_submissions').select('id');
+    if (submissions && submissions.length > 0) {
+      await client.from('code_submissions').delete().in('id', submissions.map(s => s.id));
+    }
+    // 4. Delete questions
+    const { data: questions } = await client.from('mcq_questions').select('id');
+    if (questions && questions.length > 0) {
+      await client.from('mcq_questions').delete().in('id', questions.map(q => q.id));
+    }
+
+    // 5. Reset CodeSpark system config in cloud
+    const emptyConfig = {
+      activeExamId: null,
+      shortlistMode: 'cutoff',
+      shortlistValue: 12,
+      manualShortlistRolls: [],
+      isConcluded: false,
+      candidates: [],
+      isRound2ArenaOpen: false,
+      updatedAt: Date.now()
+    };
+    await client.from('mcq_exams').upsert({
+      id: 'codespark_system_config',
+      title: 'CodeSpark System Configuration & Roster',
+      description: 'Cloud configuration for CodeSpark Active Paper, Shortlist Criteria, and Registered Candidates',
+      instructions: JSON.stringify(emptyConfig),
+      duration_minutes: 0,
+      total_marks: 0,
+      is_active: false,
+      status: 'DRAFT',
+      created_by: 'system',
+      created_at: Date.now(),
+      updated_at: Date.now()
+    });
+
     await Promise.allSettled([
-      supabase.from('mcq_attempts').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-      supabase.from('candidate_stations').delete().neq('id', 'codespark_round2_questions'),
-      supabase.from('mcq_questions').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-      supabase.from('mcq_exams').delete().neq('id', 'codespark_round2_questions').neq('id', 'codespark_system_config'),
-      supabase.from('code_submissions').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-      clearAllStationsFromCloud(),
-      clearAllAttemptsFromCloud(),
+      clearAllStationsFromCloud('all', true),
+      clearAllAttemptsFromCloud('all'),
       clearAllQuestionsFromCloud(),
       clearAllCollegeLabsFromCloud()
     ]);

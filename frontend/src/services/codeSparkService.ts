@@ -1,4 +1,4 @@
-import { supabase } from './supabaseService';
+import { supabase, supabaseAdmin } from './supabaseService';
 import {
   MCQExamConfig,
   MCQQuestion,
@@ -74,6 +74,42 @@ export const ROUND1_CONCLUDED_STORAGE_KEY = 'codedna_codespark_round1_concluded'
 export const LAB_OVERFLOW_STORAGE_KEY = 'codespark_lab_overflow_retake_enabled';
 export const RETAKE_AUTHORIZED_ROLLS_KEY = 'codespark_round1_retake_rolls';
 export const SMTP_CONFIG_STORAGE_KEY = 'codedna_codespark_smtp_config';
+export const DELETED_KEYS_STORAGE_KEY = 'codedna_codespark_deleted_keys';
+
+export function getDeletedCandidateKeys(): Set<string> {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(DELETED_KEYS_STORAGE_KEY) : null;
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr.map((k: string) => String(k).trim().toUpperCase()) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function recordCandidateKeyDeleted(keyOrRoll: string): void {
+  try {
+    const clean = keyOrRoll.trim().toUpperCase();
+    if (!clean || typeof window === 'undefined') return;
+    const set = getDeletedCandidateKeys();
+    set.add(clean);
+    const norm = normalizeCodeSparkKey(clean);
+    if (norm) set.add(norm);
+    localStorage.setItem(DELETED_KEYS_STORAGE_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
+export function unmarkCandidateKeyDeleted(keyOrRoll: string): void {
+  try {
+    const clean = keyOrRoll.trim().toUpperCase();
+    if (typeof window === 'undefined') return;
+    const set = getDeletedCandidateKeys();
+    set.delete(clean);
+    const norm = normalizeCodeSparkKey(clean);
+    if (norm) set.delete(norm);
+    localStorage.setItem(DELETED_KEYS_STORAGE_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
 
 export function normalizeCodeSparkKey(rawKey: string): string {
   if (!rawKey) return '';
@@ -140,11 +176,20 @@ export function deduplicateCandidates(candidates: CodeSparkCandidate[]): CodeSpa
 
 export function getAllCodeSparkCandidates(): CodeSparkCandidate[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return deduplicateCandidates(parsed);
+    const deletedKeys = getDeletedCandidateKeys();
+    const filtered = parsed.filter((c) => {
+      if (!c) return false;
+      const k = (c.accessKey || '').trim().toUpperCase();
+      const r = (c.rollNumber || '').trim().toUpperCase();
+      const e = (c.email || '').trim().toUpperCase();
+      const nk = normalizeCodeSparkKey(k);
+      return !deletedKeys.has(k) && (!nk || !deletedKeys.has(nk)) && (!r || !deletedKeys.has(r)) && (!e || !deletedKeys.has(e));
+    });
+    return deduplicateCandidates(filtered);
   } catch (e) {
     console.error('[CodeSpark] Failed to load candidates from storage:', e);
     return [];
@@ -310,6 +355,29 @@ export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): P
         const batch = stationRows.slice(i, i + 50);
         await supabase.from('candidate_stations').upsert(batch);
       }
+
+      // 4. Prune any removed candidates from candidate_stations
+      try {
+        const client = supabaseAdmin || supabase;
+        const validIds = new Set(stationRows.map((r) => r.id));
+        const { data: currentRoster } = await client
+          .from('candidate_stations')
+          .select('id')
+          .eq('lab_id', 'CODESPARK_ROSTER');
+
+        if (currentRoster && currentRoster.length > 0) {
+          const removedIds = currentRoster
+            .map((r: any) => r.id)
+            .filter((id: string) => !validIds.has(id));
+          if (removedIds.length > 0) {
+            for (let i = 0; i < removedIds.length; i += 50) {
+              await client.from('candidate_stations').delete().in('id', removedIds.slice(i, i + 50));
+            }
+          }
+        }
+      } catch (cleanErr) {
+        console.warn('[CodeSpark] Orphan roster cleanup notice:', cleanErr);
+      }
     } catch (candErr) {
       console.warn('[CodeSpark] candidate_stations individual upsert warning:', candErr);
     }
@@ -448,17 +516,40 @@ export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
 
       const local = getAllCodeSparkCandidates();
 
-      // CRITICAL FIX: If cloud candidates array is empty but local has real candidates,
-      // preserve local and sync them back to cloud. NEVER wipe candidates!
+      const deletedKeys = getDeletedCandidateKeys();
+      const filterDeleted = (list: CodeSparkCandidate[]) =>
+        list.filter((c) => {
+          if (!c) return false;
+          const k = (c.accessKey || '').trim().toUpperCase();
+          const r = (c.rollNumber || '').trim().toUpperCase();
+          const e = (c.email || '').trim().toUpperCase();
+          const nk = normalizeCodeSparkKey(k);
+          return (
+            !deletedKeys.has(k) &&
+            (!nk || !deletedKeys.has(nk)) &&
+            (!r || !deletedKeys.has(r)) &&
+            (!e || !deletedKeys.has(e))
+          );
+        });
+
+      const cleanCloudCandidates = filterDeleted(cloudCandidates);
+      const cleanLocalCandidates = filterDeleted(local);
+
+      const isSystemWiped = typeof window !== 'undefined' && localStorage.getItem('codedna_codespark_wiped_at');
+
       let combined: CodeSparkCandidate[];
-      if (cloudCandidates.length === 0 && local.length > 0) {
-        combined = local;
-        void pushCandidatesToCloud(combined);
-      } else if (local.length === 0 && cloudCandidates.length > 0) {
-        combined = deduplicateCandidates(cloudCandidates);
+      if (cleanCloudCandidates.length === 0 && cleanLocalCandidates.length > 0) {
+        if (isSystemWiped) {
+          combined = [];
+        } else {
+          combined = cleanLocalCandidates;
+          void pushCandidatesToCloud(combined);
+        }
+      } else if (cleanLocalCandidates.length === 0 && cleanCloudCandidates.length > 0) {
+        combined = deduplicateCandidates(cleanCloudCandidates);
       } else {
         // Merge without losing local round2Key
-        combined = deduplicateCandidates([...local, ...cloudCandidates]);
+        combined = deduplicateCandidates([...cleanLocalCandidates, ...cleanCloudCandidates]);
       }
 
       try {
@@ -1696,6 +1787,15 @@ export async function importCodeSparkCandidatesDirect(
   }
 
   // Save directly and await cloud persistence!
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('codedna_codespark_wiped_at');
+  }
+  for (const c of updatedRoster) {
+    if (c.accessKey) unmarkCandidateKeyDeleted(c.accessKey);
+    if (c.rollNumber) unmarkCandidateKeyDeleted(c.rollNumber);
+    if (c.email) unmarkCandidateKeyDeleted(c.email);
+  }
+
   saveCodeSparkCandidates(updatedRoster);
   await pushCandidatesToCloud(updatedRoster);
   return created;
@@ -1737,53 +1837,197 @@ export function deleteCodeSparkCandidate(accessKey: string): void {
   saveCodeSparkCandidates(remaining);
 }
 
-export async function deleteCodeSparkCandidateComplete(accessKeyOrRoll: string): Promise<void> {
-  const clean = accessKeyOrRoll.trim().toUpperCase();
+export async function deleteCodeSparkCandidateComplete(accessKeyOrRollOrEmail: string): Promise<void> {
+  const clean = accessKeyOrRollOrEmail.trim().toUpperCase();
   if (!clean) return;
-  const all = getAllCodeSparkCandidates();
-  const remaining = all.filter(c => 
-    (c.accessKey?.toUpperCase() !== clean) && 
-    (c.rollNumber?.toUpperCase() !== clean) &&
-    (c.email?.toUpperCase() !== clean)
+  const normKey = normalizeCodeSparkKey(clean);
+
+  // 1. Identify candidate details from raw stored data BEFORE applying tombstone
+  let rawCandidates: CodeSparkCandidate[] = [];
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) rawCandidates = parsed;
+    }
+  } catch {}
+
+  const target = rawCandidates.find(c => 
+    (c.accessKey && c.accessKey.trim().toUpperCase() === clean) ||
+    (normKey && normalizeCodeSparkKey(c.accessKey) === normKey) ||
+    (c.rollNumber && c.rollNumber.trim().toUpperCase() === clean) ||
+    (c.email && c.email.trim().toUpperCase() === clean) ||
+    (c.name && c.name.trim().toLowerCase() === accessKeyOrRollOrEmail.trim().toLowerCase())
   );
+
+  // 2. Record clean, normKey, and target credentials in tombstone
+  recordCandidateKeyDeleted(clean);
+  if (normKey) recordCandidateKeyDeleted(normKey);
+  if (target?.accessKey) {
+    recordCandidateKeyDeleted(target.accessKey.toUpperCase());
+    const targetNorm = normalizeCodeSparkKey(target.accessKey);
+    if (targetNorm) recordCandidateKeyDeleted(targetNorm);
+  }
+  if (target?.rollNumber) recordCandidateKeyDeleted(target.rollNumber.toUpperCase());
+  if (target?.email) recordCandidateKeyDeleted(target.email.toUpperCase());
+
+  // 3. Filter remaining candidates from raw
+  const remaining = rawCandidates.filter(c => {
+    if (!c) return false;
+    const k = (c.accessKey || '').trim().toUpperCase();
+    const r = (c.rollNumber || '').trim().toUpperCase();
+    const e = (c.email || '').trim().toUpperCase();
+    const nk = normalizeCodeSparkKey(k);
+    if (k === clean || nk === clean || (normKey && (k === normKey || nk === normKey))) return false;
+    if (r === clean || (normKey && r === normKey)) return false;
+    if (e === clean) return false;
+    if (target?.accessKey && (k === target.accessKey.toUpperCase() || nk === normalizeCodeSparkKey(target.accessKey))) return false;
+    if (target?.rollNumber && r === target.rollNumber.toUpperCase()) return false;
+    if (target?.email && e === target.email.toUpperCase()) return false;
+    return true;
+  });
+
   saveCodeSparkCandidates(remaining);
 
   const shortlists = getShortlistedRolls();
-  const remainingShortlists = shortlists.filter(r => r.toUpperCase() !== clean);
+  const remainingShortlists = shortlists.filter(r => 
+    r.trim().toUpperCase() !== clean && 
+    (!normKey || normalizeCodeSparkKey(r) !== normKey)
+  );
   try {
     localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(remainingShortlists));
   } catch {}
 
-  try {
-    const { deleteAttemptByRollOrKeyFromCloud } = await import('./supabaseService');
-    await deleteAttemptByRollOrKeyFromCloud(clean);
-  } catch {}
+  // 4. Delete from Supabase with service_role client (bypasses RLS)
+  const client = supabaseAdmin || supabase;
+  if (client) {
+    try {
+      const keysToDelete = new Set<string>([clean]);
+      if (normKey) keysToDelete.add(normKey);
+      if (target?.accessKey) {
+        keysToDelete.add(target.accessKey.toUpperCase());
+        const nk = normalizeCodeSparkKey(target.accessKey);
+        if (nk) keysToDelete.add(nk);
+      }
+      if (target?.rollNumber) keysToDelete.add(target.rollNumber.toUpperCase());
+      const targetEmail = target?.email ? target.email.trim().toLowerCase() : '';
+      const targetName = target?.name ? target.name.trim().toLowerCase() : '';
 
-  try {
-    if (supabase) {
-      await supabase.from('candidate_stations').delete().eq('id', `cand_${normalizeCodeSparkKey(clean)}`);
+      // Find and delete matching attempts by IDs
+      const { data: attempts } = await client.from('mcq_attempts').select('id, student_roll, student_email, student_name, candidate_ticket_id');
+      if (attempts && attempts.length > 0) {
+        const attemptIds = attempts.filter(att => {
+          const aRoll = (att.student_roll || '').trim().toUpperCase();
+          const aEmail = (att.student_email || '').trim().toLowerCase();
+          const aName = (att.student_name || '').trim().toLowerCase();
+          const aTicket = (att.candidate_ticket_id || '').trim().toUpperCase();
+
+          if (keysToDelete.has(aRoll) || keysToDelete.has(aTicket)) return true;
+          if (targetEmail && aEmail === targetEmail) return true;
+          if (targetName && aName === targetName) return true;
+          return false;
+        }).map(a => a.id);
+
+        if (attemptIds.length > 0) {
+          await client.from('mcq_attempts').delete().in('id', attemptIds);
+        }
+      }
+
+      // Find and delete matching stations by IDs
+      const { data: stations } = await client.from('candidate_stations').select('id, station_number, student_name, student_roll, student');
+      if (stations && stations.length > 0) {
+        const stationIds = stations.filter(st => {
+          const sNum = (st.station_number || '').trim().toUpperCase();
+          const sRoll = (st.student_roll || st.student?.rollNumber || '').trim().toUpperCase();
+          const sName = (st.student_name || st.student?.name || '').trim().toLowerCase();
+          const sEmail = (st.student?.email || '').trim().toLowerCase();
+          const sId = (st.id || '').trim().toUpperCase();
+
+          if (keysToDelete.has(sNum) || keysToDelete.has(sRoll) || keysToDelete.has(sId.replace(/^CAND_/, ''))) return true;
+          if (targetEmail && sEmail === targetEmail) return true;
+          if (targetName && sName === targetName) return true;
+          return false;
+        }).map(s => s.id);
+
+        if (stationIds.length > 0) {
+          await client.from('candidate_stations').delete().in('id', stationIds);
+        }
+      }
+    } catch (e) {
+      console.warn('[CodeSpark] Supabase candidate delete notice:', e);
     }
-  } catch {}
+  }
 
   await pushCandidatesToCloud(remaining);
 }
 
 export async function resetCodeSparkSystemInCloud(): Promise<boolean> {
   if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('codedna_codespark_wiped_at', String(Date.now()));
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem('codedna_codespark_candidates');
     localStorage.removeItem('codedna_codespark_shortlist');
+    localStorage.removeItem('codedna_codespark_round1_shortlist');
     localStorage.removeItem('codedna_codespark_round1_concluded');
     localStorage.removeItem('codedna_codespark_round1_exam_id');
+    localStorage.removeItem('codedna_codespark_active_exam_id');
     localStorage.removeItem('codedna_codespark_used_keys');
     localStorage.removeItem('codedna_codespark_active_candidate');
     localStorage.removeItem('codedna_student_profile');
+    localStorage.removeItem(DELETED_KEYS_STORAGE_KEY);
+    localStorage.removeItem('codedna_mcq_attempts');
+    localStorage.removeItem('codedna_college_stations');
+    localStorage.removeItem('codedna_live_stations');
+    localStorage.removeItem('codedna_codespark_active_batch');
   }
-  if (!supabase) return false;
+  const client = supabaseAdmin || supabase;
+  if (!client) return false;
   try {
-    await supabase.from('candidate_stations').delete().eq('id', CODESPARK_SYSTEM_CONFIG_ID);
-    await supabase.from('candidate_stations').delete().eq('lab_id', 'CODESPARK_ROSTER');
-    await supabase.from('mcq_exams').delete().eq('id', CODESPARK_SYSTEM_CONFIG_ID);
+    const emptyConfig = {
+      activeExamId: null,
+      shortlistMode: 'cutoff',
+      shortlistValue: 12,
+      manualShortlistRolls: [],
+      isConcluded: false,
+      candidates: [],
+      isRound2ArenaOpen: false,
+      updatedAt: Date.now()
+    };
+
+    // Query and delete all stations by IDs
+    const { data: stRows } = await client.from('candidate_stations').select('id');
+    if (stRows && stRows.length > 0) {
+      await client.from('candidate_stations').delete().in('id', stRows.map(r => r.id));
+    }
+
+    // Query and delete all attempts by IDs
+    const { data: attRows } = await client.from('mcq_attempts').select('id');
+    if (attRows && attRows.length > 0) {
+      await client.from('mcq_attempts').delete().in('id', attRows.map(r => r.id));
+    }
+
+    // Query and delete all code submissions by IDs
+    const { data: subRows } = await client.from('code_submissions').select('id');
+    if (subRows && subRows.length > 0) {
+      await client.from('code_submissions').delete().in('id', subRows.map(r => r.id));
+    }
+
+    // Reset cloud system config
+    await client.from('mcq_exams').upsert({
+      id: CODESPARK_SYSTEM_CONFIG_ID,
+      title: 'CodeSpark System Configuration & Roster',
+      description: 'Cloud configuration for CodeSpark Active Paper, Shortlist Criteria, and Registered Candidates',
+      instructions: JSON.stringify(emptyConfig),
+      subject: 'CodeSpark',
+      topic: 'System',
+      status: 'PUBLISHED',
+      duration_minutes: 0,
+      total_marks: 0,
+      question_count: 0,
+      created_at: Date.now(),
+      updated_at: Date.now()
+    });
+
     return true;
   } catch (err) {
     console.warn('[CodeSpark Cloud] resetCodeSparkSystemInCloud failed:', err);
