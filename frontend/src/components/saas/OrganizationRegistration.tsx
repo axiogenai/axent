@@ -13,7 +13,6 @@ import {
   Check,
   Zap,
   Layers,
-  Sparkles,
   HelpCircle
 } from 'lucide-react';
 import { createOrganization, getSubscriptionPlans, DEFAULT_PLANS } from '../../services/saasService';

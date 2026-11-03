@@ -10,8 +10,7 @@ import {
   Check,
   ArrowRight,
   ExternalLink,
-  Layers,
-  Sparkles
+  Layers
 } from 'lucide-react';
 import {
   getActiveOrgId,
