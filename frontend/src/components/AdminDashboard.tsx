@@ -601,7 +601,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       s.metrics.keystrokes,
       `"${s.cheatingRisk}"`,
       `"${s.integrityStatus}"`,
-      s.marks ? `${s.marks.totalMarks}/${getEffectiveMaxMarks(s)}` : s.mcqProgress?.score !== undefined ? `${s.mcqProgress.score}/${getEffectiveMaxMarks(s)}` : 'Pending'
+      s.marks ? `${s.marks.totalMarks}/${getEffectiveMaxMarks(s)}` : s.mcqProgress?.score !== undefined ? `${s.mcqProgress.score}/${getEffectiveMaxMarks(s)}` : (s.student as any)?.round1Score !== undefined && (s.student as any)?.round1Score !== null ? `${(s.student as any).round1Score}/${getEffectiveMaxMarks(s)}` : 'Pending'
     ]);
 
     const csvContent =

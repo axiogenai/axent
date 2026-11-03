@@ -316,8 +316,12 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
   }, [candidateAttempts, isBatch2OrRetake]);
 
   const isRound1Submitted = Boolean(
-    round1Attempt &&
-      (round1Attempt.status === 'SUBMITTED' || round1Attempt.status === 'TIMED_OUT' || round1Attempt.score !== undefined)
+    (round1Attempt &&
+      (round1Attempt.status === 'SUBMITTED' || round1Attempt.status === 'TIMED_OUT' || round1Attempt.score !== undefined)) ||
+    (candidateProfile?.status as string) === 'ROUND1_COMPLETED' ||
+    (candidateProfile?.status as string) === 'SUBMITTED' ||
+    (candidateProfile as any)?.round1Score !== undefined ||
+    (candidateKey && (lookupCandidateAny(candidateKey)?.candidate?.status as string) === 'ROUND1_COMPLETED')
   );
 
   // 4. Shortlist Gatekeeper Check for Round 2

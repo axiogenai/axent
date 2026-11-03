@@ -486,6 +486,10 @@ export const AdminCandidatesView: React.FC<AdminCandidatesViewProps> = ({
                           <span style={{ color: '#3b82f6' }}>
                             {station.mcqProgress.score} pts
                           </span>
+                        ) : (station.student as any)?.round1Score !== undefined && (station.student as any)?.round1Score !== null ? (
+                          <span style={{ color: '#3b82f6' }}>
+                            {(station.student as any).round1Score} pts
+                          </span>
                         ) : (
                           <span style={{ color: 'var(--text-muted)' }}>Pending</span>
                         )}
