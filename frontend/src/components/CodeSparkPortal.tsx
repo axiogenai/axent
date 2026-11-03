@@ -37,9 +37,11 @@ import {
   isLabOverflowRetakeEnabledGlobally,
   isCandidateAuthorizedForRound1Retake,
   authorizeCandidateForRound1Retake,
-  prepareCandidateForRound1Retake
+  prepareCandidateForRound1Retake,
+  getShortlistedRolls
 } from '../services/codeSparkService';
-import { getAllAttempts, getAllExams } from '../services/mcqService';
+import { getAllAttempts, getAllExams, syncFromSupabase } from '../services/mcqService';
+import { fetchAttemptsFromCloud } from '../services/supabaseService';
 import { MCQExamConfig } from '../types/mcq';
 import { getAllCodingQuestions, getAllCodingExams } from '../services/codingQuestionService';
 import { CodeSparkCandidateImportModal } from './codespark/CodeSparkCandidateImportModal';
@@ -169,7 +171,9 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
         if (latestCandidates) {
           setRegisteredCandidates(latestCandidates);
         }
+        await syncFromSupabase();
         setIsRound1Concluded(isRound1ConcludedGlobally());
+        setShortlistedRolls(getShortlistedRolls());
       } catch {}
     }, 2500);
 
@@ -437,18 +441,15 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       anyLookup.isShortlisted ||
       cand.isShortlisted ||
       cand.status === 'SHORTLISTED' ||
+      Boolean(cand.round2Key) ||
+      rawInput.includes('R2') ||
       isCandidateInShortlistStorage(cand.rollNumber || cand.accessKey)
     );
 
-    // 1. If target round is Round 2 or Round 1 has concluded:
-    if (anyLookup.targetRound === 'round2' || rawInput.includes('R2') || isRound1Concluded) {
-      if (!isCandidateShortlisted) {
-        playSound('warning');
-        setKeyError('Access Denied: Round 2 is restricted to shortlisted candidates only. Check your registered email.');
-        return;
-      }
-
+    // 1. If candidate is shortlisted, IMMEDIATELY launch Round 2 Coding Sprint Arena!
+    if (isCandidateShortlisted) {
       const derivedRoll = cand.rollNumber || cand.email.split('@')[0].toUpperCase();
+      const r2Key = cand.round2Key || (cand.accessKey.startsWith('AXENT-R2-') ? cand.accessKey : `AXENT-R2-${cand.accessKey.replace(/^AXENT-|^R2-/, '')}`);
       const codingProfile = {
         name: cand.name.trim(),
         email: cand.email.trim().toLowerCase(),
@@ -458,8 +459,8 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
         examType: 'Code Sprint',
         assignmentTitle: 'Code Spark 2026: Algorithmic Code Sprint Arena',
         examMode: 'CODING',
-        accessKey: cand.round2Key || cand.accessKey,
-        round2Key: cand.round2Key,
+        accessKey: r2Key,
+        round2Key: r2Key,
         isShortlisted: true,
         sessionStartTime: Date.now()
       };
@@ -477,7 +478,15 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       return;
     }
 
-    // 2. Candidate entered a Round 1 key: Check if Round 1 has concluded or Round 2 has started
+    // 2. Candidate is NOT shortlisted:
+    // If user attempted to enter Round 2 or explicitly entered R2 code:
+    if (anyLookup.targetRound === 'round2' || rawInput.includes('R2')) {
+      playSound('warning');
+      setKeyError('Access Denied: Round 2 is restricted to shortlisted candidates only. Check your registered email.');
+      return;
+    }
+
+    // If Round 1 has concluded globally:
     const isRound1Over = Boolean(
       isRound1Concluded ||
       isRound1ConcludedGlobally() ||
@@ -486,22 +495,90 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
 
     if (isRound1Over) {
       playSound('warning');
-      if (isCandidateShortlisted) {
-        setKeyError(
-          `Round 1 has concluded. You are shortlisted for Round 2! Your Round 2 access code has been emailed to you (${cand.email}). Please enter your Round 2 key (${cand.round2Key || 'AXENT-R2-XXXX'}) to access the coding arena.`
-        );
-      } else {
-        setKeyError(
-          'Round 1 has concluded. Shortlisted candidates have received their Round 2 access keys in their email.'
-        );
-      }
+      setKeyError(
+        'Round 1 examination has concluded and results are sealed. This candidate seat was not shortlisted for Round 2.'
+      );
       return;
     }
 
-    // For Round 1, check active exam paper
+    // 3. Round 1 Single-Use Key & Submission Enforcement
+    // Check if candidate has already submitted this examination
+    const derivedRoll = cand.rollNumber || cand.email.split('@')[0].toUpperCase();
+    const candKeyUpper = cand.accessKey.toUpperCase();
+    const candEmailLower = cand.email.toLowerCase();
+
+    // Check attempts both locally and in Supabase Cloud
+    const localAttempts = getAllAttempts();
+    let cloudAttempts: any[] = [];
+    try {
+      cloudAttempts = (await fetchAttemptsFromCloud()) || [];
+    } catch {}
+
+    const allKnownAttempts = [...localAttempts, ...cloudAttempts];
+    const priorSubmittedAttempt = allKnownAttempts.find(
+      (a) =>
+        (a.status === 'SUBMITTED' || a.status === 'TIMED_OUT' || a.score !== undefined) &&
+        ((a.studentRoll || '').trim().toUpperCase() === derivedRoll ||
+         (a.studentRoll || '').trim().toUpperCase() === candKeyUpper ||
+         (a.studentEmail || '').trim().toLowerCase() === candEmailLower)
+    );
+
+    const isAlreadySubmitted = Boolean(
+      priorSubmittedAttempt ||
+      (cand.status as string) === 'ROUND1_COMPLETED' ||
+      (cand.status as string) === 'SUBMITTED' ||
+      (cand.round1Score !== undefined && cand.round1Score !== null)
+    );
+
+    // Check active exam paper
     let targetExam = getCodeSparkActiveExam();
     if (!targetExam) {
       targetExam = await asyncGetCodeSparkActiveExam();
+    }
+
+    if (isAlreadySubmitted) {
+      const isRetakeAllowed =
+        isCandidateAuthorizedForRound1Retake(cand.rollNumber || cand.accessKey) ||
+        isCandidateAuthorizedForRound1Retake(cand.email) ||
+        isLabOverflowRetakeEnabledGlobally();
+
+      if (isRetakeAllowed && targetExam) {
+        prepareCandidateForRound1Retake(derivedRoll, targetExam.id);
+        const profile = {
+          name: cand.name.trim(),
+          email: cand.email.trim().toLowerCase(),
+          rollNumber: derivedRoll,
+          department: cand.department || 'Axent Candidate',
+          course: 'Code Spark 2026',
+          examType: 'Aptitude',
+          assignmentTitle: targetExam.title,
+          examMode: 'MCQ',
+          mcqExamId: targetExam.id,
+          accessKey: cand.accessKey,
+          sessionStartTime: Date.now(),
+          batch: 2,
+          isRetake: true
+        };
+        try {
+          localStorage.setItem('codedna_student_profile', JSON.stringify(profile));
+          localStorage.setItem('codedna_active_exam_mode', 'MCQ');
+          localStorage.setItem('codedna_codespark_round1_exam_id', targetExam.id);
+          setActiveCodeSparkCandidate(cand);
+        } catch {}
+
+        playSound('success');
+        try {
+          await requestExamFullscreen();
+        } catch {}
+        navigate(`/codespark-exams?examId=${targetExam.id}&round=1&batch=2&retake=true&autoStart=true`);
+        return;
+      }
+
+      playSound('warning');
+      setKeyError(
+        'Exam Attempted Already. This access key has already been used and submitted. Re-attempting is strictly prohibited.'
+      );
+      return;
     }
 
     if (!targetExam) {
@@ -529,115 +606,16 @@ export const CodeSparkPortal: React.FC<CodeSparkPortalProps> = () => {
       return;
     }
 
-    // Update candidate status
+    // Update candidate status to CHECKED_IN
     const allCandidates = getAllCodeSparkCandidates();
     const storedCand = allCandidates.find((c) => c.accessKey.toUpperCase() === cand.accessKey.toUpperCase()) || cand;
-    storedCand.status = isCandidateShortlisted ? 'SHORTLISTED' : 'CHECKED_IN';
+    storedCand.status = 'CHECKED_IN';
     storedCand.lastActiveAt = Date.now();
     saveCodeSparkCandidates(allCandidates);
     setRegisteredCandidates(allCandidates);
     setActiveCandidate(storedCand);
 
     const safeExam: MCQExamConfig = targetExam;
-    const derivedRoll = cand.rollNumber || cand.email.split('@')[0].toUpperCase();
-
-    // Check if candidate already completed Round 1
-    const attempts = getAllAttempts();
-    const priorAttempt = attempts.find(
-      (a) =>
-        (a.studentRoll || '').trim().toUpperCase() === derivedRoll &&
-        a.examId === safeExam.id &&
-        (a.status === 'SUBMITTED' || a.status === 'TIMED_OUT' || a.score !== undefined)
-    );
-
-    
-
-    // Candidate entered standard Round 1 code:
-    if (priorAttempt) {
-      if (isCandidateShortlisted) {
-        const codingProfile = {
-          name: cand.name.trim(),
-          email: cand.email.trim().toLowerCase(),
-          rollNumber: derivedRoll,
-          department: cand.department || 'Axent Candidate',
-          course: 'Code Spark 2026',
-          examType: 'Code Sprint',
-          assignmentTitle: 'Code Spark 2026: Algorithmic Code Sprint Arena',
-          examMode: 'CODING',
-          accessKey: cand.round2Key || cand.accessKey,
-          isShortlisted: true,
-          sessionStartTime: Date.now()
-        };
-        try {
-          localStorage.setItem('codedna_student_profile', JSON.stringify(codingProfile));
-          localStorage.setItem('codedna_active_exam_mode', 'CODING');
-          setActiveCodeSparkCandidate(cand);
-        } catch {}
-
-        playSound('success');
-        try {
-          await requestExamFullscreen();
-        } catch {}
-        navigate('/codespark-exams?round=2');
-        return;
-      } else {
-        const isRetakeAllowed =
-          isCandidateAuthorizedForRound1Retake(cand.rollNumber || cand.accessKey) ||
-          isCandidateAuthorizedForRound1Retake(cand.email) ||
-          isLabOverflowRetakeEnabledGlobally();
-
-        if (isRetakeAllowed) {
-          prepareCandidateForRound1Retake(derivedRoll, safeExam.id);
-          const profile = {
-            name: cand.name.trim(),
-            email: cand.email.trim().toLowerCase(),
-            rollNumber: derivedRoll,
-            department: cand.department || 'Axent Candidate',
-            course: 'Code Spark 2026',
-            examType: 'Aptitude',
-            assignmentTitle: safeExam.title,
-            examMode: 'MCQ',
-            mcqExamId: safeExam.id,
-            accessKey: cand.accessKey,
-            sessionStartTime: Date.now(),
-            batch: 2,
-            isRetake: true
-          };
-          try {
-            localStorage.setItem('codedna_student_profile', JSON.stringify(profile));
-            localStorage.setItem('codedna_active_exam_mode', 'MCQ');
-            localStorage.setItem('codedna_codespark_round1_exam_id', safeExam.id);
-            setActiveCodeSparkCandidate(cand);
-          } catch {}
-
-          playSound('success');
-          try {
-            await requestExamFullscreen();
-          } catch {}
-          navigate(`/codespark-exams?examId=${safeExam.id}&round=1&batch=2&retake=true&autoStart=true`);
-          return;
-        }
-
-        playSound('warning');
-        if (!isRound1ConcludedGlobally()) {
-          setKeyError(
-            `Round 1 examination attempt has been submitted and sealed. Testing is currently ongoing across campus laboratories. Results and shortlists will be declared by the examination committee once all laboratory sittings finish.`
-          );
-        } else {
-          setKeyError(
-            `Round 1 assessment has concluded across all laboratories. Candidate responses are sealed in the institutional ledger.`
-          );
-        }
-        return;
-      }
-    }
-
-    // New candidate attempt: Ensure Round 1 is still open
-    if (isRound1ConcludedGlobally()) {
-      playSound('warning');
-      setKeyError('Round 1 examination has concluded and sealed across all terminals. New registrations/attempts are closed.');
-      return;
-    }
 
     // Launch Round 1 Aptitude Exam!
     const profile = {
@@ -1799,7 +1777,7 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                   } px-3 sm:px-5 py-3 sm:py-4 flex items-center transition-colors cursor-text overflow-hidden`}
                 >
                   <span className="font-mono text-xl sm:text-2xl font-black text-black select-none tracking-[0.1em] sm:tracking-[0.25em] shrink-0">
-                    {isRound1Concluded ? 'AXENT-R2-' : 'AXENT-'}
+                    {activeCandidate?.round2Key || (activeCandidate?.isShortlisted && isRound1Concluded) ? 'AXENT-R2-' : isRound1Concluded ? 'AXENT-R2-' : 'AXENT-'}
                   </span>
                   <input
                     ref={keyInputRef}
@@ -1827,23 +1805,49 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
                 </div>
 
                 {/* Verified Candidate Card (Rendered ONLY when valid 4-digit key is typed) */}
-                {activeCandidate && keyDigits.length >= 4 && (
-                  <div className="p-4 bg-white border-2 border-black flex items-center justify-between gap-3 text-xs font-mono shadow-[3px_3px_0px_#0A0A0C]">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-black text-white flex items-center justify-center font-black">
-                        <Check size={16} className="text-[#ea1a1c]" />
+                {activeCandidate && keyDigits.length >= 4 && (() => {
+                  const isShortlisted = Boolean(
+                    activeCandidate.isShortlisted ||
+                    activeCandidate.status === 'SHORTLISTED' ||
+                    Boolean(activeCandidate.round2Key) ||
+                    isCandidateInShortlistStorage(activeCandidate.rollNumber || activeCandidate.accessKey)
+                  );
+                  const isSubmitted = Boolean(
+                    (activeCandidate.status as string) === 'ROUND1_COMPLETED' ||
+                    (activeCandidate.status as string) === 'SUBMITTED' ||
+                    (activeCandidate.round1Score !== undefined && activeCandidate.round1Score !== null)
+                  );
+                  const effectiveR2Key = activeCandidate.round2Key || (activeCandidate.accessKey?.startsWith('AXENT-R2-') ? activeCandidate.accessKey : `AXENT-R2-${activeCandidate.accessKey?.replace(/^AXENT-|^R2-/, '')}`);
+
+                  return (
+                    <div className={`p-4 bg-white border-2 ${isShortlisted ? 'border-emerald-600' : isSubmitted ? 'border-amber-600' : 'border-black'} flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono shadow-[3px_3px_0px_#0A0A0C]`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 ${isShortlisted ? 'bg-emerald-600' : isSubmitted ? 'bg-amber-600' : 'bg-black'} text-white flex items-center justify-center font-black shrink-0`}>
+                          <Check size={16} className={isShortlisted ? 'text-white' : 'text-[#ea1a1c]'} />
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Candidate Identified</div>
+                          <strong className="text-sm font-black text-black">{activeCandidate.name}</strong>
+                          <span className="text-zinc-500 ml-2 font-mono text-xs">({activeCandidate.email})</span>
+                          {isShortlisted && (
+                            <div className="text-emerald-700 font-bold text-[11px] mt-0.5">
+                              Round 2 Access Key: <span className="font-mono bg-emerald-50 px-1.5 py-0.5 border border-emerald-300 rounded">{effectiveR2Key}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Candidate Identified</div>
-                        <strong className="text-sm font-black text-black">{activeCandidate.name}</strong>
-                        <span className="text-zinc-500 ml-2 font-mono text-xs">({activeCandidate.email})</span>
-                      </div>
+                      <span className={`text-[10px] font-black uppercase px-2 py-1 shrink-0 text-center ${
+                        isShortlisted
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          : isSubmitted
+                          ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                          : 'bg-green-100 text-green-800 border border-green-300'
+                      }`}>
+                        {isShortlisted ? 'ROUND 2 QUALIFIED' : isSubmitted ? 'ATTEMPT COMPLETED' : 'READY FOR EXAM'}
+                      </span>
                     </div>
-                    <span className="text-[10px] font-black uppercase px-2 py-1 bg-green-100 text-green-800 border border-green-300">
-                      Ready
-                    </span>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {keyError && (
                   <div className="text-xs text-[#ea1a1c] font-bold flex items-center gap-2 font-mono p-3 bg-red-50 border border-[#ea1a1c]/30">
@@ -1854,19 +1858,42 @@ void main(){vec2 v=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(v*2.-
 
                 {/* One-Click Direct Exam Launch Button */}
                 <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={handleDirectExamLaunch}
-                    disabled={!keyDigits.trim()}
-                    className={`w-full py-4 px-6 font-mono font-black text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 ${
-                      keyDigits.trim()
-                        ? 'bg-black hover:bg-[#ea1a1c] text-white shadow-[4px_4px_0px_#ea1a1c] cursor-pointer'
-                        : 'bg-zinc-200 text-zinc-400 cursor-not-allowed border border-zinc-300'
-                    }`}
-                  >
-                    <span>START EXAMINATION NOW</span>
-                    <ArrowRight size={14} />
-                  </button>
+                  {(() => {
+                    const isShortlisted = activeCandidate && Boolean(
+                      activeCandidate.isShortlisted ||
+                      activeCandidate.status === 'SHORTLISTED' ||
+                      Boolean(activeCandidate.round2Key) ||
+                      isCandidateInShortlistStorage(activeCandidate.rollNumber || activeCandidate.accessKey)
+                    );
+                    const isSubmitted = activeCandidate && Boolean(
+                      (activeCandidate.status as string) === 'ROUND1_COMPLETED' ||
+                      (activeCandidate.status as string) === 'SUBMITTED' ||
+                      (activeCandidate.round1Score !== undefined && activeCandidate.round1Score !== null)
+                    );
+                    const buttonText = isShortlisted
+                      ? 'ENTER ROUND 2 CODING SPRINT NOW'
+                      : isSubmitted
+                      ? 'EXAM ATTEMPTED ALREADY'
+                      : 'START EXAMINATION NOW';
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={handleDirectExamLaunch}
+                        disabled={!keyDigits.trim()}
+                        className={`w-full py-4 px-6 font-mono font-black text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 ${
+                          keyDigits.trim()
+                            ? isShortlisted
+                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-[4px_4px_0px_#065f46] cursor-pointer'
+                              : 'bg-black hover:bg-[#ea1a1c] text-white shadow-[4px_4px_0px_#ea1a1c] cursor-pointer'
+                            : 'bg-zinc-200 text-zinc-400 cursor-not-allowed border border-zinc-300'
+                        }`}
+                      >
+                        <span>{buttonText}</span>
+                        <ArrowRight size={14} />
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

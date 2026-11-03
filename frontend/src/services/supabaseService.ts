@@ -403,17 +403,6 @@ export async function fetchAttemptsFromCloud(): Promise<MCQAttempt[] | null> {
 async function writeAttemptToCloud(a: MCQAttempt): Promise<boolean> {
   const client = supabaseAdmin || supabase;
   try {
-    // 1. Check if parent exam exists in mcq_exams. If deleted, do NOT resurrect phantom exam!
-    try {
-      const { data: exCheck } = await client.from('mcq_exams').select('id').eq('id', a.examId).maybeSingle();
-      if (!exCheck) {
-        // Exam was deleted by administrator. Do not recreate phantom exam.
-        return false;
-      }
-    } catch (exErr) {
-      console.warn('[Supabase] Parent exam verification notice:', exErr);
-    }
-
     const row = {
       id: a.id,
       exam_id: a.examId,

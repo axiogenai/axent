@@ -20,14 +20,16 @@ import {
   prepareCandidateForRound1Retake,
   authorizeCandidateForRound1Retake,
   lookupCandidateAny,
-  asyncLookupCandidateAny
+  asyncLookupCandidateAny,
+  syncCandidatesFromCloud
 } from '../services/codeSparkService';
 import { cleanCandidateNameAndRoll } from '../utils/candidateFormatter';
 import {
   getAllExams,
   getAllAttempts,
   onExamsChanged,
-  onMcqDataChanged
+  onMcqDataChanged,
+  syncFromSupabase
 } from '../services/mcqService';
 import { MCQExamConfig } from '../types/mcq';
 import { MCQExamScreen } from './MCQExamScreen';
@@ -142,12 +144,18 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
         if (lookup) {
           return {
             ...parsed,
-            name: lookup.candidate.name,
-            rollNumber: lookup.candidate.rollNumber || lookup.candidate.accessKey,
-            accessKey: lookup.candidate.accessKey,
-            round2Key: lookup.candidate.round2Key,
-            email: lookup.candidate.email,
-            isShortlisted: lookup.isShortlisted
+            name: lookup.candidate.name || parsed.name,
+            rollNumber: lookup.candidate.rollNumber || lookup.candidate.accessKey || parsed.rollNumber,
+            accessKey: lookup.candidate.accessKey || parsed.accessKey,
+            round2Key: lookup.candidate.round2Key || parsed.round2Key,
+            email: lookup.candidate.email || parsed.email,
+            isShortlisted: Boolean(lookup.isShortlisted || lookup.candidate.isShortlisted || parsed.isShortlisted)
+          };
+        }
+        if (parsed && (parsed.name || parsed.accessKey || parsed.rollNumber)) {
+          return {
+            ...parsed,
+            isShortlisted: Boolean(parsed.isShortlisted || parsed.round2Key)
           };
         }
       }
@@ -161,13 +169,25 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
             accessKey: lookup.candidate.accessKey,
             round2Key: lookup.candidate.round2Key,
             email: lookup.candidate.email,
-            isShortlisted: lookup.isShortlisted
+            isShortlisted: Boolean(lookup.isShortlisted || lookup.candidate.isShortlisted)
           };
         }
       }
     } catch {}
     return null;
   });
+
+  useEffect(() => {
+    void syncFromSupabase();
+    void syncCandidatesFromCloud();
+    const interval = setInterval(async () => {
+      try {
+        await syncCandidatesFromCloud();
+        await syncFromSupabase();
+      } catch {}
+    }, 2500);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const qKey = searchParams.get('key') || searchParams.get('round2Key') || searchParams.get('accessKey');
@@ -302,7 +322,9 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
 
   // 4. Shortlist Gatekeeper Check for Round 2
   const isCandidateShortlisted = useMemo(() => {
-    if (searchParams.get('round') === '2' || searchParams.get('round') === 'coding') return true;
+    if (searchParams.get('round') === '2' || searchParams.get('round') === 'coding') {
+      return true;
+    }
     try {
       const rawShortlist = localStorage.getItem('codedna_codespark_shortlist');
       const shortlistedRolls: string[] = rawShortlist ? JSON.parse(rawShortlist) : [];
@@ -311,9 +333,11 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
       if (candidateProfile?.isShortlisted || candidateProfile?.status === 'SHORTLISTED') return true;
       if (candidateProfile?.round2Key) return true;
       if (candidateKey && candidateKey.toUpperCase().includes('R2')) return true;
-      return true;
+      const lk = (candidateKey || cleanRoll) ? lookupCandidateAny(candidateKey || cleanRoll) : null;
+      if (lk && (lk.isShortlisted || lk.candidate?.isShortlisted || lk.candidate?.round2Key)) return true;
+      return false;
     } catch {
-      return true;
+      return false;
     }
   }, [cleanRoll, candidateKey, candidateProfile, searchParams]);
 
@@ -537,28 +561,103 @@ export const CodeSparkExamHall: React.FC<CodeSparkExamHallProps> = ({
                     </div>
                   </div>
 
-                  {/* Crucial Shortlisting Notice */}
-                  <div
-                    style={{
-                      background: 'rgba(59, 130, 246, 0.08)',
-                      border: '1px solid rgba(59, 130, 246, 0.25)',
-                      borderRadius: '6px',
-                      padding: '14px 16px',
-                      textAlign: 'left',
-                      marginBottom: '16px',
-                      display: 'flex',
-                      gap: '12px',
-                      alignItems: 'flex-start'
-                    }}
-                  >
-                    <Shield size={18} style={{ color: '#60a5fa', flexShrink: 0, marginTop: '2px' }} />
-                    <div style={{ fontSize: '12.5px', color: '#cbd5e1', lineHeight: 1.5 }}>
-                      <strong style={{ color: '#ffffff', display: 'block', marginBottom: '2px' }}>
-                        Round 2 Shortlisting Notice:
-                      </strong>
-                      Round 2 (Algorithmic Coding Sprint Arena) is strictly gated. Only shortlisted candidates based on institutional cutoff will receive their <strong>new Round 2 access code via email</strong>. Please monitor your registered email address for official results.
+                  {/* Crucial Shortlisting Notice or Round 2 Qualified Action */}
+                  {isCandidateShortlisted ? (
+                    <div
+                      style={{
+                        background: 'rgba(16, 185, 129, 0.08)',
+                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                        borderRadius: '6px',
+                        padding: '16px',
+                        textAlign: 'left',
+                        marginBottom: '16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <CheckCircle2 size={18} style={{ color: '#10b981', flexShrink: 0 }} />
+                        <strong style={{ fontSize: '13px', color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          Qualified for Round 2: Algorithmic Coding Sprint Arena
+                        </strong>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '12.5px', color: '#e4e4e7', lineHeight: 1.5 }}>
+                        Congratulations! You have qualified for the Round 2 Algorithmic Coding Sprint based on institutional cutoff.
+                      </p>
+                      <div style={{ background: '#18181b', padding: '10px 14px', borderRadius: '4px', border: '1px solid #27272a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '12px', color: '#a1a1aa' }}>Your Round 2 Access Key:</span>
+                        <strong style={{ fontSize: '14px', color: '#ffffff', letterSpacing: '0.08em', fontFamily: 'monospace' }}>
+                          {candidateProfile?.round2Key || ('AXENT-R2-' + (candidateKey.replace(/^AXENT-|^R2-?/i, '') || 'QUALIFIED'))}
+                        </strong>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playSound('success');
+                          const effR2 = candidateProfile?.round2Key || ('AXENT-R2-' + (candidateKey.replace(/^AXENT-|^R2-?/i, '') || ''));
+                          const codingProfile = {
+                            name: candidateName,
+                            email: candidateProfile?.email || '',
+                            rollNumber: cleanRoll,
+                            department: candidateProfile?.department || 'Axent Candidate',
+                            course: 'Code Spark 2026',
+                            examType: 'Code Sprint',
+                            assignmentTitle: 'Code Spark 2026: Algorithmic Code Sprint Arena',
+                            examMode: 'CODING',
+                            accessKey: effR2,
+                            round2Key: effR2,
+                            isShortlisted: true,
+                            sessionStartTime: Date.now()
+                          };
+                          try {
+                            localStorage.setItem('codedna_student_profile', JSON.stringify(codingProfile));
+                            localStorage.setItem('codedna_active_exam_mode', 'CODING');
+                          } catch {}
+                          navigate('/codespark-exams?round=2');
+                        }}
+                        style={{
+                          padding: '12px 20px',
+                          borderRadius: '4px',
+                          background: '#10b981',
+                          color: '#09090b',
+                          fontSize: '13px',
+                          fontWeight: 800,
+                          border: 'none',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px'
+                        }}
+                      >
+                        <span>Enter Round 2 Coding Sprint Arena Now</span>
+                        <ArrowRight size={14} />
+                      </button>
                     </div>
-                  </div>
+                  ) : (
+                    <div
+                      style={{
+                        background: 'rgba(59, 130, 246, 0.08)',
+                        border: '1px solid rgba(59, 130, 246, 0.25)',
+                        borderRadius: '6px',
+                        padding: '14px 16px',
+                        textAlign: 'left',
+                        marginBottom: '16px',
+                        display: 'flex',
+                        gap: '12px',
+                        alignItems: 'flex-start'
+                      }}
+                    >
+                      <Shield size={18} style={{ color: '#60a5fa', flexShrink: 0, marginTop: '2px' }} />
+                      <div style={{ fontSize: '12.5px', color: '#cbd5e1', lineHeight: 1.5 }}>
+                        <strong style={{ color: '#ffffff', display: 'block', marginBottom: '2px' }}>
+                          Round 2 Shortlisting Notice:
+                        </strong>
+                        Round 2 (Algorithmic Coding Sprint Arena) is strictly gated. Only shortlisted candidates based on institutional cutoff will receive their <strong>new Round 2 access code via email</strong>. Please monitor your registered email address for official results.
+                      </div>
+                    </div>
+                  )}
 
                   {/* Lab Overflow Notice & Batch 2 Sitting Action */}
                   <div

@@ -210,7 +210,16 @@ export function saveCodeSparkCandidates(candidates: CodeSparkCandidate[]): void 
   }
 }
 
-export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): Promise<boolean> {
+export async function pushCandidatesToCloud(
+  candidates: CodeSparkCandidate[],
+  overrides?: {
+    isConcluded?: boolean;
+    isRound2ArenaOpen?: boolean;
+    shortlistMode?: 'cutoff' | 'top_n';
+    shortlistValue?: number;
+    manualShortlistRolls?: string[];
+  }
+): Promise<boolean> {
   try {
     const client = supabaseAdmin || supabase;
     if (!client) return false;
@@ -219,8 +228,10 @@ export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): P
     const assignedId = typeof window !== 'undefined'
       ? localStorage.getItem('codedna_codespark_round1_exam_id')
       : null;
-    const isConcluded = isRound1ConcludedGlobally();
-    const localShortlist = getShortlistedRolls();
+    const isConcluded = overrides?.isConcluded !== undefined
+      ? overrides.isConcluded
+      : isRound1ConcludedGlobally();
+    const localShortlist = overrides?.manualShortlistRolls || getShortlistedRolls();
     const shortlistedSet = new Set(localShortlist.map((r) => r.trim().toUpperCase()));
 
     // Guarantee that all shortlisted candidates have their round2Key assigned in cloud payload
@@ -245,14 +256,18 @@ export async function pushCandidatesToCloud(candidates: CodeSparkCandidate[]): P
       return c;
     });
 
+    const isArenaOpen = overrides?.isRound2ArenaOpen !== undefined
+      ? overrides.isRound2ArenaOpen
+      : (isConcluded || isRound2ArenaUnlocked());
+
     const payload: CodeSparkSystemConfig = {
       activeExamId: assignedId || null,
-      shortlistMode: 'cutoff',
-      shortlistValue: 12,
+      shortlistMode: overrides?.shortlistMode || 'cutoff',
+      shortlistValue: overrides?.shortlistValue || 12,
       manualShortlistRolls: localShortlist,
       isConcluded: isConcluded,
       candidates: finalCandidates,
-      isRound2ArenaOpen: isRound2ArenaUnlocked(),
+      isRound2ArenaOpen: isArenaOpen,
       updatedAt: Date.now()
     };
 
@@ -469,18 +484,13 @@ export async function syncCandidatesFromCloud(): Promise<CodeSparkCandidate[]> {
       const isSystemWiped = typeof window !== 'undefined' && localStorage.getItem('codedna_codespark_wiped_at');
 
       let combined: CodeSparkCandidate[];
-      if (cleanCloudCandidates.length === 0 && cleanLocalCandidates.length > 0) {
-        if (isSystemWiped) {
-          combined = [];
-        } else {
-          combined = cleanLocalCandidates;
-          void pushCandidatesToCloud(combined);
-        }
-      } else if (cleanLocalCandidates.length === 0 && cleanCloudCandidates.length > 0) {
+      if (cleanCloudCandidates.length > 0) {
+        // Cloud is the single source of truth!
         combined = deduplicateCandidates(cleanCloudCandidates);
+      } else if (isSystemWiped) {
+        combined = [];
       } else {
-        // Merge without losing local round2Key
-        combined = deduplicateCandidates([...cleanLocalCandidates, ...cleanCloudCandidates]);
+        combined = deduplicateCandidates(cleanLocalCandidates);
       }
 
       try {
@@ -1024,13 +1034,22 @@ export async function dispatchRound2EmailsViaSmtp(
   }
 }
 
-export function concludeRound1AndShortlistUnified(options: { mode: 'cutoff' | 'top_n'; value: number }): {
+export async function concludeRound1AndShortlistUnified(options: { mode: 'cutoff' | 'top_n'; value: number }): Promise<{
   shortlistedCount: number;
   candidates: CodeSparkCandidate[];
   shortlistedRolls: string[];
-} {
-  const allCandidates = getAllCodeSparkCandidates();
-  const allAttempts = getAllAttempts();
+}> {
+  // Fetch fresh candidates directly from Supabase Cloud
+  const cloudCands = await syncCandidatesFromCloud();
+  const allCandidates = (cloudCands && cloudCands.length > 0) ? cloudCands : getAllCodeSparkCandidates();
+
+  let cloudAttempts: any[] | null = null;
+  try {
+    const { fetchAttemptsFromCloud } = await import('./supabaseService');
+    cloudAttempts = await fetchAttemptsFromCloud();
+  } catch {}
+  const allAttempts = (cloudAttempts && cloudAttempts.length > 0) ? cloudAttempts : getAllAttempts();
+
   const targetExam = getCodeSparkActiveExam();
   const dynamicExamTotal = targetExam?.totalMarks || 20;
 
@@ -1091,6 +1110,18 @@ export function concludeRound1AndShortlistUnified(options: { mode: 'cutoff' | 't
         }
       }
     });
+
+    // Fallback: If cutoff threshold yielded 0 qualifiers, qualify top scorer(s)
+    if (qualifyingSet.size === 0 && candidateScores.length > 0) {
+      const positiveScorers = candidateScores.filter((c) => c.bestScore > 0);
+      const fallbackList = positiveScorers.length > 0 ? positiveScorers : candidateScores.slice(0, 1);
+      fallbackList.forEach((item) => {
+        qualifyingSet.add(item.candidate.accessKey.toUpperCase());
+        if (item.candidate.rollNumber) {
+          qualifyingSet.add(item.candidate.rollNumber.toUpperCase());
+        }
+      });
+    }
   }
 
   const newlyShortlistedRolls: string[] = [];
@@ -1108,7 +1139,7 @@ export function concludeRound1AndShortlistUnified(options: { mode: 'cutoff' | 't
     cand.isShortlisted = Boolean(isQual);
     if (isQual) {
       cand.status = 'SHORTLISTED';
-      if (!cand.round2Key) {
+      if (!cand.round2Key || !cand.round2Key.startsWith('AXENT-R2-')) {
         cand.round2Key = generateRound2KeyForCandidate(cand);
       }
       cand.round2InvitedAt = Date.now();
@@ -1121,10 +1152,23 @@ export function concludeRound1AndShortlistUnified(options: { mode: 'cutoff' | 't
   });
 
   setRound1ConcludedGlobally(true);
+  setRound2ArenaUnlocked(true);
   try {
     localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(newlyShortlistedRolls));
+    localStorage.setItem(ROUND1_CONCLUDED_STORAGE_KEY, 'true');
+    localStorage.setItem(ROUND2_ARENA_UNLOCKED_KEY, 'true');
   } catch {}
+
   saveCodeSparkCandidates(allCandidates);
+
+  // Directly await push to cloud so Supabase is guaranteed updated!
+  await pushCandidatesToCloud(allCandidates, {
+    isConcluded: true,
+    isRound2ArenaOpen: true,
+    manualShortlistRolls: newlyShortlistedRolls,
+    shortlistMode: options.mode,
+    shortlistValue: options.value
+  });
 
   return {
     shortlistedCount: newlyShortlistedRolls.length,
@@ -1264,8 +1308,7 @@ export interface KeyLookupResult {
 }
 
 export async function asyncLookupCandidateAny(rawKey: string): Promise<KeyLookupResult | null> {
-  const local = lookupCandidateAny(rawKey);
-  if (local) return local;
+  // Always query fresh candidates directly from Supabase Cloud first
   await syncCandidatesFromCloud();
   return lookupCandidateAny(rawKey);
 }
@@ -1332,13 +1375,15 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
         isCandidateInShortlistStorage(c.rollNumber || c.accessKey)
       );
 
-      // If candidate is shortlisted and (has round2Key or round 1 is over), targetRound is round2!
-      if (isShortlisted && (c.round2Key || isRound1Over)) {
+      // If candidate is shortlisted, ALWAYS set targetRound to 'round2' and ensure round2Key is attached!
+      if (isShortlisted) {
+        const r2 = (c.round2Key && c.round2Key.startsWith('AXENT-R2-')) ? c.round2Key : generateRound2KeyForCandidate(c);
+        c.round2Key = r2;
         return {
           candidate: c,
           targetRound: 'round2',
           isShortlisted: true,
-          round2Key: c.round2Key || generateRound2KeyForCandidate(c)
+          round2Key: r2
         };
       }
 
@@ -1354,7 +1399,7 @@ export function lookupCandidateAny(rawKey: string): KeyLookupResult | null {
   return null;
 }
 
-export function shortlistCandidateForRound2(identifier: string, isShortlisted = true): void {
+export async function shortlistCandidateForRound2(identifier: string, isShortlisted = true): Promise<void> {
   if (!identifier) return;
   const rawId = identifier.trim().toUpperCase();
   const { name: parsedName, roll: parsedRoll } = cleanCandidateNameAndRoll(rawId, rawId);
@@ -1369,9 +1414,9 @@ export function shortlistCandidateForRound2(identifier: string, isShortlisted = 
     localStorage.setItem(SHORTLIST_STORAGE_KEY, JSON.stringify(nextRolls));
   } catch {}
 
+  await syncCandidatesFromCloud();
   const all = getAllCodeSparkCandidates();
   let updated = false;
-  let matched = false;
 
   for (const c of all) {
     const cRoll = (c.rollNumber || '').trim().toUpperCase();
@@ -1386,7 +1431,6 @@ export function shortlistCandidateForRound2(identifier: string, isShortlisted = 
       (clean.includes(cRoll) && cRoll.length >= 3) ||
       (cName && (cName === parsedName || cName.includes(parsedName)))
     ) {
-      matched = true;
       c.isShortlisted = isShortlisted;
       c.status = isShortlisted ? 'SHORTLISTED' : 'ROUND1_COMPLETED';
       if (isShortlisted) {
@@ -1402,7 +1446,14 @@ export function shortlistCandidateForRound2(identifier: string, isShortlisted = 
   }
 
   if (updated) {
+    if (isShortlisted) {
+      setRound2ArenaUnlocked(true);
+    }
     saveCodeSparkCandidates(all);
+    await pushCandidatesToCloud(all, {
+      isRound2ArenaOpen: true,
+      manualShortlistRolls: nextRolls
+    });
   }
 }
 
@@ -1655,7 +1706,6 @@ export async function importCodeSparkCandidatesDirect(
   items: CandidateImportItem[],
   assignedExamId?: string
 ): Promise<CodeSparkCandidate[]> {
-  // Use current local roster immediately for 0ms latency
   const existing = getAllCodeSparkCandidates();
   const created: CodeSparkCandidate[] = [];
 
@@ -1727,8 +1777,9 @@ export async function importCodeSparkCandidatesDirect(
     if (c.email) unmarkCandidateKeyDeleted(c.email);
   }
 
-  // Save to local storage & trigger background cloud sync
+  // Save to local storage & push to cloud immediately
   saveCodeSparkCandidates(updatedRoster);
+  void pushCandidatesToCloud(updatedRoster);
   return created;
 }
 
@@ -1737,6 +1788,7 @@ export async function updateCodeSparkCandidateScore(
   score: number,
   maxScore: number
 ): Promise<boolean> {
+  await syncCandidatesFromCloud();
   const norm = normalizeCodeSparkKey(keyOrRoll);
   const cleanRoll = keyOrRoll.trim().toUpperCase();
   const all = getAllCodeSparkCandidates();
@@ -1744,7 +1796,8 @@ export async function updateCodeSparkCandidateScore(
   for (const c of all) {
     if (
       normalizeCodeSparkKey(c.accessKey) === norm ||
-      (c.rollNumber && c.rollNumber.trim().toUpperCase() === cleanRoll)
+      (c.rollNumber && c.rollNumber.trim().toUpperCase() === cleanRoll) ||
+      (c.email && c.email.trim().toUpperCase() === cleanRoll)
     ) {
       c.round1Score = score;
       c.round1MaxScore = maxScore;
@@ -1759,6 +1812,16 @@ export async function updateCodeSparkCandidateScore(
     await pushCandidatesToCloud(all);
     return true;
   }
+  try {
+    const client = supabaseAdmin || supabase;
+    if (client) {
+      await client.from('candidate_stations').update({
+        status: 'ROUND1_COMPLETED',
+        marks: { totalMarks: score, maxMarks: maxScore, executionMarks: score, logicMarks: 0, vivaMarks: 0 },
+        last_updated_timestamp: Date.now()
+      }).ilike('station_number', `%${cleanRoll}%`);
+    }
+  } catch {}
   return false;
 }
 

@@ -125,6 +125,8 @@ import {
 
   syncCandidatesFromCloud,
 
+  onCodeSparkCandidatesChanged,
+
   CodeSparkCandidate,
 
   saveCodeSparkCandidates,
@@ -493,10 +495,32 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       setIsCloudSyncing(false);
     });
 
+    // 2.5s real-time cloud sync loop for streaming candidate progression & marks
+    const pollInterval = setInterval(() => {
+      void Promise.all([
+        syncFromSupabase(),
+        syncCandidatesFromCloud()
+      ]).then(([_, syncedCandidates]) => {
+        if (Array.isArray(syncedCandidates) && syncedCandidates.length > 0) {
+          setRegisteredCandidates(syncedCandidates);
+        }
+        sync();
+      });
+    }, 2500);
+
+    const unsubCandidates = onCodeSparkCandidatesChanged((updated) => {
+      if (Array.isArray(updated)) {
+        setRegisteredCandidates(updated);
+        sync();
+      }
+    });
+
     const unsub = onExamsChanged(sync);
     const unsubMcq = onMcqDataChanged(sync);
     window.addEventListener('storage', sync);
     return () => {
+      clearInterval(pollInterval);
+      unsubCandidates();
       unsub();
       unsubMcq();
       window.removeEventListener('storage', sync);
@@ -1240,36 +1264,26 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
 
-  const handleConcludeRound1AndShortlist = () => {
+  const handleConcludeRound1AndShortlist = async () => {
+    try {
+      const res = await concludeRound1AndShortlistUnified({
+        mode: concludeMode,
+        value: Number(concludeValue) || (concludeMode === 'top_n' ? 10 : Math.max(1, Math.round(examTotalMarks * 0.6)))
+      });
 
-    const res = concludeRound1AndShortlistUnified({
-
-      mode: concludeMode,
-
-      value: Number(concludeValue) || (concludeMode === 'top_n' ? 10 : Math.round(examTotalMarks * 0.6))
-
-    });
-
-    setShortlistedRolls(res.shortlistedRolls);
-
-    setRegisteredCandidates(res.candidates);
-
-    setIsRound1Concluded(true);
-
-    setShowConcludeModal(false);
-
-    setConcludeSuccessNotice(
-
-      `Round 1 officially concluded! Combined leaderboard calculated across all labs. Shortlisted ${res.shortlistedCount} candidates for Round 2.`
-
-    );
-
-    playSound('success');
-
-    setShowEmailDispatchModal(true);
-
-    setTimeout(() => setConcludeSuccessNotice(null), 8000);
-
+      setShortlistedRolls(res.shortlistedRolls);
+      setRegisteredCandidates(res.candidates);
+      setIsRound1Concluded(true);
+      setShowConcludeModal(false);
+      setConcludeSuccessNotice(
+        `Round 1 officially concluded & Round 2 unlocked in cloud! Shortlisted ${res.shortlistedCount} candidate(s) for Round 2.`
+      );
+      playSound('success');
+      setShowEmailDispatchModal(true);
+      setTimeout(() => setConcludeSuccessNotice(null), 8000);
+    } catch (err) {
+      console.error('Failed to conclude round 1 in cloud:', err);
+    }
   };
 
 
@@ -1426,95 +1440,76 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
 
       // Find matching live station from stations prop if available
-
       const liveStation = stations.find(
-
         (s) =>
-
-          (s.student?.rollNumber || '').trim().toUpperCase() === cleanRoll ||
-
+          (s.candidate?.accessKey || '').trim().toUpperCase() === candKeyUpper ||
+          (s.accessKey || '').trim().toUpperCase() === candKeyUpper ||
+          (s.student?.accessKey || '').trim().toUpperCase() === candKeyUpper ||
           (s.student?.rollNumber || '').trim().toUpperCase() === candKeyUpper ||
-
+          (s.student?.rollNumber || '').trim().toUpperCase() === cleanRoll ||
+          (candRollUpper && (s.student?.rollNumber || '').trim().toUpperCase() === candRollUpper) ||
+          (candEmailLower && (s.student?.email || '').trim().toLowerCase() === candEmailLower) ||
           (s.student?.name || '').trim().toLowerCase() === candidate.name.trim().toLowerCase() ||
-
           s.id === id
-
       );
-
-
 
       const isSubmitted =
-
-        Boolean(attempt) &&
-
-        (attempt.status === 'SUBMITTED' ||
-
-         attempt.status === 'TIMED_OUT' ||
-
-         attempt.status === 'DISQUALIFIED');
-
-
+        Boolean(
+          (attempt && (attempt.status === 'SUBMITTED' || attempt.status === 'TIMED_OUT' || attempt.status === 'DISQUALIFIED')) ||
+          (candidate.status as string) === 'ROUND1_COMPLETED' ||
+          (candidate.status as string) === 'SUBMITTED' ||
+          (candidate.round1Score !== undefined && candidate.round1Score !== null) ||
+          liveStation?.status === 'Submitted & Done'
+        );
 
       const isActive = !isSubmitted && Boolean(
-
         attempt?.status === 'IN_PROGRESS' ||
-
+        (candidate.status as string) === 'CHECKED_IN' ||
+        (candidate.status as string) === 'IN-EXAM' ||
         (liveStation && liveStation.status === 'In Progress' && !(liveStation as any).isStandby)
-
       );
-
-
 
       const isStandby = !isSubmitted && !isActive;
 
-
-
       const answeredKeys = attempt?.answers && !isStandby
-
         ? Object.keys(attempt.answers).filter(
-
             (k) => attempt.answers[k] !== undefined && attempt.answers[k] !== null && attempt.answers[k] !== ''
-
           )
-
         : [];
 
-      const answeredCount = isStandby ? 0 : answeredKeys.length;
+      const totalQ = attempt?.assignedQuestions?.length || liveStation?.mcqProgress?.totalQuestions || currentAssignedExam?.questionCount || mcqQuestions.length || 3;
 
-      const totalQ = attempt?.assignedQuestions?.length || currentAssignedExam?.questionCount || mcqQuestions.length || 10;
+      const answeredCount = isStandby
+        ? 0
+        : answeredKeys.length > 0
+        ? answeredKeys.length
+        : isSubmitted
+        ? (liveStation?.mcqProgress?.answeredCount || totalQ)
+        : (liveStation?.mcqProgress?.answeredCount || liveStation?.metrics?.editCount || 0);
 
-
+      const candidateScore = attempt?.score !== undefined
+        ? attempt.score
+        : (candidate.round1Score !== undefined && candidate.round1Score !== null)
+        ? candidate.round1Score
+        : liveStation?.marks?.totalMarks !== undefined
+        ? liveStation.marks.totalMarks
+        : liveStation?.mcqProgress?.score;
 
       // Determine which question the student is on:
-
       let currentQIdx = 0;
-
       if (isStandby) {
-
         currentQIdx = 0;
-
       } else if (liveStation?.mcqProgress?.currentQuestionIndex !== undefined) {
-
         currentQIdx = liveStation.mcqProgress.currentQuestionIndex;
-
       } else if (isActive) {
-
         currentQIdx = Math.min(answeredCount, totalQ - 1);
-
       } else if (isSubmitted) {
-
         currentQIdx = totalQ - 1;
-
       }
-
-
 
       const isLocked = Boolean(lockedStations[id] || liveStation?.isLockedByProctor);
 
-
-
       const stationObj: CandidateStation & { isStandby?: boolean } = {
-
         id: liveStation?.id || id,
         labId: 'LAB-SPARK-01',
         labName: 'CodeSpark Enclave 01',
@@ -1532,85 +1527,45 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
           department: candidate.department || 'Axent Enclave',
           examMode: 'MCQ'
         },
-
         language: 'MCQ',
-
         examMode: 'MCQ',
-
         code: '// Round 1 Cognitive Aptitude MCQ Telemetry',
-
         screenImageData: liveStation?.screenImageData,
-
         status: isSubmitted ? 'Submitted & Done' : 'In Progress',
-
         isStandby,
-
         isLockedByProctor: isLocked,
-
         metrics: {
-
           typingSpeed: 0,
-
           timeSpent: isStandby ? 0 : (attempt?.timeSpentSeconds || liveStation?.metrics?.timeSpent || 0),
-
           pasteCount: 0,
-
           deleteCount: 0,
-
           editCount: answeredCount,
-
           undoCount: 0,
-
           pasteRatio: 0,
-
           pastedLines: 0,
-
           totalLines: 0,
-
           keystrokes: answeredCount,
-
           pauseDuration: 0,
-
           tabSwitchViolations: isStandby ? 0 : (attempt?.tabSwitchCount || liveStation?.metrics?.tabSwitchViolations || 0),
-
           unfocusedTimeSeconds: isStandby ? 0 : (attempt?.unfocusedSeconds || liveStation?.metrics?.unfocusedTimeSeconds || 0)
-
         },
-
         mcqProgress: {
-
           examId: currentAssignedExam?.id || 'codespark-round1-aptitude',
-
           examTitle: currentAssignedExam?.title || 'Code Spark 2026: General Aptitude & Reasoning',
-
           currentQuestionIndex: currentQIdx,
-
           totalQuestions: totalQ,
-
           answeredCount: answeredCount,
-
           tabSwitches: isStandby ? 0 : (attempt?.tabSwitchCount || liveStation?.metrics?.tabSwitchViolations || 0),
-
-          score: isStandby ? undefined : attempt?.score,
-
-          maxScore: isStandby ? examTotalMarks : (attempt?.maxScore || examTotalMarks || (attempt?.score !== undefined ? attempt.score : 0))
-
+          score: isStandby ? undefined : candidateScore,
+          maxScore: isStandby ? examTotalMarks : (attempt?.maxScore || candidate.round1MaxScore || liveStation?.marks?.maxMarks || examTotalMarks || (candidateScore !== undefined ? candidateScore : 0))
         },
-
-        marks: (!isStandby && attempt?.score !== undefined) ? {
-
-          totalMarks: attempt.score,
-
-          maxMarks: attempt.maxScore || examTotalMarks || (attempt?.score !== undefined ? attempt.score : 0),
-
-          executionMarks: attempt.score,
-
+        marks: (!isStandby && candidateScore !== undefined) ? {
+          totalMarks: candidateScore,
+          maxMarks: attempt?.maxScore || candidate.round1MaxScore || liveStation?.marks?.maxMarks || examTotalMarks || (candidateScore !== undefined ? candidateScore : 0),
+          executionMarks: candidateScore,
           logicMarks: 0,
-
           vivaMarks: 0,
-
           integrityMarks: 10
-
         } : undefined,
 
         integrityStatus:
@@ -1727,13 +1682,11 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
 
   // Shortlist management
 
-  const toggleCandidateShortlist = (rollNumber: string) => {
-
+  const toggleCandidateShortlist = async (rollNumber: string) => {
     const roll = rollNumber.trim().toUpperCase();
-
     const isNowShortlisted = !shortlistedRolls.includes(roll);
 
-    shortlistCandidateForRound2(roll, isNowShortlisted);
+    await shortlistCandidateForRound2(roll, isNowShortlisted);
     const updatedRolls = getShortlistedRolls();
     setShortlistedRolls(updatedRolls);
     setRegisteredCandidates(getAllCodeSparkCandidates());
@@ -1741,39 +1694,26 @@ export const AdminCodeSparkView: React.FC<AdminCodeSparkViewProps> = ({
       setRound1ConcludedGlobally(false);
     }
     playSound('success');
-
   };
 
-
-
-  const handleShortlistTopN = (n: number) => {
-
+  const handleShortlistTopN = async (n: number) => {
     const topRolls = aptitudeCandidates.slice(0, n).map((c) => (c.studentRoll || '').toUpperCase());
-
-    topRolls.forEach((r) => shortlistCandidateForRound2(r, true));
-
+    for (const r of topRolls) {
+      await shortlistCandidateForRound2(r, true);
+    }
     setShortlistedRolls(getShortlistedRolls());
-
     setRegisteredCandidates(getAllCodeSparkCandidates());
-
     playSound('success');
-
   };
 
-
-
-  const handleShortlistByCutoff = (pct: number) => {
-
+  const handleShortlistByCutoff = async (pct: number) => {
     const eligible = aptitudeCandidates.filter((c) => c.scorePct >= pct).map((c) => (c.studentRoll || '').toUpperCase());
-
-    eligible.forEach((r) => shortlistCandidateForRound2(r, true));
-
+    for (const r of eligible) {
+      await shortlistCandidateForRound2(r, true);
+    }
     setShortlistedRolls(getShortlistedRolls());
-
     setRegisteredCandidates(getAllCodeSparkCandidates());
-
     playSound('success');
-
   };
 
 

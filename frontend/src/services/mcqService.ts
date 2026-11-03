@@ -1774,7 +1774,7 @@ export function startAttempt(
 
       })),
 
-      correctOptionId: '', // Sanitized: Authoritatively resolved on submit to prevent DevTools/storage inspection
+      correctOptionId: qOptions.find((o) => Boolean(o?.isCorrect))?.id || (q?.options as any)?.find((o: any) => Boolean(o?.isCorrect))?.id || '',
 
       marks: Number.isFinite(q?.marks) ? (q?.marks as number) : 1,
 
@@ -2111,13 +2111,9 @@ export function gradeAttempt(attempt: MCQAttempt): MCQGradeResult {
     const bankQ = qId ? getQuestionById(qId) : undefined;
 
     const authoritativeCorrectId =
-
-      bankQ?.options?.find((o) => o?.isCorrect)?.id ||
-
-      options.find((o: any) => o?.isCorrect)?.id ||
-
       snapshot.correctOptionId ||
-
+      bankQ?.options?.find((o) => o?.isCorrect)?.id ||
+      options.find((o: any) => o?.isCorrect)?.id ||
       '';
 
     const authoritativeExplanation = bankQ?.explanation || snapshot.explanation || '';
